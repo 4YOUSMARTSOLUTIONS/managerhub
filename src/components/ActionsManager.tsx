@@ -5,16 +5,28 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { InlineStatus } from "@/components/ui/InlineStatus";
-import { ACTION_STATUS, ACTION_STATUS_TONE, options } from "@/lib/constants";
+import { ACTION_STATUS, ACTION_STATUS_TONE, PRIORITY, PRIORITY_TONE } from "@/lib/constants";
 import { formatDate, isOverdue } from "@/lib/format";
-import { setDemandaStatus, deleteAction, getAttachmentUrl } from "@/lib/actions/actions";
+import { deleteAction } from "@/lib/actions/actions";
 import { ActionDialog, type Opt, type BlocoOpt, type ItemOpt, type OccOpt } from "./ActionDialog";
+import { DemandaPanel, type DemandaInfo } from "./DemandaPanel";
 import type { Person } from "./PeoplePicker";
 import type { Enums } from "@/types/database";
 
+export type DemandaCard = {
+  id: string;
+  description: string;
+  status: string;
+  dueDate: string | null;
+  assigneeNames: string[];
+  assigneeIds: string[];
+  pendingCount: number;
+  attachments: { id: string; filename: string; path: string }[];
+};
+
 export type ActionRow = {
   id: string;
+  code: number;
   isSdpo: boolean;
   pilarName: string | null;
   blocoName: string | null;
@@ -23,30 +35,21 @@ export type ActionRow = {
   occurredOn: string | null;
   kpiName: string | null;
   toolName: string | null;
+  requesterId: string | null;
   requesterName: string | null;
+  priority: Enums<"priority_level">;
   dueDate: string | null;
-  demandas: { id: string; description: string; status: string; assigneeNames: string[]; attachments: { id: string; filename: string; path: string }[] }[];
+  demandas: DemandaCard[];
   ccNames: string[];
   attachments: { id: string; filename: string; path: string }[];
 };
 
-function AttachmentLink({ path, filename }: { path: string; filename: string }) {
-  const open = async () => {
-    const url = await getAttachmentUrl(path);
-    if (url) window.open(url, "_blank");
-  };
-  return (
-    <button type="button" onClick={open} className="reg-chip" style={{ border: "1px solid var(--border)", cursor: "pointer", fontSize: "0.8rem" }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
-      {filename}
-    </button>
-  );
-}
-
 export function ActionsManager({
-  actions, people, pilares, blocos, itens, kpis, tools, series, occurrences,
+  actions, currentUserId, isAdmin, people, pilares, blocos, itens, kpis, tools, series, occurrences,
 }: {
   actions: ActionRow[];
+  currentUserId: string;
+  isAdmin: boolean;
   people: Person[];
   pilares: Opt[];
   blocos: BlocoOpt[];
@@ -57,6 +60,10 @@ export function ActionsManager({
   occurrences: OccOpt[];
 }) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null } | null>(null);
+
+  const openPanel = (d: DemandaCard, requesterId: string | null) =>
+    setSelected({ demanda: { id: d.id, description: d.description, status: d.status as Enums<"action_status">, dueDate: d.dueDate, assigneeIds: d.assigneeIds, assigneeNames: d.assigneeNames, attachments: d.attachments }, requesterId });
 
   return (
     <div>
@@ -70,68 +77,64 @@ export function ActionsManager({
         {actions.length === 0 ? (
           <EmptyState title="Nenhuma ação" description="Crie ações para acompanhar pendências e o Programa de Excelência." />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {actions.map((a) => (
-              <div key={a.id} style={{ padding: "1rem 1.1rem", borderBottom: "1px solid var(--border)" }}>
-                {/* cabeçalho */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
-                    {a.isSdpo && <Badge tone="purple">SDPO</Badge>}
-                    {a.isSdpo && (a.pilarName || a.blocoName || a.itemName) && (
-                      <span className="soft" style={{ fontSize: "0.8rem" }}>
-                        {[a.pilarName, a.blocoName, a.itemName].filter(Boolean).join(" › ")}
-                      </span>
-                    )}
-                    {a.kpiName && <Badge tone="blue">KPI: {a.kpiName}</Badge>}
-                    {a.toolName && <Badge tone="gray">{a.toolName}</Badge>}
-                  </div>
-                  <form action={deleteAction}>
-                    <input type="hidden" name="id" value={a.id} />
-                    <button className="icon-btn icon-btn-danger" type="submit" title="Excluir ação" style={{ width: 30, height: 30 }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                    </button>
-                  </form>
-                </div>
-
-                {/* meta: solicitante, prazo, reunião */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.9rem", margin: "0.5rem 0", fontSize: "0.82rem" }} className="muted">
-                  {a.requesterName && <span>Solicitante: <strong>{a.requesterName}</strong></span>}
-                  {a.dueDate && <span style={{ color: isOverdue(a.dueDate) ? "#dc2626" : undefined }}>Prazo: {formatDate(a.dueDate)}</span>}
-                  {a.seriesName && <span>Reunião: {a.seriesName}{a.occurredOn ? ` (${formatDate(a.occurredOn)})` : ""}</span>}
-                  {a.ccNames.length > 0 && <span>Em cópia: {a.ccNames.join(", ")}</span>}
-                </div>
-
-                {/* demandas */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginTop: "0.4rem" }}>
-                  {a.demandas.map((d) => (
-                    <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", background: "var(--surface-2)", borderRadius: 8, padding: "0.5rem 0.7rem", flexWrap: "wrap" }}>
-                      <div style={{ flex: "1 1 280px" }}>
-                        <div style={{ fontWeight: 500, fontSize: "0.88rem" }}>{d.description}</div>
-                        <div className="soft" style={{ fontSize: "0.78rem" }}>
-                          {d.assigneeNames.length > 0 ? d.assigneeNames.join(", ") : "Sem responsável"}
-                        </div>
-                        {d.attachments.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.4rem" }}>
-                            {d.attachments.map((at) => <AttachmentLink key={at.id} path={at.path} filename={at.filename} />)}
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Ação</th>
+                  <th>Prioridade</th>
+                  <th>SDPO</th>
+                  <th>Pilar</th>
+                  <th>Bloco</th>
+                  <th>Responsáveis</th>
+                  <th>Solicitante</th>
+                  <th>Prazo</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right" }}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actions.flatMap((a, ai) =>
+                  a.demandas.map((d, di) => {
+                    const first = di === 0;
+                    const finalizada = d.status === "done" || d.status === "cancelled";
+                    const st = d.status as Enums<"action_status">;
+                    return (
+                      <tr key={d.id} style={{ borderTop: first && ai > 0 ? "2px solid var(--border-strong)" : undefined, opacity: d.status === "cancelled" ? 0.55 : 1 }}>
+                        <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>#{a.code}.{di + 1}</td>
+                        <td>{first && <Badge tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
+                        <td>{first && (a.isSdpo ? <Badge tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
+                        <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
+                        <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.blocoName ?? ""}>{first ? (a.blocoName ?? "—") : ""}</td>
+                        <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.assigneeNames.join(", ")}>
+                          {d.assigneeNames.length > 0 ? d.assigneeNames.join(", ") : <span className="soft">—</span>}
+                          {d.attachments.length > 0 && <span className="soft" style={{ marginLeft: 6 }} title={`${d.attachments.length} anexo(s)`}>📎{d.attachments.length}</span>}
+                        </td>
+                        <td className="muted" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>{first ? (a.requesterName ?? "—") : ""}</td>
+                        <td style={{ whiteSpace: "nowrap", color: d.dueDate && !finalizada && isOverdue(d.dueDate) ? "#dc2626" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <Badge tone={ACTION_STATUS_TONE[st]}>{ACTION_STATUS[st]}</Badge>
+                          {d.pendingCount > 0 && <div style={{ fontSize: "0.68rem", fontWeight: 600, color: "#b45309", marginTop: 2 }}>● pendente</div>}
+                        </td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a.requesterId)}>Tratar</button>
+                            {first && (
+                              <form action={deleteAction} style={{ display: "inline-flex" }}>
+                                <input type="hidden" name="id" value={a.id} />
+                                <button className="icon-btn icon-btn-danger" type="submit" title="Excluir ação">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                </button>
+                              </form>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <Badge tone={ACTION_STATUS_TONE[d.status as Enums<"action_status">]}>{ACTION_STATUS[d.status as Enums<"action_status">]}</Badge>
-                        <InlineStatus id={d.id} value={d.status} options={options(ACTION_STATUS)} action={setDemandaStatus} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* anexos */}
-                {a.attachments.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.6rem" }}>
-                    {a.attachments.map((at) => <AttachmentLink key={at.id} path={at.path} filename={at.filename} />)}
-                  </div>
+                        </td>
+                      </tr>
+                    );
+                  }),
                 )}
-              </div>
-            ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Section>
@@ -147,6 +150,16 @@ export function ActionsManager({
         tools={tools}
         series={series}
         occurrences={occurrences}
+      />
+
+      <DemandaPanel
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        demanda={selected?.demanda ?? null}
+        requesterId={selected?.requesterId ?? null}
+        currentUserId={currentUserId}
+        isAdmin={isAdmin}
+        people={people}
       />
     </div>
   );

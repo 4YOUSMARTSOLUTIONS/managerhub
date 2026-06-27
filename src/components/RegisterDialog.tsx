@@ -62,9 +62,21 @@ export function RegisterDialog({
   const removeAction = (i: number) => setActions((a) => a.filter((_, idx) => idx !== i));
 
   const presentCount = attendees.filter((id) => present[id]).length;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   const submit = () => {
     setError("");
+    if (occurredOn && occurredOn > today) {
+      setError("A reunião não pode ser registrada com data futura — só é possível registrar reuniões já realizadas.");
+      return;
+    }
+    const namedActions = actions.filter((a) => a.title.trim());
+    if (namedActions.some((a) => !a.due_date)) {
+      setError("Toda ação gerada precisa de um prazo.");
+      return;
+    }
     start(async () => {
       const res = await registerOccurrence({
         series_id: series.id,
@@ -96,7 +108,7 @@ export function RegisterDialog({
           <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "0.8rem", alignItems: "end" }}>
             <div>
               <label className="label">Data da reunião</label>
-              <input type="date" className="input" value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
+              <input type="date" className="input" max={today} value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
             </div>
           </div>
 

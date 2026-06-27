@@ -32,6 +32,7 @@ export async function createAction(formData: FormData): Promise<ActionState> {
     const demandas = (payload.demandas ?? []).filter((d) => d.description.trim());
     if (demandas.length === 0) return { error: "Informe ao menos uma demanda." };
     if (!payload.requester_id) return { error: "Informe o solicitante." };
+    if (!payload.due_date) return { error: "Informe o prazo da ação." };
     if (payload.is_sdpo && (!payload.pilar_id || !payload.bloco_id || !payload.item_id)) {
       return { error: "Para ações do Programa de Excelência, informe Pilar, Bloco e Item." };
     }
@@ -77,16 +78,100 @@ export async function createAction(formData: FormData): Promise<ActionState> {
   }
 }
 
-export async function setDemandaStatus(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
-  const id = String(formData.get("id"));
-  const status = String(formData.get("status")) as Enums<"action_status">;
-  await supabase
-    .from("action_demandas")
-    .update({ status, completed_at: status === "done" ? new Date().toISOString() : null })
-    .eq("id", id);
+// ---------- Tratamento da demanda/ação ----------
+function rv() {
   revalidatePath("/acoes");
   revalidatePath("/dashboard");
+}
+
+export async function demandaSetStatus(demandaId: string, status: Enums<"action_status">): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_set_status", { p_demanda: demandaId, p_status: status });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export async function demandaComment(demandaId: string, body: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_comment", { p_demanda: demandaId, p_body: body });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export async function demandaRequest(demandaId: string, type: "prazo" | "conclusao", newDue: string, note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_request", { p_demanda: demandaId, p_type: type, p_new_due: newDue || null, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export async function demandaDecide(requestId: string, approve: boolean, note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_decide", { p_request: requestId, p_approve: approve, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export async function demandaReopen(demandaId: string, note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_reopen", { p_demanda: demandaId, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export async function demandaCancel(demandaId: string, note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_cancel", { p_demanda: demandaId, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export async function demandaReassign(demandaId: string, userIds: string[], note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_reassign", { p_demanda: demandaId, p_users: userIds, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+export type TimelineEvent = { id: string; type: string; actorName: string | null; body: string | null; meta: Record<string, unknown>; createdAt: string };
+export type PendingReq = { id: string; type: string; newDueDate: string | null; note: string | null; requestedByName: string | null; createdAt: string };
+
+export async function getDemandaTimeline(demandaId: string): Promise<{ events: TimelineEvent[]; requests: PendingReq[]; status: Enums<"action_status">; dueDate: string | null }> {
+  const { supabase } = await actionContext();
+  const [{ data: events }, { data: reqs }, { data: profs }, { data: dem }] = await Promise.all([
+    supabase.from("demanda_events").select("id, type, actor_id, body, meta, created_at").eq("demanda_id", demandaId).order("created_at", { ascending: true }),
+    supabase.from("demanda_requests").select("id, type, new_due_date, note, requested_by, created_at").eq("demanda_id", demandaId).eq("status", "pending"),
+    supabase.from("profiles").select("id, full_name").limit(5000),
+    supabase.from("action_demandas").select("status, due_date").eq("id", demandaId).single(),
+  ]);
+  const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name ?? "—"]));
+  return {
+    events: (events ?? []).map((e) => ({ id: e.id, type: e.type, actorName: e.actor_id ? nameById.get(e.actor_id) ?? null : null, body: e.body, meta: (e.meta as Record<string, unknown>) ?? {}, createdAt: e.created_at })),
+    requests: (reqs ?? []).map((r) => ({ id: r.id, type: r.type, newDueDate: r.new_due_date, note: r.note, requestedByName: r.requested_by ? nameById.get(r.requested_by) ?? null : null, createdAt: r.created_at })),
+    status: (dem?.status ?? "open") as Enums<"action_status">,
+    dueDate: dem?.due_date ?? null,
+  };
 }
 
 export async function deleteAction(formData: FormData): Promise<void> {

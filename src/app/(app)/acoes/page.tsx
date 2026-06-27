@@ -4,8 +4,9 @@ import { ActionsManager, type ActionRow } from "@/components/ActionsManager";
 import type { Person } from "@/components/PeoplePicker";
 
 export default async function ActionsPage() {
-  const { tenant } = await requireContext();
+  const { tenant, user, role } = await requireContext();
   const supabase = await createClient();
+  const isAdmin = role === "owner" || role === "admin";
 
   const [
     { data: actions }, { data: pilares }, { data: blocos }, { data: itens },
@@ -26,15 +27,18 @@ export default async function ActionsPage() {
 
   const actionIds = (actions ?? []).map((a) => a.id);
   const [{ data: demandas }, { data: ccs }, { data: atts }] = await Promise.all([
-    actionIds.length ? supabase.from("action_demandas").select("id, action_id, description, status").in("action_id", actionIds) : Promise.resolve({ data: [] as { id: string; action_id: string; description: string; status: string }[] }),
+    actionIds.length ? supabase.from("action_demandas").select("id, action_id, description, status, due_date").in("action_id", actionIds) : Promise.resolve({ data: [] as { id: string; action_id: string; description: string; status: string; due_date: string | null }[] }),
     actionIds.length ? supabase.from("action_cc").select("action_id, user_id").in("action_id", actionIds) : Promise.resolve({ data: [] as { action_id: string; user_id: string }[] }),
     actionIds.length ? supabase.from("action_attachments").select("id, action_id, demanda_id, filename, path").in("action_id", actionIds) : Promise.resolve({ data: [] as { id: string; action_id: string; demanda_id: string | null; filename: string; path: string }[] }),
   ]);
 
   const demandaIds = (demandas ?? []).map((d) => d.id);
-  const { data: assigneeRows } = demandaIds.length
-    ? await supabase.from("action_demanda_assignees").select("demanda_id, user_id").in("demanda_id", demandaIds)
-    : { data: [] as { demanda_id: string; user_id: string }[] };
+  const [{ data: assigneeRows }, { data: pendingReqs }] = demandaIds.length
+    ? await Promise.all([
+        supabase.from("action_demanda_assignees").select("demanda_id, user_id").in("demanda_id", demandaIds),
+        supabase.from("demanda_requests").select("demanda_id").eq("status", "pending").in("demanda_id", demandaIds),
+      ])
+    : [{ data: [] as { demanda_id: string; user_id: string }[] }, { data: [] as { demanda_id: string }[] }];
 
   // mapas de nomes
   const nameById = new Map((profilesData ?? []).map((p) => [p.id, p.full_name ?? "—"]));
@@ -47,11 +51,17 @@ export default async function ActionsPage() {
   const occDate = new Map((occData ?? []).map((o) => [o.id, o.occurred_on]));
 
   const assigneesByDemanda = new Map<string, string[]>();
+  const assigneeIdsByDemanda = new Map<string, string[]>();
   for (const r of assigneeRows ?? []) {
     const arr = assigneesByDemanda.get(r.demanda_id) ?? [];
     arr.push(nameById.get(r.user_id) ?? "—");
     assigneesByDemanda.set(r.demanda_id, arr);
+    const ids = assigneeIdsByDemanda.get(r.demanda_id) ?? [];
+    ids.push(r.user_id);
+    assigneeIdsByDemanda.set(r.demanda_id, ids);
   }
+  const pendingByDemanda = new Map<string, number>();
+  for (const r of pendingReqs ?? []) pendingByDemanda.set(r.demanda_id, (pendingByDemanda.get(r.demanda_id) ?? 0) + 1);
   // anexos por demanda e gerais (demanda_id null)
   const attsByDemanda = new Map<string, { id: string; filename: string; path: string }[]>();
   for (const a of atts ?? []) {
@@ -60,10 +70,16 @@ export default async function ActionsPage() {
     arr.push({ id: a.id, filename: a.filename, path: a.path });
     attsByDemanda.set(a.demanda_id, arr);
   }
-  const demandasByAction = new Map<string, { id: string; description: string; status: string; assigneeNames: string[]; attachments: { id: string; filename: string; path: string }[] }[]>();
+  const demandasByAction = new Map<string, ActionRow["demandas"]>();
   for (const d of demandas ?? []) {
     const arr = demandasByAction.get(d.action_id) ?? [];
-    arr.push({ id: d.id, description: d.description, status: d.status, assigneeNames: assigneesByDemanda.get(d.id) ?? [], attachments: attsByDemanda.get(d.id) ?? [] });
+    arr.push({
+      id: d.id, description: d.description, status: d.status, dueDate: d.due_date,
+      assigneeNames: assigneesByDemanda.get(d.id) ?? [],
+      assigneeIds: assigneeIdsByDemanda.get(d.id) ?? [],
+      pendingCount: pendingByDemanda.get(d.id) ?? 0,
+      attachments: attsByDemanda.get(d.id) ?? [],
+    });
     demandasByAction.set(d.action_id, arr);
   }
   const ccByAction = new Map<string, string[]>();
@@ -82,6 +98,7 @@ export default async function ActionsPage() {
 
   const rows: ActionRow[] = (actions ?? []).map((a) => ({
     id: a.id,
+    code: a.code,
     isSdpo: a.is_sdpo,
     pilarName: a.pilar_id ? pilarName.get(a.pilar_id) ?? null : null,
     blocoName: a.bloco_id ? blocoName.get(a.bloco_id) ?? null : null,
@@ -90,7 +107,9 @@ export default async function ActionsPage() {
     occurredOn: a.occurrence_id ? occDate.get(a.occurrence_id) ?? null : null,
     kpiName: a.kpi_id ? kpiName.get(a.kpi_id) ?? null : null,
     toolName: a.tool_id ? toolName.get(a.tool_id) ?? null : null,
+    requesterId: a.requester_id,
     requesterName: a.requester_id ? nameById.get(a.requester_id) ?? null : null,
+    priority: a.priority,
     dueDate: a.due_date,
     demandas: demandasByAction.get(a.id) ?? [],
     ccNames: ccByAction.get(a.id) ?? [],
@@ -104,6 +123,8 @@ export default async function ActionsPage() {
   return (
     <ActionsManager
       actions={rows}
+      currentUserId={user.id}
+      isAdmin={isAdmin}
       people={people}
       pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name }))}
       blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id }))}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createAction } from "@/lib/actions/actions";
 import { formatDate } from "@/lib/format";
+import { PRIORITY } from "@/lib/constants";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { SearchSelect } from "./SearchSelect";
 
@@ -37,6 +38,7 @@ export function ActionDialog({
   const [kpiId, setKpiId] = useState("");
   const [toolId, setToolId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState("medium");
   const [requesterId, setRequesterId] = useState("");
   const [cc, setCc] = useState<string[]>([]);
   const [demandas, setDemandas] = useState<Demanda[]>([{ description: "", assignees: [], files: [] }]);
@@ -52,7 +54,7 @@ export function ActionDialog({
     if (open) {
       setIsSdpo(true); setPilarId(""); setBlocoId(""); setItemId("");
       setSeriesId(""); setOccurrenceId(""); setKpiId(""); setToolId("");
-      setDueDate(""); setRequesterId(""); setCc([]);
+      setDueDate(""); setPriority("medium"); setRequesterId(""); setCc([]);
       setDemandas([{ description: "", assignees: [], files: [] }]); setFiles([]); setError(""); setSaved(""); setKeepOpen(false);
     }
   }, [open]);
@@ -75,6 +77,7 @@ export function ActionDialog({
     const cleanDemandas = demandas.filter((d) => d.description.trim());
     if (cleanDemandas.length === 0) { setError("Informe ao menos uma ação."); return; }
     if (!requesterId) { setError("Informe o solicitante."); return; }
+    if (!dueDate) { setError("Informe o prazo da ação."); return; }
     if (isSdpo && (!pilarId || !blocoId || !itemId)) { setError("Para SDPO, informe Pilar, Bloco e Item."); return; }
     if (isSdpo && !seriesId) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
 
@@ -83,7 +86,7 @@ export function ActionDialog({
       pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
       kpi_id: kpiId, tool_id: toolId,
-      requester_id: requesterId, due_date: dueDate, cc,
+      requester_id: requesterId, due_date: dueDate, priority, cc,
       demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
     };
     const fd = new FormData();
@@ -160,9 +163,16 @@ export function ActionDialog({
               <SearchSelect options={tools} value={toolId} onChange={setToolId} placeholder="Buscar ferramenta…" />
             </div>
             <div>
-              <label className="label">Prazo</label>
+              <label className="label">Prazo <span style={{ color: "#dc2626" }}>*</span></label>
               <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
+          </div>
+
+          <div style={{ maxWidth: 220 }}>
+            <label className="label">Prioridade</label>
+            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+              {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
           </div>
 
           {/* Solicitante + Em cópia */}

@@ -491,15 +491,33 @@ export type Database = {
         Relationships: []
       }
       actions: {
-        Row: { id: string; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; requester_id: string | null; due_date: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; requester_id?: string | null; due_date?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; requester_id?: string | null; due_date?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; code: number; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; requester_id: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"]; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; code?: number; tenant_id: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; code?: number; tenant_id?: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       action_demandas: {
-        Row: { id: string; action_id: string; tenant_id: string; description: string; status: Database["public"]["Enums"]["action_status"]; completed_at: string | null; created_at: string }
-        Insert: { id?: string; action_id: string; tenant_id: string; description: string; status?: Database["public"]["Enums"]["action_status"]; completed_at?: string | null; created_at?: string }
-        Update: { id?: string; action_id?: string; tenant_id?: string; description?: string; status?: Database["public"]["Enums"]["action_status"]; completed_at?: string | null; created_at?: string }
+        Row: { id: string; action_id: string; tenant_id: string; description: string; status: Database["public"]["Enums"]["action_status"]; due_date: string | null; completed_at: string | null; created_at: string }
+        Insert: { id?: string; action_id: string; tenant_id: string; description: string; status?: Database["public"]["Enums"]["action_status"]; due_date?: string | null; completed_at?: string | null; created_at?: string }
+        Update: { id?: string; action_id?: string; tenant_id?: string; description?: string; status?: Database["public"]["Enums"]["action_status"]; due_date?: string | null; completed_at?: string | null; created_at?: string }
+        Relationships: []
+      }
+      demanda_requests: {
+        Row: { id: string; tenant_id: string; demanda_id: string; type: string; status: string; requested_by: string | null; new_due_date: string | null; note: string | null; decided_by: string | null; decided_at: string | null; decision_note: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; demanda_id: string; type: string; status?: string; requested_by?: string | null; new_due_date?: string | null; note?: string | null; decided_by?: string | null; decided_at?: string | null; decision_note?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; demanda_id?: string; type?: string; status?: string; requested_by?: string | null; new_due_date?: string | null; note?: string | null; decided_by?: string | null; decided_at?: string | null; decision_note?: string | null; created_at?: string }
+        Relationships: []
+      }
+      demanda_events: {
+        Row: { id: string; tenant_id: string; demanda_id: string; type: string; actor_id: string | null; body: string | null; meta: Json; created_at: string }
+        Insert: { id?: string; tenant_id: string; demanda_id: string; type: string; actor_id?: string | null; body?: string | null; meta?: Json; created_at?: string }
+        Update: { id?: string; tenant_id?: string; demanda_id?: string; type?: string; actor_id?: string | null; body?: string | null; meta?: Json; created_at?: string }
+        Relationships: []
+      }
+      notifications: {
+        Row: { id: string; tenant_id: string; user_id: string; type: string; title: string; body: string | null; demanda_id: string | null; is_read: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; type: string; title: string; body?: string | null; demanda_id?: string | null; is_read?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; type?: string; title?: string; body?: string | null; demanda_id?: string | null; is_read?: boolean; created_at?: string }
         Relationships: []
       }
       action_demanda_assignees: {
@@ -814,6 +832,13 @@ export type Database = {
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
+      demanda_comment: { Args: { p_demanda: string; p_body: string }; Returns: undefined }
+      demanda_set_status: { Args: { p_demanda: string; p_status: Database["public"]["Enums"]["action_status"] }; Returns: undefined }
+      demanda_request: { Args: { p_demanda: string; p_type: string; p_new_due: string | null; p_note: string }; Returns: undefined }
+      demanda_decide: { Args: { p_request: string; p_approve: boolean; p_note: string }; Returns: undefined }
+      demanda_reopen: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
+      demanda_cancel: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
+      demanda_reassign: { Args: { p_demanda: string; p_users: Json; p_note: string }; Returns: undefined }
       save_meeting_series: { Args: { p_data: Json }; Returns: string }
       register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       admin_create_employee: { Args: { p_data: Json; p_password: string }; Returns: string }
