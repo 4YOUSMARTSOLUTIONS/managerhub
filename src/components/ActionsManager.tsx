@@ -62,8 +62,31 @@ export function ActionsManager({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null } | null>(null);
 
-  const openPanel = (d: DemandaCard, requesterId: string | null) =>
-    setSelected({ demanda: { id: d.id, description: d.description, status: d.status as Enums<"action_status">, dueDate: d.dueDate, assigneeIds: d.assigneeIds, assigneeNames: d.assigneeNames, attachments: d.attachments }, requesterId });
+  const openPanel = (d: DemandaCard, a: ActionRow, di: number) =>
+    setSelected({
+      demanda: {
+        id: d.id,
+        label: `#${a.code}.${di + 1}`,
+        description: d.description,
+        status: d.status as Enums<"action_status">,
+        dueDate: d.dueDate,
+        priority: a.priority,
+        assigneeIds: d.assigneeIds,
+        assigneeNames: d.assigneeNames,
+        attachments: d.attachments,
+        requesterName: a.requesterName,
+        ccNames: a.ccNames,
+        isSdpo: a.isSdpo,
+        pilarName: a.pilarName,
+        blocoName: a.blocoName,
+        itemName: a.itemName,
+        kpiName: a.kpiName,
+        toolName: a.toolName,
+        seriesName: a.seriesName,
+        occurredOn: a.occurredOn,
+      },
+      requesterId: a.requesterId,
+    });
 
   return (
     <div>
@@ -90,6 +113,7 @@ export function ActionsManager({
                   <th>Solicitante</th>
                   <th>Prazo</th>
                   <th>Status</th>
+                  <th>Descrição</th>
                   <th style={{ textAlign: "right" }}>Ações</th>
                 </tr>
               </thead>
@@ -116,9 +140,10 @@ export function ActionsManager({
                           <Badge tone={ACTION_STATUS_TONE[st]}>{ACTION_STATUS[st]}</Badge>
                           {d.pendingCount > 0 && <div style={{ fontSize: "0.68rem", fontWeight: 600, color: "#b45309", marginTop: 2 }}>● pendente</div>}
                         </td>
+                        <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                           <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a.requesterId)}>Tratar</button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a, di)}>Tratar</button>
                             {first && (
                               <form action={deleteAction} style={{ display: "inline-flex" }}>
                                 <input type="hidden" name="id" value={a.id} />

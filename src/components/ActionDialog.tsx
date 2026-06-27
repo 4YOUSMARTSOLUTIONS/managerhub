@@ -59,14 +59,50 @@ export function ActionDialog({
     }
   }, [open]);
 
-  const blocoOpts = useMemo(() => blocos.filter((b) => b.pilarId === pilarId), [blocos, pilarId]);
-  const itemOpts = useMemo(() => itens.filter((i) => i.blocoId === blocoId), [itens, blocoId]);
+  // cascata bidirecional: filtra pelo pai se houver, senão mostra todos
+  const blocoOpts = useMemo(() => (pilarId ? blocos.filter((b) => b.pilarId === pilarId) : blocos), [blocos, pilarId]);
+  const itemOpts = useMemo(() => (blocoId ? itens.filter((i) => i.blocoId === blocoId) : itens), [itens, blocoId]);
   const occOpts = useMemo(
     () => occurrences.filter((o) => !seriesId || o.seriesId === seriesId).map((o) => ({ id: o.id, name: formatDate(o.occurredOn) })),
     [occurrences, seriesId],
   );
 
   if (!open) return null;
+
+  // ao escolher o pilar: se o bloco atual não pertence a ele, limpa bloco+item
+  const onPilar = (id: string) => {
+    setPilarId(id);
+    if (blocoId) {
+      const b = blocos.find((x) => x.id === blocoId);
+      if (!id || (b && b.pilarId !== id)) { setBlocoId(""); setItemId(""); }
+    }
+  };
+  // ao escolher o bloco: preenche o pilar automaticamente; limpa item se não pertencer
+  const onBloco = (id: string) => {
+    setBlocoId(id);
+    if (id) {
+      const b = blocos.find((x) => x.id === id);
+      if (b) setPilarId(b.pilarId);
+      if (itemId) {
+        const it = itens.find((x) => x.id === itemId);
+        if (!it || it.blocoId !== id) setItemId("");
+      }
+    } else {
+      setItemId("");
+    }
+  };
+  // ao escolher o item: preenche bloco e pilar automaticamente
+  const onItem = (id: string) => {
+    setItemId(id);
+    if (id) {
+      const it = itens.find((x) => x.id === id);
+      if (it) {
+        setBlocoId(it.blocoId);
+        const b = blocos.find((x) => x.id === it.blocoId);
+        if (b) setPilarId(b.pilarId);
+      }
+    }
+  };
 
   const setDemanda = (i: number, patch: Partial<Demanda>) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
   const addDemandaFiles = (i: number, list: FileList) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, files: [...d.files, ...Array.from(list)] } : d)));
@@ -127,15 +163,15 @@ export function ActionDialog({
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem", background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
               <div>
                 <label className="label">Pilar</label>
-                <SearchSelect options={pilares} value={pilarId} onChange={(id) => { setPilarId(id); setBlocoId(""); setItemId(""); }} placeholder="Buscar pilar…" />
+                <SearchSelect options={pilares} value={pilarId} onChange={onPilar} placeholder="Buscar pilar…" />
               </div>
               <div>
                 <label className="label">Bloco</label>
-                <SearchSelect options={blocoOpts} value={blocoId} onChange={(id) => { setBlocoId(id); setItemId(""); }} disabled={!pilarId} placeholder={pilarId ? "Buscar bloco…" : "Escolha o pilar"} />
+                <SearchSelect options={blocoOpts} value={blocoId} onChange={onBloco} placeholder="Buscar bloco…" />
               </div>
               <div>
                 <label className="label">Item</label>
-                <SearchSelect options={itemOpts} value={itemId} onChange={setItemId} disabled={!blocoId} placeholder={blocoId ? "Buscar item…" : "Escolha o bloco"} />
+                <SearchSelect options={itemOpts} value={itemId} onChange={onItem} placeholder="Buscar item…" />
               </div>
             </div>
           )}

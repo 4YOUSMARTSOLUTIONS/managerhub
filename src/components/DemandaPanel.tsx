@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { ACTION_STATUS, ACTION_STATUS_TONE } from "@/lib/constants";
+import { ACTION_STATUS, ACTION_STATUS_TONE, PRIORITY, PRIORITY_TONE } from "@/lib/constants";
 import { formatDate, formatDateTime, isOverdue } from "@/lib/format";
 import {
   getDemandaTimeline, demandaComment, demandaSetStatus, demandaRequest,
@@ -16,13 +16,34 @@ import type { Enums } from "@/types/database";
 
 export type DemandaInfo = {
   id: string;
+  label: string;
   description: string;
   status: Enums<"action_status">;
   dueDate: string | null;
+  priority: Enums<"priority_level">;
   assigneeIds: string[];
   assigneeNames: string[];
   attachments: { id: string; filename: string; path: string }[];
+  requesterName: string | null;
+  ccNames: string[];
+  isSdpo: boolean;
+  pilarName: string | null;
+  blocoName: string | null;
+  itemName: string | null;
+  kpiName: string | null;
+  toolName: string | null;
+  seriesName: string | null;
+  occurredOn: string | null;
 };
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+      <div style={{ fontSize: "0.85rem", marginTop: 1 }}>{children}</div>
+    </div>
+  );
+}
 
 function AttLink({ path, filename }: { path: string; filename: string }) {
   const open = async () => { const url = await getAttachmentUrl(path); if (url) window.open(url, "_blank"); };
@@ -119,24 +140,40 @@ export function DemandaPanel({
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 65, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 640, boxShadow: "var(--shadow)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", gap: "0.75rem" }}>
-          <div>
-            <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>{demanda.description}</h2>
-            <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", marginTop: "0.35rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, fontSize: "0.78rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 7, padding: "0.06rem 0.4rem" }}>{demanda.label}</span>
               <Badge tone={ACTION_STATUS_TONE[status]}>{ACTION_STATUS[status]}</Badge>
-              {due && <span className="muted" style={{ color: !finalizada && isOverdue(due) ? "#dc2626" : undefined }}>Prazo: {formatDate(due)}</span>}
-              <span className="muted">{demanda.assigneeNames.join(", ") || "Sem responsável"}</span>
+              <Badge tone={PRIORITY_TONE[demanda.priority]}>{PRIORITY[demanda.priority]}</Badge>
+              {demanda.isSdpo && <Badge tone="purple">SDPO</Badge>}
             </div>
+            <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: "0.45rem 0 0", whiteSpace: "pre-wrap" }}>{demanda.description}</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
+          <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)", flexShrink: 0 }}>×</button>
         </div>
 
         <div style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {demanda.attachments.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
-              <span className="soft" style={{ fontSize: "0.78rem" }}>Anexos:</span>
-              {demanda.attachments.map((at) => <AttLink key={at.id} path={at.path} filename={at.filename} />)}
-            </div>
-          )}
+          {/* informações da ação */}
+          <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.85rem 1rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem" }}>
+            <Field label="Prazo"><span style={{ color: due && !finalizada && isOverdue(due) ? "#dc2626" : undefined }}>{due ? formatDate(due) : "—"}</span></Field>
+            <Field label="Responsáveis">{demanda.assigneeNames.length > 0 ? demanda.assigneeNames.join(", ") : <span className="soft">Sem responsável</span>}</Field>
+            <Field label="Solicitante">{demanda.requesterName ?? "—"}</Field>
+            {(demanda.ccNames ?? []).length > 0 && <Field label="Em cópia"><span className="muted">{demanda.ccNames.join(", ")}</span></Field>}
+            {demanda.isSdpo && (demanda.pilarName || demanda.blocoName || demanda.itemName) && (
+              <Field label="SDPO"><span className="muted">{[demanda.pilarName, demanda.blocoName, demanda.itemName].filter(Boolean).join(" › ")}</span></Field>
+            )}
+            {demanda.kpiName && <Field label="KPI">{demanda.kpiName}</Field>}
+            {demanda.toolName && <Field label="Ferramenta">{demanda.toolName}</Field>}
+            {demanda.seriesName && <Field label="Reunião"><span className="muted">{demanda.seriesName}{demanda.occurredOn ? ` (${formatDate(demanda.occurredOn)})` : ""}</span></Field>}
+            {demanda.attachments.length > 0 && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 4 }}>Anexos</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                  {demanda.attachments.map((at) => <AttLink key={at.id} path={at.path} filename={at.filename} />)}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Pedidos pendentes */}
           {requests.map((r) => (
