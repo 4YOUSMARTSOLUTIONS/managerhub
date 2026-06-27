@@ -32,8 +32,8 @@ export function MeetingsBoard({
   return (
     <>
       <PageHeader
-        title="Reuniões"
-        subtitle="Agende e acompanhe as reuniões do time."
+        title="Salas de reuniões"
+        subtitle="Agende e acompanhe a ocupação das salas."
         action={
           <button className="btn btn-primary" onClick={() => openNew()}>
             + Nova reunião

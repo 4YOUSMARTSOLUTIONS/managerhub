@@ -95,7 +95,7 @@ export default async function DashboardPage() {
           gap: "1.25rem",
         }}
       >
-        <Section title="Próximas reuniões" action={<Link href="/reunioes" className="btn btn-ghost btn-sm">Ver todas</Link>} padded={false}>
+        <Section title="Próximas reuniões" action={<Link href="/salas" className="btn btn-ghost btn-sm">Ver todas</Link>} padded={false}>
           {meetings && meetings.length > 0 ? (
             <table className="table">
               <tbody>

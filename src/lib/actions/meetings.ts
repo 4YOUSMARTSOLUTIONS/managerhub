@@ -46,7 +46,7 @@ export async function createMeeting(
       return { error: error.message };
     }
 
-    revalidatePath("/reunioes");
+    revalidatePath("/salas");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (e) {
@@ -59,7 +59,7 @@ export async function setMeetingStatus(formData: FormData): Promise<void> {
   const id = String(formData.get("id"));
   const status = String(formData.get("status")) as Enums<"meeting_status">;
   await supabase.from("meetings").update({ status }).eq("id", id);
-  revalidatePath("/reunioes");
+  revalidatePath("/salas");
   revalidatePath("/dashboard");
 }
 
@@ -67,6 +67,6 @@ export async function deleteMeeting(formData: FormData): Promise<void> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));
   await supabase.from("meetings").delete().eq("id", id);
-  revalidatePath("/reunioes");
+  revalidatePath("/salas");
   revalidatePath("/dashboard");
 }

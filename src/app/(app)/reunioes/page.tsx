@@ -1,41 +1,126 @@
 import { requireContext } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
-import { MeetingsBoard } from "@/components/MeetingsBoard";
-import type { CalMeeting } from "@/components/RoomCalendar";
+import { MeetingRecords, type SeriesRow, type OccurrenceRow } from "@/components/MeetingRecords";
+import type { Person } from "@/components/PeoplePicker";
 
-export default async function MeetingsPage() {
-  const { user, role } = await requireContext();
+export default async function MeetingRecordsPage() {
+  const { tenant } = await requireContext();
   const supabase = await createClient();
 
-  const [{ data: meetings }, { data: rooms }] = await Promise.all([
+  const [
+    { data: series }, { data: parts }, { data: unitLinks }, { data: unitsData },
+    { data: members }, { data: roomsData }, { data: occ },
+  ] = await Promise.all([
     supabase
-      .from("meetings")
-      .select("*, rooms(id, name, color), creator:profiles!created_by(full_name)")
-      .order("starts_at", { ascending: false })
-      .limit(500),
-    supabase.from("rooms").select("id, name, color").eq("is_active", true).order("name"),
+      .from("meeting_series")
+      .select("*")
+      .eq("tenant_id", tenant.id)
+      .order("is_active", { ascending: false })
+      .order("next_date", { ascending: true, nullsFirst: false })
+      .order("name"),
+    supabase.from("meeting_series_participants").select("series_id, user_id"),
+    supabase.from("meeting_series_units").select("series_id, unit_id"),
+    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase
+      .from("memberships")
+      .select("user_id, profiles!memberships_user_id_fkey(full_name)")
+      .eq("tenant_id", tenant.id)
+      .eq("is_active", true),
+    supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
+    supabase
+      .from("meeting_occurrences")
+      .select("id, series_id, occurred_on, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+      .order("occurred_on", { ascending: false })
+      .limit(300),
   ]);
 
-  const calMeetings: CalMeeting[] = (meetings ?? []).map((m) => {
-    const room = m.rooms as { id: string; name: string; color: string } | null;
-    const creator = m.creator as { full_name: string | null } | null;
+  const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
+  const roomById = new Map(rooms.map((r) => [r.id, r.name]));
+
+  const units = (unitsData ?? []).map((u) => ({ id: u.id, name: u.name }));
+  const unitById = new Map(units.map((u) => [u.id, u.name]));
+  const unitsBySeries = new Map<string, string[]>();
+  for (const ul of unitLinks ?? []) {
+    const arr = unitsBySeries.get(ul.series_id) ?? [];
+    arr.push(ul.unit_id);
+    unitsBySeries.set(ul.series_id, arr);
+  }
+
+  // pessoas (membros ativos)
+  const people: Person[] = (members ?? [])
+    .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  const personById = new Map(people.map((p) => [p.id, p.name]));
+
+  // participantes habituais por série
+  const partsBySeries = new Map<string, string[]>();
+  for (const p of parts ?? []) {
+    const arr = partsBySeries.get(p.series_id) ?? [];
+    arr.push(p.user_id);
+    partsBySeries.set(p.series_id, arr);
+  }
+
+  const seriesRows: SeriesRow[] = (series ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    periodicity: s.periodicity,
+    nextDate: s.next_date,
+    objetivo: s.objetivo,
+    owner: s.owner,
+    ownerUserId: s.owner_user_id,
+    ownerUserName: s.owner_user_id ? personById.get(s.owner_user_id) ?? null : null,
+    roomId: s.room_id,
+    roomName: s.room_id ? roomById.get(s.room_id) ?? null : null,
+    isOnline: s.is_online,
+    participantsText: s.participants_text,
+    durationMin: s.duration_min,
+    durationUnit: s.duration_unit,
+    content: (s.content as { item: string; tempo: string; dono: string }[] | null) ?? [],
+    generalRules: (s.general_rules as string[] | null) ?? [],
+    howTo: (s.how_to as string[] | null) ?? [],
+    participantIds: partsBySeries.get(s.id) ?? [],
+    unitIds: unitsBySeries.get(s.id) ?? [],
+    unitNames: (unitsBySeries.get(s.id) ?? []).map((id) => unitById.get(id)).filter((x): x is string => !!x),
+    isActive: s.is_active,
+  }));
+
+  // contagens de presença/ações por registro
+  const occIds = (occ ?? []).map((o) => o.id);
+  const [{ data: att }, { data: acts }] = await Promise.all([
+    occIds.length
+      ? supabase.from("meeting_attendance").select("occurrence_id, present").in("occurrence_id", occIds)
+      : Promise.resolve({ data: [] as { occurrence_id: string; present: boolean }[] }),
+    occIds.length
+      ? supabase.from("action_items").select("occurrence_id").in("occurrence_id", occIds)
+      : Promise.resolve({ data: [] as { occurrence_id: string | null }[] }),
+  ]);
+
+  const attBy = new Map<string, { total: number; present: number }>();
+  for (const a of att ?? []) {
+    const cur = attBy.get(a.occurrence_id) ?? { total: 0, present: 0 };
+    cur.total += 1;
+    if (a.present) cur.present += 1;
+    attBy.set(a.occurrence_id, cur);
+  }
+  const actBy = new Map<string, number>();
+  for (const a of acts ?? []) {
+    if (!a.occurrence_id) continue;
+    actBy.set(a.occurrence_id, (actBy.get(a.occurrence_id) ?? 0) + 1);
+  }
+
+  const occurrences: OccurrenceRow[] = (occ ?? []).map((o) => {
+    const counts = attBy.get(o.id) ?? { total: 0, present: 0 };
     return {
-      id: m.id,
-      title: m.title,
-      description: m.description,
-      starts_at: m.starts_at,
-      ends_at: m.ends_at,
-      status: m.status,
-      room: room ? { id: room.id, name: room.name, color: room.color } : null,
-      created_by: m.created_by,
-      creatorName: creator?.full_name ?? null,
+      id: o.id,
+      seriesId: o.series_id,
+      seriesName: (o.meeting_series as { name: string } | null)?.name ?? "—",
+      occurredOn: o.occurred_on,
+      presentCount: counts.present,
+      totalCount: counts.total,
+      actionsCount: actBy.get(o.id) ?? 0,
+      registeredByName: (o.registrant as { full_name: string | null } | null)?.full_name ?? null,
     };
   });
-  const calRooms = (rooms ?? []).map((r) => ({ id: r.id, name: r.name, color: r.color }));
 
-  return (
-    <div>
-      <MeetingsBoard meetings={calMeetings} rooms={calRooms} userId={user.id} role={role} />
-    </div>
-  );
+  return <MeetingRecords series={seriesRows} occurrences={occurrences} people={people} rooms={rooms} units={units} />;
 }

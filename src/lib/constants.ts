@@ -15,6 +15,19 @@ export const MEETING_STATUS_TONE: Record<Enums<"meeting_status">, Tone> = {
   cancelled: "gray",
 };
 
+// ---------- Periodicidade de reuniões ----------
+export const PERIODICITY: Record<Enums<"meeting_periodicity">, string> = {
+  diaria: "Diária",
+  semanal: "Semanal",
+  quinzenal: "Quinzenal",
+  mensal: "Mensal",
+  bimestral: "Bimestral",
+  trimestral: "Trimestral",
+  semestral: "Semestral",
+  anual: "Anual",
+  sob_demanda: "Sob demanda",
+};
+
 // ---------- Ações ----------
 export const ACTION_STATUS: Record<Enums<"action_status">, string> = {
   open: "Aberta",

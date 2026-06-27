@@ -16,6 +16,10 @@ import {
   createSubdepartment, deleteSubdepartment, createPosition, deletePosition,
   createPositionLevel, deletePositionLevel,
 } from "@/lib/actions/registry";
+import {
+  createPilar, deletePilar, createBloco, deleteBloco, createItem, deleteItem,
+  createKpi, deleteKpi, createTool, deleteTool,
+} from "@/lib/actions/sdpo";
 
 export default async function SettingsPage() {
   const { tenant, role, user } = await requireContext();
@@ -42,6 +46,14 @@ export default async function SettingsPage() {
     supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name"),
+  ]);
+
+  const [{ data: pilares }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools }] = await Promise.all([
+    supabase.from("sdpo_pilares").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_blocos").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_itens").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_kpis").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_tools").select("*").eq("tenant_id", tenant.id).order("name"),
   ]);
 
   const mems = memberships ?? [];
@@ -241,10 +253,85 @@ export default async function SettingsPage() {
     </Section>
   );
 
+  // ---------- SDPO / Programa de Excelência ----------
+  const pilarOpts = (pilares ?? []).map((p) => ({ id: p.id, name: p.name }));
+  const blocoOpts = (blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilar_id: b.pilar_id }));
+  const itemOpts = (itens ?? []).map((i) => ({ id: i.id, name: i.name, bloco_id: i.bloco_id }));
+  const pilarById = new Map(pilarOpts.map((p) => [p.id, p.name]));
+  const blocoById = new Map(blocoOpts.map((b) => [b.id, b.name]));
+
+  const sdpoTab = (
+    <Tabs
+      variant="sub"
+      tabs={[
+        {
+          id: "pilares",
+          label: "Pilares",
+          content: <RegistryList title="Pilares" description="Pilares do Programa de Excelência (SDPO)." items={pilarOpts} createAction={createPilar} deleteAction={deletePilar} placeholder="Nome do pilar" />,
+        },
+        {
+          id: "blocos",
+          label: "Blocos",
+          content: (
+            <RegistryList
+              title="Blocos"
+              description="Cada bloco pertence a um pilar."
+              items={blocoOpts.map((b) => ({ id: b.id, name: b.name, meta: pilarById.get(b.pilar_id) ?? undefined }))}
+              createAction={createBloco}
+              deleteAction={deleteBloco}
+              placeholder="Nome do bloco"
+              metaLabel="Pilar"
+              emptyText="Nenhum bloco. Cadastre pilares primeiro."
+              extraFields={
+                <select name="pilar_id" className="select" required style={{ width: "auto" }}>
+                  <option value="">Pilar…</option>
+                  {pilarOpts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              }
+            />
+          ),
+        },
+        {
+          id: "itens",
+          label: "Itens",
+          content: (
+            <RegistryList
+              title="Itens"
+              description="Cada item pertence a um bloco."
+              items={itemOpts.map((i) => ({ id: i.id, name: i.name, meta: blocoById.get(i.bloco_id) ?? undefined }))}
+              createAction={createItem}
+              deleteAction={deleteItem}
+              placeholder="Nome do item"
+              metaLabel="Bloco"
+              emptyText="Nenhum item. Cadastre blocos primeiro."
+              extraFields={
+                <select name="bloco_id" className="select" required style={{ width: "auto" }}>
+                  <option value="">Bloco…</option>
+                  {blocoOpts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              }
+            />
+          ),
+        },
+        {
+          id: "kpis",
+          label: "KPIs",
+          content: <RegistryList title="KPIs" description="Indicadores relacionados às ações." items={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))} createAction={createKpi} deleteAction={deleteKpi} placeholder="Nome do KPI" />,
+        },
+        {
+          id: "ferramentas",
+          label: "Ferramentas de gestão",
+          content: <RegistryList title="Ferramentas de gestão" items={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))} createAction={createTool} deleteAction={deleteTool} placeholder="Ex.: 5W2H, PDCA, Ishikawa" />,
+        },
+      ]}
+    />
+  );
+
   const tabs: Tab[] = [
     { id: "empresa", label: "Empresa", content: empresaTab },
     { id: "usuarios", label: "Usuários", content: usuariosTab },
     { id: "estrutura", label: "Estrutura", content: estruturaTab },
+    { id: "sdpo", label: "Programa de Excelência", content: sdpoTab },
     { id: "salas", label: "Salas", content: salasTab },
   ];
 

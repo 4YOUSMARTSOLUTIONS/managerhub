@@ -17,7 +17,8 @@ const icon = (d: string) => (
 
 const NAV: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: icon("M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z") },
-  { href: "/reunioes", label: "Reuniões", icon: icon("M8 2v4|M16 2v4|M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z") },
+  { href: "/reunioes", label: "Reuniões", icon: icon("M9 11l3 3 8-8|M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9") },
+  { href: "/salas", label: "Salas de reuniões", icon: icon("M8 2v4|M16 2v4|M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z") },
   { href: "/acoes", label: "Ações", icon: icon("M9 11l3 3L22 4|M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11") },
   { href: "/chamados", label: "Chamados", icon: icon("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z") },
   { href: "/metas", label: "Metas", icon: icon("M12 2a10 10 0 1 0 10 10|M12 6a6 6 0 1 0 6 6|M12 10a2 2 0 1 0 2 2") },

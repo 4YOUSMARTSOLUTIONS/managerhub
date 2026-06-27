@@ -22,6 +22,7 @@ export type Database = {
           due_date: string | null
           id: string
           meeting_id: string | null
+          occurrence_id: string | null
           priority: Database["public"]["Enums"]["priority_level"]
           status: Database["public"]["Enums"]["action_status"]
           tenant_id: string
@@ -37,6 +38,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           meeting_id?: string | null
+          occurrence_id?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           status?: Database["public"]["Enums"]["action_status"]
           tenant_id: string
@@ -52,6 +54,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           meeting_id?: string | null
+          occurrence_id?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           status?: Database["public"]["Enums"]["action_status"]
           tenant_id?: string
@@ -439,6 +442,111 @@ export type Database = {
         Update: { membership_id?: string; unit_id?: string }
         Relationships: []
       }
+      meeting_series: {
+        Row: { id: string; tenant_id: string; name: string; periodicity: Database["public"]["Enums"]["meeting_periodicity"]; next_date: string | null; objetivo: string | null; owner: string | null; owner_user_id: string | null; room_id: string | null; is_online: boolean; participants_text: string | null; duration_min: number | null; duration_unit: string; content: Json; general_rules: Json; how_to: Json; is_active: boolean; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; created_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      meeting_series_participants: {
+        Row: { series_id: string; user_id: string }
+        Insert: { series_id: string; user_id: string }
+        Update: { series_id?: string; user_id?: string }
+        Relationships: []
+      }
+      meeting_series_units: {
+        Row: { series_id: string; unit_id: string }
+        Insert: { series_id: string; unit_id: string }
+        Update: { series_id?: string; unit_id?: string }
+        Relationships: []
+      }
+      sdpo_pilares: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      sdpo_blocos: {
+        Row: { id: string; tenant_id: string; pilar_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; pilar_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; pilar_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      sdpo_itens: {
+        Row: { id: string; tenant_id: string; bloco_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; bloco_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; bloco_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      action_kpis: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      action_tools: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      actions: {
+        Row: { id: string; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; requester_id: string | null; due_date: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; requester_id?: string | null; due_date?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; requester_id?: string | null; due_date?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      action_demandas: {
+        Row: { id: string; action_id: string; tenant_id: string; description: string; status: Database["public"]["Enums"]["action_status"]; completed_at: string | null; created_at: string }
+        Insert: { id?: string; action_id: string; tenant_id: string; description: string; status?: Database["public"]["Enums"]["action_status"]; completed_at?: string | null; created_at?: string }
+        Update: { id?: string; action_id?: string; tenant_id?: string; description?: string; status?: Database["public"]["Enums"]["action_status"]; completed_at?: string | null; created_at?: string }
+        Relationships: []
+      }
+      action_demanda_assignees: {
+        Row: { demanda_id: string; user_id: string }
+        Insert: { demanda_id: string; user_id: string }
+        Update: { demanda_id?: string; user_id?: string }
+        Relationships: []
+      }
+      action_cc: {
+        Row: { action_id: string; user_id: string }
+        Insert: { action_id: string; user_id: string }
+        Update: { action_id?: string; user_id?: string }
+        Relationships: []
+      }
+      action_attachments: {
+        Row: { id: string; action_id: string; demanda_id: string | null; tenant_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; action_id: string; demanda_id?: string | null; tenant_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; action_id?: string; demanda_id?: string | null; tenant_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      meeting_occurrences: {
+        Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; registered_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; series_id?: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_occurrences_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_occurrences_registered_by_fkey"
+            columns: ["registered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_attendance: {
+        Row: { occurrence_id: string; user_id: string; present: boolean }
+        Insert: { occurrence_id: string; user_id: string; present?: boolean }
+        Update: { occurrence_id?: string; user_id?: string; present?: boolean }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -705,6 +813,9 @@ export type Database = {
       is_tenant_member: { Args: { p_tenant: string }; Returns: boolean }
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
+      create_action: { Args: { p_data: Json }; Returns: Json }
+      save_meeting_series: { Args: { p_data: Json }; Returns: string }
+      register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       admin_create_employee: { Args: { p_data: Json; p_password: string }; Returns: string }
       admin_update_employee: { Args: { p_user: string; p_data: Json }; Returns: undefined }
       admin_import_employees: { Args: { p_rows: Json; p_password: string }; Returns: Json }
@@ -768,6 +879,16 @@ export type Database = {
       tenant_status: "active" | "suspended" | "inactive"
       unit_kind: "matriz" | "filial"
       gender_type: "masculino" | "feminino" | "outro" | "nao_informado"
+      meeting_periodicity:
+        | "diaria"
+        | "semanal"
+        | "quinzenal"
+        | "mensal"
+        | "bimestral"
+        | "trimestral"
+        | "semestral"
+        | "anual"
+        | "sob_demanda"
     }
     CompositeTypes: {
       [_ in never]: never
