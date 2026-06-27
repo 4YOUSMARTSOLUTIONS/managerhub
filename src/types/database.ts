@@ -1,0 +1,787 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  public: {
+    Tables: {
+      action_items: {
+        Row: {
+          assignee_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          meeting_id: string | null
+          priority: Database["public"]["Enums"]["priority_level"]
+          status: Database["public"]["Enums"]["action_status"]
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assignee_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          meeting_id?: string | null
+          priority?: Database["public"]["Enums"]["priority_level"]
+          status?: Database["public"]["Enums"]["action_status"]
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assignee_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          meeting_id?: string | null
+          priority?: Database["public"]["Enums"]["priority_level"]
+          status?: Database["public"]["Enums"]["action_status"]
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_items_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_items_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changes: Json | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: number
+          summary: string | null
+          tenant_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: never
+          summary?: string | null
+          tenant_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: never
+          summary?: string | null
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goal_updates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          goal_id: string
+          id: string
+          note: string | null
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          goal_id: string
+          id?: string
+          note?: string | null
+          value: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          goal_id?: string
+          id?: string
+          note?: string | null
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_updates_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      goals: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          current_value: number
+          description: string | null
+          id: string
+          owner_id: string | null
+          period_end: string | null
+          period_start: string | null
+          status: Database["public"]["Enums"]["goal_status"]
+          target_value: number
+          tenant_id: string
+          title: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          current_value?: number
+          description?: string | null
+          id?: string
+          owner_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          status?: Database["public"]["Enums"]["goal_status"]
+          target_value?: number
+          tenant_id: string
+          title: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          current_value?: number
+          description?: string | null
+          id?: string
+          owner_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          status?: Database["public"]["Enums"]["goal_status"]
+          target_value?: number
+          tenant_id?: string
+          title?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goals_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_participants: {
+        Row: {
+          created_at: string
+          meeting_id: string
+          response: Database["public"]["Enums"]["participant_response"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          meeting_id: string
+          response?: Database["public"]["Enums"]["participant_response"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          meeting_id?: string
+          response?: Database["public"]["Enums"]["participant_response"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_participants_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          ends_at: string
+          id: string
+          organizer_id: string | null
+          room_id: string | null
+          starts_at: string
+          status: Database["public"]["Enums"]["meeting_status"]
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          ends_at: string
+          id?: string
+          organizer_id?: string | null
+          room_id?: string | null
+          starts_at: string
+          status?: Database["public"]["Enums"]["meeting_status"]
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          ends_at?: string
+          id?: string
+          organizer_id?: string | null
+          room_id?: string | null
+          starts_at?: string
+          status?: Database["public"]["Enums"]["meeting_status"]
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_organizer_id_fkey"
+            columns: ["organizer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memberships: {
+        Row: {
+          admission_date: string | null
+          created_at: string
+          department_id: string | null
+          dismissed_at: string | null
+          employee_code: string | null
+          id: string
+          is_active: boolean
+          manager_id: string | null
+          position_id: string | null
+          position_level_id: string | null
+          role: Database["public"]["Enums"]["member_role"]
+          subdepartment_id: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          admission_date?: string | null
+          created_at?: string
+          department_id?: string | null
+          dismissed_at?: string | null
+          employee_code?: string | null
+          id?: string
+          is_active?: boolean
+          manager_id?: string | null
+          position_id?: string | null
+          position_level_id?: string | null
+          role?: Database["public"]["Enums"]["member_role"]
+          subdepartment_id?: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          admission_date?: string | null
+          created_at?: string
+          department_id?: string | null
+          dismissed_at?: string | null
+          employee_code?: string | null
+          id?: string
+          is_active?: boolean
+          manager_id?: string | null
+          position_id?: string | null
+          position_level_id?: string | null
+          role?: Database["public"]["Enums"]["member_role"]
+          subdepartment_id?: string | null
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memberships_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      units: {
+        Row: { id: string; tenant_id: string; name: string; kind: Database["public"]["Enums"]["unit_kind"]; cnpj: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; kind?: Database["public"]["Enums"]["unit_kind"]; cnpj?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; kind?: Database["public"]["Enums"]["unit_kind"]; cnpj?: string | null; created_at?: string }
+        Relationships: []
+      }
+      departments: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      subdepartments: {
+        Row: { id: string; tenant_id: string; department_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; department_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; department_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      positions: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      position_levels: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      membership_units: {
+        Row: { membership_id: string; unit_id: string }
+        Insert: { membership_id: string; unit_id: string }
+        Update: { membership_id?: string; unit_id?: string }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          birth_date: string | null
+          cpf: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
+          id: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          birth_date?: string | null
+          cpf?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
+          id: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          birth_date?: string | null
+          cpf?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
+          id?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rooms: {
+        Row: {
+          capacity: number
+          color: string
+          created_at: string
+          id: string
+          is_active: boolean
+          location: string | null
+          name: string
+          resources: string[]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          capacity?: number
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location?: string | null
+          name: string
+          resources?: string[]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          capacity?: number
+          color?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location?: string | null
+          name?: string
+          resources?: string[]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rooms_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+          status: Database["public"]["Enums"]["tenant_status"]
+          units_limit: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          slug: string
+          status?: Database["public"]["Enums"]["tenant_status"]
+          units_limit?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+          status?: Database["public"]["Enums"]["tenant_status"]
+          units_limit?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ticket_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          ticket_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          ticket_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          assignee_id: string | null
+          category: Database["public"]["Enums"]["ticket_category"]
+          code: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: Database["public"]["Enums"]["priority_level"]
+          requester_id: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["ticket_status"]
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assignee_id?: string | null
+          category?: Database["public"]["Enums"]["ticket_category"]
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: Database["public"]["Enums"]["priority_level"]
+          requester_id?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assignee_id?: string | null
+          category?: Database["public"]["Enums"]["ticket_category"]
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: Database["public"]["Enums"]["priority_level"]
+          requester_id?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      admin_create_user: {
+        Args: {
+          p_email: string
+          p_password: string
+          p_full_name: string
+          p_role: Database["public"]["Enums"]["member_role"]
+        }
+        Returns: string
+      }
+      admin_delete_user: { Args: { p_user: string }; Returns: undefined }
+      admin_set_password: {
+        Args: { p_user: string; p_password: string }
+        Returns: undefined
+      }
+      my_active_tenant: { Args: Record<PropertyKey, never>; Returns: string }
+      create_tenant_with_owner: {
+        Args: { p_name: string; p_slug: string }
+        Returns: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+          updated_at: string
+        }[]
+      }
+      current_tenant_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      dashboard_stats: { Args: { p_tenant: string }; Returns: Json }
+      has_tenant_role: {
+        Args: {
+          p_roles: Database["public"]["Enums"]["member_role"][]
+          p_tenant: string
+        }
+        Returns: boolean
+      }
+      is_tenant_member: { Args: { p_tenant: string }; Returns: boolean }
+      is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      email_by_cpf: { Args: { p_cpf: string }; Returns: string }
+      admin_create_employee: { Args: { p_data: Json; p_password: string }; Returns: string }
+      admin_update_employee: { Args: { p_user: string; p_data: Json }; Returns: undefined }
+      admin_import_employees: { Args: { p_rows: Json; p_password: string }; Returns: Json }
+      platform_companies: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          name: string
+          slug: string
+          status: Database["public"]["Enums"]["tenant_status"]
+          created_at: string
+          members_count: number
+          units_count: number
+          units_limit: number | null
+        }[]
+      }
+      platform_set_units_limit: {
+        Args: { p_tenant: string; p_limit: number | null }
+        Returns: undefined
+      }
+      platform_stats: { Args: Record<PropertyKey, never>; Returns: Json }
+      platform_create_company: {
+        Args: {
+          p_company: string
+          p_owner_email: string
+          p_owner_password: string
+          p_owner_name: string
+        }
+        Returns: string
+      }
+      platform_set_company_status: {
+        Args: {
+          p_tenant: string
+          p_status: Database["public"]["Enums"]["tenant_status"]
+        }
+        Returns: undefined
+      }
+      platform_delete_company: { Args: { p_tenant: string }; Returns: undefined }
+    }
+    Enums: {
+      action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
+      goal_status: "active" | "at_risk" | "achieved" | "missed" | "archived"
+      meeting_status: "scheduled" | "in_progress" | "done" | "cancelled"
+      member_role: "owner" | "admin" | "manager" | "member"
+      participant_response: "invited" | "accepted" | "declined" | "tentative"
+      priority_level: "low" | "medium" | "high" | "urgent"
+      ticket_category:
+        | "ti"
+        | "servicos_gerais"
+        | "facilities"
+        | "rh"
+        | "financeiro"
+        | "outros"
+      ticket_status:
+        | "open"
+        | "in_progress"
+        | "waiting"
+        | "resolved"
+        | "closed"
+        | "cancelled"
+      tenant_status: "active" | "suspended" | "inactive"
+      unit_kind: "matriz" | "filial"
+      gender_type: "masculino" | "feminino" | "outro" | "nao_informado"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type PublicSchema = Database["public"]
+
+export type Tables<T extends keyof PublicSchema["Tables"]> =
+  PublicSchema["Tables"][T]["Row"]
+export type TablesInsert<T extends keyof PublicSchema["Tables"]> =
+  PublicSchema["Tables"][T]["Insert"]
+export type TablesUpdate<T extends keyof PublicSchema["Tables"]> =
+  PublicSchema["Tables"][T]["Update"]
+export type Enums<T extends keyof PublicSchema["Enums"]> =
+  PublicSchema["Enums"][T]

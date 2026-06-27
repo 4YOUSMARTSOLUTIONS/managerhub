@@ -1,0 +1,257 @@
+import { requireContext } from "@/lib/tenant";
+import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Section } from "@/components/ui/Section";
+import { Tabs, type Tab } from "@/components/ui/Tabs";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FormModal } from "@/components/ui/FormModal";
+import { CompanyForm } from "@/components/CompanyForm";
+import { RegistryList } from "@/components/RegistryList";
+import { UnitsManager } from "@/components/UnitsManager";
+import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
+import { createRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
+import {
+  createDepartment, deleteDepartment,
+  createSubdepartment, deleteSubdepartment, createPosition, deletePosition,
+  createPositionLevel, deletePositionLevel,
+} from "@/lib/actions/registry";
+
+export default async function SettingsPage() {
+  const { tenant, role, user } = await requireContext();
+  const canAdmin = role === "owner" || role === "admin";
+
+  if (!canAdmin) {
+    return (
+      <div>
+        <PageHeader title="Configurações" />
+        <EmptyState title="Acesso restrito" description="Apenas proprietários e administradores podem acessar as configurações." />
+      </div>
+    );
+  }
+
+  const supabase = await createClient();
+  const [
+    { data: memberships }, { data: units }, { data: departments },
+    { data: subdepartments }, { data: positions }, { data: levels }, { data: rooms },
+  ] = await Promise.all([
+    supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
+    supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("departments").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("subdepartments").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name"),
+  ]);
+
+  const mems = memberships ?? [];
+
+  // RLS já limita ao tenant — evita .in() com centenas de ids (estoura a URL do PostgREST)
+  const [{ data: profilesData }, { data: muData }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, email, cpf, phone, birth_date, gender").limit(5000),
+    supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+  ]);
+
+  // mapas de apoio
+  const profById = new Map((profilesData ?? []).map((p) => [p.id, p]));
+  const unitById = new Map((units ?? []).map((u) => [u.id, u]));
+  const deptById = new Map((departments ?? []).map((d) => [d.id, d]));
+  const posById = new Map((positions ?? []).map((p) => [p.id, p]));
+  const levelById = new Map((levels ?? []).map((l) => [l.id, l]));
+  const unitsByMem = new Map<string, string[]>();
+  for (const mu of muData ?? []) {
+    const arr = unitsByMem.get(mu.membership_id) ?? [];
+    arr.push(mu.unit_id);
+    unitsByMem.set(mu.membership_id, arr);
+  }
+
+  const employees: EmployeeRow[] = mems.map((m) => {
+    const p = profById.get(m.user_id);
+    const uIds = unitsByMem.get(m.id) ?? [];
+    return {
+      userId: m.user_id,
+      fullName: p?.full_name ?? null,
+      email: p?.email ?? null,
+      cpf: p?.cpf ?? null,
+      phone: p?.phone ?? null,
+      birthDate: p?.birth_date ?? null,
+      gender: p?.gender ?? null,
+      role: m.role,
+      employeeCode: m.employee_code,
+      admissionDate: m.admission_date,
+      departmentId: m.department_id,
+      subdepartmentId: m.subdepartment_id,
+      positionId: m.position_id,
+      positionLevelId: m.position_level_id,
+      managerId: m.manager_id,
+      unitIds: uIds,
+      departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
+      positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
+      levelName: m.position_level_id ? levelById.get(m.position_level_id)?.name ?? null : null,
+      managerName: m.manager_id ? profById.get(m.manager_id)?.full_name ?? null : null,
+      unitNames: uIds.map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
+      active: m.is_active,
+    };
+  });
+
+  const people = (profilesData ?? []).map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
+  const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind }));
+  const deptOpts = (departments ?? []).map((d) => ({ id: d.id, name: d.name }));
+  const subOpts = (subdepartments ?? []).map((s) => ({ id: s.id, name: s.name, department_id: s.department_id }));
+  const posOpts = (positions ?? []).map((p) => ({ id: p.id, name: p.name }));
+  const levelOpts = (levels ?? []).map((l) => ({ id: l.id, name: l.name }));
+
+  // ---------- Conteúdo das abas ----------
+  const empresaTab = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <Section title="Dados da empresa">
+        <CompanyForm name={tenant.name} canEdit={role === "owner"} />
+      </Section>
+      <UnitsManager
+        units={(units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind, cnpj: u.cnpj }))}
+        unitLimit={tenant.units_limit}
+      />
+    </div>
+  );
+
+  const usuariosTab = (
+    <UsersManager
+      employees={employees}
+      units={unitOpts}
+      departments={deptOpts}
+      subdepartments={subOpts}
+      positions={posOpts}
+      levels={levelOpts}
+      people={people}
+      currentUserId={user.id}
+    />
+  );
+
+  const estruturaTab = (
+    <Tabs
+      variant="sub"
+      tabs={[
+        {
+          id: "setores",
+          label: "Setores",
+          content: <RegistryList title="Setores" items={deptOpts} createAction={createDepartment} deleteAction={deleteDepartment} placeholder="Nome do setor" />,
+        },
+        {
+          id: "subsetores",
+          label: "Subsetores",
+          content: (
+            <RegistryList
+              title="Subsetores"
+              description="Cada subsetor pertence a um setor."
+              items={subOpts.map((s) => ({ id: s.id, name: s.name, meta: deptById.get(s.department_id)?.name ?? undefined }))}
+              createAction={createSubdepartment}
+              deleteAction={deleteSubdepartment}
+              placeholder="Nome do subsetor"
+              metaLabel="Setor"
+              emptyText="Nenhum subsetor. Cadastre setores primeiro."
+              extraFields={
+                <select name="department_id" className="select" required style={{ width: "auto" }}>
+                  <option value="">Setor…</option>
+                  {deptOpts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              }
+            />
+          ),
+        },
+        {
+          id: "funcoes",
+          label: "Funções",
+          content: <RegistryList title="Funções" items={posOpts} createAction={createPosition} deleteAction={deletePosition} placeholder="Nome da função" />,
+        },
+        {
+          id: "perfis",
+          label: "Perfis de função",
+          content: <RegistryList title="Perfis de função" description="Ex.: Júnior, Pleno, Sênior." items={levelOpts} createAction={createPositionLevel} deleteAction={deletePositionLevel} placeholder="Ex.: Júnior, Pleno, Sênior" />,
+        },
+      ]}
+    />
+  );
+
+  const salasTab = (
+    <Section
+      title={`Salas de reunião · ${rooms?.length ?? 0}`}
+      padded={false}
+      action={
+        <FormModal triggerLabel="+ Nova sala" title="Nova sala" action={createRoom} submitLabel="Criar sala">
+          <div>
+            <label className="label">Nome</label>
+            <input name="name" className="input" required placeholder="Sala Principal" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "0.8rem" }}>
+            <div>
+              <label className="label">Localização</label>
+              <input name="location" className="input" placeholder="3º andar" />
+            </div>
+            <div>
+              <label className="label">Capacidade</label>
+              <input name="capacity" type="number" min={1} defaultValue={6} className="input" />
+            </div>
+          </div>
+          <div>
+            <label className="label">Recursos (separados por vírgula)</label>
+            <input name="resources" className="input" placeholder="TV, Webcam, Quadro branco" />
+          </div>
+          <div>
+            <label className="label">Cor</label>
+            <input name="color" type="color" defaultValue="#4f46e5" className="input" style={{ height: 42, padding: 4 }} />
+          </div>
+        </FormModal>
+      }
+    >
+      {rooms && rooms.length > 0 ? (
+        <table className="table">
+          <thead>
+            <tr><th>Sala</th><th>Localização</th><th>Capacidade</th><th>Status</th><th style={{ textAlign: "right" }}>Ações</th></tr>
+          </thead>
+          <tbody>
+            {rooms.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", fontWeight: 600 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color }} />
+                    {r.name}
+                  </span>
+                </td>
+                <td className="muted">{r.location ?? "—"}</td>
+                <td className="muted">{r.capacity} pessoas</td>
+                <td><Badge tone={r.is_active ? "green" : "gray"}>{r.is_active ? "Ativa" : "Inativa"}</Badge></td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <form action={toggleRoom} style={{ display: "inline" }}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <input type="hidden" name="is_active" value={String(r.is_active)} />
+                    <button className="btn btn-ghost btn-sm" type="submit">{r.is_active ? "Desativar" : "Ativar"}</button>
+                  </form>{" "}
+                  <form action={deleteRoom} style={{ display: "inline" }}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <EmptyState title="Nenhuma sala cadastrada" description="Crie a primeira sala para começar a agendar reuniões." />
+      )}
+    </Section>
+  );
+
+  const tabs: Tab[] = [
+    { id: "empresa", label: "Empresa", content: empresaTab },
+    { id: "usuarios", label: "Usuários", content: usuariosTab },
+    { id: "estrutura", label: "Estrutura", content: estruturaTab },
+    { id: "salas", label: "Salas", content: salasTab },
+  ];
+
+  return (
+    <div>
+      <PageHeader title="Configurações" subtitle="Empresa, usuários, unidades e estrutura organizacional." />
+      <Tabs tabs={tabs} />
+    </div>
+  );
+}
