@@ -183,6 +183,7 @@ export type GenerateActionsInput = {
   candidates?: { id: string; name: string }[];
   sdpoItens?: { item_id: string; bloco_id: string; pilar_id: string; label: string }[];
   today?: string; // YYYY-MM-DD (calculado no cliente para respeitar o fuso local)
+  single?: boolean; // consolida tudo em UMA ação (uso na tela de Nova ação)
 };
 
 export type SuggestedActionPayload = {
@@ -255,6 +256,9 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       "Regras: use SOMENTE nomes que aparecem na lista de Pessoas para \"responsaveis\" (se ninguém claro, deixe array vazio); " +
       "use \"item_index\" SOMENTE do catálogo fornecido (nunca invente índices); " +
       "seja fiel ao texto — NÃO invente ações, prazos ou responsáveis que não estejam no rascunho. " +
+      (input.single
+        ? "IMPORTANTE: consolide TUDO em UMA única ação (um único objeto no array \"acoes\") com quantas demandas forem necessárias. "
+        : "") +
       "Se não houver nenhuma ação clara, devolva { \"acoes\": [] }. Não inclua nada além do JSON.";
 
     const user = `${contexto ? contexto + "\n\n" : ""}Rascunho/transcrição:\n${draft}`;

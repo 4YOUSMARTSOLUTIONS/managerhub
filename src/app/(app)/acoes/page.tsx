@@ -133,6 +133,7 @@ export default async function ActionsPage() {
       tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
       series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
       occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
+      aiEnabled={tenant.has_openai_key}
     />
   );
 }

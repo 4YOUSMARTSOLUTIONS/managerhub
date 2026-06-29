@@ -45,7 +45,7 @@ export type ActionRow = {
 };
 
 export function ActionsManager({
-  actions, currentUserId, isAdmin, people, pilares, blocos, itens, kpis, tools, series, occurrences,
+  actions, currentUserId, isAdmin, people, pilares, blocos, itens, kpis, tools, series, occurrences, aiEnabled,
 }: {
   actions: ActionRow[];
   currentUserId: string;
@@ -58,6 +58,7 @@ export function ActionsManager({
   tools: Opt[];
   series: Opt[];
   occurrences: OccOpt[];
+  aiEnabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null } | null>(null);
@@ -176,6 +177,7 @@ export function ActionsManager({
         tools={tools}
         series={series}
         occurrences={occurrences}
+        aiEnabled={aiEnabled}
       />
 
       <DemandaPanel

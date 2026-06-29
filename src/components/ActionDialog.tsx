@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createAction } from "@/lib/actions/actions";
+import { generateActionsAI } from "@/lib/actions/ai";
 import { formatDate } from "@/lib/format";
 import { PRIORITY } from "@/lib/constants";
 import { PeoplePicker, type Person } from "./PeoplePicker";
@@ -29,7 +30,7 @@ export type CollectedAction = {
 
 export function ActionDialog({
   open, onClose, people, pilares, blocos, itens, kpis, tools, series, occurrences,
-  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, editing,
+  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, editing, aiEnabled,
 }: {
   open: boolean;
   onClose: () => void;
@@ -46,6 +47,7 @@ export function ActionDialog({
   defaultRequesterId?: string;
   defaultAssignees?: string[];
   editing?: CollectedAction | null;
+  aiEnabled?: boolean;
 }) {
   const [isSdpo, setIsSdpo] = useState(true);
   const [pilarId, setPilarId] = useState("");
@@ -65,12 +67,17 @@ export function ActionDialog({
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiDraft, setAiDraft] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
     setOccurrenceId(""); setError(""); setSaved(""); setKeepOpen(false);
+    setAiOpen(false); setAiDraft(""); setAiBusy(false); setAiErr("");
     if (editing) {
       const p = editing.payload;
       setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
@@ -136,6 +143,41 @@ export function ActionDialog({
   const addDemandaFiles = (i: number, list: FileList) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, files: [...d.files, ...Array.from(list)] } : d)));
   const removeDemandaFile = (i: number, fi: number) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, files: d.files.filter((_, k) => k !== fi) } : d)));
 
+  const runAiActions = async () => {
+    setAiErr("");
+    if (!aiDraft.trim()) { setAiErr("Descreva a ação e quem ficou responsável para a IA montar."); return; }
+    setAiBusy(true);
+    const candidates = people.map((p) => ({ id: p.id, name: p.name }));
+    // catálogo SDPO numerado: só itens com pilar/bloco resolvidos
+    const sdpoItens = itens
+      .map((it) => {
+        const b = blocos.find((x) => x.id === it.blocoId);
+        const p = b ? pilares.find((x) => x.id === b.pilarId) : undefined;
+        if (!b || !p) return null;
+        return { item_id: it.id, bloco_id: b.id, pilar_id: p.id, label: `${p.name} > ${b.name} > ${it.name}` };
+      })
+      .filter((x): x is { item_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
+    const today = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD no fuso local
+
+    const res = await generateActionsAI({ draft: aiDraft, candidates, sdpoItens, today, single: true });
+    setAiBusy(false);
+    if (!res.ok) { setAiErr(res.error); return; }
+
+    const first = res.actions[0];
+    if (!first) { setAiErr("A IA não identificou ações claras no texto."); return; }
+    const p = first.payload;
+    setIsSdpo(p.is_sdpo);
+    setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
+    setPriority(p.priority); setDueDate(p.due_date);
+    const allDemandas = res.actions.flatMap((a) => a.payload.demandas);
+    setDemandas(
+      allDemandas.length
+        ? allDemandas.map((d) => ({ description: d.description, assignees: d.assignees, files: [] }))
+        : [{ description: "", assignees: [], files: [] }],
+    );
+    setAiOpen(false);
+  };
+
   const submit = () => {
     setError(""); setSaved("");
     const cleanDemandas = demandas.filter((d) => d.description.trim());
@@ -200,6 +242,41 @@ export function ActionDialog({
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+          {/* Sugerir com IA (só na criação direta) */}
+          {aiEnabled && !onCollect && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)" }}>
+              {!aiOpen ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAiOpen(true)}>
+                  ✨ Sugerir ação com IA
+                </button>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <label className="label" style={{ margin: 0 }}>Descreva a ação</label>
+                  <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+                    Escreva a tarefa e quem ficou responsável. A IA preenche as demandas, responsáveis, prazo, prioridade e a classificação SDPO (quando der) — você revisa e ajusta antes de criar.
+                  </p>
+                  <textarea
+                    className="textarea"
+                    value={aiDraft}
+                    onChange={(e) => setAiDraft(e.target.value)}
+                    placeholder="Ex.: João precisa renegociar o contrato com o fornecedor X até o fim do mês; é urgente…"
+                    style={{ minHeight: 90 }}
+                    disabled={aiBusy}
+                  />
+                  {aiErr && <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0 }}>{aiErr}</p>}
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={runAiActions} disabled={aiBusy}>
+                      {aiBusy ? "Gerando…" : "Gerar"}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setAiOpen(false); setAiErr(""); }} disabled={aiBusy}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* SDPO */}
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", fontWeight: 600 }}>
             <input type="checkbox" checked={isSdpo} onChange={(e) => setIsSdpo(e.target.checked)} />
