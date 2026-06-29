@@ -154,6 +154,7 @@ export type OccurrenceDraft = {
   present: Record<string, boolean>;
   advance: boolean;
   aiDraft: string;
+  aiActionsDraft?: string;
   collected: CollectedDraft[];
 };
 

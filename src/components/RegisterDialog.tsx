@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { finishOccurrence, saveOccurrenceDraft, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { createAction } from "@/lib/actions/actions";
-import { generateMeetingAI } from "@/lib/actions/ai";
+import { generateMeetingAI, generateActionsAI } from "@/lib/actions/ai";
 import { PERIODICITY } from "@/lib/constants";
 import { formatTime } from "@/lib/format";
 import { Avatar } from "@/components/ui/Avatar";
@@ -60,6 +60,10 @@ export function RegisterDialog({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [aiActionsDraft, setAiActionsDraft] = useState("");
+  const [aiActionsOpen, setAiActionsOpen] = useState(false);
+  const [aiActionsLoading, setAiActionsLoading] = useState(false);
+  const [aiActionsError, setAiActionsError] = useState("");
   const [draftSaved, setDraftSaved] = useState(false);
   const skipAutosave = useRef(true);
   const router = useRouter();
@@ -69,6 +73,7 @@ export function RegisterDialog({
       skipAutosave.current = true; // não regravar logo após hidratar
       setError(""); setActionOpen(false); setEditingIdx(null);
       setAiOpen(false); setAiLoading(false); setAiError(""); setDraftSaved(false);
+      setAiActionsOpen(false); setAiActionsLoading(false); setAiActionsError("");
       if (draft) {
         // restaura o rascunho (anexos não são guardados)
         setAttendees(draft.attendees ?? []);
@@ -77,6 +82,7 @@ export function RegisterDialog({
         setDecisions(draft.decisions ?? "");
         setAdvance(draft.advance ?? series.periodicity !== "sob_demanda");
         setAiDraft(draft.aiDraft ?? "");
+        setAiActionsDraft(draft.aiActionsDraft ?? "");
         setCollected((draft.collected ?? []).map((c) => ({
           payload: c.payload,
           summary: c.summary,
@@ -88,7 +94,7 @@ export function RegisterDialog({
         setAttendees(ids);
         setPresent(Object.fromEntries(ids.map((id) => [id, true])));
         setNotes(""); setDecisions(""); setCollected([]);
-        setAiDraft(""); setAdvance(series.periodicity !== "sob_demanda");
+        setAiDraft(""); setAiActionsDraft(""); setAdvance(series.periodicity !== "sob_demanda");
       }
     }
   }, [open, series, draft]);
@@ -99,14 +105,14 @@ export function RegisterDialog({
     if (skipAutosave.current) { skipAutosave.current = false; return; }
     const t = setTimeout(async () => {
       const payload: OccurrenceDraft = {
-        notes, decisions, attendees, present, advance, aiDraft,
+        notes, decisions, attendees, present, advance, aiDraft, aiActionsDraft,
         collected: collected.map((c) => ({ payload: c.payload, summary: c.summary })),
       };
       const r = await saveOccurrenceDraft(occurrenceId, payload);
       if (r.ok) { setDraftSaved(true); setTimeout(() => setDraftSaved(false), 1500); }
     }, 1000);
     return () => clearTimeout(t);
-  }, [open, occurrenceId, notes, decisions, attendees, present, advance, aiDraft, collected]);
+  }, [open, occurrenceId, notes, decisions, attendees, present, advance, aiDraft, aiActionsDraft, collected]);
 
   if (!open || !series) return null;
 
@@ -168,10 +174,49 @@ export function RegisterDialog({
     setAiOpen(false);
   };
 
+  const runActionsAI = async () => {
+    setAiActionsError("");
+    if (!aiActionsDraft.trim()) { setAiActionsError("Escreva ou cole o que foi combinado na reunião (tarefas e responsáveis)."); return; }
+    setAiActionsLoading(true);
+    const presentIds = attendees.filter((id) => present[id]);
+    const candidates = people.map((p) => ({ id: p.id, name: p.name }));
+    // catálogo SDPO numerado: só itens com pilar/bloco resolvidos
+    const sdpoItens = itens
+      .map((it) => {
+        const b = blocos.find((x) => x.id === it.blocoId);
+        const p = b ? pilares.find((x) => x.id === b.pilarId) : undefined;
+        if (!b || !p) return null;
+        return { item_id: it.id, bloco_id: b.id, pilar_id: p.id, label: `${p.name} > ${b.name} > ${it.name}` };
+      })
+      .filter((x): x is { item_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
+    const today = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD no fuso local
+
+    const res = await generateActionsAI({
+      draft: aiActionsDraft,
+      objetivo: series.objetivo,
+      pautaItens: series.content.map((c) => c.item).filter(Boolean),
+      candidates,
+      sdpoItens,
+      today,
+    });
+    setAiActionsLoading(false);
+    if (!res.ok) { setAiActionsError(res.error); return; }
+
+    const defaultRequester = series.ownerUserId ?? presentIds[0] ?? attendees[0] ?? "";
+    const novos: CollectedAction[] = res.actions.map((s) => ({
+      payload: { ...s.payload, meeting_series_id: series.id, requester_id: defaultRequester },
+      headerFiles: [],
+      demandaFiles: s.payload.demandas.map(() => []),
+      summary: s.summary,
+    }));
+    setCollected((cs) => [...cs, ...novos]);
+    setAiActionsOpen(false);
+  };
+
   // ao fechar, garante o salvamento do estado atual (cobre a janela do debounce)
   const handleClose = () => {
     const payload: OccurrenceDraft = {
-      notes, decisions, attendees, present, advance, aiDraft,
+      notes, decisions, attendees, present, advance, aiDraft, aiActionsDraft,
       collected: collected.map((c) => ({ payload: c.payload, summary: c.summary })),
     };
     onDraftChange?.(payload); // mantém em memória para reabrir na mesma sessão
@@ -280,6 +325,41 @@ export function RegisterDialog({
               <label className="label" style={{ margin: 0 }}>Ações da reunião</label>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditingIdx(null); setActionOpen(true); }}>+ Nova ação</button>
             </div>
+
+            {aiEnabled && (
+              <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)", marginBottom: "0.6rem" }}>
+                {!aiActionsOpen ? (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAiActionsOpen(true)}>
+                    ✨ Sugerir ações com IA
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <label className="label" style={{ margin: 0 }}>O que foi combinado na reunião</label>
+                    <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+                      Descreva as tarefas e quem ficou responsável. A IA monta as ações (com responsáveis, prazo e classificação SDPO quando der) — você revisa e edita cada uma antes de finalizar.
+                    </p>
+                    <textarea
+                      className="textarea"
+                      value={aiActionsDraft}
+                      onChange={(e) => setAiActionsDraft(e.target.value)}
+                      placeholder="Ex.: João vai negociar com o fornecedor até sexta; Maria revisa o relatório de vendas e apresenta na próxima…"
+                      style={{ minHeight: 100 }}
+                      disabled={aiActionsLoading}
+                    />
+                    {aiActionsError && <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0 }}>{aiActionsError}</p>}
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={runActionsAI} disabled={aiActionsLoading}>
+                        {aiActionsLoading ? "Gerando…" : "Gerar ações"}
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setAiActionsOpen(false); setAiActionsError(""); }} disabled={aiActionsLoading}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {collected.length === 0 ? (
               <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma ação. Use “+ Nova ação” para abrir o formulário completo — a reunião já vem preenchida.</p>
             ) : (
