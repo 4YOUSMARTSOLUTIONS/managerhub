@@ -9,6 +9,7 @@ import { FormModal } from "@/components/ui/FormModal";
 import { CompanyForm } from "@/components/CompanyForm";
 import { OpenAISettingsForm } from "@/components/OpenAISettingsForm";
 import { RegistryList } from "@/components/RegistryList";
+import { TicketSlaEditor } from "@/components/TicketSlaEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { createRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
@@ -21,6 +22,10 @@ import {
   createPilar, deletePilar, createBloco, deleteBloco, createItem, deleteItem,
   createKpi, deleteKpi, createTool, deleteTool,
 } from "@/lib/actions/sdpo";
+import {
+  createTicketSector, deleteTicketSector,
+  createTicketCategory, deleteTicketCategory,
+} from "@/lib/actions/tickets";
 
 export default async function SettingsPage() {
   const { tenant, role, user } = await requireContext();
@@ -55,6 +60,12 @@ export default async function SettingsPage() {
     supabase.from("sdpo_itens").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_kpis").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_tools").select("*").eq("tenant_id", tenant.id).order("name"),
+  ]);
+
+  const [{ data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }] = await Promise.all([
+    supabase.from("ticket_sectors").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("ticket_categories").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("ticket_slas").select("*").eq("tenant_id", tenant.id),
   ]);
 
   const mems = memberships ?? [];
@@ -120,14 +131,17 @@ export default async function SettingsPage() {
       <Section title="Dados da empresa">
         <CompanyForm name={tenant.name} canEdit={role === "owner"} />
       </Section>
-      <Section title="Integração com IA (OpenAI)">
-        <OpenAISettingsForm hasKey={tenant.has_openai_key} model={tenant.openai_model} canEdit={role === "owner"} />
-      </Section>
       <UnitsManager
         units={(units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind, cnpj: u.cnpj }))}
         unitLimit={tenant.units_limit}
       />
     </div>
+  );
+
+  const integracoesTab = (
+    <Section title="Integração com IA (OpenAI)">
+      <OpenAISettingsForm hasKey={tenant.has_openai_key} model={tenant.openai_model} canEdit={role === "owner"} />
+    </Section>
   );
 
   const usuariosTab = (
@@ -331,12 +345,73 @@ export default async function SettingsPage() {
     />
   );
 
+  // ---------- Chamados (Setores, Categorias, SLA) ----------
+  const ticketSectorOpts = (ticketSectors ?? []).map((s) => ({ id: s.id, name: s.name }));
+  const ticketSectorById = new Map(ticketSectorOpts.map((s) => [s.id, s.name]));
+  const ticketCategoryOpts = (ticketCategories ?? []).map((c) => ({ id: c.id, name: c.name, sector_id: c.sector_id }));
+
+  const chamadosTab = (
+    <Tabs
+      variant="sub"
+      tabs={[
+        {
+          id: "ticket-setores",
+          label: "Setores",
+          content: (
+            <RegistryList
+              title="Setores de chamado"
+              description="Áreas que atendem chamados (ex.: TI, Serviços Gerais)."
+              items={ticketSectorOpts}
+              createAction={createTicketSector}
+              deleteAction={deleteTicketSector}
+              placeholder="Nome do setor"
+            />
+          ),
+        },
+        {
+          id: "ticket-categorias",
+          label: "Categorias",
+          content: (
+            <RegistryList
+              title="Categorias de chamado"
+              description="Cada categoria pertence a um setor (ex.: TI → Acesso, Backup, Computador)."
+              items={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, meta: ticketSectorById.get(c.sector_id) ?? undefined }))}
+              createAction={createTicketCategory}
+              deleteAction={deleteTicketCategory}
+              placeholder="Nome da categoria"
+              metaLabel="Setor"
+              emptyText="Nenhuma categoria. Cadastre setores primeiro."
+              extraFields={
+                <select name="sector_id" className="select" required style={{ width: "auto" }}>
+                  <option value="">Setor…</option>
+                  {ticketSectorOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              }
+            />
+          ),
+        },
+        {
+          id: "ticket-sla",
+          label: "SLA",
+          content: (
+            <TicketSlaEditor
+              categories={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, sectorName: ticketSectorById.get(c.sector_id) ?? "—" }))}
+              slas={(ticketSlas ?? []).map((s) => ({ category_id: s.category_id, priority: s.priority, sla_value: s.sla_value, sla_unit: s.sla_unit }))}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+
   const tabs: Tab[] = [
     { id: "empresa", label: "Empresa", content: empresaTab },
-    { id: "usuarios", label: "Usuários", content: usuariosTab },
     { id: "estrutura", label: "Estrutura", content: estruturaTab },
+    { id: "usuarios", label: "Usuários", content: usuariosTab },
     { id: "sdpo", label: "Programa de Excelência", content: sdpoTab },
+    { id: "chamados", label: "Chamados", content: chamadosTab },
     { id: "salas", label: "Salas", content: salasTab },
+    { id: "integracoes", label: "Integrações", content: integracoesTab },
   ];
 
   return (

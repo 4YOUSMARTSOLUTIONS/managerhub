@@ -91,6 +91,7 @@ export const TICKET_STATUS_TONE: Record<Enums<"ticket_status">, Tone> = {
   cancelled: "gray",
 };
 
+// legado: chamados antigos usavam um enum fixo de "categoria" (hoje virou Setor configurável)
 export const TICKET_CATEGORY: Record<Enums<"ticket_category">, string> = {
   ti: "TI",
   servicos_gerais: "Serviços Gerais",
@@ -98,6 +99,12 @@ export const TICKET_CATEGORY: Record<Enums<"ticket_category">, string> = {
   rh: "RH",
   financeiro: "Financeiro",
   outros: "Outros",
+};
+
+export const TICKET_SLA_UNIT: Record<Enums<"ticket_sla_unit">, string> = {
+  horas: "horas",
+  dias_corridos: "dias corridos",
+  dias_uteis: "dias úteis",
 };
 
 // ---------- Metas ----------

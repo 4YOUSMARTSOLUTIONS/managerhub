@@ -541,6 +541,30 @@ export type Database = {
         Update: { id?: string; action_id?: string; demanda_id?: string | null; tenant_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
         Relationships: []
       }
+      ticket_sectors: {
+        Row: { id: string; tenant_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      ticket_categories: {
+        Row: { id: string; tenant_id: string; sector_id: string; name: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; sector_id: string; name: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; sector_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
+      ticket_slas: {
+        Row: { id: string; tenant_id: string; category_id: string; priority: Database["public"]["Enums"]["priority_level"]; sla_value: number; sla_unit: Database["public"]["Enums"]["ticket_sla_unit"]; created_at: string }
+        Insert: { id?: string; tenant_id: string; category_id: string; priority: Database["public"]["Enums"]["priority_level"]; sla_value: number; sla_unit?: Database["public"]["Enums"]["ticket_sla_unit"]; created_at?: string }
+        Update: { id?: string; tenant_id?: string; category_id?: string; priority?: Database["public"]["Enums"]["priority_level"]; sla_value?: number; sla_unit?: Database["public"]["Enums"]["ticket_sla_unit"]; created_at?: string }
+        Relationships: []
+      }
+      ticket_attachments: {
+        Row: { id: string; tenant_id: string; ticket_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; ticket_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; ticket_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Relationships: []
+      }
       meeting_occurrences: {
         Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; registered_by: string | null; created_at: string; status: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at: string | null; ended_at: string | null; duration_seconds: number | null; draft: Json | null }
         Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null; draft?: Json | null }
@@ -752,6 +776,7 @@ export type Database = {
         Row: {
           assignee_id: string | null
           category: Database["public"]["Enums"]["ticket_category"]
+          category_id: string | null
           code: string | null
           created_at: string
           created_by: string | null
@@ -759,16 +784,20 @@ export type Database = {
           due_date: string | null
           id: string
           priority: Database["public"]["Enums"]["priority_level"]
+          requested_priority: Database["public"]["Enums"]["priority_level"] | null
           requester_id: string | null
           resolved_at: string | null
+          sector_id: string | null
           status: Database["public"]["Enums"]["ticket_status"]
           tenant_id: string
           title: string
+          unit_id: string | null
           updated_at: string
         }
         Insert: {
           assignee_id?: string | null
           category?: Database["public"]["Enums"]["ticket_category"]
+          category_id?: string | null
           code?: string | null
           created_at?: string
           created_by?: string | null
@@ -776,16 +805,20 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["priority_level"]
+          requested_priority?: Database["public"]["Enums"]["priority_level"] | null
           requester_id?: string | null
           resolved_at?: string | null
+          sector_id?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           tenant_id: string
           title: string
+          unit_id?: string | null
           updated_at?: string
         }
         Update: {
           assignee_id?: string | null
           category?: Database["public"]["Enums"]["ticket_category"]
+          category_id?: string | null
           code?: string | null
           created_at?: string
           created_by?: string | null
@@ -793,11 +826,14 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["priority_level"]
+          requested_priority?: Database["public"]["Enums"]["priority_level"] | null
           requester_id?: string | null
           resolved_at?: string | null
+          sector_id?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           tenant_id?: string
           title?: string
+          unit_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -922,6 +958,7 @@ export type Database = {
         Returns: undefined
       }
       platform_delete_company: { Args: { p_tenant: string }; Returns: undefined }
+      notify_users: { Args: { p_tenant: string; p_users: string[]; p_type: string; p_title: string; p_body: string; p_demanda: string | null }; Returns: undefined }
     }
     Enums: {
       action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
@@ -945,6 +982,7 @@ export type Database = {
         | "resolved"
         | "closed"
         | "cancelled"
+      ticket_sla_unit: "horas" | "dias_corridos" | "dias_uteis"
       tenant_status: "active" | "suspended" | "inactive"
       unit_kind: "matriz" | "filial"
       gender_type: "masculino" | "feminino" | "outro" | "nao_informado"
