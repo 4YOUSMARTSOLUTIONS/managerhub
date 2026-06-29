@@ -128,7 +128,7 @@ export default async function SettingsPage() {
 
   // ---------- Conteúdo das abas ----------
   const empresaTab = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 760 }}>
       <Section title="Dados da empresa">
         <CompanyForm name={tenant.name} canEdit={role === "owner"} />
       </Section>
@@ -204,6 +204,7 @@ export default async function SettingsPage() {
   );
 
   const salasTab = (
+    <div style={{ maxWidth: 760 }}>
     <Section
       title={`Salas de reunião · ${rooms?.length ?? 0}`}
       padded={false}
@@ -270,6 +271,7 @@ export default async function SettingsPage() {
         <EmptyState title="Nenhuma sala cadastrada" description="Crie a primeira sala para começar a agendar reuniões." />
       )}
     </Section>
+    </div>
   );
 
   // ---------- SDPO / Programa de Excelência ----------

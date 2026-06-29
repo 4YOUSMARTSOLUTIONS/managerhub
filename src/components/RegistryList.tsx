@@ -25,7 +25,7 @@ export function RegistryList({
   const hasMeta = items.some((i) => i.meta);
 
   return (
-    <div className="card">
+    <div className="card" style={{ maxWidth: 760 }}>
       <div style={{ padding: "0.85rem 1.1rem", borderBottom: "1px solid var(--border)" }}>
         <h2 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>{title} · {items.length}</h2>
         {description && <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.82rem" }}>{description}</p>}

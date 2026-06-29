@@ -55,7 +55,7 @@ export function TicketSlaEditor({ categories, slas }: { categories: Cat[]; slas:
 
   if (categories.length === 0) {
     return (
-      <div className="card" style={{ padding: "1.1rem" }}>
+      <div className="card" style={{ padding: "1.1rem", maxWidth: 760 }}>
         <p className="soft" style={{ margin: 0, fontSize: "0.85rem" }}>
           Nenhuma categoria cadastrada. Cadastre setores e categorias primeiro para definir os SLAs.
         </p>
@@ -64,7 +64,7 @@ export function TicketSlaEditor({ categories, slas }: { categories: Cat[]; slas:
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: 760 }}>
       <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
         Defina o prazo (SLA) de cada categoria por prioridade. O prazo do chamado é calculado automaticamente a partir destes valores. Deixe em branco para não definir.
       </p>
