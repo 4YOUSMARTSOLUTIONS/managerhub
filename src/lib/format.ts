@@ -45,6 +45,17 @@ export function isOverdue(date: string | null): boolean {
   return d !== null && d < 0;
 }
 
+/** Duração legível a partir de segundos: "1h 23min", "45min", "30s". */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return m > 0 ? `${h}h ${m}min` : `${h}h`;
+  if (m > 0) return `${m}min`;
+  return `${s}s`;
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);

@@ -542,9 +542,9 @@ export type Database = {
         Relationships: []
       }
       meeting_occurrences: {
-        Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; registered_by: string | null; created_at: string }
-        Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string }
-        Update: { id?: string; tenant_id?: string; series_id?: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string }
+        Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; registered_by: string | null; created_at: string; status: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at: string | null; ended_at: string | null; duration_seconds: number | null }
+        Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null }
+        Update: { id?: string; tenant_id?: string; series_id?: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null }
         Relationships: [
           {
             foreignKeyName: "meeting_occurrences_series_id_fkey"
@@ -880,6 +880,9 @@ export type Database = {
       demanda_reassign: { Args: { p_demanda: string; p_users: Json; p_note: string }; Returns: undefined }
       save_meeting_series: { Args: { p_data: Json }; Returns: string }
       register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
+      start_meeting_occurrence: { Args: { p_series_id: string }; Returns: string }
+      finish_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
+      cancel_meeting_occurrence: { Args: { p_id: string }; Returns: undefined }
       admin_create_employee: { Args: { p_data: Json; p_password: string }; Returns: string }
       admin_update_employee: { Args: { p_user: string; p_data: Json }; Returns: undefined }
       admin_import_employees: { Args: { p_rows: Json; p_password: string }; Returns: Json }
@@ -923,6 +926,7 @@ export type Database = {
       action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
       goal_status: "active" | "at_risk" | "achieved" | "missed" | "archived"
       meeting_status: "scheduled" | "in_progress" | "done" | "cancelled"
+      meeting_occurrence_status: "in_progress" | "finished" | "cancelled"
       member_role: "owner" | "admin" | "manager" | "member"
       participant_response: "invited" | "accepted" | "declined" | "tentative"
       priority_level: "low" | "medium" | "high" | "urgent"

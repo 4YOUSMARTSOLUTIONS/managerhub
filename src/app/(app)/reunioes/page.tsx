@@ -30,7 +30,8 @@ export default async function MeetingRecordsPage() {
     supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     supabase
       .from("meeting_occurrences")
-      .select("id, series_id, occurred_on, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+      .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+      .order("started_at", { ascending: false, nullsFirst: false })
       .order("occurred_on", { ascending: false })
       .limit(300),
     supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
@@ -121,6 +122,10 @@ export default async function MeetingRecordsPage() {
       seriesId: o.series_id,
       seriesName: (o.meeting_series as { name: string } | null)?.name ?? "—",
       occurredOn: o.occurred_on,
+      status: o.status,
+      startedAt: o.started_at,
+      endedAt: o.ended_at,
+      durationSeconds: o.duration_seconds,
       presentCount: counts.present,
       totalCount: counts.total,
       actionsCount: actBy.get(o.id) ?? 0,

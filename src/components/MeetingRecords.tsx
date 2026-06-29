@@ -1,29 +1,42 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Tabs } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PERIODICITY } from "@/lib/constants";
-import { formatDate } from "@/lib/format";
-import { toggleSeries, deleteSeries, deleteOccurrence } from "@/lib/actions/meeting-records";
+import { formatDate, formatTime, formatDuration } from "@/lib/format";
+import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence } from "@/lib/actions/meeting-records";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
+import { ElapsedTimer } from "./ElapsedTimer";
 import type { Opt, BlocoOpt, ItemOpt } from "./ActionDialog";
 import type { Person } from "./PeoplePicker";
 
+export type OccStatus = "in_progress" | "finished" | "cancelled";
 export type SeriesRow = SeriesData & { isActive: boolean };
 export type OccurrenceRow = {
   id: string;
   seriesId: string;
   seriesName: string;
   occurredOn: string;
+  status: OccStatus;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationSeconds: number | null;
   presentCount: number;
   totalCount: number;
   actionsCount: number;
   registeredByName: string | null;
+};
+
+const OCC_STATUS: Record<OccStatus, { label: string; tone: "green" | "red" | "blue" }> = {
+  in_progress: { label: "Em andamento", tone: "blue" },
+  finished: { label: "Finalizada", tone: "green" },
+  cancelled: { label: "Cancelada", tone: "red" },
 };
 
 const ICON = {
@@ -66,10 +79,12 @@ export function MeetingRecords({
   tools: Opt[];
   aiEnabled: boolean;
 }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [editing, setEditing] = useState<SeriesData | undefined>(undefined);
-  const [registerOpen, setRegisterOpen] = useState(false);
-  const [registerSeries, setRegisterSeries] = useState<SeriesData | undefined>(undefined);
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [finishOcc, setFinishOcc] = useState<OccurrenceRow | null>(null);
 
   // filtros — reuniões cadastradas (padrão: só ativas)
   const [seriesQuery, setSeriesQuery] = useState("");
@@ -101,9 +116,26 @@ export function MeetingRecords({
     return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [series, personName]);
 
+  const inProgress = useMemo(() => occurrences.filter((o) => o.status === "in_progress"), [occurrences]);
+  const inProgressBySeries = useMemo(() => new Map(inProgress.map((o) => [o.seriesId, o])), [inProgress]);
+  const history = useMemo(() => occurrences.filter((o) => o.status !== "in_progress"), [occurrences]);
+
   const openCreate = () => { setEditing(undefined); setSeriesOpen(true); };
   const openEdit = (s: SeriesRow) => { setEditing(s); setSeriesOpen(true); };
-  const openRegister = (s: SeriesRow) => { setRegisterSeries(s); setRegisterOpen(true); };
+  const openFinish = (o: OccurrenceRow) => { setFinishOcc(o); setFinishOpen(true); };
+  const doStart = (s: SeriesRow) => start(async () => {
+    const r = await startOccurrence(s.id);
+    if (r.error) { alert(r.error); return; }
+    router.refresh();
+  });
+  const doCancel = (id: string) => {
+    if (!confirm("Cancelar esta reunião em andamento? Ela ficará no histórico como cancelada.")) return;
+    start(async () => {
+      const r = await cancelOccurrence(id);
+      if (r.error) { alert(r.error); return; }
+      router.refresh();
+    });
+  };
 
   const filteredSeries = useMemo(() => {
     const q = norm(seriesQuery.trim());
@@ -122,7 +154,7 @@ export function MeetingRecords({
 
   const filteredOcc = useMemo(() => {
     const q = norm(recQuery.trim());
-    return occurrences.filter((o) => {
+    return history.filter((o) => {
       if (recSeries !== "all" && o.seriesId !== recSeries) return false;
       if (recFrom && o.occurredOn < recFrom) return false;
       if (recTo && o.occurredOn > recTo) return false;
@@ -134,7 +166,7 @@ export function MeetingRecords({
       if (!q) return true;
       return norm(`${o.seriesName} ${o.registeredByName ?? ""}`).includes(q);
     });
-  }, [occurrences, recQuery, recSeries, recFrom, recTo, recUnit, recResp, recPeriod, recPart, seriesById]);
+  }, [history, recQuery, recSeries, recFrom, recTo, recUnit, recResp, recPeriod, recPart, seriesById]);
 
   const seriesFilterStyle = { padding: "0.42rem 0.6rem", fontSize: "0.85rem" };
   const seriesTab = (
@@ -207,7 +239,11 @@ export function MeetingRecords({
                 <td style={{ textAlign: "right" }}>
                   <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end", alignItems: "center" }}>
                     {s.isActive && (
-                      <button className="btn btn-primary btn-sm" onClick={() => openRegister(s)}>Registrar</button>
+                      inProgressBySeries.has(s.id) ? (
+                        <button className="btn btn-sm" style={{ background: "var(--blue-50, #eff6ff)", color: "#1d4ed8", border: "1px solid #bfdbfe" }} onClick={() => openFinish(inProgressBySeries.get(s.id)!)}>● Em andamento</button>
+                      ) : (
+                        <button className="btn btn-primary btn-sm" disabled={pending} onClick={() => doStart(s)}>Iniciar</button>
+                      )
                     )}
                     <button className="icon-btn" title="Editar" onClick={() => openEdit(s)}><Ico d={ICON.edit} /></button>
                     <form action={toggleSeries} style={{ display: "inline-flex" }}>
@@ -233,10 +269,10 @@ export function MeetingRecords({
 
   const recordsTab = (
     <Section
-      title={`Registros · ${filteredOcc.length}${filteredOcc.length !== occurrences.length ? ` de ${occurrences.length}` : ""}`}
+      title={`Registros · ${filteredOcc.length}${filteredOcc.length !== history.length ? ` de ${history.length}` : ""}`}
       padded={false}
     >
-      {occurrences.length > 0 && (
+      {history.length > 0 && (
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.8rem 1.1rem", borderBottom: "1px solid var(--border)" }}>
           <input className="input" placeholder="Buscar por nome…" value={recQuery} onChange={(e) => setRecQuery(e.target.value)} style={{ flex: "1 1 180px", minWidth: 150, ...seriesFilterStyle }} />
           <select className="select" value={recSeries} onChange={(e) => setRecSeries(e.target.value)} style={{ width: "auto", maxWidth: 190, ...seriesFilterStyle }} title="Reunião">
@@ -273,27 +309,31 @@ export function MeetingRecords({
           </label>
         </div>
       )}
-      {occurrences.length === 0 ? (
-        <EmptyState title="Nenhum registro" description="Quando uma reunião acontecer, clique em “Registrar” na aba de reuniões cadastradas." />
+      {history.length === 0 ? (
+        <EmptyState title="Nenhum registro" description="Quando uma reunião acontecer, clique em “Iniciar” na aba de reuniões cadastradas e depois finalize-a." />
       ) : filteredOcc.length > 0 ? (
         <table className="table">
           <thead>
             <tr>
               <th>Reunião</th>
               <th>Data</th>
+              <th>Duração</th>
               <th>Presença</th>
               <th>Ações</th>
+              <th>Status</th>
               <th>Registrado por</th>
               <th style={{ textAlign: "right" }}></th>
             </tr>
           </thead>
           <tbody>
             {filteredOcc.map((o) => (
-              <tr key={o.id}>
+              <tr key={o.id} style={{ opacity: o.status === "cancelled" ? 0.6 : 1 }}>
                 <td style={{ fontWeight: 600 }}>{o.seriesName}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDate(o.occurredOn)}</td>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{o.status === "cancelled" ? "—" : formatDuration(o.durationSeconds)}</td>
                 <td className="muted">{o.presentCount}/{o.totalCount}</td>
                 <td className="muted">{o.actionsCount > 0 ? <Badge tone="blue">{o.actionsCount}</Badge> : "—"}</td>
+                <td><Badge tone={OCC_STATUS[o.status].tone}>{OCC_STATUS[o.status].label}</Badge></td>
                 <td className="muted">{o.registeredByName ?? "—"}</td>
                 <td style={{ textAlign: "right" }}>
                   <form action={deleteOccurrence} style={{ display: "inline-flex" }}>
@@ -315,9 +355,31 @@ export function MeetingRecords({
     <div>
       <PageHeader
         title="Reuniões"
-        subtitle="Cadastre as reuniões recorrentes e registre cada acontecimento."
+        subtitle="Cadastre as reuniões recorrentes, inicie e finalize cada acontecimento."
         action={<button className="btn btn-primary" onClick={openCreate}>+ Nova reunião</button>}
       />
+
+      {inProgress.length > 0 && (
+        <div style={{ marginBottom: "1.25rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          {inProgress.map((o) => (
+            <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", border: "1px solid #bfdbfe", background: "linear-gradient(0deg, var(--surface), var(--surface)), #eff6ff", borderRadius: 12, padding: "0.9rem 1.1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.9rem", minWidth: 0 }}>
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#2563eb", flexShrink: 0, boxShadow: "0 0 0 4px rgba(37,99,235,0.15)" }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.seriesName}</div>
+                  <div className="soft" style={{ fontSize: "0.8rem" }}>Em andamento{o.startedAt ? ` · iniciada às ${formatTime(o.startedAt)}` : ""}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.9rem" }}>
+                {o.startedAt && <ElapsedTimer startedAt={o.startedAt} style={{ fontSize: "1.15rem", color: "#1d4ed8" }} />}
+                <button className="btn btn-primary btn-sm" onClick={() => openFinish(o)}>Registros da reunião</button>
+                <button className="btn btn-ghost btn-sm" disabled={pending} onClick={() => doCancel(o.id)}>Cancelar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <Tabs
         tabs={[
           { id: "cadastradas", label: "Reuniões cadastradas", content: seriesTab },
@@ -326,7 +388,20 @@ export function MeetingRecords({
       />
 
       <SeriesDialog open={seriesOpen} onClose={() => setSeriesOpen(false)} people={people} rooms={rooms} units={units} series={editing} />
-      <RegisterDialog open={registerOpen} onClose={() => setRegisterOpen(false)} people={people} series={registerSeries} pilares={pilares} blocos={blocos} itens={itens} kpis={kpis} tools={tools} aiEnabled={aiEnabled} />
+      <RegisterDialog
+        open={finishOpen}
+        onClose={() => setFinishOpen(false)}
+        people={people}
+        series={finishOcc ? seriesById.get(finishOcc.seriesId) : undefined}
+        occurrenceId={finishOcc?.id}
+        startedAt={finishOcc?.startedAt ?? null}
+        pilares={pilares}
+        blocos={blocos}
+        itens={itens}
+        kpis={kpis}
+        tools={tools}
+        aiEnabled={aiEnabled}
+      />
     </div>
   );
 }

@@ -99,6 +99,58 @@ export async function registerOccurrence(input: OccurrenceInput): Promise<Action
   }
 }
 
+/** Inicia uma reunião: cria a ocorrência em andamento (cronômetro). */
+export async function startOccurrence(seriesId: string): Promise<ActionState & { occurrenceId?: string }> {
+  try {
+    const { supabase } = await actionContext();
+    if (!seriesId) return { error: "Reunião inválida." };
+    const { data, error } = await supabase.rpc("start_meeting_occurrence", { p_series_id: seriesId });
+    if (error) return { error: error.message };
+    revalidatePath(RP);
+    return { ok: true, occurrenceId: data as string };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type FinishOccurrenceInput = {
+  occurrence_id: string;
+  notes: string;
+  decisions: string;
+  advance_next: boolean;
+  attendance: { user_id: string; present: boolean }[];
+};
+
+/** Finaliza a reunião em andamento: grava notas/decisões/presença e fecha a duração. */
+export async function finishOccurrence(input: FinishOccurrenceInput): Promise<ActionState & { occurrenceId?: string }> {
+  try {
+    const { supabase } = await actionContext();
+    if (!input.occurrence_id) return { error: "Reunião inválida." };
+    const { data, error } = await supabase.rpc("finish_meeting_occurrence", { p_data: input });
+    if (error) return { error: error.message };
+    revalidatePath(RP);
+    revalidatePath("/acoes");
+    revalidatePath("/dashboard");
+    return { ok: true, occurrenceId: data as string };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Cancela uma reunião em andamento (mantém no histórico). */
+export async function cancelOccurrence(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    if (!id) return { error: "Reunião inválida." };
+    const { error } = await supabase.rpc("cancel_meeting_occurrence", { p_id: id });
+    if (error) return { error: error.message };
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function toggleSeries(formData: FormData): Promise<void> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));

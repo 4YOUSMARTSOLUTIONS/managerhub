@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { registerOccurrence } from "@/lib/actions/meeting-records";
+import { finishOccurrence } from "@/lib/actions/meeting-records";
 import { createAction } from "@/lib/actions/actions";
 import { generateMeetingAI } from "@/lib/actions/ai";
 import { PERIODICITY } from "@/lib/constants";
+import { formatTime } from "@/lib/format";
 import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { TorView } from "./TorView";
+import { ElapsedTimer } from "./ElapsedTimer";
 import { ActionDialog, type Opt, type BlocoOpt, type ItemOpt, type CollectedAction } from "./ActionDialog";
 import type { SeriesData } from "./SeriesDialog";
 
@@ -17,6 +19,8 @@ export function RegisterDialog({
   onClose,
   people,
   series,
+  occurrenceId,
+  startedAt,
   pilares,
   blocos,
   itens,
@@ -28,6 +32,8 @@ export function RegisterDialog({
   onClose: () => void;
   people: Person[];
   series?: SeriesData;
+  occurrenceId?: string;
+  startedAt?: string | null;
   pilares: Opt[];
   blocos: BlocoOpt[];
   itens: ItemOpt[];
@@ -36,7 +42,6 @@ export function RegisterDialog({
   aiEnabled: boolean;
 }) {
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
-  const [occurredOn, setOccurredOn] = useState("");
   const [present, setPresent] = useState<Record<string, boolean>>({});
   const [attendees, setAttendees] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
@@ -58,7 +63,6 @@ export function RegisterDialog({
       const ids = series.participantIds;
       setAttendees(ids);
       setPresent(Object.fromEntries(ids.map((id) => [id, true])));
-      setOccurredOn(series.nextDate ?? new Date().toISOString().slice(0, 10));
       setNotes(""); setDecisions(""); setCollected([]); setError(""); setActionOpen(false); setEditingIdx(null);
       setAiDraft(""); setAiOpen(false); setAiLoading(false); setAiError("");
       setAdvance(series.periodicity !== "sob_demanda");
@@ -77,25 +81,17 @@ export function RegisterDialog({
   };
 
   const presentCount = attendees.filter((id) => present[id]).length;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const now = new Date();
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   const submit = () => {
     setError("");
-    if (occurredOn && occurredOn > today) {
-      setError("A reunião não pode ser registrada com data futura — só é possível registrar reuniões já realizadas.");
-      return;
-    }
+    if (!occurrenceId) { setError("Reunião inválida."); return; }
     start(async () => {
-      const res = await registerOccurrence({
-        series_id: series.id,
-        occurred_on: occurredOn,
+      const res = await finishOccurrence({
+        occurrence_id: occurrenceId,
         notes,
         decisions,
         advance_next: advance,
         attendance: attendees.map((id) => ({ user_id: id, present: !!present[id] })),
-        actions: [],
       });
       if (res.error) { setError(res.error); return; }
       const occId = res.occurrenceId;
@@ -107,7 +103,7 @@ export function RegisterDialog({
         ca.headerFiles.forEach((f) => fd.append("files", f));
         ca.demandaFiles.forEach((files, i) => files.forEach((f) => fd.append(`files_${i}`, f)));
         const r2 = await createAction(fd);
-        if (r2.error) { setError("Reunião registrada, mas falhou ao criar uma ação: " + r2.error); router.refresh(); return; }
+        if (r2.error) { setError("Reunião finalizada, mas falhou ao criar uma ação: " + r2.error); router.refresh(); return; }
       }
 
       onClose();
@@ -138,19 +134,21 @@ export function RegisterDialog({
       <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--shadow)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <div>
-            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Registrar reunião</h2>
+            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Finalizar reunião</h2>
             <p className="muted" style={{ margin: "0.15rem 0 0", fontSize: "0.85rem" }}>{series.name} · {PERIODICITY[series.periodicity as keyof typeof PERIODICITY]}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "0.8rem", alignItems: "end" }}>
-            <div>
-              <label className="label">Data da reunião</label>
-              <input type="date" className="input" max={today} value={occurredOn} onChange={(e) => setOccurredOn(e.target.value)} />
+          {startedAt && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.8rem", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 9, padding: "0.6rem 0.9rem" }}>
+              <div className="soft" style={{ fontSize: "0.83rem", color: "#1d4ed8" }}>
+                Iniciada às {formatTime(startedAt)} · em andamento
+              </div>
+              <ElapsedTimer startedAt={startedAt} style={{ fontSize: "1.1rem", color: "#1d4ed8" }} />
             </div>
-          </div>
+          )}
 
           <details style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.6rem 0.9rem" }}>
             <summary style={{ cursor: "pointer", fontSize: "0.82rem", fontWeight: 600, color: "var(--text-muted)" }}>Ver TOR da reunião</summary>
@@ -269,7 +267,7 @@ export function RegisterDialog({
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
           <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>
-            {pending ? "Registrando…" : "Registrar reunião"}
+            {pending ? "Finalizando…" : "Finalizar reunião"}
           </button>
         </div>
       </div>
