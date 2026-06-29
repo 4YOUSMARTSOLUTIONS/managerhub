@@ -11,6 +11,7 @@ import { formatDate } from "@/lib/format";
 import { toggleSeries, deleteSeries, deleteOccurrence } from "@/lib/actions/meeting-records";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
+import type { Opt, BlocoOpt, ItemOpt } from "./ActionDialog";
 import type { Person } from "./PeoplePicker";
 
 export type SeriesRow = SeriesData & { isActive: boolean };
@@ -46,12 +47,22 @@ export function MeetingRecords({
   people,
   rooms,
   units,
+  pilares,
+  blocos,
+  itens,
+  kpis,
+  tools,
 }: {
   series: SeriesRow[];
   occurrences: OccurrenceRow[];
   people: Person[];
   rooms: Room[];
   units: Unit[];
+  pilares: Opt[];
+  blocos: BlocoOpt[];
+  itens: ItemOpt[];
+  kpis: Opt[];
+  tools: Opt[];
 }) {
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [editing, setEditing] = useState<SeriesData | undefined>(undefined);
@@ -313,7 +324,7 @@ export function MeetingRecords({
       />
 
       <SeriesDialog open={seriesOpen} onClose={() => setSeriesOpen(false)} people={people} rooms={rooms} units={units} series={editing} />
-      <RegisterDialog open={registerOpen} onClose={() => setRegisterOpen(false)} people={people} series={registerSeries} />
+      <RegisterDialog open={registerOpen} onClose={() => setRegisterOpen(false)} people={people} series={registerSeries} pilares={pilares} blocos={blocos} itens={itens} kpis={kpis} tools={tools} />
     </div>
   );
 }

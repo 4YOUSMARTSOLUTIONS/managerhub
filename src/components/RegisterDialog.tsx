@@ -3,24 +3,34 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { registerOccurrence } from "@/lib/actions/meeting-records";
+import { createAction } from "@/lib/actions/actions";
 import { PERIODICITY } from "@/lib/constants";
 import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { TorView } from "./TorView";
+import { ActionDialog, type Opt, type BlocoOpt, type ItemOpt, type CollectedAction } from "./ActionDialog";
 import type { SeriesData } from "./SeriesDialog";
-
-type ActionRow = { title: string; assignee_id: string; due_date: string };
 
 export function RegisterDialog({
   open,
   onClose,
   people,
   series,
+  pilares,
+  blocos,
+  itens,
+  kpis,
+  tools,
 }: {
   open: boolean;
   onClose: () => void;
   people: Person[];
   series?: SeriesData;
+  pilares: Opt[];
+  blocos: BlocoOpt[];
+  itens: ItemOpt[];
+  kpis: Opt[];
+  tools: Opt[];
 }) {
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const [occurredOn, setOccurredOn] = useState("");
@@ -28,7 +38,9 @@ export function RegisterDialog({
   const [attendees, setAttendees] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [decisions, setDecisions] = useState("");
-  const [actions, setActions] = useState<ActionRow[]>([]);
+  const [collected, setCollected] = useState<CollectedAction[]>([]);
+  const [actionOpen, setActionOpen] = useState(false);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [advance, setAdvance] = useState(true);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
@@ -40,7 +52,7 @@ export function RegisterDialog({
       setAttendees(ids);
       setPresent(Object.fromEntries(ids.map((id) => [id, true])));
       setOccurredOn(series.nextDate ?? new Date().toISOString().slice(0, 10));
-      setNotes(""); setDecisions(""); setActions([]); setError("");
+      setNotes(""); setDecisions(""); setCollected([]); setError(""); setActionOpen(false); setEditingIdx(null);
       setAdvance(series.periodicity !== "sob_demanda");
     }
   }, [open, series]);
@@ -56,11 +68,6 @@ export function RegisterDialog({
     });
   };
 
-  const addAction = () => setActions((a) => [...a, { title: "", assignee_id: "", due_date: "" }]);
-  const setAction = (i: number, patch: Partial<ActionRow>) =>
-    setActions((a) => a.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  const removeAction = (i: number) => setActions((a) => a.filter((_, idx) => idx !== i));
-
   const presentCount = attendees.filter((id) => present[id]).length;
   const pad = (n: number) => String(n).padStart(2, "0");
   const now = new Date();
@@ -72,11 +79,6 @@ export function RegisterDialog({
       setError("A reunião não pode ser registrada com data futura — só é possível registrar reuniões já realizadas.");
       return;
     }
-    const namedActions = actions.filter((a) => a.title.trim());
-    if (namedActions.some((a) => !a.due_date)) {
-      setError("Toda ação gerada precisa de um prazo.");
-      return;
-    }
     start(async () => {
       const res = await registerOccurrence({
         series_id: series.id,
@@ -85,9 +87,21 @@ export function RegisterDialog({
         decisions,
         advance_next: advance,
         attendance: attendees.map((id) => ({ user_id: id, present: !!present[id] })),
-        actions: actions.filter((a) => a.title.trim()),
+        actions: [],
       });
       if (res.error) { setError(res.error); return; }
+      const occId = res.occurrenceId;
+
+      // cria cada ação completa, já vinculada a esta ocorrência (com anexos)
+      for (const ca of collected) {
+        const fd = new FormData();
+        fd.append("payload", JSON.stringify({ ...ca.payload, occurrence_id: occId }));
+        ca.headerFiles.forEach((f) => fd.append("files", f));
+        ca.demandaFiles.forEach((files, i) => files.forEach((f) => fd.append(`files_${i}`, f)));
+        const r2 = await createAction(fd);
+        if (r2.error) { setError("Reunião registrada, mas falhou ao criar uma ação: " + r2.error); router.refresh(); return; }
+      }
+
       onClose();
       router.refresh();
     });
@@ -149,26 +163,35 @@ export function RegisterDialog({
             <textarea className="textarea" value={decisions} onChange={(e) => setDecisions(e.target.value)} placeholder="Deliberações tomadas na reunião…" style={{ minHeight: 60 }} />
           </div>
 
+          {/* Ações da reunião (formulário completo) */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
-              <label className="label" style={{ margin: 0 }}>Ações geradas</label>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={addAction}>+ Ação</button>
+              <label className="label" style={{ margin: 0 }}>Ações da reunião</label>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditingIdx(null); setActionOpen(true); }}>+ Nova ação</button>
             </div>
-            {actions.length === 0 ? (
-              <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma ação. Estas viram tarefas no módulo de Ações.</p>
+            {collected.length === 0 ? (
+              <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma ação. Use “+ Nova ação” para abrir o formulário completo — a reunião já vem preenchida.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {actions.map((a, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 150px 140px 32px", gap: "0.4rem", alignItems: "center" }}>
-                    <input className="input" placeholder="O que fazer" value={a.title} onChange={(e) => setAction(i, { title: e.target.value })} />
-                    <select className="select" value={a.assignee_id} onChange={(e) => setAction(i, { assignee_id: e.target.value })}>
-                      <option value="">Responsável…</option>
-                      {attendees.map((id) => <option key={id} value={id}>{byId.get(id)?.name ?? "—"}</option>)}
-                    </select>
-                    <input type="date" className="input" value={a.due_date} onChange={(e) => setAction(i, { due_date: e.target.value })} />
-                    <button type="button" className="icon-btn icon-btn-danger" onClick={() => removeAction(i)} title="Remover" style={{ width: 32, height: 32 }}>×</button>
-                  </div>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                {collected.map((ca, i) => {
+                  const nFiles = ca.headerFiles.length + ca.demandaFiles.reduce((s, f) => s + f.length, 0);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.6rem", background: "var(--surface-2)", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
+                      <button type="button" onClick={() => { setEditingIdx(i); setActionOpen(true); }} title="Editar ação" style={{ minWidth: 0, flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                        <div style={{ fontSize: "0.86rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ca.summary || "Ação"}</div>
+                        <div className="soft" style={{ fontSize: "0.76rem" }}>
+                          {ca.payload.demandas.length} demanda(s){ca.payload.is_sdpo ? " · SDPO" : ""}{nFiles > 0 ? ` · 📎${nFiles}` : ""}
+                        </div>
+                      </button>
+                      <div style={{ display: "flex", gap: "0.3rem", flexShrink: 0 }}>
+                        <button type="button" className="icon-btn" onClick={() => { setEditingIdx(i); setActionOpen(true); }} title="Editar ação" style={{ width: 30, height: 30 }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" /><path d="m15 5 4 4" /></svg>
+                        </button>
+                        <button type="button" className="icon-btn icon-btn-danger" onClick={() => setCollected((cs) => cs.filter((_, idx) => idx !== i))} title="Remover" style={{ width: 30, height: 30 }}>×</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -190,6 +213,25 @@ export function RegisterDialog({
           </button>
         </div>
       </div>
+
+      <ActionDialog
+        open={actionOpen}
+        onClose={() => { setActionOpen(false); setEditingIdx(null); }}
+        people={people}
+        pilares={pilares}
+        blocos={blocos}
+        itens={itens}
+        kpis={kpis}
+        tools={tools}
+        series={[]}
+        occurrences={[]}
+        onCollect={(a) => {
+          setCollected((cs) => (editingIdx !== null ? cs.map((c, idx) => (idx === editingIdx ? a : c)) : [...cs, a]));
+          setEditingIdx(null);
+        }}
+        editing={editingIdx !== null ? collected[editingIdx] : null}
+        lockedSeries={{ id: series.id, name: series.name }}
+      />
     </div>
   );
 }

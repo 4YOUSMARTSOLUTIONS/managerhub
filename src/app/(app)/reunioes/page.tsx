@@ -10,6 +10,7 @@ export default async function MeetingRecordsPage() {
   const [
     { data: series }, { data: parts }, { data: unitLinks }, { data: unitsData },
     { data: members }, { data: roomsData }, { data: occ },
+    { data: pilares }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
   ] = await Promise.all([
     supabase
       .from("meeting_series")
@@ -32,6 +33,11 @@ export default async function MeetingRecordsPage() {
       .select("id, series_id, occurred_on, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
       .order("occurred_on", { ascending: false })
       .limit(300),
+    supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_blocos").select("id, name, pilar_id").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_kpis").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_tools").select("id, name").eq("tenant_id", tenant.id).order("name"),
   ]);
 
   const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
@@ -122,5 +128,18 @@ export default async function MeetingRecordsPage() {
     };
   });
 
-  return <MeetingRecords series={seriesRows} occurrences={occurrences} people={people} rooms={rooms} units={units} />;
+  return (
+    <MeetingRecords
+      series={seriesRows}
+      occurrences={occurrences}
+      people={people}
+      rooms={rooms}
+      units={units}
+      pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name }))}
+      blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id }))}
+      itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, blocoId: i.bloco_id }))}
+      kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))}
+      tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
+    />
+  );
 }

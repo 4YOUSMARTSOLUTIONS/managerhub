@@ -84,16 +84,16 @@ export async function saveSeries(input: SeriesInput): Promise<ActionState> {
   }
 }
 
-export async function registerOccurrence(input: OccurrenceInput): Promise<ActionState> {
+export async function registerOccurrence(input: OccurrenceInput): Promise<ActionState & { occurrenceId?: string }> {
   try {
     const { supabase } = await actionContext();
     if (!input.series_id) return { error: "Reunião inválida." };
-    const { error } = await supabase.rpc("register_meeting_occurrence", { p_data: input });
+    const { data, error } = await supabase.rpc("register_meeting_occurrence", { p_data: input });
     if (error) return { error: error.message };
     revalidatePath(RP);
     revalidatePath("/acoes");
     revalidatePath("/dashboard");
-    return { ok: true };
+    return { ok: true, occurrenceId: data as string };
   } catch (e) {
     return { error: (e as Error).message };
   }

@@ -15,8 +15,21 @@ export type OccOpt = { id: string; seriesId: string; occurredOn: string };
 
 type Demanda = { description: string; assignees: string[]; files: File[] };
 
+export type CollectedAction = {
+  payload: {
+    is_sdpo: boolean; pilar_id: string; bloco_id: string; item_id: string;
+    meeting_series_id: string; kpi_id: string; tool_id: string;
+    requester_id: string; due_date: string; priority: string; cc: string[];
+    demandas: { description: string; assignees: string[] }[];
+  };
+  headerFiles: File[];
+  demandaFiles: File[][];
+  summary: string;
+};
+
 export function ActionDialog({
   open, onClose, people, pilares, blocos, itens, kpis, tools, series, occurrences,
+  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, editing,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +41,11 @@ export function ActionDialog({
   tools: Opt[];
   series: Opt[];
   occurrences: OccOpt[];
+  onCollect?: (a: CollectedAction) => void;
+  lockedSeries?: { id: string; name: string } | null;
+  defaultRequesterId?: string;
+  defaultAssignees?: string[];
+  editing?: CollectedAction | null;
 }) {
   const [isSdpo, setIsSdpo] = useState(true);
   const [pilarId, setPilarId] = useState("");
@@ -51,12 +69,22 @@ export function ActionDialog({
   const router = useRouter();
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    setOccurrenceId(""); setError(""); setSaved(""); setKeepOpen(false);
+    if (editing) {
+      const p = editing.payload;
+      setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
+      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id);
+      setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
+      setDemandas(p.demandas.map((d, i) => ({ description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
+      setFiles(editing.headerFiles);
+    } else {
       setIsSdpo(true); setPilarId(""); setBlocoId(""); setItemId("");
-      setSeriesId(""); setOccurrenceId(""); setKpiId(""); setToolId("");
-      setDueDate(""); setPriority("medium"); setRequesterId(""); setCc([]);
-      setDemandas([{ description: "", assignees: [], files: [] }]); setFiles([]); setError(""); setSaved(""); setKeepOpen(false);
+      setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId("");
+      setDueDate(""); setPriority("medium"); setRequesterId(defaultRequesterId ?? ""); setCc([]);
+      setDemandas([{ description: "", assignees: defaultAssignees ?? [], files: [] }]); setFiles([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // cascata bidirecional: filtra pelo pai se houver, senão mostra todos
@@ -117,6 +145,25 @@ export function ActionDialog({
     if (isSdpo && (!pilarId || !blocoId || !itemId)) { setError("Para SDPO, informe Pilar, Bloco e Item."); return; }
     if (isSdpo && !seriesId) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
 
+    // modo coletar: devolve a ação ao pai (não salva agora)
+    if (onCollect) {
+      onCollect({
+        payload: {
+          is_sdpo: isSdpo,
+          pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
+          meeting_series_id: seriesId,
+          kpi_id: kpiId, tool_id: toolId,
+          requester_id: requesterId, due_date: dueDate, priority, cc,
+          demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
+        },
+        headerFiles: files,
+        demandaFiles: cleanDemandas.map((d) => d.files),
+        summary: cleanDemandas.map((d) => d.description).join("; "),
+      });
+      onClose();
+      return;
+    }
+
     const payload = {
       is_sdpo: isSdpo,
       pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
@@ -148,7 +195,7 @@ export function ActionDialog({
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 60, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--shadow)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Nova ação</h2>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{onCollect ? (editing ? "Editar ação da reunião" : "Ação da reunião") : "Nova ação"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
@@ -177,16 +224,22 @@ export function ActionDialog({
           )}
 
           {/* Reunião + referência */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
-            <div>
-              <label className="label">Reunião {isSdpo ? <span style={{ color: "#dc2626" }}>*</span> : <span className="soft">(opcional)</span>}</label>
-              <SearchSelect options={series} value={seriesId} onChange={(id) => { setSeriesId(id); setOccurrenceId(""); }} placeholder="Buscar reunião…" />
+          {lockedSeries ? (
+            <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.6rem 0.85rem", fontSize: "0.85rem" }} className="muted">
+              Vinculada à reunião <strong>{lockedSeries.name}</strong> · esta reunião que está sendo registrada.
             </div>
-            <div>
-              <label className="label">Referência da reunião <span className="soft">(opcional)</span></label>
-              <SearchSelect options={occOpts} value={occurrenceId} onChange={setOccurrenceId} placeholder="Buscar data…" emptyHint={seriesId ? "Sem registros" : "Sem registros"} />
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
+              <div>
+                <label className="label">Reunião {isSdpo ? <span style={{ color: "#dc2626" }}>*</span> : <span className="soft">(opcional)</span>}</label>
+                <SearchSelect options={series} value={seriesId} onChange={(id) => { setSeriesId(id); setOccurrenceId(""); }} placeholder="Buscar reunião…" />
+              </div>
+              <div>
+                <label className="label">Referência da reunião <span className="soft">(opcional)</span></label>
+                <SearchSelect options={occOpts} value={occurrenceId} onChange={setOccurrenceId} placeholder="Buscar data…" emptyHint="Sem registros" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* KPI + Ferramenta + Prazo */}
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
@@ -281,11 +334,13 @@ export function ActionDialog({
             )}
           </div>
 
-          {/* Manter dados para criar outra */}
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.88rem", borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
-            <input type="checkbox" checked={keepOpen} onChange={(e) => setKeepOpen(e.target.checked)} />
-            Criar e manter os parâmetros para abrir outra ação em seguida
-          </label>
+          {/* Manter dados para criar outra (só na criação direta) */}
+          {!onCollect && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.88rem", borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
+              <input type="checkbox" checked={keepOpen} onChange={(e) => setKeepOpen(e.target.checked)} />
+              Criar e manter os parâmetros para abrir outra ação em seguida
+            </label>
+          )}
 
           {saved && <p style={{ color: "#047857", fontSize: "0.85rem", margin: 0, background: "#ecfdf5", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{saved}</p>}
           {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
@@ -293,7 +348,7 @@ export function ActionDialog({
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost" onClick={onClose}>{keepOpen ? "Fechar" : "Cancelar"}</button>
-          <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>{pending ? "Salvando…" : "Criar ação"}</button>
+          <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>{onCollect ? (editing ? "Salvar ação" : "Adicionar ação") : pending ? "Salvando…" : "Criar ação"}</button>
         </div>
       </div>
     </div>
