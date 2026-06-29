@@ -275,6 +275,7 @@ export type Database = {
           id: string
           organizer_id: string | null
           room_id: string | null
+          series_id: string | null
           starts_at: string
           status: Database["public"]["Enums"]["meeting_status"]
           tenant_id: string
@@ -289,6 +290,7 @@ export type Database = {
           id?: string
           organizer_id?: string | null
           room_id?: string | null
+          series_id?: string | null
           starts_at: string
           status?: Database["public"]["Enums"]["meeting_status"]
           tenant_id: string
@@ -303,6 +305,7 @@ export type Database = {
           id?: string
           organizer_id?: string | null
           room_id?: string | null
+          series_id?: string | null
           starts_at?: string
           status?: Database["public"]["Enums"]["meeting_status"]
           tenant_id?: string

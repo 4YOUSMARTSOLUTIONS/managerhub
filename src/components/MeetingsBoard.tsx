@@ -3,29 +3,41 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RoomCalendar, type CalMeeting, type CalRoom, type View } from "./RoomCalendar";
-import { NewMeetingDialog, type Prefill } from "./NewMeetingDialog";
+import { NewMeetingDialog, type Prefill, type Routine } from "./NewMeetingDialog";
 import { MeetingsTable } from "./MeetingsTable";
+import type { Person } from "./PeoplePicker";
 import type { Enums } from "@/types/database";
 
 export function MeetingsBoard({
   meetings,
   rooms,
+  routines,
+  people,
   userId,
   role,
 }: {
   meetings: CalMeeting[];
   rooms: CalRoom[];
+  routines: Routine[];
+  people: Person[];
   userId: string;
   role: Enums<"member_role">;
 }) {
   const [open, setOpen] = useState(false);
   const [prefill, setPrefill] = useState<Prefill | undefined>(undefined);
+  const [editing, setEditing] = useState<CalMeeting | null>(null);
   const [roomFilter, setRoomFilter] = useState<string>("all");
   const [view, setView] = useState<View>("month");
   const [cursor, setCursor] = useState<Date>(() => new Date());
 
   const openNew = (p?: Prefill) => {
+    setEditing(null);
     setPrefill(p);
+    setOpen(true);
+  };
+  const openEdit = (m: CalMeeting) => {
+    setEditing(m);
+    setPrefill(undefined);
     setOpen(true);
   };
 
@@ -46,6 +58,7 @@ export function MeetingsBoard({
           meetings={meetings}
           rooms={rooms}
           onNew={openNew}
+          onEdit={openEdit}
           roomFilter={roomFilter}
           onRoomFilterChange={setRoomFilter}
           view={view}
@@ -62,9 +75,10 @@ export function MeetingsBoard({
         cursor={cursor}
         userId={userId}
         role={role}
+        onEdit={openEdit}
       />
 
-      <NewMeetingDialog open={open} onClose={() => setOpen(false)} initial={prefill} rooms={rooms} />
+      <NewMeetingDialog open={open} onClose={() => setOpen(false)} initial={prefill} editing={editing} rooms={rooms} routines={routines} people={people} />
     </>
   );
 }

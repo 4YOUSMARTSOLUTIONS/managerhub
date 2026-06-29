@@ -4,10 +4,10 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { ACTION_STATUS, ACTION_STATUS_TONE, PRIORITY, PRIORITY_TONE } from "@/lib/constants";
+import { ACTION_STATUS, PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus } from "@/lib/constants";
 import { formatDate, formatDateTime, isOverdue } from "@/lib/format";
 import {
-  getDemandaTimeline, demandaComment, demandaSetStatus, demandaRequest,
+  getDemandaTimeline, demandaComment, demandaRequest,
   demandaDecide, demandaReopen, demandaCancel, demandaReassign, getAttachmentUrl,
   type TimelineEvent, type PendingReq,
 } from "@/lib/actions/actions";
@@ -120,6 +120,10 @@ export function DemandaPanel({
   const isRequester = currentUserId === requesterId;
   const canManage = isRequester || isAdmin;
   const finalizada = status === "done" || status === "cancelled";
+  const overdue = !!due && !finalizada && isOverdue(due);
+  const hasPendingPrazo = requests.some((r) => r.type === "prazo");
+  const hasPendingConclusao = requests.some((r) => r.type === "conclusao");
+  const eff = effStatus(status, overdue, requests.length > 0);
 
   const run = (fn: () => Promise<{ ok?: boolean; error?: string }>) => {
     setError("");
@@ -143,7 +147,7 @@ export function DemandaPanel({
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, fontSize: "0.78rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 7, padding: "0.06rem 0.4rem" }}>{demanda.label}</span>
-              <Badge tone={ACTION_STATUS_TONE[status]}>{ACTION_STATUS[status]}</Badge>
+              <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>
               <Badge tone={PRIORITY_TONE[demanda.priority]}>{PRIORITY[demanda.priority]}</Badge>
               {demanda.isSdpo && <Badge tone="purple">SDPO</Badge>}
             </div>
@@ -194,26 +198,8 @@ export function DemandaPanel({
 
           {/* Ações de tratamento */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-            {isAssignee && !finalizada && (
-              <>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem" }} className="muted">
-                  Status
-                  <select
-                    className="select"
-                    value={status}
-                    disabled={pending}
-                    onChange={(e) => run(() => demandaSetStatus(demanda.id, e.target.value as Enums<"action_status">))}
-                    style={{ width: "auto", padding: "0.35rem 0.55rem", fontSize: "0.83rem" }}
-                  >
-                    {(["open", "in_progress", "blocked"] as Enums<"action_status">[]).map((s) => (
-                      <option key={s} value={s}>{ACTION_STATUS[s]}</option>
-                    ))}
-                  </select>
-                </label>
-                <Btn m="prazo" label="Solicitar prorrogação" />
-                <Btn m="conclusao" label="Solicitar conclusão" />
-              </>
-            )}
+            {isAssignee && !finalizada && !hasPendingPrazo && <Btn m="prazo" label="Solicitar prorrogação" />}
+            {isAssignee && !finalizada && !hasPendingConclusao && <Btn m="conclusao" label="Solicitar conclusão" />}
             {canManage && !finalizada && <Btn m="reassign" label="Reatribuir" />}
             {canManage && !finalizada && <Btn m="cancel" label="Cancelar" tone="danger" />}
             {canManage && status === "done" && <Btn m="reopen" label="Reabrir" />}

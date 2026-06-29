@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ACTION_STATUS, ACTION_STATUS_TONE, PRIORITY, PRIORITY_TONE } from "@/lib/constants";
+import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus } from "@/lib/constants";
 import { formatDate, isOverdue } from "@/lib/format";
 import { deleteAction } from "@/lib/actions/actions";
 import { ActionDialog, type Opt, type BlocoOpt, type ItemOpt, type OccOpt } from "./ActionDialog";
@@ -109,11 +109,11 @@ export function ActionsManager({
                   <th>SDPO</th>
                   <th>Pilar</th>
                   <th>Bloco</th>
+                  <th>Descrição</th>
                   <th>Responsáveis</th>
                   <th>Solicitante</th>
-                  <th>Prazo</th>
                   <th>Status</th>
-                  <th>Descrição</th>
+                  <th>Prazo</th>
                   <th style={{ textAlign: "right" }}>Ações</th>
                 </tr>
               </thead>
@@ -123,6 +123,8 @@ export function ActionsManager({
                     const first = di === 0;
                     const finalizada = d.status === "done" || d.status === "cancelled";
                     const st = d.status as Enums<"action_status">;
+                    const overdue = !!d.dueDate && !finalizada && isOverdue(d.dueDate);
+                    const eff = effStatus(st, overdue, d.pendingCount > 0);
                     return (
                       <tr key={d.id} style={{ borderTop: first && ai > 0 ? "2px solid var(--border-strong)" : undefined, opacity: d.status === "cancelled" ? 0.55 : 1 }}>
                         <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>#{a.code}.{di + 1}</td>
@@ -130,17 +132,16 @@ export function ActionsManager({
                         <td>{first && (a.isSdpo ? <Badge tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
                         <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
                         <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.blocoName ?? ""}>{first ? (a.blocoName ?? "—") : ""}</td>
+                        <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
                         <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.assigneeNames.join(", ")}>
                           {d.assigneeNames.length > 0 ? d.assigneeNames.join(", ") : <span className="soft">—</span>}
                           {d.attachments.length > 0 && <span className="soft" style={{ marginLeft: 6 }} title={`${d.attachments.length} anexo(s)`}>📎{d.attachments.length}</span>}
                         </td>
                         <td className="muted" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>{first ? (a.requesterName ?? "—") : ""}</td>
-                        <td style={{ whiteSpace: "nowrap", color: d.dueDate && !finalizada && isOverdue(d.dueDate) ? "#dc2626" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          <Badge tone={ACTION_STATUS_TONE[st]}>{ACTION_STATUS[st]}</Badge>
-                          {d.pendingCount > 0 && <div style={{ fontSize: "0.68rem", fontWeight: 600, color: "#b45309", marginTop: 2 }}>● pendente</div>}
+                          <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>
                         </td>
-                        <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
+                        <td style={{ whiteSpace: "nowrap", color: overdue ? "#dc2626" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                           <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a, di)}>Tratar</button>

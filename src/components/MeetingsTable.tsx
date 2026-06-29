@@ -4,9 +4,8 @@ import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { InlineStatus } from "@/components/ui/InlineStatus";
-import { deleteMeeting, setMeetingStatus } from "@/lib/actions/meetings";
-import { MEETING_STATUS, MEETING_STATUS_TONE, options } from "@/lib/constants";
+import { deleteMeeting } from "@/lib/actions/meetings";
+import { MEETING_STATUS, MEETING_STATUS_TONE } from "@/lib/constants";
 import { formatDateTime, formatTime } from "@/lib/format";
 import type { CalMeeting, View } from "./RoomCalendar";
 import type { Enums } from "@/types/database";
@@ -45,6 +44,7 @@ export function MeetingsTable({
   cursor,
   userId,
   role,
+  onEdit,
 }: {
   meetings: CalMeeting[];
   roomFilter: string;
@@ -52,6 +52,7 @@ export function MeetingsTable({
   cursor: Date;
   userId: string;
   role: Enums<"member_role">;
+  onEdit: (m: CalMeeting) => void;
 }) {
   const isAdmin = role === "owner" || role === "admin";
   const [start, end, periodLabel] = periodRange(view, cursor);
@@ -104,24 +105,17 @@ export function MeetingsTable({
                     ) : <span className="soft">—</span>}
                   </td>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Badge tone={MEETING_STATUS_TONE[m.status]}>{MEETING_STATUS[m.status]}</Badge>
-                      {canManage && (
-                        <InlineStatus
-                          id={m.id}
-                          value={m.status}
-                          options={options(MEETING_STATUS)}
-                          action={setMeetingStatus}
-                        />
-                      )}
-                    </div>
+                    <Badge tone={MEETING_STATUS_TONE[m.status]}>{MEETING_STATUS[m.status]}</Badge>
                   </td>
-                  <td style={{ textAlign: "right" }}>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     {canManage ? (
-                      <form action={deleteMeeting}>
-                        <input type="hidden" name="id" value={m.id} />
-                        <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
-                      </form>
+                      <div style={{ display: "inline-flex", gap: "0.4rem", justifyContent: "flex-end" }}>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onEdit(m)}>Editar</button>
+                        <form action={deleteMeeting} style={{ display: "inline" }}>
+                          <input type="hidden" name="id" value={m.id} />
+                          <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
+                        </form>
+                      </div>
                     ) : (
                       <span className="soft" style={{ fontSize: "0.78rem" }} title="Apenas o criador, admin ou owner">—</span>
                     )}

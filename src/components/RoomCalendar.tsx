@@ -17,6 +17,10 @@ export type CalMeeting = {
   room: CalRoom | null;
   created_by: string | null;
   creatorName: string | null;
+  seriesId: string | null;
+  participantIds: string[];
+  startInput: string;
+  endInput: string;
 };
 
 export type View = "month" | "week" | "day";
@@ -55,6 +59,7 @@ export function RoomCalendar({
   meetings,
   rooms,
   onNew,
+  onEdit,
   roomFilter,
   onRoomFilterChange,
   view,
@@ -65,6 +70,7 @@ export function RoomCalendar({
   meetings: CalMeeting[];
   rooms: CalRoom[];
   onNew?: (p: Prefill) => void;
+  onEdit?: (m: CalMeeting) => void;
   roomFilter: string;
   onRoomFilterChange: (v: string) => void;
   view: View;
@@ -208,7 +214,7 @@ export function RoomCalendar({
         )}
       </div>
 
-      {detail && <DetailModal ev={detail} onClose={() => setDetail(null)} />}
+      {detail && <DetailModal ev={detail} onClose={() => setDetail(null)} onEdit={onEdit ? () => { onEdit(detail); setDetail(null); } : undefined} />}
     </div>
   );
 }
@@ -418,7 +424,7 @@ function layoutDay(evs: Ev[]) {
 }
 
 // ---------------- DETALHE ----------------
-function DetailModal({ ev, onClose }: { ev: Ev; onClose: () => void }) {
+function DetailModal({ ev, onClose, onEdit }: { ev: Ev; onClose: () => void; onEdit?: () => void }) {
   return (
     <div
       onClick={onClose}
@@ -454,6 +460,11 @@ function DetailModal({ ev, onClose }: { ev: Ev; onClose: () => void }) {
           </Row>
           {ev.description && <Row label="Descrição"><span className="muted">{ev.description}</span></Row>}
         </div>
+        {onEdit && (
+          <div style={{ display: "flex", justifyContent: "flex-end", padding: "0.9rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>Editar</button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -45,6 +45,33 @@ export const ACTION_STATUS_TONE: Record<Enums<"action_status">, Tone> = {
   cancelled: "gray",
 };
 
+// ---------- Status efetivo da ação (exibido ao usuário) ----------
+export type EffStatus = "concluida" | "cancelada" | "aguardando" | "atrasada" | "andamento";
+
+export const EFF_STATUS_LABEL: Record<EffStatus, string> = {
+  concluida: "Concluída",
+  atrasada: "Atrasada",
+  andamento: "Em andamento",
+  aguardando: "Aguardando aprovação",
+  cancelada: "Cancelada",
+};
+
+export const EFF_STATUS_TONE: Record<EffStatus, Tone> = {
+  concluida: "green",
+  atrasada: "red",
+  andamento: "amber",
+  aguardando: "blue",
+  cancelada: "gray",
+};
+
+export function effStatus(status: Enums<"action_status">, overdue: boolean, pending: boolean): EffStatus {
+  if (status === "cancelled") return "cancelada";
+  if (status === "done") return "concluida";
+  if (pending) return "aguardando";
+  if (overdue) return "atrasada";
+  return "andamento";
+}
+
 // ---------- Chamados ----------
 export const TICKET_STATUS: Record<Enums<"ticket_status">, string> = {
   open: "Aberto",
