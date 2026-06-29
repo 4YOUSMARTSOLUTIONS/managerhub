@@ -159,7 +159,17 @@ export function ActionDialog({
       .filter((x): x is { item_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
     const today = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD no fuso local
 
-    const res = await generateActionsAI({ draft: aiDraft, candidates, sdpoItens, today, single: true });
+    const res = await generateActionsAI({
+      draft: aiDraft,
+      candidates,
+      sdpoItens,
+      kpis,
+      tools,
+      series,
+      occurrences,
+      today,
+      single: true,
+    });
     setAiBusy(false);
     if (!res.ok) { setAiErr(res.error); return; }
 
@@ -168,6 +178,9 @@ export function ActionDialog({
     const p = first.payload;
     setIsSdpo(p.is_sdpo);
     setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
+    setSeriesId(p.meeting_series_id); setOccurrenceId(p.occurrence_id);
+    setKpiId(p.kpi_id); setToolId(p.tool_id);
+    setRequesterId(p.requester_id); setCc(p.cc);
     setPriority(p.priority); setDueDate(p.due_date);
     const allDemandas = res.actions.flatMap((a) => a.payload.demandas);
     setDemandas(

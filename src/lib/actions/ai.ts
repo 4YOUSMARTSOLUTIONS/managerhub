@@ -182,6 +182,10 @@ export type GenerateActionsInput = {
   pautaItens?: string[];
   candidates?: { id: string; name: string }[];
   sdpoItens?: { item_id: string; bloco_id: string; pilar_id: string; label: string }[];
+  kpis?: { id: string; name: string }[];
+  tools?: { id: string; name: string }[];
+  series?: { id: string; name: string }[];
+  occurrences?: { id: string; seriesId: string; occurredOn: string }[];
   today?: string; // YYYY-MM-DD (calculado no cliente para respeitar o fuso local)
   single?: boolean; // consolida tudo em UMA ação (uso na tela de Nova ação)
 };
@@ -191,8 +195,11 @@ export type SuggestedActionPayload = {
   pilar_id: string;
   bloco_id: string;
   item_id: string;
+  meeting_series_id: string;
+  occurrence_id: string;
   kpi_id: string;
   tool_id: string;
+  requester_id: string;
   due_date: string;
   priority: string;
   cc: string[];
@@ -229,17 +236,26 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
 
     const candidates = input.candidates ?? [];
     const sdpoItens = input.sdpoItens ?? [];
+    const kpis = input.kpis ?? [];
+    const tools = input.tools ?? [];
+    const seriesList = input.series ?? [];
+    const occurrences = input.occurrences ?? [];
     const today =
       input.today && /^\d{4}-\d{2}-\d{2}$/.test(input.today) ? input.today : new Date().toISOString().slice(0, 10);
+
+    const numbered = (arr: { name: string }[]) => arr.map((x, i) => `[${i}] ${x.name}`).join("\n");
 
     const contexto = [
       input.objetivo ? `Objetivo da reunião: ${input.objetivo}` : null,
       input.pautaItens && input.pautaItens.length ? `Pauta: ${input.pautaItens.filter(Boolean).join("; ")}` : null,
-      candidates.length ? `Pessoas (responsáveis possíveis): ${candidates.map((c) => c.name).join(", ")}` : null,
+      `Hoje é ${today}.`,
+      candidates.length ? `Pessoas (para responsáveis, solicitante e em cópia): ${candidates.map((c) => c.name).join(", ")}` : null,
       sdpoItens.length
-        ? "Catálogo SDPO (use o índice em \"item_index\"):\n" +
-          sdpoItens.map((it, i) => `[${i}] ${it.label}`).join("\n")
+        ? "Catálogo SDPO (use o índice em \"item_index\"):\n" + sdpoItens.map((it, i) => `[${i}] ${it.label}`).join("\n")
         : null,
+      kpis.length ? "KPIs (use o índice em \"kpi_index\"):\n" + numbered(kpis) : null,
+      tools.length ? "Ferramentas de gestão (use o índice em \"ferramenta_index\"):\n" + numbered(tools) : null,
+      seriesList.length ? "Reuniões (use o índice em \"reuniao_index\"):\n" + numbered(seriesList) : null,
     ]
       .filter(Boolean)
       .join("\n");
@@ -247,15 +263,22 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
     const system =
       "Você é um assistente que extrai planos de ação de reuniões corporativas em português do Brasil. " +
       "A partir de um rascunho/transcrição e do contexto, identifique as ações/tarefas combinadas e produza um JSON " +
-      "com exatamente uma chave \"acoes\": um array de objetos. Cada objeto tem: " +
+      "com exatamente uma chave \"acoes\": um array de objetos. Cada objeto pode ter os campos: " +
       "\"titulo\" (string curta), " +
       "\"prioridade\" (uma de: low, medium, high, urgent), " +
       "\"prazo_dias\" (inteiro: dias a partir de hoje para a conclusão), " +
-      "\"item_index\" (índice inteiro do Catálogo SDPO que melhor classifica a ação, ou null se não houver classificação clara) e " +
+      "\"item_index\" (índice do Catálogo SDPO, ou null), " +
+      "\"kpi_index\" (índice da lista de KPIs, ou null), " +
+      "\"ferramenta_index\" (índice da lista de Ferramentas de gestão, ou null), " +
+      "\"reuniao_index\" (índice da lista de Reuniões, ou null), " +
+      "\"referencia_data\" (data YYYY-MM-DD de uma ocorrência específica da reunião citada, ou null), " +
+      "\"solicitante\" (nome de quem pediu a ação, da lista de Pessoas, ou null), " +
+      "\"em_copia\" (array de nomes da lista de Pessoas que devem ter conhecimento), e " +
       "\"demandas\" (array com 1+ objetos { \"descricao\": string, \"responsaveis\": [nomes] }). " +
-      "Regras: use SOMENTE nomes que aparecem na lista de Pessoas para \"responsaveis\" (se ninguém claro, deixe array vazio); " +
-      "use \"item_index\" SOMENTE do catálogo fornecido (nunca invente índices); " +
-      "seja fiel ao texto — NÃO invente ações, prazos ou responsáveis que não estejam no rascunho. " +
+      "Regras: para nomes (responsaveis, solicitante, em_copia) use SOMENTE nomes que aparecem na lista de Pessoas; " +
+      "para índices use SOMENTE valores válidos dos catálogos fornecidos (nunca invente índices); " +
+      "preencha um campo APENAS quando a informação estiver clara no texto — caso contrário use null (ou array vazio). " +
+      "seja fiel ao texto — NÃO invente nada que não esteja no rascunho. " +
       (input.single
         ? "IMPORTANTE: consolide TUDO em UMA única ação (um único objeto no array \"acoes\") com quantas demandas forem necessárias. "
         : "") +
@@ -303,15 +326,20 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
 
     const rawAcoes = Array.isArray(parsed.acoes) ? parsed.acoes : [];
 
-    // índice de pessoas normalizado para casar responsáveis por nome
+    // índice de pessoas normalizado para casar nomes (responsável, solicitante, em cópia)
     const byNorm = candidates.map((c) => ({ id: c.id, n: normName(c.name) }));
-    const matchAssignee = (raw: unknown): string | null => {
+    const matchPerson = (raw: unknown): string | null => {
       const q = normName(toText(raw));
       if (!q) return null;
       const exact = byNorm.find((c) => c.n === q);
       if (exact) return exact.id;
       const partial = byNorm.find((c) => c.n.includes(q) || q.includes(c.n));
       return partial ? partial.id : null;
+    };
+    // resolve um índice de catálogo em id, com limites
+    const idAt = (raw: unknown, arr: { id: string }[]): string => {
+      const i = Number(raw);
+      return Number.isInteger(i) && i >= 0 && i < arr.length ? arr[i].id : "";
     };
 
     const actions = rawAcoes
@@ -325,7 +353,7 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
             const description = toText(dObj.descricao ?? dObj.description);
             const respRaw = Array.isArray(dObj.responsaveis) ? dObj.responsaveis : [];
             const assignees = Array.from(
-              new Set(respRaw.map(matchAssignee).filter((x): x is string => !!x)),
+              new Set(respRaw.map(matchPerson).filter((x): x is string => !!x)),
             );
             return { description, assignees };
           })
@@ -343,6 +371,24 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
         const sdpo =
           Number.isInteger(idx) && idx >= 0 && idx < sdpoItens.length ? sdpoItens[idx] : null;
 
+        const kpi_id = idAt(obj.kpi_index, kpis);
+        const tool_id = idAt(obj.ferramenta_index, tools);
+        const meeting_series_id = idAt(obj.reuniao_index, seriesList);
+
+        // referência da reunião: casa a data informada com uma ocorrência da reunião escolhida
+        let occurrence_id = "";
+        const refData = toText(obj.referencia_data);
+        if (meeting_series_id && /^\d{4}-\d{2}-\d{2}$/.test(refData)) {
+          const occ = occurrences.find((o) => o.seriesId === meeting_series_id && o.occurredOn === refData);
+          if (occ) occurrence_id = occ.id;
+        }
+
+        const requester_id = matchPerson(obj.solicitante) ?? "";
+        const ccRaw = Array.isArray(obj.em_copia) ? obj.em_copia : [];
+        const cc = Array.from(
+          new Set(ccRaw.map(matchPerson).filter((x): x is string => !!x && x !== requester_id)),
+        );
+
         const titulo = toText(obj.titulo ?? obj.title);
         const summary = titulo || demandas.map((d) => d.description).join("; ");
 
@@ -351,11 +397,14 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
           pilar_id: sdpo?.pilar_id ?? "",
           bloco_id: sdpo?.bloco_id ?? "",
           item_id: sdpo?.item_id ?? "",
-          kpi_id: "",
-          tool_id: "",
+          meeting_series_id,
+          occurrence_id,
+          kpi_id,
+          tool_id,
+          requester_id,
           due_date,
           priority,
-          cc: [],
+          cc,
           demandas,
         };
         return { payload, summary };

@@ -197,18 +197,30 @@ export function RegisterDialog({
       pautaItens: series.content.map((c) => c.item).filter(Boolean),
       candidates,
       sdpoItens,
+      kpis,
+      tools,
       today,
     });
     setAiActionsLoading(false);
     if (!res.ok) { setAiActionsError(res.error); return; }
 
     const defaultRequester = series.ownerUserId ?? presentIds[0] ?? attendees[0] ?? "";
-    const novos: CollectedAction[] = res.actions.map((s) => ({
-      payload: { ...s.payload, meeting_series_id: series.id, requester_id: defaultRequester },
-      headerFiles: [],
-      demandaFiles: s.payload.demandas.map(() => []),
-      summary: s.summary,
-    }));
+    const novos: CollectedAction[] = res.actions.map((s) => {
+      const p = s.payload;
+      return {
+        // reunião travada nesta ocorrência; ocorrência é vinculada ao finalizar
+        payload: {
+          is_sdpo: p.is_sdpo, pilar_id: p.pilar_id, bloco_id: p.bloco_id, item_id: p.item_id,
+          meeting_series_id: series.id, kpi_id: p.kpi_id, tool_id: p.tool_id,
+          requester_id: p.requester_id || defaultRequester,
+          due_date: p.due_date, priority: p.priority, cc: p.cc,
+          demandas: p.demandas,
+        },
+        headerFiles: [],
+        demandaFiles: p.demandas.map(() => []),
+        summary: s.summary,
+      };
+    });
     setCollected((cs) => [...cs, ...novos]);
     setAiActionsOpen(false);
   };
