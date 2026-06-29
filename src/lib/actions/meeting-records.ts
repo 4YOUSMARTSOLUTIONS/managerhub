@@ -137,6 +137,39 @@ export async function finishOccurrence(input: FinishOccurrenceInput): Promise<Ac
   }
 }
 
+export type CollectedDraft = {
+  payload: {
+    is_sdpo: boolean; pilar_id: string; bloco_id: string; item_id: string;
+    meeting_series_id: string; kpi_id: string; tool_id: string; requester_id: string;
+    due_date: string; priority: string; cc: string[];
+    demandas: { description: string; assignees: string[] }[];
+  };
+  summary: string;
+};
+
+export type OccurrenceDraft = {
+  notes: string;
+  decisions: string;
+  attendees: string[];
+  present: Record<string, boolean>;
+  advance: boolean;
+  aiDraft: string;
+  collected: CollectedDraft[];
+};
+
+/** Autosave do rascunho da reunião em andamento (silencioso — sem revalidate). */
+export async function saveOccurrenceDraft(occurrenceId: string, draft: OccurrenceDraft): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    if (!occurrenceId) return { error: "Reunião inválida." };
+    const { error } = await supabase.rpc("save_occurrence_draft", { p_id: occurrenceId, p_draft: draft });
+    if (error) return { error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 /** Cancela uma reunião em andamento (mantém no histórico). */
 export async function cancelOccurrence(id: string): Promise<ActionState> {
   try {

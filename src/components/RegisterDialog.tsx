@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { finishOccurrence } from "@/lib/actions/meeting-records";
+import { finishOccurrence, saveOccurrenceDraft, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { createAction } from "@/lib/actions/actions";
 import { generateMeetingAI } from "@/lib/actions/ai";
 import { PERIODICITY } from "@/lib/constants";
@@ -21,6 +21,8 @@ export function RegisterDialog({
   series,
   occurrenceId,
   startedAt,
+  draft,
+  onDraftChange,
   pilares,
   blocos,
   itens,
@@ -34,6 +36,8 @@ export function RegisterDialog({
   series?: SeriesData;
   occurrenceId?: string;
   startedAt?: string | null;
+  draft?: OccurrenceDraft | null;
+  onDraftChange?: (draft: OccurrenceDraft) => void;
   pilares: Opt[];
   blocos: BlocoOpt[];
   itens: ItemOpt[];
@@ -56,18 +60,53 @@ export function RegisterDialog({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [draftSaved, setDraftSaved] = useState(false);
+  const skipAutosave = useRef(true);
   const router = useRouter();
 
   useEffect(() => {
     if (open && series) {
-      const ids = series.participantIds;
-      setAttendees(ids);
-      setPresent(Object.fromEntries(ids.map((id) => [id, true])));
-      setNotes(""); setDecisions(""); setCollected([]); setError(""); setActionOpen(false); setEditingIdx(null);
-      setAiDraft(""); setAiOpen(false); setAiLoading(false); setAiError("");
-      setAdvance(series.periodicity !== "sob_demanda");
+      skipAutosave.current = true; // não regravar logo após hidratar
+      setError(""); setActionOpen(false); setEditingIdx(null);
+      setAiOpen(false); setAiLoading(false); setAiError(""); setDraftSaved(false);
+      if (draft) {
+        // restaura o rascunho (anexos não são guardados)
+        setAttendees(draft.attendees ?? []);
+        setPresent(draft.present ?? {});
+        setNotes(draft.notes ?? "");
+        setDecisions(draft.decisions ?? "");
+        setAdvance(draft.advance ?? series.periodicity !== "sob_demanda");
+        setAiDraft(draft.aiDraft ?? "");
+        setCollected((draft.collected ?? []).map((c) => ({
+          payload: c.payload,
+          summary: c.summary,
+          headerFiles: [],
+          demandaFiles: c.payload.demandas.map(() => []),
+        })));
+      } else {
+        const ids = series.participantIds;
+        setAttendees(ids);
+        setPresent(Object.fromEntries(ids.map((id) => [id, true])));
+        setNotes(""); setDecisions(""); setCollected([]);
+        setAiDraft(""); setAdvance(series.periodicity !== "sob_demanda");
+      }
     }
-  }, [open, series]);
+  }, [open, series, draft]);
+
+  // autosave do rascunho (debounce ~1s) enquanto o formulário está aberto
+  useEffect(() => {
+    if (!open || !occurrenceId) return;
+    if (skipAutosave.current) { skipAutosave.current = false; return; }
+    const t = setTimeout(async () => {
+      const payload: OccurrenceDraft = {
+        notes, decisions, attendees, present, advance, aiDraft,
+        collected: collected.map((c) => ({ payload: c.payload, summary: c.summary })),
+      };
+      const r = await saveOccurrenceDraft(occurrenceId, payload);
+      if (r.ok) { setDraftSaved(true); setTimeout(() => setDraftSaved(false), 1500); }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [open, occurrenceId, notes, decisions, attendees, present, advance, aiDraft, collected]);
 
   if (!open || !series) return null;
 
@@ -129,6 +168,17 @@ export function RegisterDialog({
     setAiOpen(false);
   };
 
+  // ao fechar, garante o salvamento do estado atual (cobre a janela do debounce)
+  const handleClose = () => {
+    const payload: OccurrenceDraft = {
+      notes, decisions, attendees, present, advance, aiDraft,
+      collected: collected.map((c) => ({ payload: c.payload, summary: c.summary })),
+    };
+    onDraftChange?.(payload); // mantém em memória para reabrir na mesma sessão
+    if (occurrenceId) void saveOccurrenceDraft(occurrenceId, payload);
+    onClose();
+  };
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--shadow)" }}>
@@ -137,7 +187,10 @@ export function RegisterDialog({
             <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Finalizar reunião</h2>
             <p className="muted" style={{ margin: "0.15rem 0 0", fontSize: "0.85rem" }}>{series.name} · {PERIODICITY[series.periodicity as keyof typeof PERIODICITY]}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <span style={{ fontSize: "0.76rem", color: "#16a34a", opacity: draftSaved ? 1 : 0, transition: "opacity 0.2s" }}>✓ Rascunho salvo</span>
+            <button type="button" onClick={handleClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
+          </div>
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
@@ -264,11 +317,14 @@ export function RegisterDialog({
           {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-          <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>
-            {pending ? "Finalizando…" : "Finalizar reunião"}
-          </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+          <span className="soft" style={{ fontSize: "0.75rem" }}>O preenchimento fica salvo automaticamente até finalizar ou cancelar (anexos não ficam no rascunho).</span>
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            <button type="button" className="btn btn-ghost" onClick={handleClose}>Fechar</button>
+            <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>
+              {pending ? "Finalizando…" : "Finalizar reunião"}
+            </button>
+          </div>
         </div>
       </div>
 

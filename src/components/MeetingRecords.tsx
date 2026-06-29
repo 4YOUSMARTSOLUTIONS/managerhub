@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PERIODICITY } from "@/lib/constants";
 import { formatDate, formatTime, formatDuration } from "@/lib/format";
-import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence } from "@/lib/actions/meeting-records";
+import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
 import { ElapsedTimer } from "./ElapsedTimer";
@@ -27,6 +27,7 @@ export type OccurrenceRow = {
   startedAt: string | null;
   endedAt: string | null;
   durationSeconds: number | null;
+  draft: OccurrenceDraft | null;
   presentCount: number;
   totalCount: number;
   actionsCount: number;
@@ -85,6 +86,7 @@ export function MeetingRecords({
   const [editing, setEditing] = useState<SeriesData | undefined>(undefined);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishOcc, setFinishOcc] = useState<OccurrenceRow | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, OccurrenceDraft>>({});
 
   // filtros — reuniões cadastradas (padrão: só ativas)
   const [seriesQuery, setSeriesQuery] = useState("");
@@ -123,11 +125,20 @@ export function MeetingRecords({
   const openCreate = () => { setEditing(undefined); setSeriesOpen(true); };
   const openEdit = (s: SeriesRow) => { setEditing(s); setSeriesOpen(true); };
   const openFinish = (o: OccurrenceRow) => { setFinishOcc(o); setFinishOpen(true); };
-  const doStart = (s: SeriesRow) => start(async () => {
-    const r = await startOccurrence(s.id);
-    if (r.error) { alert(r.error); return; }
-    router.refresh();
-  });
+  const doStart = (s: SeriesRow) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    if (s.nextDate && s.nextDate > todayStr) {
+      alert(`A próxima reunião está agendada para ${formatDate(s.nextDate)}. Para iniciar antes, edite a data da próxima reunião.`);
+      return;
+    }
+    start(async () => {
+      const r = await startOccurrence(s.id);
+      if (r.error) { alert(r.error); return; }
+      router.refresh();
+    });
+  };
   const doCancel = (id: string) => {
     if (!confirm("Cancelar esta reunião em andamento? Ela ficará no histórico como cancelada.")) return;
     start(async () => {
@@ -395,6 +406,8 @@ export function MeetingRecords({
         series={finishOcc ? seriesById.get(finishOcc.seriesId) : undefined}
         occurrenceId={finishOcc?.id}
         startedAt={finishOcc?.startedAt ?? null}
+        draft={finishOcc ? (drafts[finishOcc.id] ?? finishOcc.draft) : null}
+        onDraftChange={(d) => { if (finishOcc) setDrafts((p) => ({ ...p, [finishOcc.id]: d })); }}
         pilares={pilares}
         blocos={blocos}
         itens={itens}

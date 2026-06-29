@@ -1,6 +1,7 @@
 import { requireContext } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { MeetingRecords, type SeriesRow, type OccurrenceRow } from "@/components/MeetingRecords";
+import type { OccurrenceDraft } from "@/lib/actions/meeting-records";
 import type { Person } from "@/components/PeoplePicker";
 
 export default async function MeetingRecordsPage() {
@@ -30,7 +31,7 @@ export default async function MeetingRecordsPage() {
     supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     supabase
       .from("meeting_occurrences")
-      .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+      .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
       .order("started_at", { ascending: false, nullsFirst: false })
       .order("occurred_on", { ascending: false })
       .limit(300),
@@ -126,6 +127,7 @@ export default async function MeetingRecordsPage() {
       startedAt: o.started_at,
       endedAt: o.ended_at,
       durationSeconds: o.duration_seconds,
+      draft: (o.draft as OccurrenceDraft | null) ?? null,
       presentCount: counts.present,
       totalCount: counts.total,
       actionsCount: actBy.get(o.id) ?? 0,
