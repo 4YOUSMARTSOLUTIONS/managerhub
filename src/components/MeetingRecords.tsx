@@ -52,6 +52,7 @@ export function MeetingRecords({
   itens,
   kpis,
   tools,
+  aiEnabled,
 }: {
   series: SeriesRow[];
   occurrences: OccurrenceRow[];
@@ -63,6 +64,7 @@ export function MeetingRecords({
   itens: ItemOpt[];
   kpis: Opt[];
   tools: Opt[];
+  aiEnabled: boolean;
 }) {
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [editing, setEditing] = useState<SeriesData | undefined>(undefined);
@@ -324,7 +326,7 @@ export function MeetingRecords({
       />
 
       <SeriesDialog open={seriesOpen} onClose={() => setSeriesOpen(false)} people={people} rooms={rooms} units={units} series={editing} />
-      <RegisterDialog open={registerOpen} onClose={() => setRegisterOpen(false)} people={people} series={registerSeries} pilares={pilares} blocos={blocos} itens={itens} kpis={kpis} tools={tools} />
+      <RegisterDialog open={registerOpen} onClose={() => setRegisterOpen(false)} people={people} series={registerSeries} pilares={pilares} blocos={blocos} itens={itens} kpis={kpis} tools={tools} aiEnabled={aiEnabled} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { registerOccurrence } from "@/lib/actions/meeting-records";
 import { createAction } from "@/lib/actions/actions";
+import { generateMeetingAI } from "@/lib/actions/ai";
 import { PERIODICITY } from "@/lib/constants";
 import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker, type Person } from "./PeoplePicker";
@@ -21,6 +22,7 @@ export function RegisterDialog({
   itens,
   kpis,
   tools,
+  aiEnabled,
 }: {
   open: boolean;
   onClose: () => void;
@@ -31,6 +33,7 @@ export function RegisterDialog({
   itens: ItemOpt[];
   kpis: Opt[];
   tools: Opt[];
+  aiEnabled: boolean;
 }) {
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const [occurredOn, setOccurredOn] = useState("");
@@ -44,6 +47,10 @@ export function RegisterDialog({
   const [advance, setAdvance] = useState(true);
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
+  const [aiDraft, setAiDraft] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -53,6 +60,7 @@ export function RegisterDialog({
       setPresent(Object.fromEntries(ids.map((id) => [id, true])));
       setOccurredOn(series.nextDate ?? new Date().toISOString().slice(0, 10));
       setNotes(""); setDecisions(""); setCollected([]); setError(""); setActionOpen(false); setEditingIdx(null);
+      setAiDraft(""); setAiOpen(false); setAiLoading(false); setAiError("");
       setAdvance(series.periodicity !== "sob_demanda");
     }
   }, [open, series]);
@@ -107,6 +115,24 @@ export function RegisterDialog({
     });
   };
 
+  const runAI = async () => {
+    setAiError("");
+    if (!aiDraft.trim()) { setAiError("Escreva ou cole um rascunho/transcrição da reunião."); return; }
+    setAiLoading(true);
+    const presentes = attendees.filter((id) => present[id]).map((id) => byId.get(id)?.name ?? "—");
+    const res = await generateMeetingAI({
+      draft: aiDraft,
+      objetivo: series.objetivo,
+      pautaItens: series.content.map((c) => c.item).filter(Boolean),
+      presentes,
+    });
+    setAiLoading(false);
+    if (!res.ok) { setAiError(res.error); return; }
+    setNotes(res.anotacoes);
+    setDecisions(res.decisoes);
+    setAiOpen(false);
+  };
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--shadow)" }}>
@@ -152,6 +178,40 @@ export function RegisterDialog({
             )}
             <PeoplePicker people={people} selected={attendees} onChange={onAttendeesChange} placeholder="Adicionar participante…" />
           </div>
+
+          {aiEnabled && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)" }}>
+              {!aiOpen ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAiOpen(true)}>
+                  ✨ Gerar anotações e decisões com IA
+                </button>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <label className="label" style={{ margin: 0 }}>Rascunho / transcrição da reunião</label>
+                  <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+                    Escreva pontos soltos ou cole a transcrição. A IA organiza em Anotações e Decisões — você pode editar depois.
+                  </p>
+                  <textarea
+                    className="textarea"
+                    value={aiDraft}
+                    onChange={(e) => setAiDraft(e.target.value)}
+                    placeholder="Ex.: falamos sobre o atraso da entrega X, João vai assumir Y, decidimos adiar Z para a próxima…"
+                    style={{ minHeight: 100 }}
+                    disabled={aiLoading}
+                  />
+                  {aiError && <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0 }}>{aiError}</p>}
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={runAI} disabled={aiLoading}>
+                      {aiLoading ? "Gerando…" : "Gerar"}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setAiOpen(false); setAiError(""); }} disabled={aiLoading}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="label">Anotações</label>

@@ -140,6 +140,7 @@ export default async function MeetingRecordsPage() {
       itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, blocoId: i.bloco_id }))}
       kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))}
       tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
+      aiEnabled={tenant.has_openai_key}
     />
   );
 }

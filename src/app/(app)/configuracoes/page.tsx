@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { CompanyForm } from "@/components/CompanyForm";
+import { OpenAISettingsForm } from "@/components/OpenAISettingsForm";
 import { RegistryList } from "@/components/RegistryList";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
@@ -118,6 +119,9 @@ export default async function SettingsPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       <Section title="Dados da empresa">
         <CompanyForm name={tenant.name} canEdit={role === "owner"} />
+      </Section>
+      <Section title="Integração com IA (OpenAI)">
+        <OpenAISettingsForm hasKey={tenant.has_openai_key} model={tenant.openai_model} canEdit={role === "owner"} />
       </Section>
       <UnitsManager
         units={(units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind, cnpj: u.cnpj }))}

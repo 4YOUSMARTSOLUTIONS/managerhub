@@ -654,11 +654,39 @@ export type Database = {
           },
         ]
       }
+      tenant_secrets: {
+        Row: {
+          openai_api_key: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          openai_api_key?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          openai_api_key?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_secrets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string
+          has_openai_key: boolean
           id: string
           name: string
+          openai_model: string
           slug: string
           status: Database["public"]["Enums"]["tenant_status"]
           units_limit: number | null
@@ -666,8 +694,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          has_openai_key?: boolean
           id?: string
           name: string
+          openai_model?: string
           slug: string
           status?: Database["public"]["Enums"]["tenant_status"]
           units_limit?: number | null
@@ -675,8 +705,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          has_openai_key?: boolean
           id?: string
           name?: string
+          openai_model?: string
           slug?: string
           status?: Database["public"]["Enums"]["tenant_status"]
           units_limit?: number | null
@@ -832,6 +864,10 @@ export type Database = {
         Returns: boolean
       }
       is_tenant_member: { Args: { p_tenant: string }; Returns: boolean }
+      set_openai_settings: {
+        Args: { p_key: string; p_model: string; p_clear?: boolean }
+        Returns: undefined
+      }
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
