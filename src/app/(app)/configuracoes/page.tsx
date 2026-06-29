@@ -10,6 +10,7 @@ import { CompanyForm } from "@/components/CompanyForm";
 import { OpenAISettingsForm } from "@/components/OpenAISettingsForm";
 import { RegistryList } from "@/components/RegistryList";
 import { TicketSlaEditor } from "@/components/TicketSlaEditor";
+import { TicketManagersEditor } from "@/components/TicketManagersEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { createRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
@@ -349,6 +350,14 @@ export default async function SettingsPage() {
   const ticketSectorOpts = (ticketSectors ?? []).map((s) => ({ id: s.id, name: s.name }));
   const ticketSectorById = new Map(ticketSectorOpts.map((s) => [s.id, s.name]));
   const ticketCategoryOpts = (ticketCategories ?? []).map((c) => ({ id: c.id, name: c.name, sector_id: c.sector_id }));
+  const ticketManagers = mems
+    .filter((m) => m.is_active)
+    .map((m) => ({
+      userId: m.user_id,
+      name: profById.get(m.user_id)?.full_name ?? profById.get(m.user_id)?.email ?? "—",
+      isManager: m.is_ticket_manager,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   const chamadosTab = (
     <Tabs
@@ -399,6 +408,11 @@ export default async function SettingsPage() {
               slas={(ticketSlas ?? []).map((s) => ({ category_id: s.category_id, priority: s.priority, sla_value: s.sla_value, sla_unit: s.sla_unit }))}
             />
           ),
+        },
+        {
+          id: "ticket-gestores",
+          label: "Gestores",
+          content: <TicketManagersEditor members={ticketManagers} />,
         },
       ]}
     />

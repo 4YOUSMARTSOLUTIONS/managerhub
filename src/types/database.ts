@@ -352,6 +352,7 @@ export type Database = {
           employee_code: string | null
           id: string
           is_active: boolean
+          is_ticket_manager: boolean
           manager_id: string | null
           position_id: string | null
           position_level_id: string | null
@@ -368,6 +369,7 @@ export type Database = {
           employee_code?: string | null
           id?: string
           is_active?: boolean
+          is_ticket_manager?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
@@ -384,6 +386,7 @@ export type Database = {
           employee_code?: string | null
           id?: string
           is_active?: boolean
+          is_ticket_manager?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null

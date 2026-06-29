@@ -31,12 +31,13 @@ export type TicketRow = {
   unitName: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
+  requesterId: string | null;
   requesterName: string | null;
   attachments: { id: string; path: string; filename: string; contentType: string | null }[];
 };
 
 export function TicketsManager({
-  tickets, sectors, categories, units, slas, members, currentUserId, isAdmin,
+  tickets, sectors, categories, units, slas, members, currentUserId, isAdmin, canTreat,
 }: {
   tickets: TicketRow[];
   sectors: Opt[];
@@ -46,11 +47,10 @@ export function TicketsManager({
   members: Member[];
   currentUserId: string;
   isAdmin: boolean;
+  canTreat: boolean;
 }) {
   const [newOpen, setNewOpen] = useState(false);
   const [selected, setSelected] = useState<TicketRow | null>(null);
-
-  const canTreat = (t: TicketRow) => isAdmin || t.assigneeId === currentUserId;
 
   return (
     <>
@@ -104,7 +104,7 @@ export function TicketsManager({
                       <Badge tone={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS[t.status]}</Badge>
                     </td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelected(t)}>Tratar</button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelected(t)}>{canTreat ? "Tratar" : "Abrir"}</button>
                       {isAdmin && (
                         <form action={deleteTicket} style={{ display: "inline" }}>
                           <input type="hidden" name="id" value={t.id} />
@@ -137,7 +137,8 @@ export function TicketsManager({
         sectors={sectors}
         categories={categories}
         members={members}
-        canEdit={!!selected && canTreat(selected)}
+        canEdit={canTreat}
+        canComment={!!selected && (canTreat || selected.requesterId === currentUserId)}
       />
     </>
   );

@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTicketTriage, getTicketAttachmentUrl } from "@/lib/actions/tickets";
+import { updateTicketTriage, getTicketAttachmentUrl, getTicketComments, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
+import { Avatar } from "@/components/ui/Avatar";
 import { PRIORITY, TICKET_STATUS, options } from "@/lib/constants";
+import { formatDateTime } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import type { TicketRow, Opt, CatOpt, Member } from "./TicketsManager";
 
 export function TicketPanel({
-  open, onClose, ticket, sectors, categories, members, canEdit,
+  open, onClose, ticket, sectors, categories, members, canEdit, canComment,
 }: {
   open: boolean;
   onClose: () => void;
@@ -17,6 +19,7 @@ export function TicketPanel({
   categories: CatOpt[];
   members: Member[];
   canEdit: boolean;
+  canComment: boolean;
 }) {
   const [status, setStatus] = useState<Enums<"ticket_status">>("open");
   const [priority, setPriority] = useState<Enums<"priority_level">>("medium");
@@ -24,6 +27,8 @@ export function TicketPanel({
   const [categoryId, setCategoryId] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<TicketComment[]>([]);
+  const [commentText, setCommentText] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -37,6 +42,8 @@ export function TicketPanel({
       setAssigneeId(ticket.assigneeId ?? "");
       setError("");
       setUrls({});
+      setComments([]);
+      setCommentText("");
       // gera URLs assinadas das imagens
       (async () => {
         const entries = await Promise.all(
@@ -44,6 +51,7 @@ export function TicketPanel({
         );
         setUrls(Object.fromEntries(entries.filter(([, u]) => u)));
       })();
+      getTicketComments(ticket.id).then(setComments);
     }
   }, [open, ticket]);
 
@@ -64,6 +72,19 @@ export function TicketPanel({
       });
       if (res.error) { setError(res.error); return; }
       onClose();
+      router.refresh();
+    });
+  };
+
+  const sendComment = () => {
+    const text = commentText.trim();
+    if (!text || !ticket) return;
+    setError("");
+    start(async () => {
+      const res = await addTicketComment(ticket.id, text);
+      if (res.error) { setError(res.error); return; }
+      setCommentText("");
+      setComments(await getTicketComments(ticket.id));
       router.refresh();
     });
   };
@@ -152,16 +173,41 @@ export function TicketPanel({
               {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
             </>
           ) : (
-            <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Você não tem permissão para tratar este chamado.</p>
+            <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Somente o gestor de chamados (ou owner/admin) pode tratar este chamado.</p>
           )}
+
+          {/* Comentários */}
+          <div>
+            <label className="label">Comentários</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: 240, overflowY: "auto" }}>
+              {comments.length === 0 ? (
+                <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem comentários.</p>
+              ) : comments.map((c) => (
+                <div key={c.id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                  <Avatar name={c.authorName ?? "?"} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "0.83rem" }}>
+                      <strong>{c.authorName ?? "—"}</strong>
+                      <span className="soft" style={{ fontSize: "0.74rem" }}> · {formatDateTime(c.createdAt)}</span>
+                    </div>
+                    <div className="muted" style={{ fontSize: "0.83rem", marginTop: 2, whiteSpace: "pre-wrap" }}>{c.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {canComment && (
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", marginTop: "0.6rem" }}>
+                <textarea className="textarea" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Escreva um comentário…" style={{ minHeight: 46 }} />
+                <button type="button" className="btn btn-primary btn-sm" disabled={pending || !commentText.trim()} onClick={sendComment}>Enviar</button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {canEdit && (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-            <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Salvando…" : "Salvar"}</button>
-          </div>
-        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>{canEdit ? "Cancelar" : "Fechar"}</button>
+          {canEdit && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Salvando…" : "Salvar"}</button>}
+        </div>
       </div>
     </div>
   );

@@ -25,6 +25,14 @@ export default async function TicketsPage() {
       supabase.from("ticket_slas").select("category_id, priority, sla_value, sla_unit").eq("tenant_id", tenant.id),
     ]);
 
+  const { data: myMembership } = await supabase
+    .from("memberships")
+    .select("is_ticket_manager")
+    .eq("tenant_id", tenant.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const canTreat = role === "owner" || role === "admin" || !!myMembership?.is_ticket_manager;
+
   const ticketIds = (tickets ?? []).map((t) => t.id);
   const { data: atts } = ticketIds.length
     ? await supabase.from("ticket_attachments").select("id, ticket_id, path, filename, content_type").in("ticket_id", ticketIds)
@@ -53,6 +61,7 @@ export default async function TicketsPage() {
     unitName: (t.unit as unknown as { name: string } | null)?.name ?? null,
     assigneeId: t.assignee_id,
     assigneeName: (t.assignee as { full_name: string | null } | null)?.full_name ?? null,
+    requesterId: t.requester_id,
     requesterName: (t.requester as { full_name: string | null } | null)?.full_name ?? null,
     attachments: attByTicket.get(t.id) ?? [],
   }));
@@ -73,6 +82,7 @@ export default async function TicketsPage() {
         members={members2}
         currentUserId={user.id}
         isAdmin={isAdmin}
+        canTreat={canTreat}
       />
     </div>
   );

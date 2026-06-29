@@ -2,11 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { PRIORITY } from "@/lib/constants";
 import type { ActionState } from "./types";
 import type { Database, Enums } from "@/types/database";
 
 type TicketUpdate = Database["public"]["Tables"]["tickets"]["Update"];
+type Ctx = Awaited<ReturnType<typeof actionContext>>;
+
+/** Quem pode tratar chamados: owner/admin ou usuário designado gestor de chamados. */
+async function canTreatTickets(ctx: Ctx): Promise<boolean> {
+  if (ctx.role === "owner" || ctx.role === "admin") return true;
+  const { data } = await ctx.supabase
+    .from("memberships")
+    .select("is_ticket_manager")
+    .eq("tenant_id", ctx.tenantId)
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  return !!data?.is_ticket_manager;
+}
 
 const BUCKET = "ticket-attachments";
 const RP = "/configuracoes";
@@ -123,7 +137,11 @@ export type TriageInput = {
 /** Tratamento do chamado: muda status/prioridade/categoria/responsável; recalcula prazo e notifica. */
 export async function updateTicketTriage(input: TriageInput): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase, tenantId, userId } = ctx;
+    if (!(await canTreatTickets(ctx))) {
+      return { error: "Apenas o gestor de chamados (ou owner/admin) pode tratar chamados." };
+    }
 
     const { data: cur, error: e0 } = await supabase
       .from("tickets")
@@ -186,6 +204,70 @@ export async function getTicketAttachmentUrl(path: string): Promise<string | nul
   const { supabase } = await actionContext();
   const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 10);
   return data?.signedUrl ?? null;
+}
+
+// ---------- Comentários do chamado ----------
+export type TicketComment = { id: string; body: string; authorName: string | null; createdAt: string };
+
+export async function getTicketComments(ticketId: string): Promise<TicketComment[]> {
+  const { supabase } = await actionContext();
+  const { data } = await supabase
+    .from("ticket_comments")
+    .select("id, body, created_at, author:profiles!author_id(full_name)")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true });
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    body: c.body,
+    authorName: (c.author as unknown as { full_name: string | null } | null)?.full_name ?? null,
+    createdAt: c.created_at,
+  }));
+}
+
+export async function addTicketComment(ticketId: string, body: string): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    const { supabase, userId } = ctx;
+    const text = body.trim();
+    if (!text) return { error: "Escreva um comentário." };
+
+    const { data: t, error: e0 } = await supabase.from("tickets").select("requester_id").eq("id", ticketId).maybeSingle();
+    if (e0) return { error: e0.message };
+    if (!t) return { error: "Chamado não encontrado." };
+
+    const allowed = userId === t.requester_id || (await canTreatTickets(ctx));
+    if (!allowed) return { error: "Apenas o gestor de chamados e o solicitante podem comentar." };
+
+    const { error } = await supabase.from("ticket_comments").insert({ ticket_id: ticketId, author_id: userId, body: text });
+    if (error) return { error: error.message };
+
+    revalidatePath("/chamados");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------- Designação de gestores de chamado (owner/admin) ----------
+export async function setTicketManager(input: { user_id: string; value: boolean }): Promise<ActionState> {
+  try {
+    const { tenantId, role } = await actionContext();
+    if (role !== "owner" && role !== "admin") return { error: "Apenas owner/admin podem designar gestores de chamado." };
+    if (!input.user_id) return { error: "Usuário inválido." };
+    // service role: alterar memberships com segurança (checagem de papel feita acima)
+    const admin = createServiceClient();
+    const { error } = await admin
+      .from("memberships")
+      .update({ is_ticket_manager: input.value })
+      .eq("tenant_id", tenantId)
+      .eq("user_id", input.user_id);
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    revalidatePath("/chamados");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function setTicketStatus(formData: FormData): Promise<void> {
