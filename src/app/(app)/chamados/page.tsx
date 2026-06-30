@@ -1,7 +1,9 @@
 import { requireContext, getMembers } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { TicketsManager, type TicketRow } from "@/components/TicketsManager";
+import { TicketsDashboard } from "@/components/TicketsDashboard";
 import { TICKET_CATEGORY } from "@/lib/constants";
 
 export default async function TicketsPage() {
@@ -58,32 +60,56 @@ export default async function TicketsPage() {
     sectorName: (t.sector as unknown as { name: string } | null)?.name ?? (t.category ? TICKET_CATEGORY[t.category] : null),
     categoryId: t.category_id,
     categoryName: (t.cat as unknown as { name: string } | null)?.name ?? null,
+    unitId: t.unit_id,
     unitName: (t.unit as unknown as { name: string } | null)?.name ?? null,
     assigneeId: t.assignee_id,
     assigneeName: (t.assignee as { full_name: string | null } | null)?.full_name ?? null,
     requesterId: t.requester_id,
     requesterName: (t.requester as { full_name: string | null } | null)?.full_name ?? null,
+    createdAt: t.created_at,
+    resolvedAt: t.resolved_at,
+    npsScore: t.nps_score,
+    npsComment: t.nps_comment,
     attachments: attByTicket.get(t.id) ?? [],
   }));
 
   const members2 = members
     .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "—" }))
-    .filter((m) => m.id);
+    .filter((m) => m.id)
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+  const sectorOpts = (sectors ?? []).map((s) => ({ id: s.id, name: s.name }));
+  const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name }));
+
+  const tabs: Tab[] = [
+    {
+      id: "chamados",
+      label: "Chamados",
+      content: (
+        <TicketsManager
+          tickets={rows}
+          sectors={sectorOpts}
+          categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name, sectorId: c.sector_id }))}
+          units={unitOpts}
+          slas={(slas ?? []).map((s) => ({ categoryId: s.category_id, priority: s.priority, value: s.sla_value, unit: s.sla_unit }))}
+          members={members2}
+          currentUserId={user.id}
+          isAdmin={isAdmin}
+          canTreat={canTreat}
+        />
+      ),
+    },
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      content: <TicketsDashboard tickets={rows} sectors={sectorOpts} units={unitOpts} />,
+    },
+  ];
 
   return (
     <div>
       <PageHeader title="Chamados" subtitle="Solicitações de TI, Serviços Gerais e outras áreas." />
-      <TicketsManager
-        tickets={rows}
-        sectors={(sectors ?? []).map((s) => ({ id: s.id, name: s.name }))}
-        categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name, sectorId: c.sector_id }))}
-        units={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
-        slas={(slas ?? []).map((s) => ({ categoryId: s.category_id, priority: s.priority, value: s.sla_value, unit: s.sla_unit }))}
-        members={members2}
-        currentUserId={user.id}
-        isAdmin={isAdmin}
-        canTreat={canTreat}
-      />
+      <Tabs tabs={tabs} />
     </div>
   );
 }

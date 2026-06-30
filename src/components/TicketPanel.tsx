@@ -4,13 +4,16 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTicketTriage, getTicketAttachmentUrl, getTicketComments, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
 import { Avatar } from "@/components/ui/Avatar";
+import { SearchSelect } from "@/components/SearchSelect";
+import { NpsRating } from "@/components/NpsRating";
 import { PRIORITY, TICKET_STATUS, options } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
+import { npsColor, npsFace } from "@/lib/nps";
 import type { Enums } from "@/types/database";
 import type { TicketRow, Opt, CatOpt, Member } from "./TicketsManager";
 
 export function TicketPanel({
-  open, onClose, ticket, sectors, categories, members, canEdit, canComment,
+  open, onClose, ticket, sectors, categories, members, canEdit, canComment, canRate,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +23,7 @@ export function TicketPanel({
   members: Member[];
   canEdit: boolean;
   canComment: boolean;
+  canRate: boolean;
 }) {
   const [status, setStatus] = useState<Enums<"ticket_status">>("open");
   const [priority, setPriority] = useState<Enums<"priority_level">>("medium");
@@ -161,11 +165,8 @@ export function TicketPanel({
                 </div>
               </div>
               <div>
-                <label className="label">Responsável</label>
-                <select className="select" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-                  <option value="">A definir</option>
-                  {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                <label className="label">Responsável <span className="soft">(busque pelo nome)</span></label>
+                <SearchSelect options={members} value={assigneeId} onChange={setAssigneeId} placeholder="Buscar responsável…" emptyHint="Nenhum colaborador" />
               </div>
               <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
                 Ao mudar a prioridade ou a categoria, o prazo é recalculado pelo SLA e o solicitante é notificado.
@@ -175,6 +176,17 @@ export function TicketPanel({
           ) : (
             <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Somente o gestor de chamados (ou owner/admin) pode tratar este chamado.</p>
           )}
+
+          {/* Avaliação (NPS) */}
+          {canRate ? (
+            <NpsRating ticketId={ticket.id} current={ticket.npsScore} currentComment={ticket.npsComment} />
+          ) : ticket.npsScore != null ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
+              <span className="label" style={{ margin: 0 }}>Avaliação do solicitante:</span>
+              <span style={{ fontWeight: 700, color: npsColor(ticket.npsScore) }}>{npsFace(ticket.npsScore)} {ticket.npsScore}/10</span>
+              {ticket.npsComment && <span className="muted">· {ticket.npsComment}</span>}
+            </div>
+          ) : null}
 
           {/* Comentários */}
           <div>

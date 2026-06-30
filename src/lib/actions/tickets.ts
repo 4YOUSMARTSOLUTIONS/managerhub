@@ -206,6 +206,37 @@ export async function getTicketAttachmentUrl(path: string): Promise<string | nul
   return data?.signedUrl ?? null;
 }
 
+// ---------- Avaliação (NPS) do chamado — somente o solicitante ----------
+export async function rateTicket(input: { ticket_id: string; score: number; comment?: string }): Promise<ActionState> {
+  try {
+    const { supabase, userId } = await actionContext();
+    const score = Math.round(Number(input.score));
+    if (!input.ticket_id) return { error: "Chamado inválido." };
+    if (!Number.isInteger(score) || score < 0 || score > 10) return { error: "Informe uma nota de 0 a 10." };
+
+    const { data: t, error: e0 } = await supabase
+      .from("tickets")
+      .select("requester_id, status")
+      .eq("id", input.ticket_id)
+      .maybeSingle();
+    if (e0) return { error: e0.message };
+    if (!t) return { error: "Chamado não encontrado." };
+    if (t.requester_id !== userId) return { error: "Apenas o solicitante pode avaliar o chamado." };
+    if (t.status !== "resolved" && t.status !== "closed") return { error: "Avalie o chamado apenas após ser resolvido." };
+
+    const { error } = await supabase
+      .from("tickets")
+      .update({ nps_score: score, nps_comment: (input.comment ?? "").trim() || null, rated_at: new Date().toISOString() })
+      .eq("id", input.ticket_id);
+    if (error) return { error: error.message };
+
+    revalidatePath("/chamados");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 // ---------- Comentários do chamado ----------
 export type TicketComment = { id: string; body: string; authorName: string | null; createdAt: string };
 

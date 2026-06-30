@@ -28,11 +28,16 @@ export type TicketRow = {
   sectorName: string | null;
   categoryId: string | null;
   categoryName: string | null;
+  unitId: string | null;
   unitName: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
   requesterId: string | null;
   requesterName: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  npsScore: number | null;
+  npsComment: string | null;
   attachments: { id: string; path: string; filename: string; contentType: string | null }[];
 };
 
@@ -139,6 +144,7 @@ export function TicketsManager({
         members={members}
         canEdit={canTreat}
         canComment={!!selected && (canTreat || selected.requesterId === currentUserId)}
+        canRate={!!selected && selected.requesterId === currentUserId && (selected.status === "resolved" || selected.status === "closed")}
       />
     </>
   );
