@@ -22,6 +22,13 @@ const NAV: Item[] = [
   { href: "/acoes", label: "Ações", icon: icon("M9 11l3 3L22 4|M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11") },
   { href: "/chamados", label: "Chamados", icon: icon("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z") },
   { href: "/metas", label: "Metas", icon: icon("M12 2a10 10 0 1 0 10 10|M12 6a6 6 0 1 0 6 6|M12 10a2 2 0 1 0 2 2") },
+  { href: "/pnr", label: "PNR", icon: icon("M3 3v18h18|M19 9l-5 5-4-4-3 3") },
+  { href: "/central-sdpo", label: "Central SDPO", icon: icon("M4 4h6v6H4z|M14 4h6v6h-6z|M4 14h6v6H4z|M14 14h6v6h-6z") },
+  { href: "/feedbacks", label: "Feedbacks", icon: icon("M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z") },
+  { href: "/checklists", label: "Checklists", icon: icon("M9 6h11|M9 12h11|M9 18h11|M4 5l1.2 1.2L7.5 4|M4 11l1.2 1.2L7.5 10|M4 17l1.2 1.2L7.5 16") },
+  { href: "/formularios", label: "Formulários", icon: icon("M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M8 13h8|M8 17h5") },
+  { href: "/seguranca", label: "Segurança", icon: icon("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z") },
+  { href: "/agenda", label: "Agenda", icon: icon("M8 2v4|M16 2v4|M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z") },
 ];
 
 const MANAGER_NAV: Item[] = [
