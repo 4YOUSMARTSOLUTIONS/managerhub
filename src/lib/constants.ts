@@ -124,6 +124,41 @@ export const GOAL_STATUS_TONE: Record<Enums<"goal_status">, Tone> = {
   archived: "gray",
 };
 
+// ---------- Metas individuais (farol) ----------
+export const GOAL_DIRECTION: Record<Enums<"goal_direction">, string> = {
+  maior_melhor: "Maior é melhor",
+  menor_melhor: "Menor é melhor",
+};
+
+export const FAROL_LABEL: Record<"atingida" | "nao_atingida" | "pendente", string> = {
+  atingida: "Atingida",
+  nao_atingida: "Não atingida",
+  pendente: "Pendente",
+};
+
+export const FAROL_TONE: Record<"atingida" | "nao_atingida" | "pendente", Tone> = {
+  atingida: "green",
+  nao_atingida: "red",
+  pendente: "gray",
+};
+
+// ---------- Metas da área ----------
+export const AREA_GOAL_KIND: Record<Enums<"area_goal_kind">, string> = {
+  ic: "IC",
+  iv: "IV",
+};
+
+export const AREA_GOAL_KIND_FULL: Record<Enums<"area_goal_kind">, string> = {
+  ic: "Índice de Controle",
+  iv: "Índice de Verificação",
+};
+
+export const CONSOLIDATION_LABEL: Record<Enums<"area_consolidation">, string> = {
+  soma: "Soma",
+  media: "Média",
+  manual: "Manual",
+};
+
 // ---------- Prioridade ----------
 export const PRIORITY: Record<Enums<"priority_level">, string> = {
   low: "Baixa",

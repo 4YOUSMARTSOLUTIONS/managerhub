@@ -47,8 +47,9 @@ export async function getMembers(tenantId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("memberships")
-    .select("role, user_id, profiles(id, full_name, email)")
-    .eq("tenant_id", tenantId);
+    .select("role, user_id, profiles!memberships_user_id_fkey(id, full_name, email)")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true);
   return (data ?? []).map((m) => ({
     role: m.role,
     profile: m.profiles as Tables<"profiles"> | null,

@@ -568,6 +568,30 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; ticket_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
         Relationships: []
       }
+      individual_goals: {
+        Row: { id: string; tenant_id: string; owner_id: string; name: string; description: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; owner_id: string; name: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; owner_id?: string; name?: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      individual_goal_entries: {
+        Row: { id: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value?: number | null; weight?: number; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; goal_id?: string; period?: string; target_value?: number; actual_value?: number | null; weight?: number; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      area_goals: {
+        Row: { id: string; tenant_id: string; department_id: string | null; name: string; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; department_id?: string | null; name: string; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; department_id?: string | null; name?: string; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      area_goal_entries: {
+        Row: { id: string; tenant_id: string; area_goal_id: string; unit_id: string | null; period: string; target_value: number | null; actual_value: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; area_goal_id: string; unit_id?: string | null; period: string; target_value?: number | null; actual_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; area_goal_id?: string; unit_id?: string | null; period?: string; target_value?: number | null; actual_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       meeting_occurrences: {
         Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; registered_by: string | null; created_at: string; status: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at: string | null; ended_at: string | null; duration_seconds: number | null; draft: Json | null }
         Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null; draft?: Json | null }
@@ -786,7 +810,10 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          nps_comment: string | null
+          nps_score: number | null
           priority: Database["public"]["Enums"]["priority_level"]
+          rated_at: string | null
           requested_priority: Database["public"]["Enums"]["priority_level"] | null
           requester_id: string | null
           resolved_at: string | null
@@ -807,7 +834,10 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          nps_comment?: string | null
+          nps_score?: number | null
           priority?: Database["public"]["Enums"]["priority_level"]
+          rated_at?: string | null
           requested_priority?: Database["public"]["Enums"]["priority_level"] | null
           requester_id?: string | null
           resolved_at?: string | null
@@ -828,7 +858,10 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          nps_comment?: string | null
+          nps_score?: number | null
           priority?: Database["public"]["Enums"]["priority_level"]
+          rated_at?: string | null
           requested_priority?: Database["public"]["Enums"]["priority_level"] | null
           requester_id?: string | null
           resolved_at?: string | null
@@ -966,6 +999,9 @@ export type Database = {
     Enums: {
       action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
       goal_status: "active" | "at_risk" | "achieved" | "missed" | "archived"
+      goal_direction: "maior_melhor" | "menor_melhor"
+      area_goal_kind: "ic" | "iv"
+      area_consolidation: "soma" | "media" | "manual"
       meeting_status: "scheduled" | "in_progress" | "done" | "cancelled"
       meeting_occurrence_status: "in_progress" | "finished" | "cancelled"
       member_role: "owner" | "admin" | "manager" | "member"
