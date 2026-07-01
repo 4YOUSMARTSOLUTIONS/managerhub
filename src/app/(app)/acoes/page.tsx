@@ -27,7 +27,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
     { data: members }, { data: profilesData },
   ] = await Promise.all([
-    unitIds ? actionsQuery.in("unit_id", unitIds) : actionsQuery,
+    unitIds ? actionsQuery.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : actionsQuery,
     supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_blocos").select("id, name, pilar_id").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),

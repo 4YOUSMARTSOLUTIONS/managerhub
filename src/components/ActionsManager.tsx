@@ -143,7 +143,7 @@ export function ActionsManager({
                         </td>
                         <td className="muted" style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>
                           {first ? (a.requesterName ?? "—") : ""}
-                          {first && a.unitName && <span className="badge badge-gray" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{a.unitName}</span>}
+                          {first && <span className="badge badge-gray" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{a.unitName ?? "Todas"}</span>}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>

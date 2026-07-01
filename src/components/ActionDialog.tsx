@@ -360,7 +360,7 @@ export function ActionDialog({
               <div>
                 <label className="label">Unidade <span className="soft">(opcional)</span></label>
                 <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                  <option value="">Sem unidade</option>
+                  <option value="">Todas as unidades</option>
                   {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </div>
