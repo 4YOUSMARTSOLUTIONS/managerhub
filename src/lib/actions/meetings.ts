@@ -227,6 +227,73 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
   }
 }
 
+/**
+ * Override de UMA ocorrência de uma série com auto-reserva no convite recorrente
+ * do Outlook (VEVENT com RECURRENCE-ID = slot original). Mantém a série sincronizada
+ * quando o usuário move/cancela uma ocorrência isolada.
+ */
+async function dispatchOccurrenceOverride(meetingId: string, method: IcsMethod): Promise<InviteResult> {
+  try {
+    const admin = createServiceClient();
+    const { data: m } = await admin
+      .from("meetings")
+      .select("id, tenant_id, title, description, starts_at, ends_at, series_id, series_slot, rooms(name)")
+      .eq("id", meetingId)
+      .maybeSingle();
+    if (!m || !m.series_id || !m.series_slot) return "skipped";
+
+    const { data: s } = await admin.from("meeting_series").select("auto_book, ics_sequence, owner_user_id").eq("id", m.series_id).maybeSingle();
+    if (!s?.auto_book) return "skipped";
+
+    const { data: secret } = await admin.from("tenant_secrets").select("resend_api_key").eq("tenant_id", m.tenant_id).maybeSingle();
+    const apiKey = secret?.resend_api_key?.trim();
+    if (!apiKey) return "skipped";
+
+    const { data: parts } = await admin.from("meeting_series_participants").select("profiles(full_name, email)").eq("series_id", m.series_id);
+    const attendees = (parts ?? [])
+      .map((p) => (p as unknown as { profiles: { full_name: string | null; email: string | null } | null }).profiles)
+      .filter((pr): pr is { full_name: string | null; email: string } => !!pr?.email)
+      .map((pr) => ({ name: pr.full_name ?? pr.email, email: pr.email }));
+    if (attendees.length === 0) return "skipped";
+
+    const { data: org } = s.owner_user_id
+      ? await admin.from("profiles").select("full_name").eq("id", s.owner_user_id).maybeSingle()
+      : { data: null };
+    const location = (m.rooms as unknown as { name: string } | null)?.name || "Online";
+    const organizerName = org?.full_name ?? "MANAGER HUB";
+    const seq = (s.ics_sequence ?? 0) + 1;
+    const label = method === "CANCEL" ? "Ocorrência cancelada" : "Ocorrência remarcada";
+
+    const ics = buildIcs({
+      uid: `series-${m.series_id}@managerhub`,
+      sequence: seq,
+      method,
+      title: m.title,
+      description: m.description,
+      location,
+      start: m.starts_at,
+      end: m.ends_at,
+      recurrenceId: m.series_slot,
+      organizerName,
+      organizerEmail: ORGANIZER_EMAIL,
+      attendees,
+    });
+
+    const html =
+      `<h2 style="margin:0 0 8px">${escapeHtml(label)}: ${escapeHtml(m.title)}</h2>` +
+      `<p style="margin:2px 0"><strong>Quando:</strong> ${formatDateTime(m.starts_at)} — ${formatDateTime(m.ends_at)}</p>` +
+      `<p style="margin:2px 0"><strong>Local:</strong> ${escapeHtml(location)}</p>` +
+      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Alteração de uma ocorrência da série recorrente (MANAGER HUB).</p>`;
+
+    const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${m.title}`, html, ics, method });
+    if (ok) await admin.from("meeting_series").update({ ics_sequence: seq }).eq("id", m.series_id);
+    return ok ? "sent" : "failed";
+  } catch (e) {
+    console.error("[meetings] dispatchOccurrenceOverride falhou:", (e as Error).message);
+    return "failed";
+  }
+}
+
 export async function createMeeting(
   _prev: ActionState,
   formData: FormData,
@@ -347,14 +414,27 @@ export async function updateMeeting(
       return { error: error.message };
     }
 
+    // ocorrência gerada por série (auto-reserva) tem convite tratado como override
+    const { data: mrow } = await supabase.from("meetings").select("series_slot").eq("id", id).maybeSingle();
+    const isSeriesOcc = !!mrow?.series_slot;
+
+    let invite: InviteResult = "skipped";
+    // cancelamento de reunião avulsa: avisa quem TINHA a reunião (antes de trocar participantes)
+    if (status === "cancelled" && !isSeriesOcc) {
+      invite = await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
+    }
+
     // substitui os participantes
     await supabase.from("meeting_participants").delete().eq("meeting_id", id);
     const { error: pErr } = await supabase.from("meeting_participants").insert(participants.map((uid) => ({ meeting_id: id, user_id: uid })));
     if (pErr) return { error: "Não foi possível salvar os participantes. Tente novamente." };
 
-    const invite = status !== "cancelled"
-      ? await dispatchInvite(id, "REQUEST", { bump: true, label: "Reunião atualizada" })
-      : await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
+    if (isSeriesOcc) {
+      // move/cancela UMA ocorrência da série → override RECURRENCE-ID no Outlook
+      invite = await dispatchOccurrenceOverride(id, status === "cancelled" ? "CANCEL" : "REQUEST");
+    } else if (status !== "cancelled") {
+      invite = await dispatchInvite(id, "REQUEST", { bump: true, label: "Reunião atualizada" });
+    }
 
     revalidatePath("/salas");
     revalidatePath("/dashboard");
@@ -390,6 +470,8 @@ export async function deleteMeeting(formData: FormData): Promise<void> {
   // Marca como cancelada + destacada — vira uma "lápide" que a série respeita.
   if (m.series_slot) {
     await supabase.from("meetings").update({ status: "cancelled", series_detached: true }).eq("id", id);
+    // remove essa ocorrência do convite recorrente no Outlook (RECURRENCE-ID + CANCEL)
+    await dispatchOccurrenceOverride(id, "CANCEL");
     revalidatePath("/salas");
     revalidatePath("/dashboard");
     return;

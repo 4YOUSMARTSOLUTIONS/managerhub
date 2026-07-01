@@ -12,6 +12,7 @@ export type IcsInput = {
   start: string; // ISO
   end: string; // ISO
   rrule?: string | null; // ex.: "FREQ=MONTHLY;INTERVAL=1;UNTIL=20270630T120000Z"
+  recurrenceId?: string | null; // ISO do slot original — override de UMA ocorrência da série
   organizerName: string;
   organizerEmail: string;
   attendees: { name: string; email: string }[];
@@ -67,6 +68,7 @@ export function buildIcs(input: IcsInput): string {
     `DTSTART:${toUtc(input.start)}`,
     `DTEND:${toUtc(input.end)}`,
     input.rrule ? `RRULE:${input.rrule}` : "",
+    input.recurrenceId ? `RECURRENCE-ID:${toUtc(input.recurrenceId)}` : "",
     `SUMMARY:${esc(input.title)}`,
     input.description ? `DESCRIPTION:${esc(input.description)}` : "",
     input.location ? `LOCATION:${esc(input.location)}` : "",
