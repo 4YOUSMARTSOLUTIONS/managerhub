@@ -400,25 +400,35 @@ a {
 }
 /* feriado (mês + semana/dia) */
 .cal-day.cal-holiday {
-  background: repeating-linear-gradient(-45deg, #fef2f2, #fef2f2 8px, #fee2e2 8px, #fee2e2 16px);
+  background: #ffd9d9;
+  box-shadow: inset 4px 0 0 #dc2626;
+}
+.cal-day.cal-holiday .cal-daynum {
+  color: #b91c1c;
+  font-weight: 800;
+}
+.cal-week-head .cal-holiday .cal-wn,
+.cal-week-head .cal-wn.cal-holiday {
+  color: #b91c1c;
 }
 .cal-holiday-tag {
   align-self: flex-start;
   max-width: 100%;
-  font-size: 0.6rem;
-  font-weight: 700;
-  line-height: 1.1;
-  color: #b91c1c;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
-  border-radius: 5px;
-  padding: 1px 4px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: #fff;
+  background: #dc2626;
+  border-radius: 999px;
+  padding: 1px 7px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .cal-week-head .cal-holiday-tag {
-  margin: 2px auto 0;
+  display: inline-block;
+  margin: 3px auto 0;
 }
 .cal-daynum {
   font-size: 0.74rem;
