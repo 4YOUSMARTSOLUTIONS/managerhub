@@ -32,6 +32,27 @@ export async function setOpenAISettings(_prev: ActionState, formData: FormData):
   }
 }
 
+/** Owner grava/atualiza a chave do Resend (envio de convites por e-mail). */
+export async function setResendSettings(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const key = String(formData.get("resend_api_key") ?? "").trim();
+    const clear = String(formData.get("clear") ?? "") === "1";
+
+    if (!clear && key && !key.startsWith("re_")) {
+      return { error: "Chave inválida — a chave do Resend normalmente começa com \"re_\"." };
+    }
+
+    const { error } = await supabase.rpc("set_resend_key", { p_key: key, p_clear: clear });
+    if (error) return { error: error.message };
+
+    revalidatePath("/configuracoes");
+    return { ok: true, message: clear ? "Chave removida." : "Configuração salva." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export type GenerateMeetingInput = {
   draft: string;
   objetivo?: string | null;

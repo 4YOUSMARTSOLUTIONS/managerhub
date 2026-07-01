@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { CompanyForm } from "@/components/CompanyForm";
 import { OpenAISettingsForm } from "@/components/OpenAISettingsForm";
+import { ResendSettingsForm } from "@/components/ResendSettingsForm";
 import { RegistryList } from "@/components/RegistryList";
 import { TicketSlaEditor } from "@/components/TicketSlaEditor";
 import { TicketManagersEditor } from "@/components/TicketManagersEditor";
@@ -140,9 +141,14 @@ export default async function SettingsPage() {
   );
 
   const integracoesTab = (
-    <Section title="Integração com IA (OpenAI)">
-      <OpenAISettingsForm hasKey={tenant.has_openai_key} model={tenant.openai_model} canEdit={role === "owner"} />
-    </Section>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 760 }}>
+      <Section title="Integração com IA (OpenAI)">
+        <OpenAISettingsForm hasKey={tenant.has_openai_key} model={tenant.openai_model} canEdit={role === "owner"} />
+      </Section>
+      <Section title="Envio de e-mail / Convites (Resend)">
+        <ResendSettingsForm hasKey={tenant.has_resend_key} canEdit={role === "owner"} />
+      </Section>
+    </div>
   );
 
   const usuariosTab = (

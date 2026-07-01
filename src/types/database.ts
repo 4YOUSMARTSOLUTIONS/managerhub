@@ -272,6 +272,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           ends_at: string
+          ics_sequence: number
           id: string
           organizer_id: string | null
           room_id: string | null
@@ -287,6 +288,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           ends_at: string
+          ics_sequence?: number
           id?: string
           organizer_id?: string | null
           room_id?: string | null
@@ -302,6 +304,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           ends_at?: string
+          ics_sequence?: number
           id?: string
           organizer_id?: string | null
           room_id?: string | null
@@ -708,16 +711,19 @@ export type Database = {
       tenant_secrets: {
         Row: {
           openai_api_key: string | null
+          resend_api_key: string | null
           tenant_id: string
           updated_at: string
         }
         Insert: {
           openai_api_key?: string | null
+          resend_api_key?: string | null
           tenant_id: string
           updated_at?: string
         }
         Update: {
           openai_api_key?: string | null
+          resend_api_key?: string | null
           tenant_id?: string
           updated_at?: string
         }
@@ -735,6 +741,7 @@ export type Database = {
         Row: {
           created_at: string
           has_openai_key: boolean
+          has_resend_key: boolean
           id: string
           name: string
           openai_model: string
@@ -746,6 +753,7 @@ export type Database = {
         Insert: {
           created_at?: string
           has_openai_key?: boolean
+          has_resend_key?: boolean
           id?: string
           name: string
           openai_model?: string
@@ -757,6 +765,7 @@ export type Database = {
         Update: {
           created_at?: string
           has_openai_key?: boolean
+          has_resend_key?: boolean
           id?: string
           name?: string
           openai_model?: string
@@ -995,6 +1004,7 @@ export type Database = {
       }
       platform_delete_company: { Args: { p_tenant: string }; Returns: undefined }
       notify_users: { Args: { p_tenant: string; p_users: string[]; p_type: string; p_title: string; p_body: string; p_demanda: string | null }; Returns: undefined }
+      set_resend_key: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
     }
     Enums: {
       action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
