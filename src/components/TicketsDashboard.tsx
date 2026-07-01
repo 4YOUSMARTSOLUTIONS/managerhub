@@ -42,20 +42,24 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
 
     const nps = computeNps(cohort.filter((t) => t.npsScore != null).map((t) => t.npsScore as number));
 
-    // por setor (volume + %SLA)
-    const bySectorMap = new Map<string, { name: string; total: number; within: number; base: number }>();
-    for (const t of cohort) {
-      const key = t.sectorId ?? "—";
-      const name = t.sectorName ?? "Sem setor";
-      const cur = bySectorMap.get(key) ?? { name, total: 0, within: 0, base: 0 };
-      cur.total += 1;
-      if ((t.status === "resolved" || t.status === "closed") && t.resolvedAt && t.dueDate) {
-        cur.base += 1;
-        if (new Date(t.resolvedAt) <= new Date(t.dueDate)) cur.within += 1;
+    // agrupa por uma dimensão (setor/categoria) por NOME — evita duplicar (ex.: TI
+    // configurável + TI legado). Retorna volume + %SLA.
+    const groupBy = (nameOf: (t: TicketRow) => string) => {
+      const m = new Map<string, { name: string; total: number; within: number; base: number }>();
+      for (const t of cohort) {
+        const name = nameOf(t);
+        const cur = m.get(name) ?? { name, total: 0, within: 0, base: 0 };
+        cur.total += 1;
+        if ((t.status === "resolved" || t.status === "closed") && t.resolvedAt && t.dueDate) {
+          cur.base += 1;
+          if (new Date(t.resolvedAt) <= new Date(t.dueDate)) cur.within += 1;
+        }
+        m.set(name, cur);
       }
-      bySectorMap.set(key, cur);
-    }
-    const bySector = [...bySectorMap.values()].sort((a, b) => b.total - a.total);
+      return [...m.values()].sort((a, b) => b.total - a.total);
+    };
+    const bySector = groupBy((t) => t.sectorName ?? "Sem setor");
+    const byCategory = groupBy((t) => t.categoryName ?? "Sem categoria");
 
     // por status
     const byStatus = (Object.keys(TICKET_STATUS) as Enums<"ticket_status">[])
@@ -68,7 +72,7 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
 
     return {
       total: cohort.length, resolved: resolved.length, openCohort,
-      within, outside, pctWithin, pctOutside, avgDur, nps, bySector, byStatus,
+      within, outside, pctWithin, pctOutside, avgDur, nps, bySector, byCategory, byStatus,
       taxaResolucao: cohort.length ? Math.round((resolved.length / cohort.length) * 100) : null,
       backlog, semResp,
     };
@@ -108,6 +112,22 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
         <div className="card card-pad">
           <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.7rem" }}>Por setor</h3>
           {data.bySector.length === 0 ? <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem dados no período.</p> : data.bySector.map((s) => {
+            const pct = s.base ? Math.round((s.within / s.base) * 100) : null;
+            return (
+              <div key={s.name} style={{ marginBottom: "0.6rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", marginBottom: "0.25rem" }}>
+                  <span>{s.name} <span className="soft">· {s.total}</span></span>
+                  <span style={{ fontWeight: 600 }}>{pct == null ? "—" : `${pct}% SLA`}</span>
+                </div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${pct ?? 0}%`, background: pct == null ? "var(--border)" : pct >= 100 ? "#16a34a" : pct >= 80 ? "#b45309" : "#dc2626" }} /></div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="card card-pad">
+          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.7rem" }}>Por categoria</h3>
+          {data.byCategory.length === 0 ? <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem dados no período.</p> : data.byCategory.map((s) => {
             const pct = s.base ? Math.round((s.within / s.base) * 100) : null;
             return (
               <div key={s.name} style={{ marginBottom: "0.6rem" }}>
