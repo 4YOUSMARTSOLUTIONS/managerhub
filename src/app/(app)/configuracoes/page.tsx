@@ -301,7 +301,7 @@ export default async function SettingsPage() {
         </FormModal>
       }
     >
-      <p className="muted" style={{ fontSize: "0.82rem", margin: "0 0 0.8rem" }}>
+      <p className="muted" style={{ fontSize: "0.82rem", padding: "0.9rem 1.25rem 0", margin: "0 0 0.8rem" }}>
         Os feriados <strong>nacionais</strong> (fixos e móveis) já são reconhecidos automaticamente e sinalizados no
         calendário de salas. Cadastre aqui apenas feriados <strong>próprios</strong> (estaduais, municipais ou pontos
         facultativos da empresa). Ao agendar num feriado, o sistema avisa — mas não impede.
