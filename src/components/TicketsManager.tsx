@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NewTicketDialog, type SlaOpt } from "@/components/NewTicketDialog";
 import { TicketPanel } from "@/components/TicketPanel";
+import { NpsRating } from "@/components/NpsRating";
 import { deleteTicket } from "@/lib/actions/tickets";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
@@ -60,6 +61,7 @@ export function TicketsManager({
 }) {
   const [newOpen, setNewOpen] = useState(false);
   const [selected, setSelected] = useState<TicketRow | null>(null);
+  const [ratingTicket, setRatingTicket] = useState<TicketRow | null>(null);
 
   return (
     <>
@@ -92,6 +94,8 @@ export function TicketsManager({
                 const openish = !terminal;
                 const lastDate = terminal ? (t.resolvedAt ?? t.updatedAt) : t.updatedAt;
                 const sv = ticketStatusView(t.status, openish && isOverdue(t.dueDate));
+                // solicitante pode avaliar quando o chamado está resolvido/fechado
+                const canRate = t.requesterId === currentUserId && (t.status === "resolved" || t.status === "closed");
                 return (
                   <tr key={t.id}>
                     <td className="soft" style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{t.code}</td>
@@ -131,6 +135,17 @@ export function TicketsManager({
                     </td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: "0.35rem", justifyContent: "flex-end" }}>
+                        {canRate && (
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            title={t.npsScore != null ? `Avaliação: ${t.npsScore}/10 — clique para editar` : "Avaliar chamado"}
+                            onClick={() => setRatingTicket(t)}
+                            style={{ color: "#f59e0b" }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill={t.npsScore != null ? "#f59e0b" : "none"} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="icon-btn"
@@ -185,8 +200,23 @@ export function TicketsManager({
         members={members}
         canEdit={canTreat}
         canComment={!!selected && (canTreat || selected.requesterId === currentUserId)}
-        canRate={!!selected && selected.requesterId === currentUserId && (selected.status === "resolved" || selected.status === "closed")}
+        canRate={false}
       />
+
+      {ratingTicket && (
+        <div onClick={() => setRatingTicket(null)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 1rem", zIndex: 70, overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 460, boxShadow: "var(--shadow)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Avaliar chamado {ratingTicket.code ?? ""}</h2>
+              <button type="button" onClick={() => setRatingTicket(null)} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
+            </div>
+            <div style={{ padding: "1.1rem 1.25rem" }}>
+              <div className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.6rem" }}>{ratingTicket.title}</div>
+              <NpsRating ticketId={ratingTicket.id} current={ratingTicket.npsScore} currentComment={ratingTicket.npsComment} />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
