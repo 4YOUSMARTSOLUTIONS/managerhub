@@ -1,4 +1,4 @@
-import { requireContext } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { ActionsManager, type ActionRow } from "@/components/ActionsManager";
 import { Pager } from "@/components/ui/Pager";
@@ -7,18 +7,27 @@ import type { Person } from "@/components/PeoplePicker";
 const PAGE_SIZE = 50;
 
 export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
-  const { tenant, user, role } = await requireContext();
+  const { tenant, user, role, unitScope } = await requireContext();
   const supabase = await createClient();
   const isAdmin = role === "owner" || role === "admin";
   const page = Math.max(1, Number((await searchParams).p) || 1);
   const from = (page - 1) * PAGE_SIZE;
+
+  const unitIds = effectiveUnitFilter(unitScope);
+  const unitById = new Map(unitScope.units.map((u) => [u.id, u.name]));
+  const actionsQuery = supabase
+    .from("actions")
+    .select("*", { count: "exact" })
+    .eq("tenant_id", tenant.id)
+    .order("created_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
 
   const [
     { data: actions, count: actionsTotal }, { data: pilares }, { data: blocos }, { data: itens },
     { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
     { data: members }, { data: profilesData },
   ] = await Promise.all([
-    supabase.from("actions").select("*", { count: "exact" }).eq("tenant_id", tenant.id).order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
+    unitIds ? actionsQuery.in("unit_id", unitIds) : actionsQuery,
     supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_blocos").select("id, name, pilar_id").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),
@@ -113,6 +122,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     occurredOn: a.occurrence_id ? occDate.get(a.occurrence_id) ?? null : null,
     kpiName: a.kpi_id ? kpiName.get(a.kpi_id) ?? null : null,
     toolName: a.tool_id ? toolName.get(a.tool_id) ?? null : null,
+    unitName: a.unit_id ? unitById.get(a.unit_id) ?? null : null,
     requesterId: a.requester_id,
     requesterName: a.requester_id ? nameById.get(a.requester_id) ?? null : null,
     priority: a.priority,
@@ -140,6 +150,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
         series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
         occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
+        units={unitScope.units}
         aiEnabled={tenant.has_openai_key}
       />
       <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal ?? 0} />

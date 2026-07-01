@@ -36,6 +36,7 @@ export type ActionRow = {
   occurredOn: string | null;
   kpiName: string | null;
   toolName: string | null;
+  unitName: string | null;
   requesterId: string | null;
   requesterName: string | null;
   priority: Enums<"priority_level">;
@@ -46,7 +47,7 @@ export type ActionRow = {
 };
 
 export function ActionsManager({
-  actions, currentUserId, isAdmin, people, pilares, blocos, itens, kpis, tools, series, occurrences, aiEnabled,
+  actions, currentUserId, isAdmin, people, pilares, blocos, itens, kpis, tools, series, occurrences, units, aiEnabled,
 }: {
   actions: ActionRow[];
   currentUserId: string;
@@ -59,6 +60,7 @@ export function ActionsManager({
   tools: Opt[];
   series: Opt[];
   occurrences: OccOpt[];
+  units?: Opt[];
   aiEnabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -139,7 +141,10 @@ export function ActionsManager({
                           {d.assigneeNames.length > 0 ? d.assigneeNames.join(", ") : <span className="soft">—</span>}
                           {d.attachments.length > 0 && <span className="soft" style={{ marginLeft: 6 }} title={`${d.attachments.length} anexo(s)`}>📎{d.attachments.length}</span>}
                         </td>
-                        <td className="muted" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>{first ? (a.requesterName ?? "—") : ""}</td>
+                        <td className="muted" style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>
+                          {first ? (a.requesterName ?? "—") : ""}
+                          {first && a.unitName && <span className="badge badge-gray" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{a.unitName}</span>}
+                        </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>
                         </td>
@@ -183,6 +188,7 @@ export function ActionsManager({
         tools={tools}
         series={series}
         occurrences={occurrences}
+        units={units}
         aiEnabled={aiEnabled}
       />
 

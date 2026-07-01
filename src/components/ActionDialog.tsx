@@ -19,7 +19,7 @@ type Demanda = { description: string; assignees: string[]; files: File[] };
 export type CollectedAction = {
   payload: {
     is_sdpo: boolean; pilar_id: string; bloco_id: string; item_id: string;
-    meeting_series_id: string; kpi_id: string; tool_id: string;
+    meeting_series_id: string; kpi_id: string; tool_id: string; unit_id?: string;
     requester_id: string; due_date: string; priority: string; cc: string[];
     demandas: { description: string; assignees: string[] }[];
   };
@@ -29,7 +29,7 @@ export type CollectedAction = {
 };
 
 export function ActionDialog({
-  open, onClose, people, pilares, blocos, itens, kpis, tools, series, occurrences,
+  open, onClose, people, pilares, blocos, itens, kpis, tools, series, occurrences, units,
   onCollect, lockedSeries, defaultRequesterId, defaultAssignees, editing, aiEnabled,
 }: {
   open: boolean;
@@ -42,6 +42,7 @@ export function ActionDialog({
   tools: Opt[];
   series: Opt[];
   occurrences: OccOpt[];
+  units?: Opt[];
   onCollect?: (a: CollectedAction) => void;
   lockedSeries?: { id: string; name: string } | null;
   defaultRequesterId?: string;
@@ -56,6 +57,7 @@ export function ActionDialog({
   const [seriesId, setSeriesId] = useState("");
   const [occurrenceId, setOccurrenceId] = useState("");
   const [kpiId, setKpiId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [toolId, setToolId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -81,13 +83,13 @@ export function ActionDialog({
     if (editing) {
       const p = editing.payload;
       setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
-      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id);
+      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id ?? "");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
       setDemandas(p.demandas.map((d, i) => ({ description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
       setFiles(editing.headerFiles);
     } else {
       setIsSdpo(true); setPilarId(""); setBlocoId(""); setItemId("");
-      setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId("");
+      setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId(""); setUnitId("");
       setDueDate(""); setPriority("medium"); setRequesterId(defaultRequesterId ?? ""); setCc([]);
       setDemandas([{ description: "", assignees: defaultAssignees ?? [], files: [] }]); setFiles([]);
     }
@@ -179,7 +181,7 @@ export function ActionDialog({
     setIsSdpo(p.is_sdpo);
     setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
     setSeriesId(p.meeting_series_id); setOccurrenceId(p.occurrence_id);
-    setKpiId(p.kpi_id); setToolId(p.tool_id);
+    setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId("");
     setRequesterId(p.requester_id); setCc(p.cc);
     setPriority(p.priority); setDueDate(p.due_date);
     const allDemandas = res.actions.flatMap((a) => a.payload.demandas);
@@ -207,7 +209,7 @@ export function ActionDialog({
           is_sdpo: isSdpo,
           pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
           meeting_series_id: seriesId,
-          kpi_id: kpiId, tool_id: toolId,
+          kpi_id: kpiId, tool_id: toolId, unit_id: unitId,
           requester_id: requesterId, due_date: dueDate, priority, cc,
           demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
         },
@@ -223,7 +225,7 @@ export function ActionDialog({
       is_sdpo: isSdpo,
       pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
-      kpi_id: kpiId, tool_id: toolId,
+      kpi_id: kpiId, tool_id: toolId, unit_id: unitId,
       requester_id: requesterId, due_date: dueDate, priority, cc,
       demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
     };
@@ -347,11 +349,22 @@ export function ActionDialog({
             </div>
           </div>
 
-          <div style={{ maxWidth: 220 }}>
-            <label className="label">Prioridade</label>
-            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
-              {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+          <div style={{ display: "grid", gridTemplateColumns: units && units.length ? "220px 1fr" : "220px", gap: "0.8rem" }}>
+            <div>
+              <label className="label">Prioridade</label>
+              <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            {units && units.length > 0 && (
+              <div>
+                <label className="label">Unidade <span className="soft">(opcional)</span></label>
+                <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                  <option value="">Sem unidade</option>
+                  {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Solicitante + Em cópia */}
