@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { MEETING_STATUS, MEETING_STATUS_TONE } from "@/lib/constants";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { deleteMeeting } from "@/lib/actions/meetings";
 import type { Prefill } from "./NewMeetingDialog";
 
 export type CalRoom = { id: string; name: string; color: string };
@@ -82,6 +85,9 @@ export function RoomCalendar({
   const setCursor = onCursorChange;
   const [rangeKey, setRangeKey] = useState<string>("comercial");
   const [detail, setDetail] = useState<Ev | null>(null);
+  const [confirmDel, setConfirmDel] = useState<Ev | null>(null);
+  const [delPending, startDel] = useTransition();
+  const router = useRouter();
   const today = new Date();
   const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[0];
 
@@ -214,7 +220,36 @@ export function RoomCalendar({
         )}
       </div>
 
-      {detail && <DetailModal ev={detail} onClose={() => setDetail(null)} onEdit={onEdit ? () => { onEdit(detail); setDetail(null); } : undefined} />}
+      {detail && (
+        <DetailModal
+          ev={detail}
+          onClose={() => setDetail(null)}
+          onEdit={onEdit ? () => { onEdit(detail); setDetail(null); } : undefined}
+          onDelete={() => { setConfirmDel(detail); setDetail(null); }}
+        />
+      )}
+      {confirmDel && (
+        <ConfirmDialog
+          open
+          title="Excluir reunião"
+          message={<>Excluir <strong>{confirmDel.title}</strong>? Os participantes com e-mail recebem um cancelamento.</>}
+          confirmLabel="Excluir"
+          cancelLabel="Voltar"
+          tone="danger"
+          pending={delPending}
+          onConfirm={() => {
+            const ev = confirmDel;
+            startDel(async () => {
+              const fd = new FormData();
+              fd.append("id", ev.id);
+              await deleteMeeting(fd);
+              setConfirmDel(null);
+              router.refresh();
+            });
+          }}
+          onClose={() => setConfirmDel(null)}
+        />
+      )}
     </div>
   );
 }
@@ -424,7 +459,7 @@ function layoutDay(evs: Ev[]) {
 }
 
 // ---------------- DETALHE ----------------
-function DetailModal({ ev, onClose, onEdit }: { ev: Ev; onClose: () => void; onEdit?: () => void }) {
+function DetailModal({ ev, onClose, onEdit, onDelete }: { ev: Ev; onClose: () => void; onEdit?: () => void; onDelete?: () => void }) {
   return (
     <div
       onClick={onClose}
@@ -460,9 +495,14 @@ function DetailModal({ ev, onClose, onEdit }: { ev: Ev; onClose: () => void; onE
           </Row>
           {ev.description && <Row label="Descrição"><span className="muted">{ev.description}</span></Row>}
         </div>
-        {onEdit && (
-          <div style={{ display: "flex", justifyContent: "flex-end", padding: "0.9rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>Editar</button>
+        {(onEdit || onDelete) && (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", padding: "0.9rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+            {onDelete && (
+              <button type="button" className="btn btn-danger btn-sm" onClick={onDelete}>Excluir</button>
+            )}
+            {onEdit && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>Editar</button>
+            )}
           </div>
         )}
       </div>
