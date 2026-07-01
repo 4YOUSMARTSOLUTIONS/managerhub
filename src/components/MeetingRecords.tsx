@@ -7,11 +7,13 @@ import { Section } from "@/components/ui/Section";
 import { Tabs } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PERIODICITY } from "@/lib/constants";
 import { formatDate, formatTime, formatDuration } from "@/lib/format";
 import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
+import { SearchSelect } from "./SearchSelect";
 import { ElapsedTimer } from "./ElapsedTimer";
 import type { Opt, BlocoOpt, ItemOpt } from "./ActionDialog";
 import type { Person } from "./PeoplePicker";
@@ -125,6 +127,7 @@ export function MeetingRecords({
   const openCreate = () => { setEditing(undefined); setSeriesOpen(true); };
   const openEdit = (s: SeriesRow) => { setEditing(s); setSeriesOpen(true); };
   const openFinish = (o: OccurrenceRow) => { setFinishOcc(o); setFinishOpen(true); };
+  const [confirmStart, setConfirmStart] = useState<SeriesRow | null>(null);
   const doStart = (s: SeriesRow) => {
     const pad = (n: number) => String(n).padStart(2, "0");
     const d = new Date();
@@ -133,8 +136,15 @@ export function MeetingRecords({
       alert(`A próxima reunião está agendada para ${formatDate(s.nextDate)}. Para iniciar antes, edite a data da próxima reunião.`);
       return;
     }
+    setConfirmStart(s);
+  };
+
+  const runStart = () => {
+    const s = confirmStart;
+    if (!s) return;
     start(async () => {
       const r = await startOccurrence(s.id);
+      setConfirmStart(null);
       if (r.error) { alert(r.error); return; }
       router.refresh();
     });
@@ -205,10 +215,9 @@ export function MeetingRecords({
             {(Object.entries(PERIODICITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {partOptions.length > 0 && (
-            <select className="select" value={seriesPart} onChange={(e) => setSeriesPart(e.target.value)} style={{ width: "auto", maxWidth: 200, ...seriesFilterStyle }} title="Usuário participante">
-              <option value="all">Todos os participantes</option>
-              {partOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <div style={{ width: 200 }} title="Usuário participante">
+              <SearchSelect options={partOptions} value={seriesPart === "all" ? "" : seriesPart} onChange={(id) => setSeriesPart(id || "all")} placeholder="Participante…" emptyHint="Nenhum participante" />
+            </div>
           )}
           <select className="select" value={seriesStatus} onChange={(e) => setSeriesStatus(e.target.value as "all" | "active" | "inactive")} style={{ width: "auto", ...seriesFilterStyle }} title="Status">
             <option value="active">Ativas</option>
@@ -224,6 +233,7 @@ export function MeetingRecords({
           <thead>
             <tr>
               <th>Reunião</th>
+              <th>Dono</th>
               <th>Periodicidade</th>
               <th>Unidades</th>
               <th>Próxima</th>
@@ -236,6 +246,7 @@ export function MeetingRecords({
             {filteredSeries.map((s) => (
               <tr key={s.id} style={{ opacity: s.isActive ? 1 : 0.55 }}>
                 <td style={{ fontWeight: 600 }}>{s.name}</td>
+                <td className="muted">{s.ownerUserName ?? s.owner ?? "—"}</td>
                 <td className="muted">{PERIODICITY[s.periodicity as keyof typeof PERIODICITY]}</td>
                 <td className="muted">
                   {(s.unitNames ?? []).length === 0
@@ -307,10 +318,9 @@ export function MeetingRecords({
             {(Object.entries(PERIODICITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {partOptions.length > 0 && (
-            <select className="select" value={recPart} onChange={(e) => setRecPart(e.target.value)} style={{ width: "auto", maxWidth: 190, ...seriesFilterStyle }} title="Usuário participante">
-              <option value="all">Todos os participantes</option>
-              {partOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <div style={{ width: 190 }} title="Usuário participante">
+              <SearchSelect options={partOptions} value={recPart === "all" ? "" : recPart} onChange={(id) => setRecPart(id || "all")} placeholder="Participante…" emptyHint="Nenhum participante" />
+            </div>
           )}
           <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.8rem" }} className="soft">
             De <input type="date" className="input" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} style={{ width: "auto", padding: "0.35rem 0.5rem", fontSize: "0.82rem" }} />
@@ -327,6 +337,7 @@ export function MeetingRecords({
           <thead>
             <tr>
               <th>Reunião</th>
+              <th>Dono</th>
               <th>Data</th>
               <th>Duração</th>
               <th>Presença</th>
@@ -340,6 +351,7 @@ export function MeetingRecords({
             {filteredOcc.map((o) => (
               <tr key={o.id} style={{ opacity: o.status === "cancelled" ? 0.6 : 1 }}>
                 <td style={{ fontWeight: 600 }}>{o.seriesName}</td>
+                <td className="muted">{seriesById.get(o.seriesId)?.ownerUserName ?? seriesById.get(o.seriesId)?.owner ?? "—"}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDate(o.occurredOn)}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{o.status === "cancelled" ? "—" : formatDuration(o.durationSeconds)}</td>
                 <td className="muted">{o.presentCount}/{o.totalCount}</td>
@@ -414,6 +426,15 @@ export function MeetingRecords({
         kpis={kpis}
         tools={tools}
         aiEnabled={aiEnabled}
+      />
+      <ConfirmDialog
+        open={!!confirmStart}
+        title="Iniciar reunião"
+        message={<>Iniciar <strong>{confirmStart?.name}</strong> agora? O cronômetro começará a contar.</>}
+        confirmLabel="Iniciar"
+        pending={pending}
+        onConfirm={runStart}
+        onClose={() => setConfirmStart(null)}
       />
     </div>
   );
