@@ -49,6 +49,17 @@ const addDays = (d: Date, n: number) => {
 };
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const dayKeyOf = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+// agrupa os eventos por dia UMA vez (O(n)) p/ lookup O(1) por célula do calendário
+function bucketByDay(events: Ev[]): Map<string, Ev[]> {
+  const m = new Map<string, Ev[]>();
+  for (const e of events) {
+    const k = dayKeyOf(e.start);
+    const arr = m.get(k);
+    if (arr) arr.push(e); else m.set(k, [e]);
+  }
+  return m;
+}
 const mondayOf = (d: Date) => addDays(startOfDay(d), -(((d.getDay() + 6) % 7)));
 const minutesOf = (d: Date) => d.getHours() * 60 + d.getMinutes();
 const fmtTime = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -278,13 +289,14 @@ function MonthView({
   const gridStart = mondayOf(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const month = cursor.getMonth();
+  const byDay = bucketByDay(events);
 
   return (
     <div className="cal-month">
       {WEEKDAYS.map((w) => <div key={w} className="cal-mhead">{w}</div>)}
       {days.map((day) => {
-        const dayEvents = events
-          .filter((e) => sameDay(e.start, day))
+        const dayEvents = (byDay.get(dayKeyOf(day)) ?? [])
+          .slice()
           .sort((a, b) => a.start.getTime() - b.start.getTime());
         const visible = dayEvents.slice(0, 3);
         const extra = dayEvents.length - visible.length;
@@ -354,6 +366,7 @@ function TimeGrid({
 }) {
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
   const cols = `56px repeat(${days.length}, minmax(0, 1fr))`;
+  const byDay = bucketByDay(events);
 
   const handleColClick = (e: React.MouseEvent<HTMLDivElement>, day: Date) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -388,7 +401,7 @@ function TimeGrid({
           ))}
         </div>
         {days.map((day) => {
-          const dayEvents = events.filter((e) => sameDay(e.start, day));
+          const dayEvents = byDay.get(dayKeyOf(day)) ?? [];
           const laid = layoutDay(dayEvents);
           const hol = holidayName(day, holidays);
           const sun = !hol && isSunday(day);
