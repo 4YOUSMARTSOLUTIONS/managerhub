@@ -80,6 +80,25 @@ export function TicketPanel({
     });
   };
 
+  // conclui o chamado: status vai automaticamente para Resolvido
+  const conclude = () => {
+    if (!ticket) return;
+    setError("");
+    start(async () => {
+      const res = await updateTicketTriage({
+        ticket_id: ticket.id,
+        status: "resolved",
+        priority,
+        sector_id: sectorId || null,
+        category_id: categoryId || null,
+        assignee_id: assigneeId || null,
+      });
+      if (res.error) { setError(res.error); return; }
+      onClose();
+      router.refresh();
+    });
+  };
+
   const sendComment = () => {
     const text = commentText.trim();
     if (!text || !ticket) return;
@@ -138,7 +157,7 @@ export function TicketPanel({
                 <div>
                   <label className="label">Status</label>
                   <select className="select" value={status} onChange={(e) => setStatus(e.target.value as Enums<"ticket_status">)}>
-                    {options(TICKET_STATUS).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {options(TICKET_STATUS).filter((o) => o.value !== "closed").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -218,6 +237,11 @@ export function TicketPanel({
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost" onClick={onClose}>{canEdit ? "Cancelar" : "Fechar"}</button>
+          {canEdit && status !== "resolved" && status !== "cancelled" && (
+            <button type="button" className="btn" style={{ background: "#16a34a", color: "#fff" }} disabled={pending} onClick={conclude} title="Marca o chamado como Resolvido">
+              {pending ? "…" : "✓ Concluir"}
+            </button>
+          )}
           {canEdit && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Salvando…" : "Salvar"}</button>}
         </div>
       </div>
