@@ -17,12 +17,15 @@ const OPENISH: Enums<"ticket_status">[] = ["open", "in_progress", "waiting"];
 
 export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; sectors: Opt[] }) {
   const [month, setMonth] = useState(nowMonth());
+  const [period, setPeriod] = useState<"month" | "year">("month");
   const [sectorId, setSectorId] = useState("");
 
   const matchFilters = (t: TicketRow) => !sectorId || t.sectorId === sectorId;
 
   const data = useMemo(() => {
-    const cohort = tickets.filter((t) => t.createdAt.slice(0, 7) === month && matchFilters(t));
+    const inPeriod = (t: TicketRow) =>
+      period === "year" ? t.createdAt.slice(0, 4) === month.slice(0, 4) : t.createdAt.slice(0, 7) === month;
+    const cohort = tickets.filter((t) => inPeriod(t) && matchFilters(t));
     const resolved = cohort.filter((t) => (t.status === "resolved" || t.status === "closed") && t.resolvedAt);
     const openCohort = cohort.filter((t) => OPENISH.includes(t.status)).length;
 
@@ -77,7 +80,7 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
       backlog, semResp,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickets, month, sectorId]);
+  }, [tickets, month, period, sectorId]);
 
   const npsTone = data.nps.total === 0 ? "gray" : data.nps.nps >= 50 ? "green" : data.nps.nps >= 0 ? "amber" : "red";
 
@@ -85,7 +88,14 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
         <div>
-          <label className="label">Competência</label>
+          <label className="label">Período</label>
+          <select className="select" value={period} onChange={(e) => setPeriod(e.target.value as "month" | "year")}>
+            <option value="month">Mês</option>
+            <option value="year">Ano inteiro</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">{period === "year" ? "Competência (usa o ano)" : "Competência"}</label>
           <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
         </div>
         <div>
