@@ -9,7 +9,7 @@ import { NewTicketDialog, type SlaOpt } from "@/components/NewTicketDialog";
 import { TicketPanel } from "@/components/TicketPanel";
 import { deleteTicket } from "@/lib/actions/tickets";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
-import { TICKET_STATUS, TICKET_STATUS_TONE, PRIORITY, PRIORITY_TONE } from "@/lib/constants";
+import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
 import { formatDateTime, isOverdue } from "@/lib/format";
 
 const TERMINAL = ["resolved", "closed", "cancelled"];
@@ -90,6 +90,7 @@ export function TicketsManager({
                 const terminal = TERMINAL.includes(t.status);
                 const openish = !terminal;
                 const lastDate = terminal ? (t.resolvedAt ?? t.updatedAt) : t.updatedAt;
+                const sv = ticketStatusView(t.status, openish && isOverdue(t.dueDate));
                 return (
                   <tr key={t.id}>
                     <td className="soft" style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{t.code}</td>
@@ -113,7 +114,7 @@ export function TicketsManager({
                     </td>
                     <td style={{ color: openish && isOverdue(t.dueDate) ? "#dc2626" : "var(--text-muted)", whiteSpace: "nowrap", fontSize: "0.85rem" }}>{formatDateTime(t.dueDate)}</td>
                     <td>
-                      <Badge tone={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS[t.status]}</Badge>
+                      <Badge tone={sv.tone}>{sv.label}</Badge>
                     </td>
                     <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.85rem" }} title={terminal ? "Data de conclusão" : "Última atualização"}>
                       {terminal && <span style={{ color: "#059669", marginRight: 4 }}>✓</span>}

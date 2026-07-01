@@ -86,13 +86,25 @@ export const TICKET_STATUS: Record<Enums<"ticket_status">, string> = {
 };
 
 export const TICKET_STATUS_TONE: Record<Enums<"ticket_status">, Tone> = {
-  open: "blue",
-  in_progress: "amber",
-  waiting: "purple",
+  open: "gray",
+  in_progress: "blue",
+  waiting: "amber",
   resolved: "green",
-  closed: "gray",
-  cancelled: "gray",
+  closed: "dark",
+  cancelled: "pink",
 };
+
+// Status "de exibição": vira Atrasado (vermelho) quando o prazo expirou e o
+// chamado ainda está aberto. Não é um valor do enum — é derivado na hora.
+export function ticketStatusView(
+  status: Enums<"ticket_status">,
+  overdue: boolean,
+): { label: string; tone: Tone } {
+  if (overdue && !["resolved", "closed", "cancelled"].includes(status)) {
+    return { label: "Atrasado", tone: "red" };
+  }
+  return { label: TICKET_STATUS[status], tone: TICKET_STATUS_TONE[status] };
+}
 
 // legado: chamados antigos usavam um enum fixo de "categoria" (hoje virou Setor configurável)
 export const TICKET_CATEGORY: Record<Enums<"ticket_category">, string> = {
@@ -171,10 +183,10 @@ export const PRIORITY: Record<Enums<"priority_level">, string> = {
 };
 
 export const PRIORITY_TONE: Record<Enums<"priority_level">, Tone> = {
-  low: "gray",
-  medium: "blue",
-  high: "amber",
-  urgent: "red",
+  low: "green",
+  medium: "amber",
+  high: "red",
+  urgent: "purple",
 };
 
 // ---------- Status da empresa ----------
@@ -225,7 +237,9 @@ export type Tone =
   | "amber"
   | "red"
   | "gray"
-  | "purple";
+  | "purple"
+  | "dark"
+  | "pink";
 
 // helper para transformar enum -> [{value,label}]
 export function options<T extends string>(map: Record<T, string>) {

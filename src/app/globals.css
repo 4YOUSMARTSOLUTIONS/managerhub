@@ -179,6 +179,16 @@ a {
   color: #4b5563;
   border-color: #e5e7eb;
 }
+.badge-dark {
+  background: #1f2937;
+  color: #f9fafb;
+  border-color: #111827;
+}
+.badge-pink {
+  background: #fdf2f8;
+  color: #be185d;
+  border-color: #fce7f3;
+}
 
 /* ---------- Botão-ícone ---------- */
 .icon-btn {

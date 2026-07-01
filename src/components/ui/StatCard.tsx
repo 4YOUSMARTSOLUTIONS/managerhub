@@ -18,6 +18,8 @@ export function StatCard({
     red: "#dc2626",
     purple: "#7c3aed",
     gray: "#4b5563",
+    dark: "#1f2937",
+    pink: "#be185d",
   };
   return (
     <div className="card card-pad">

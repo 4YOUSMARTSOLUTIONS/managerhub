@@ -9,9 +9,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import {
   ACTION_STATUS,
   ACTION_STATUS_TONE,
-  TICKET_STATUS,
-  TICKET_STATUS_TONE,
   TICKET_CATEGORY,
+  ticketStatusView,
 } from "@/lib/constants";
 import { formatDate, formatDateTime, formatNumber, isOverdue } from "@/lib/format";
 
@@ -51,7 +50,7 @@ export default async function DashboardPage() {
         .limit(5),
       supabase
         .from("tickets")
-        .select("id, code, title, status, category")
+        .select("id, code, title, status, category, due_date")
         .in("status", ["open", "in_progress", "waiting"])
         .order("created_at", { ascending: false })
         .limit(5),
@@ -137,14 +136,17 @@ export default async function DashboardPage() {
           {tickets && tickets.length > 0 ? (
             <table className="table">
               <tbody>
-                {tickets.map((t) => (
-                  <tr key={t.id}>
-                    <td className="soft" style={{ fontVariantNumeric: "tabular-nums" }}>{t.code}</td>
-                    <td style={{ fontWeight: 500 }}>{t.title}</td>
-                    <td className="muted">{TICKET_CATEGORY[t.category]}</td>
-                    <td style={{ textAlign: "right" }}><Badge tone={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS[t.status]}</Badge></td>
-                  </tr>
-                ))}
+                {tickets.map((t) => {
+                  const sv = ticketStatusView(t.status, isOverdue(t.due_date));
+                  return (
+                    <tr key={t.id}>
+                      <td className="soft" style={{ fontVariantNumeric: "tabular-nums" }}>{t.code}</td>
+                      <td style={{ fontWeight: 500 }}>{t.title}</td>
+                      <td className="muted">{TICKET_CATEGORY[t.category]}</td>
+                      <td style={{ textAlign: "right" }}><Badge tone={sv.tone}>{sv.label}</Badge></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (
