@@ -312,6 +312,9 @@ export async function updateMeeting(
       starts_at: starts,
       ends_at: ends,
       ...(status ? { status } : {}),
+      // editar uma ocorrência de série a "destaca": a renovação automática
+      // passa a respeitar a alteração (não move de volta nem duplica).
+      ...(series_id ? { series_detached: true } : {}),
     }).eq("id", id);
 
     if (error) {
@@ -351,6 +354,17 @@ export async function setMeetingStatus(formData: FormData): Promise<void> {
 export async function deleteMeeting(formData: FormData): Promise<void> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));
+
+  // Ocorrência gerada por uma série: não apaga (a renovação recriaria o dia).
+  // Marca como cancelada + destacada — vira uma "lápide" que a série respeita.
+  const { data: m } = await supabase.from("meetings").select("series_slot").eq("id", id).maybeSingle();
+  if (m?.series_slot) {
+    await supabase.from("meetings").update({ status: "cancelled", series_detached: true }).eq("id", id);
+    revalidatePath("/salas");
+    revalidatePath("/dashboard");
+    return;
+  }
+
   // envia o cancelamento ANTES de excluir (precisa dos participantes)
   await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
   await supabase.from("meetings").delete().eq("id", id);
