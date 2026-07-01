@@ -345,9 +345,9 @@ export function SeriesDialog({
               <span>
                 <strong>Reservar sala e enviar convites automaticamente (Outlook)</strong>
                 <span className="muted" style={{ display: "block", fontSize: "0.8rem", marginTop: 2 }}>
-                  Gera as ocorrências dos próximos 12 meses no calendário de salas (pré-reservando o horário) e envia um
-                  convite recorrente por e-mail aos participantes. Exige data, horário e sala (ou “online”). As reservas se
-                  renovam automaticamente.
+                  Gera as ocorrências futuras no calendário de salas (pré-reservando o horário) e envia um convite recorrente
+                  por e-mail aos participantes. Reserva 12 meses à frente — ou 30 dias quando a frequência for diária. Exige
+                  data, horário e sala (ou “online”). As reservas se renovam automaticamente.
                 </span>
               </span>
             </label>

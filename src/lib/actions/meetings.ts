@@ -157,8 +157,10 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
     const start = new Date(`${s.next_date}T${s.start_time}-03:00`);
     const durMin = (s.duration_min ?? 60) * (s.duration_unit === "h" ? 60 : 1) || 60;
     const end = new Date(start.getTime() + durMin * 60000);
+    // horizonte: diária = 1 mês (evita ~365 ocorrências); demais = 12 meses
+    const horizonMonths = s.periodicity === "diaria" ? 1 : 12;
     const until = new Date(start);
-    until.setMonth(until.getMonth() + 12);
+    until.setMonth(until.getMonth() + horizonMonths);
 
     const rrule = method === "CANCEL" ? null : seriesRrule(s.periodicity, toIcsUtc(until));
 
@@ -198,7 +200,7 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
           `<p style="margin:2px 0"><strong>Local:</strong> ${location}</p>` +
           `<p style="margin:2px 0"><strong>Organizador:</strong> ${organizerName}</p>` +
           (s.objetivo ? `<p style="margin:8px 0 0">${s.objetivo}</p>` : "")) +
-      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo MANAGER HUB. As ocorrências dos próximos 12 meses ficam reservadas.</p>`;
+      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo MANAGER HUB. As ocorrências dos próximos ${horizonMonths === 1 ? "30 dias" : "12 meses"} ficam reservadas.</p>`;
 
     await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${s.name}`, html, ics, method });
   } catch (e) {
