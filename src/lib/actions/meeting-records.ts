@@ -270,8 +270,10 @@ export async function deleteSeries(formData: FormData): Promise<ActionState> {
     .eq("id", id);
   if (error) return { error: error.message };
   try {
-    await supabase.rpc("sync_series_bookings", { p_series: id }); // remove reservas futuras geradas
     await dispatchSeriesInvite(id, "CANCEL"); // cancela a série no Outlook
+    // excluir a série leva TODAS as reservas futuras junto — inclusive as
+    // ocorrências movidas/canceladas manualmente (destacadas).
+    await supabase.from("meetings").delete().eq("series_id", id).gte("starts_at", new Date().toISOString());
   } catch (e) {
     console.error("[series] limpeza pós-exclusão falhou:", (e as Error).message);
   }
