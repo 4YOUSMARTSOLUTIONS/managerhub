@@ -64,8 +64,20 @@ export function TicketPanel({
   if (!open || !ticket) return null;
 
   const save = () => {
+    if (!ticket) return;
     setError("");
+    const pendingComment = commentText.trim();
+    // concluir (Resolvido) exige ao menos um comentário/tratamento
+    if (status === "resolved" && comments.length === 0 && !pendingComment) {
+      setError("Registre ao menos um comentário/tratamento antes de concluir o chamado.");
+      return;
+    }
     start(async () => {
+      if (status === "resolved" && pendingComment) {
+        const c = await addTicketComment(ticket.id, pendingComment);
+        if (c.error) { setError(c.error); return; }
+        setCommentText("");
+      }
       const res = await updateTicketTriage({
         ticket_id: ticket.id,
         status,
@@ -80,11 +92,22 @@ export function TicketPanel({
     });
   };
 
-  // conclui o chamado: status vai automaticamente para Resolvido
+  // conclui o chamado: status vai automaticamente para Resolvido.
+  // exige ao menos um comentário/tratamento (envia o texto pendente, se houver).
   const conclude = () => {
     if (!ticket) return;
+    const pendingComment = commentText.trim();
+    if (comments.length === 0 && !pendingComment) {
+      setError("Registre ao menos um comentário/tratamento antes de concluir o chamado.");
+      return;
+    }
     setError("");
     start(async () => {
+      if (pendingComment) {
+        const c = await addTicketComment(ticket.id, pendingComment);
+        if (c.error) { setError(c.error); return; }
+        setCommentText("");
+      }
       const res = await updateTicketTriage({
         ticket_id: ticket.id,
         status: "resolved",
