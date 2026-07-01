@@ -250,14 +250,14 @@ export function ActionDialog({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 60, overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "3vh 1rem", zIndex: 60, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--shadow)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{onCollect ? (editing ? "Editar ação da reunião" : "Ação da reunião") : "Nova ação"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
-        <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+        <div style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
           {/* Sugerir com IA (só na criação direta) */}
           {aiEnabled && !onCollect && (
             <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)" }}>
@@ -293,17 +293,25 @@ export function ActionDialog({
             </div>
           )}
 
-          {/* Unidade (primeiro campo, obrigatório) */}
-          {units && units.length > 0 && (
-            <div style={{ maxWidth: 320 }}>
-              <label className="label">Unidade <span style={{ color: "#dc2626" }}>*</span></label>
-              <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                <option value="" disabled>Selecione…</option>
-                <option value="all">Todas as unidades</option>
-                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {/* Unidade (obrigatório) + Prioridade */}
+          <div style={{ display: "grid", gridTemplateColumns: units && units.length ? "1fr 200px" : "200px", gap: "0.8rem" }}>
+            {units && units.length > 0 && (
+              <div>
+                <label className="label">Unidade <span style={{ color: "#dc2626" }}>*</span></label>
+                <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                  <option value="" disabled>Selecione…</option>
+                  <option value="all">Todas as unidades</option>
+                  {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="label">Prioridade</label>
+              <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
-          )}
+          </div>
 
           {/* SDPO */}
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", fontWeight: 600 }}>
@@ -362,21 +370,16 @@ export function ActionDialog({
             </div>
           </div>
 
-          <div style={{ maxWidth: 220 }}>
-            <label className="label">Prioridade</label>
-            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
-              {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-
           {/* Solicitante + Em cópia */}
-          <div>
-            <label className="label">Solicitante</label>
-            <PeoplePicker people={people} selected={requesterId ? [requesterId] : []} onChange={(ids) => setRequesterId(ids[0] ?? "")} single placeholder="Buscar solicitante…" />
-          </div>
-          <div>
-            <label className="label">Em cópia <span className="soft">(usuários que devem ter conhecimento)</span></label>
-            <PeoplePicker people={people} selected={cc} onChange={setCc} placeholder="Adicionar em cópia…" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
+            <div>
+              <label className="label">Solicitante</label>
+              <PeoplePicker people={people} selected={requesterId ? [requesterId] : []} onChange={(ids) => setRequesterId(ids[0] ?? "")} single placeholder="Buscar solicitante…" />
+            </div>
+            <div>
+              <label className="label">Em cópia <span className="soft">(conhecimento)</span></label>
+              <PeoplePicker people={people} selected={cc} onChange={setCc} placeholder="Adicionar em cópia…" />
+            </div>
           </div>
 
           {/* Ações (demandas) */}
@@ -385,9 +388,9 @@ export function ActionDialog({
               <label className="label" style={{ margin: 0 }}>Ações <span className="soft">(cada uma com seu(s) responsável(is))</span></label>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDemandas((d) => [...d, { description: "", assignees: [], files: [] }])}>+ Ação</button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {demandas.map((d, i) => (
-                <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.8rem" }}>
+                <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.6rem 0.7rem" }}>
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
                     <span className="soft" style={{ fontSize: "0.8rem", paddingTop: "0.55rem" }}>{i + 1}.</span>
                     <div style={{ flex: 1 }}>
