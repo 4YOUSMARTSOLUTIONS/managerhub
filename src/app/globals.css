@@ -430,6 +430,35 @@ a {
   display: inline-block;
   margin: 3px auto 0;
 }
+/* domingo (dia não útil) — cinza */
+.cal-day.cal-sunday {
+  background: #eef1f4;
+  box-shadow: inset 4px 0 0 #9aa4b2;
+}
+.cal-day.cal-sunday .cal-daynum {
+  color: #64748b;
+}
+.cal-daycol.cal-sunday {
+  background: #eef1f4;
+}
+.cal-daycol.cal-holiday {
+  background: #fff0f0;
+}
+.cal-sunday-tag {
+  align-self: flex-start;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+  background: #94a3b8;
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.cal-week-head .cal-sunday-tag {
+  display: inline-block;
+  margin: 3px auto 0;
+}
 .cal-daynum {
   font-size: 0.74rem;
   font-weight: 600;

@@ -301,11 +301,19 @@ export default async function SettingsPage() {
         </FormModal>
       }
     >
-      <p className="muted" style={{ fontSize: "0.82rem", padding: "0.9rem 1.25rem 0", margin: "0 0 0.8rem" }}>
-        Os feriados <strong>nacionais</strong> (fixos e móveis) já são reconhecidos automaticamente e sinalizados no
-        calendário de salas. Cadastre aqui apenas feriados <strong>próprios</strong> (estaduais, municipais ou pontos
-        facultativos da empresa). Ao agendar num feriado, o sistema avisa — mas não impede.
-      </p>
+      <div className="muted" style={{ fontSize: "0.82rem", padding: "0.9rem 1.25rem 0", margin: "0 0 0.8rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <p style={{ margin: 0 }}>
+          Os feriados <strong>nacionais</strong> (fixos e móveis) já são reconhecidos automaticamente e sinalizados no
+          calendário de salas. Cadastre aqui apenas feriados <strong>próprios</strong> (estaduais, municipais ou pontos
+          facultativos da empresa).
+        </p>
+        <p style={{ margin: 0 }}>
+          <strong>Domingo</strong> é considerado dia não útil; <strong>sábado</strong> é útil (a não ser que você o
+          cadastre como feriado acima). Ao agendar manualmente num dia não útil, o sistema avisa — mas não impede. Já as
+          reuniões <strong>recorrentes</strong> que caírem em domingo ou feriado são <strong>deslocadas para o próximo dia
+          útil</strong>.
+        </p>
+      </div>
       {holidays && holidays.length > 0 ? (
         <table className="table">
           <thead>
@@ -486,7 +494,7 @@ export default async function SettingsPage() {
     { id: "sdpo", label: "Programa de Excelência", content: sdpoTab },
     { id: "chamados", label: "Chamados", content: chamadosTab },
     { id: "salas", label: "Salas", content: salasTab },
-    { id: "feriados", label: "Feriados", content: feriadosTab },
+    { id: "feriados", label: "Calendário e Feriados", content: feriadosTab },
     { id: "integracoes", label: "Integrações", content: integracoesTab },
   ];
 

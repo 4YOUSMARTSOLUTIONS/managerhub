@@ -8,7 +8,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { MEETING_STATUS } from "@/lib/constants";
-import { holidayName } from "@/lib/holidays";
+import { blockedReason } from "@/lib/holidays";
 import type { CalRoom, CalMeeting } from "./RoomCalendar";
 
 export type Prefill = {
@@ -81,7 +81,7 @@ export function NewMeetingDialog({
     if (participants.length === 0) { e.preventDefault(); setLocalErr("Selecione ao menos um participante."); return; }
     if (!confirmedRef.current) {
       const v = (e.currentTarget.elements.namedItem("starts_at") as HTMLInputElement | null)?.value;
-      const hn = v ? holidayName(new Date(v), customHolidays) : null;
+      const hn = v ? blockedReason(new Date(v), customHolidays) : null;
       if (hn) { e.preventDefault(); setHolidayWarn(hn); return; }
     }
     confirmedRef.current = false;
@@ -170,8 +170,8 @@ export function NewMeetingDialog({
     </div>
     <ConfirmDialog
       open={!!holidayWarn}
-      title="Atenção: feriado"
-      message={<>O dia escolhido é <strong>{holidayWarn}</strong> (feriado). Normalmente não há expediente. Deseja agendar mesmo assim?</>}
+      title="Atenção: dia não útil"
+      message={<>O dia escolhido é <strong>{holidayWarn}</strong>. Normalmente não há expediente. Deseja agendar mesmo assim?</>}
       confirmLabel="Agendar mesmo assim"
       cancelLabel="Voltar"
       onConfirm={() => { confirmedRef.current = true; setHolidayWarn(null); formRef.current?.requestSubmit(); }}

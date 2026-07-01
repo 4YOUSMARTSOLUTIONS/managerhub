@@ -73,3 +73,19 @@ export function holidayName(date: Date, custom?: { day: string; name: string }[]
   if (custHit) return custHit.name;
   return nationalHolidays(date.getFullYear()).get(key) ?? null;
 }
+
+/** True se a data é domingo. (Sábado é útil, salvo se cadastrado como feriado.) */
+export function isSunday(date: Date): boolean {
+  return date.getDay() === 0;
+}
+
+/**
+ * Motivo de a data ser "não útil" (feriado ou domingo), ou null.
+ * Feriado tem prioridade sobre "Domingo" na hora de rotular.
+ */
+export function blockedReason(date: Date, custom?: { day: string; name: string }[]): string | null {
+  const h = holidayName(date, custom);
+  if (h) return h;
+  if (isSunday(date)) return "Domingo";
+  return null;
+}

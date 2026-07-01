@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { deleteMeeting } from "@/lib/actions/meetings";
-import { holidayName } from "@/lib/holidays";
+import { holidayName, isSunday } from "@/lib/holidays";
 import type { Prefill } from "./NewMeetingDialog";
 
 export type CalRoom = { id: string; name: string; color: string };
@@ -289,13 +289,14 @@ function MonthView({
         const visible = dayEvents.slice(0, 3);
         const extra = dayEvents.length - visible.length;
         const hol = holidayName(day, holidays);
+        const sun = !hol && isSunday(day);
         return (
           <div
             key={day.toISOString()}
-            className={`cal-day${day.getMonth() !== month ? " cal-out" : ""}${hol ? " cal-holiday" : ""}`}
+            className={`cal-day${day.getMonth() !== month ? " cal-out" : ""}${hol ? " cal-holiday" : sun ? " cal-sunday" : ""}`}
             style={{ cursor: "pointer" }}
             onClick={() => onSlot(day)}
-            title={hol ? `${hol} (feriado) · clique para agendar` : "Clique para agendar"}
+            title={hol ? `${hol} (feriado) · clique para agendar` : sun ? "Domingo (dia não útil) · clique para agendar" : "Clique para agendar"}
           >
             <span
               className={`cal-daynum${sameDay(day, today) ? " cal-today" : ""}`}
@@ -305,6 +306,7 @@ function MonthView({
               {day.getDate()}
             </span>
             {hol && <span className="cal-holiday-tag" title={hol}>{hol}</span>}
+            {sun && <span className="cal-sunday-tag">Domingo</span>}
             {visible.map((e) => {
               const color = e.room?.color ?? DEFAULT_COLOR;
               return (
@@ -368,11 +370,13 @@ function TimeGrid({
         <div />
         {days.map((d) => {
           const hol = holidayName(d, holidays);
+          const sun = !hol && isSunday(d);
           return (
             <div key={d.toISOString()}>
               <div className="cal-wd">{WEEKDAYS[(d.getDay() + 6) % 7]}</div>
               <div className={`cal-wn${sameDay(d, today) ? " cal-today" : ""}`}>{d.getDate()}</div>
               {hol && <div className="cal-holiday-tag" title={hol}>{hol}</div>}
+              {sun && <div className="cal-sunday-tag">Domingo</div>}
             </div>
           );
         })}
@@ -386,8 +390,10 @@ function TimeGrid({
         {days.map((day) => {
           const dayEvents = events.filter((e) => sameDay(e.start, day));
           const laid = layoutDay(dayEvents);
+          const hol = holidayName(day, holidays);
+          const sun = !hol && isSunday(day);
           return (
-            <div key={day.toISOString()} className="cal-daycol" style={{ cursor: "pointer" }} onClick={(e) => handleColClick(e, day)}>
+            <div key={day.toISOString()} className={`cal-daycol${hol ? " cal-holiday" : sun ? " cal-sunday" : ""}`} style={{ cursor: "pointer" }} onClick={(e) => handleColClick(e, day)}>
               {hours.map((h) => <div key={h} className="cal-hourline" />)}
               {laid.map(({ e, leftPct, widthPct }) => {
                 const s = Math.max(minutesOf(e.start), startHour * 60);
