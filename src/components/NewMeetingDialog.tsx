@@ -44,6 +44,7 @@ export function NewMeetingDialog({
   const [participants, setParticipants] = useState<string[]>([]);
   const [localErr, setLocalErr] = useState("");
   const [holidayWarn, setHolidayWarn] = useState<string | null>(null);
+  const [saveWarn, setSaveWarn] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const confirmedRef = useRef(false);
   const router = useRouter();
@@ -55,12 +56,18 @@ export function NewMeetingDialog({
       setParticipants(editing?.participantIds ?? []);
       setLocalErr("");
       setHolidayWarn(null);
+      setSaveWarn("");
       confirmedRef.current = false;
     }
   }, [open, editing]);
 
   useEffect(() => {
-    if (state.ok && open) { onClose(); router.refresh(); }
+    if (state.ok && open) {
+      router.refresh();
+      // se houve aviso (ex.: convite não enviado), mantém aberto mostrando o aviso
+      if (state.warning) setSaveWarn(state.warning);
+      else onClose();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
@@ -160,10 +167,19 @@ export function NewMeetingDialog({
             {(localErr || state.error) && (
               <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{localErr || state.error}</p>
             )}
+            {saveWarn && (
+              <p style={{ color: "#92400e", fontSize: "0.85rem", margin: 0, background: "#fffbeb", border: "1px solid #fde68a", padding: "0.5rem 0.7rem", borderRadius: 8 }}>⚠️ {saveWarn}</p>
+            )}
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-            <SubmitButton>{editing ? "Salvar" : "Agendar"}</SubmitButton>
+            {saveWarn ? (
+              <button type="button" className="btn btn-primary" onClick={onClose}>Fechar</button>
+            ) : (
+              <>
+                <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+                <SubmitButton>{editing ? "Salvar" : "Agendar"}</SubmitButton>
+              </>
+            )}
           </div>
         </form>
       </div>

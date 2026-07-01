@@ -8,12 +8,22 @@ export default async function MeetingsPage() {
   const { tenant, user, role } = await requireContext();
   const supabase = await createClient();
 
+  // Janela de datas para o calendário (evita carregar histórico inteiro e a
+  // truncagem silenciosa do antigo limit(500)). Cobre folga p/ trás + horizonte
+  // das séries (12 meses) p/ frente.
+  const nowRef = new Date();
+  const winStart = new Date(nowRef.getFullYear(), nowRef.getMonth() - 2, 1).toISOString();
+  const winEnd = new Date(nowRef.getFullYear(), nowRef.getMonth() + 15, 1).toISOString();
+
   const [{ data: meetings }, { data: rooms }, { data: series }, { data: seriesParts }, { data: members }, { data: meetingParts }, { data: holidays }] = await Promise.all([
     supabase
       .from("meetings")
       .select("*, rooms(id, name, color), creator:profiles!created_by(full_name)")
+      .eq("tenant_id", tenant.id)
+      .gte("starts_at", winStart)
+      .lt("starts_at", winEnd)
       .order("starts_at", { ascending: false })
-      .limit(500),
+      .limit(5000),
     supabase.from("rooms").select("id, name, color").eq("is_active", true).order("name"),
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     supabase.from("meeting_series_participants").select("series_id, user_id"),

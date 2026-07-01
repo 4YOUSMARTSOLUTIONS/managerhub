@@ -41,11 +41,24 @@ function localToISO(value: string): string | null {
   return new Date(`${value}:00-03:00`).toISOString();
 }
 
+// Resultado do envio: enviado, falhou (havia o que enviar mas não saiu), ou
+// pulado (nada a enviar: sem chave, sem participante com e-mail, série auto).
+type InviteResult = "sent" | "failed" | "skipped";
+
+function escapeHtml(s: string | null | undefined): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 /**
  * Envia (ou atualiza/cancela) o convite .ics por e-mail aos participantes.
- * Best-effort: qualquer falha é engolida para não quebrar o salvamento da reunião.
+ * Retorna o status para o chamador poder avisar o usuário se o envio falhar.
+ * Nunca lança — qualquer erro vira "failed".
  */
-async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump: boolean; label: string }): Promise<void> {
+async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump: boolean; label: string }): Promise<InviteResult> {
   try {
     const admin = createServiceClient();
     const { data: m } = await admin
@@ -53,26 +66,22 @@ async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump
       .select("id, tenant_id, title, description, starts_at, ends_at, ics_sequence, organizer_id, series_id, rooms(name)")
       .eq("id", meetingId)
       .maybeSingle();
-    if (!m) return;
+    if (!m) return "skipped";
 
     // reuniões geradas por uma série com auto-reserva têm o convite tratado
     // no nível da série (convite recorrente único) — não envia convite avulso.
     const seriesId = (m as unknown as { series_id: string | null }).series_id;
     if (seriesId) {
       const { data: srs } = await admin.from("meeting_series").select("auto_book").eq("id", seriesId).maybeSingle();
-      if (srs?.auto_book) return;
+      if (srs?.auto_book) return "skipped";
     }
 
     // chave do Resend do tenant (server-only); sem chave, não envia
     const { data: secret } = await admin.from("tenant_secrets").select("resend_api_key").eq("tenant_id", m.tenant_id).maybeSingle();
     const apiKey = secret?.resend_api_key?.trim();
-    if (!apiKey) return;
+    if (!apiKey) return "skipped";
 
-    let seq = m.ics_sequence ?? 0;
-    if (opts.bump) {
-      seq += 1;
-      await admin.from("meetings").update({ ics_sequence: seq }).eq("id", meetingId);
-    }
+    const seq = (m.ics_sequence ?? 0) + (opts.bump ? 1 : 0);
 
     const { data: org } = m.organizer_id
       ? await admin.from("profiles").select("full_name").eq("id", m.organizer_id).maybeSingle()
@@ -87,7 +96,7 @@ async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump
       .map((p) => (p as unknown as { profiles: { full_name: string | null; email: string | null } | null }).profiles)
       .filter((pr): pr is { full_name: string | null; email: string } => !!pr?.email)
       .map((pr) => ({ name: pr.full_name ?? pr.email, email: pr.email }));
-    if (attendees.length === 0) return;
+    if (attendees.length === 0) return "skipped";
 
     const location = (m.rooms as unknown as { name: string } | null)?.name || "Online";
     const organizerName = org?.full_name ?? "MANAGER HUB";
@@ -107,16 +116,22 @@ async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump
     });
 
     const html =
-      `<h2 style="margin:0 0 8px">${opts.label}: ${m.title}</h2>` +
+      `<h2 style="margin:0 0 8px">${escapeHtml(opts.label)}: ${escapeHtml(m.title)}</h2>` +
       `<p style="margin:2px 0"><strong>Quando:</strong> ${formatDateTime(m.starts_at)} — ${formatDateTime(m.ends_at)}</p>` +
-      `<p style="margin:2px 0"><strong>Local:</strong> ${location}</p>` +
-      `<p style="margin:2px 0"><strong>Organizador:</strong> ${organizerName}</p>` +
-      (m.description ? `<p style="margin:8px 0 0">${m.description}</p>` : "") +
+      `<p style="margin:2px 0"><strong>Local:</strong> ${escapeHtml(location)}</p>` +
+      `<p style="margin:2px 0"><strong>Organizador:</strong> ${escapeHtml(organizerName)}</p>` +
+      (m.description ? `<p style="margin:8px 0 0">${escapeHtml(m.description)}</p>` : "") +
       `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite enviado pelo MANAGER HUB.</p>`;
 
-    await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${opts.label}: ${m.title}`, html, ics, method });
+    const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${opts.label}: ${m.title}`, html, ics, method });
+    // só grava a nova sequência se o envio deu certo (evita drift de SEQUENCE)
+    if (ok && opts.bump) {
+      await admin.from("meetings").update({ ics_sequence: seq }).eq("id", meetingId);
+    }
+    return ok ? "sent" : "failed";
   } catch (e) {
     console.error("[meetings] dispatchInvite falhou:", (e as Error).message);
+    return "failed";
   }
 }
 
@@ -125,7 +140,7 @@ async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump
  * Best-effort: qualquer falha é engolida. Use "REQUEST" quando a série tem
  * auto-reserva ativa, e "CANCEL" quando a auto-reserva é desligada.
  */
-export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod): Promise<void> {
+export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod): Promise<InviteResult> {
   try {
     const admin = createServiceClient();
     const { data: s } = await admin
@@ -133,14 +148,14 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
       .select("id, tenant_id, name, objetivo, periodicity, next_date, start_time, duration_min, duration_unit, ics_sequence, owner_user_id, rooms(name)")
       .eq("id", seriesId)
       .maybeSingle();
-    if (!s || !s.next_date || !s.start_time) return;
+    if (!s || !s.next_date || !s.start_time) return "skipped";
 
     // CANCEL só faz sentido se já enviamos algo antes
-    if (method === "CANCEL" && (s.ics_sequence ?? 0) === 0) return;
+    if (method === "CANCEL" && (s.ics_sequence ?? 0) === 0) return "skipped";
 
     const { data: secret } = await admin.from("tenant_secrets").select("resend_api_key").eq("tenant_id", s.tenant_id).maybeSingle();
     const apiKey = secret?.resend_api_key?.trim();
-    if (!apiKey) return;
+    if (!apiKey) return "skipped";
 
     const { data: parts } = await admin
       .from("meeting_series_participants")
@@ -151,7 +166,7 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
       .map((p) => (p as unknown as { profiles: { full_name: string | null; email: string | null } | null }).profiles)
       .filter((pr): pr is { full_name: string | null; email: string } => !!pr?.email)
       .map((pr) => ({ name: pr.full_name ?? pr.email, email: pr.email }));
-    if (attendees.length === 0) return;
+    if (attendees.length === 0) return "skipped";
 
     // primeira ocorrência (horário de Brasília, offset fixo -03:00)
     const start = new Date(`${s.next_date}T${s.start_time}-03:00`);
@@ -160,12 +175,11 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
     // horizonte: diária = 1 mês (evita ~365 ocorrências); demais = 12 meses
     const horizonMonths = s.periodicity === "diaria" ? 1 : 12;
     const until = new Date(start);
-    until.setMonth(until.getMonth() + horizonMonths);
+    until.setUTCMonth(until.getUTCMonth() + horizonMonths); // UTC-safe
 
     const rrule = method === "CANCEL" ? null : seriesRrule(s.periodicity, toIcsUtc(until));
 
     const seq = (s.ics_sequence ?? 0) + 1;
-    await admin.from("meeting_series").update({ ics_sequence: seq }).eq("id", seriesId);
 
     const { data: org } = s.owner_user_id
       ? await admin.from("profiles").select("full_name").eq("id", s.owner_user_id).maybeSingle()
@@ -192,19 +206,24 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
     });
 
     const html =
-      `<h2 style="margin:0 0 8px">${label}: ${s.name}</h2>` +
+      `<h2 style="margin:0 0 8px">${escapeHtml(label)}: ${escapeHtml(s.name)}</h2>` +
       (method === "CANCEL"
         ? `<p style="margin:2px 0">A série de reuniões recorrentes foi cancelada.</p>`
-        : `<p style="margin:2px 0"><strong>Frequência:</strong> ${cadence}</p>` +
+        : `<p style="margin:2px 0"><strong>Frequência:</strong> ${escapeHtml(cadence)}</p>` +
           `<p style="margin:2px 0"><strong>Primeira ocorrência:</strong> ${formatDateTime(start.toISOString())}</p>` +
-          `<p style="margin:2px 0"><strong>Local:</strong> ${location}</p>` +
-          `<p style="margin:2px 0"><strong>Organizador:</strong> ${organizerName}</p>` +
-          (s.objetivo ? `<p style="margin:8px 0 0">${s.objetivo}</p>` : "")) +
+          `<p style="margin:2px 0"><strong>Local:</strong> ${escapeHtml(location)}</p>` +
+          `<p style="margin:2px 0"><strong>Organizador:</strong> ${escapeHtml(organizerName)}</p>` +
+          (s.objetivo ? `<p style="margin:8px 0 0">${escapeHtml(s.objetivo)}</p>` : "")) +
       `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo MANAGER HUB. As ocorrências dos próximos ${horizonMonths === 1 ? "30 dias" : "12 meses"} ficam reservadas.</p>`;
 
-    await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${s.name}`, html, ics, method });
+    const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${s.name}`, html, ics, method });
+    if (ok) {
+      await admin.from("meeting_series").update({ ics_sequence: seq }).eq("id", seriesId);
+    }
+    return ok ? "sent" : "failed";
   } catch (e) {
     console.error("[meetings] dispatchSeriesInvite falhou:", (e as Error).message);
+    return "failed";
   }
 }
 
@@ -262,11 +281,13 @@ export async function createMeeting(
       return { error: "Não foi possível salvar os participantes. Tente novamente." };
     }
 
-    await dispatchInvite(meeting.id, "REQUEST", { bump: false, label: "Convite de reunião" });
+    const invite = await dispatchInvite(meeting.id, "REQUEST", { bump: false, label: "Convite de reunião" });
 
     revalidatePath("/salas");
     revalidatePath("/dashboard");
-    return { ok: true };
+    return invite === "failed"
+      ? { ok: true, warning: "Reunião agendada, mas o convite por e-mail não pôde ser enviado. Verifique a integração (Resend) em Configurações." }
+      : { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -327,15 +348,15 @@ export async function updateMeeting(
     const { error: pErr } = await supabase.from("meeting_participants").insert(participants.map((uid) => ({ meeting_id: id, user_id: uid })));
     if (pErr) return { error: "Não foi possível salvar os participantes. Tente novamente." };
 
-    if (status !== "cancelled") {
-      await dispatchInvite(id, "REQUEST", { bump: true, label: "Reunião atualizada" });
-    } else {
-      await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
-    }
+    const invite = status !== "cancelled"
+      ? await dispatchInvite(id, "REQUEST", { bump: true, label: "Reunião atualizada" })
+      : await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
 
     revalidatePath("/salas");
     revalidatePath("/dashboard");
-    return { ok: true };
+    return invite === "failed"
+      ? { ok: true, warning: "Reunião salva, mas o convite/atualização por e-mail não pôde ser enviado." }
+      : { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -345,7 +366,9 @@ export async function setMeetingStatus(formData: FormData): Promise<void> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));
   const status = String(formData.get("status")) as Enums<"meeting_status">;
-  await supabase.from("meetings").update({ status }).eq("id", id);
+  // .select() confirma que a linha é do tenant (RLS) antes de acionar o e-mail via service-role
+  const { data: updated } = await supabase.from("meetings").update({ status }).eq("id", id).select("id");
+  if (!updated || updated.length === 0) return; // não é do tenant / RLS bloqueou
   if (status === "cancelled") await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
   revalidatePath("/salas");
   revalidatePath("/dashboard");
@@ -355,10 +378,13 @@ export async function deleteMeeting(formData: FormData): Promise<void> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));
 
+  // leitura via RLS confirma a posse antes de qualquer ação com service-role
+  const { data: m } = await supabase.from("meetings").select("series_slot").eq("id", id).maybeSingle();
+  if (!m) return; // não é do tenant / não existe — não aciona o e-mail
+
   // Ocorrência gerada por uma série: não apaga (a renovação recriaria o dia).
   // Marca como cancelada + destacada — vira uma "lápide" que a série respeita.
-  const { data: m } = await supabase.from("meetings").select("series_slot").eq("id", id).maybeSingle();
-  if (m?.series_slot) {
+  if (m.series_slot) {
     await supabase.from("meetings").update({ status: "cancelled", series_detached: true }).eq("id", id);
     revalidatePath("/salas");
     revalidatePath("/dashboard");
