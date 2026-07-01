@@ -149,10 +149,14 @@ export function MeetingRecords({
       router.refresh();
     });
   };
-  const doCancel = (id: string) => {
-    if (!confirm("Cancelar esta reunião em andamento? Ela ficará no histórico como cancelada.")) return;
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
+  const doCancel = (id: string) => setConfirmCancel(id);
+  const runCancel = () => {
+    const id = confirmCancel;
+    if (!id) return;
     start(async () => {
       const r = await cancelOccurrence(id);
+      setConfirmCancel(null);
       if (r.error) { alert(r.error); return; }
       router.refresh();
     });
@@ -443,6 +447,17 @@ export function MeetingRecords({
         pending={pending}
         onConfirm={runStart}
         onClose={() => setConfirmStart(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmCancel}
+        title="Cancelar reunião"
+        message="Cancelar esta reunião em andamento? Ela ficará no histórico como cancelada."
+        confirmLabel="Cancelar reunião"
+        cancelLabel="Voltar"
+        tone="danger"
+        pending={pending}
+        onConfirm={runCancel}
+        onClose={() => setConfirmCancel(null)}
       />
     </div>
   );
