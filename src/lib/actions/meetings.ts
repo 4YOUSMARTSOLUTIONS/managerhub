@@ -232,7 +232,7 @@ export async function createMeeting(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId } = await actionContext();
+    const { supabase } = await actionContext();
 
     const title = String(formData.get("title") ?? "").trim();
     if (!title) return { error: "Informe o título da reunião." };
@@ -254,34 +254,22 @@ export async function createMeeting(
     }
     if (participants.length === 0) return { error: "Selecione ao menos um participante." };
 
-    const { data: meeting, error } = await supabase.from("meetings").insert({
-      tenant_id: tenantId,
-      title,
-      description: String(formData.get("description") ?? "").trim() || null,
-      room_id,
-      series_id,
-      organizer_id: userId,
-      created_by: userId,
-      starts_at: starts,
-      ends_at: ends,
-    }).select("id").single();
+    // insert atômico (reunião + participantes) validando sala/série/participantes
+    // contra o tenant — sem "reunião fantasma" e sem IDs de outro tenant.
+    const { data: meetingId, error } = await supabase.rpc("create_meeting", {
+      p_data: {
+        title,
+        description: String(formData.get("description") ?? "").trim() || null,
+        room_id,
+        series_id,
+        participants,
+        starts_at: starts,
+        ends_at: ends,
+      },
+    });
+    if (error) return { error: error.message };
 
-    if (error) {
-      if (error.code === "23P01")
-        return { error: "Essa sala já está reservada nesse horário." };
-      return { error: error.message };
-    }
-
-    const { error: pErr } = await supabase.from("meeting_participants").insert(
-      participants.map((uid) => ({ meeting_id: meeting.id, user_id: uid })),
-    );
-    if (pErr) {
-      // rollback: não deixa reunião "fantasma" sem participantes
-      await supabase.from("meetings").delete().eq("id", meeting.id);
-      return { error: "Não foi possível salvar os participantes. Tente novamente." };
-    }
-
-    const invite = await dispatchInvite(meeting.id, "REQUEST", { bump: false, label: "Convite de reunião" });
+    const invite = await dispatchInvite(meetingId as string, "REQUEST", { bump: false, label: "Convite de reunião" });
 
     revalidatePath("/salas");
     revalidatePath("/dashboard");
@@ -298,7 +286,7 @@ export async function updateMeeting(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase, tenantId } = await actionContext();
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Reunião inválida." };
 
@@ -310,8 +298,8 @@ export async function updateMeeting(
     if (!starts || !ends) return { error: "Informe início e fim." };
     if (new Date(ends) <= new Date(starts)) return { error: "O fim deve ser depois do início." };
 
-    const room_id = String(formData.get("room_id") ?? "") || null;
-    const series_id = String(formData.get("series_id") ?? "") || null;
+    let room_id = String(formData.get("room_id") ?? "") || null;
+    let series_id = String(formData.get("series_id") ?? "") || null;
 
     let participants: string[] = [];
     try {
@@ -320,6 +308,22 @@ export async function updateMeeting(
       participants = [];
     }
     if (participants.length === 0) return { error: "Selecione ao menos um participante." };
+
+    // valida referências/participantes contra o tenant (não aceita IDs de outro tenant)
+    if (room_id) {
+      const { data } = await supabase.from("rooms").select("id").eq("id", room_id).eq("tenant_id", tenantId).maybeSingle();
+      if (!data) room_id = null;
+    }
+    if (series_id) {
+      const { data } = await supabase.from("meeting_series").select("id").eq("id", series_id).eq("tenant_id", tenantId).maybeSingle();
+      if (!data) series_id = null;
+    }
+    {
+      const { data } = await supabase.from("memberships").select("user_id").eq("tenant_id", tenantId).in("user_id", participants);
+      const ok = new Set((data ?? []).map((m) => m.user_id));
+      participants = participants.filter((p) => ok.has(p));
+      if (participants.length === 0) return { error: "Selecione ao menos um participante válido." };
+    }
 
     const statusRaw = String(formData.get("status") ?? "");
     const validStatus: Enums<"meeting_status">[] = ["scheduled", "in_progress", "done", "cancelled"];

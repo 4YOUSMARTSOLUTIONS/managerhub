@@ -22,7 +22,8 @@ export default async function ActionsPage() {
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenant.id).order("occurred_on", { ascending: false }).limit(500),
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
-    supabase.from("profiles").select("id, full_name").limit(5000),
+    // nomes: todos os membros do tenant (inclui inativos, p/ resolver autores antigos)
+    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id),
   ]);
 
   const actionIds = (actions ?? []).map((a) => a.id);
@@ -41,7 +42,7 @@ export default async function ActionsPage() {
     : [{ data: [] as { demanda_id: string; user_id: string }[] }, { data: [] as { demanda_id: string }[] }];
 
   // mapas de nomes
-  const nameById = new Map((profilesData ?? []).map((p) => [p.id, p.full_name ?? "—"]));
+  const nameById = new Map((profilesData ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
   const pilarName = new Map((pilares ?? []).map((p) => [p.id, p.name]));
   const blocoName = new Map((blocos ?? []).map((b) => [b.id, b.name]));
   const itemName = new Map((itens ?? []).map((i) => [i.id, i.name]));

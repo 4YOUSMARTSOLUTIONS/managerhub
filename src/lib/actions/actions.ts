@@ -158,14 +158,14 @@ export type TimelineEvent = { id: string; type: string; actorName: string | null
 export type PendingReq = { id: string; type: string; newDueDate: string | null; note: string | null; requestedByName: string | null; createdAt: string };
 
 export async function getDemandaTimeline(demandaId: string): Promise<{ events: TimelineEvent[]; requests: PendingReq[]; status: Enums<"action_status">; dueDate: string | null }> {
-  const { supabase } = await actionContext();
+  const { supabase, tenantId } = await actionContext();
   const [{ data: events }, { data: reqs }, { data: profs }, { data: dem }] = await Promise.all([
     supabase.from("demanda_events").select("id, type, actor_id, body, meta, created_at").eq("demanda_id", demandaId).order("created_at", { ascending: true }),
     supabase.from("demanda_requests").select("id, type, new_due_date, note, requested_by, created_at").eq("demanda_id", demandaId).eq("status", "pending"),
-    supabase.from("profiles").select("id, full_name").limit(5000),
+    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
     supabase.from("action_demandas").select("status, due_date").eq("id", demandaId).single(),
   ]);
-  const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name ?? "—"]));
+  const nameById = new Map((profs ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
   return {
     events: (events ?? []).map((e) => ({ id: e.id, type: e.type, actorName: e.actor_id ? nameById.get(e.actor_id) ?? null : null, body: e.body, meta: (e.meta as Record<string, unknown>) ?? {}, createdAt: e.created_at })),
     requests: (reqs ?? []).map((r) => ({ id: r.id, type: r.type, newDueDate: r.new_due_date, note: r.note, requestedByName: r.requested_by ? nameById.get(r.requested_by) ?? null : null, createdAt: r.created_at })),

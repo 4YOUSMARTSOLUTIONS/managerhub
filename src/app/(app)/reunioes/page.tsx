@@ -32,6 +32,7 @@ export default async function MeetingRecordsPage() {
     supabase
       .from("meeting_occurrences")
       .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+      .eq("tenant_id", tenant.id)
       .order("started_at", { ascending: false, nullsFirst: false })
       .order("occurred_on", { ascending: false })
       .limit(300),

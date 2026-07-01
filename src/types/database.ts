@@ -971,6 +971,7 @@ export type Database = {
       demanda_reopen: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
       demanda_cancel: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
       demanda_reassign: { Args: { p_demanda: string; p_users: Json; p_note: string }; Returns: undefined }
+      create_meeting: { Args: { p_data: Json }; Returns: string }
       save_meeting_series: { Args: { p_data: Json }; Returns: string }
       sync_series_bookings: { Args: { p_series: string }; Returns: undefined }
       topup_all_series_bookings: { Args: Record<string, never>; Returns: undefined }
