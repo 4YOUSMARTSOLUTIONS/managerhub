@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PERIODICITY } from "@/lib/constants";
 import { formatDate, formatTime, formatDateTime, formatDuration } from "@/lib/format";
-import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, type OccurrenceDraft } from "@/lib/actions/meeting-records";
+import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, loadMoreOccurrences, OCC_PAGE_SIZE, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
@@ -121,9 +121,20 @@ export function MeetingRecords({
     return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [series, personName]);
 
-  const inProgress = useMemo(() => occurrences.filter((o) => o.status === "in_progress"), [occurrences]);
+  // "Carregar mais" preservando o estado da tela (abas/filtros/rascunhos)
+  const [occ, setOcc] = useState(occurrences);
+  const [noMore, setNoMore] = useState(occurrences.length < OCC_PAGE_SIZE);
+  const [moreLoading, startMore] = useTransition();
+  useEffect(() => { setOcc(occurrences); setNoMore(occurrences.length < OCC_PAGE_SIZE); }, [occurrences]);
+  const loadMore = () => startMore(async () => {
+    const next = await loadMoreOccurrences(occ.length);
+    setOcc((cur) => [...cur, ...next]);
+    if (next.length < OCC_PAGE_SIZE) setNoMore(true);
+  });
+
+  const inProgress = useMemo(() => occ.filter((o) => o.status === "in_progress"), [occ]);
   const inProgressBySeries = useMemo(() => new Map(inProgress.map((o) => [o.seriesId, o])), [inProgress]);
-  const history = useMemo(() => occurrences.filter((o) => o.status !== "in_progress"), [occurrences]);
+  const history = useMemo(() => occ.filter((o) => o.status !== "in_progress"), [occ]);
 
   const openCreate = () => { setEditing(undefined); setSeriesOpen(true); };
   const openEdit = (s: SeriesRow) => { setEditing(s); setSeriesOpen(true); };
@@ -397,6 +408,13 @@ export function MeetingRecords({
         </table>
       ) : (
         <EmptyState title="Nenhum registro encontrado" description="Tente outro termo de busca ou ajuste o período." />
+      )}
+      {!noMore && (
+        <div style={{ textAlign: "center", marginTop: "1rem" }}>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={moreLoading} onClick={loadMore}>
+            {moreLoading ? "Carregando…" : "Carregar mais registros"}
+          </button>
+        </div>
       )}
     </Section>
   );

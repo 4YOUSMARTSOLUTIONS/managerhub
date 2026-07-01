@@ -5,6 +5,56 @@ import { actionContext } from "./context";
 import { parseTor, type ParsedTor, type TextItem } from "@/lib/tor-parser";
 import { dispatchSeriesInvite } from "./meetings";
 import type { ActionState } from "./types";
+import type { OccurrenceRow } from "@/components/MeetingRecords";
+
+export const OCC_PAGE_SIZE = 300;
+
+/** Próxima página de registros (ocorrências), para "Carregar mais" sem perder o estado da tela. */
+export async function loadMoreOccurrences(offset: number): Promise<OccurrenceRow[]> {
+  const { supabase, tenantId } = await actionContext();
+  const { data: occ } = await supabase
+    .from("meeting_occurrences")
+    .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+    .eq("tenant_id", tenantId)
+    .order("started_at", { ascending: false, nullsFirst: false })
+    .order("occurred_on", { ascending: false })
+    .range(offset, offset + OCC_PAGE_SIZE - 1);
+
+  const rows = occ ?? [];
+  const occIds = rows.map((o) => o.id);
+  const [{ data: att }, { data: acts }] = await Promise.all([
+    occIds.length ? supabase.from("meeting_attendance").select("occurrence_id, present").in("occurrence_id", occIds) : Promise.resolve({ data: [] as { occurrence_id: string; present: boolean }[] }),
+    occIds.length ? supabase.from("action_items").select("occurrence_id").in("occurrence_id", occIds) : Promise.resolve({ data: [] as { occurrence_id: string | null }[] }),
+  ]);
+  const attBy = new Map<string, { total: number; present: number }>();
+  for (const a of att ?? []) {
+    const cur = attBy.get(a.occurrence_id) ?? { total: 0, present: 0 };
+    cur.total += 1;
+    if (a.present) cur.present += 1;
+    attBy.set(a.occurrence_id, cur);
+  }
+  const actBy = new Map<string, number>();
+  for (const a of acts ?? []) { if (a.occurrence_id) actBy.set(a.occurrence_id, (actBy.get(a.occurrence_id) ?? 0) + 1); }
+
+  return rows.map((o) => {
+    const counts = attBy.get(o.id) ?? { total: 0, present: 0 };
+    return {
+      id: o.id,
+      seriesId: o.series_id,
+      seriesName: (o.meeting_series as { name: string } | null)?.name ?? "—",
+      occurredOn: o.occurred_on,
+      status: o.status,
+      startedAt: o.started_at,
+      endedAt: o.ended_at,
+      durationSeconds: o.duration_seconds,
+      draft: (o.draft as OccurrenceRow["draft"]) ?? null,
+      presentCount: counts.present,
+      totalCount: counts.total,
+      actionsCount: actBy.get(o.id) ?? 0,
+      registeredByName: (o.registrant as { full_name: string | null } | null)?.full_name ?? null,
+    };
+  });
+}
 
 const RP = "/reunioes";
 

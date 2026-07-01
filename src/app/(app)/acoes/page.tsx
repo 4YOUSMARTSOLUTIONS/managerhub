@@ -1,19 +1,24 @@
 import { requireContext } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { ActionsManager, type ActionRow } from "@/components/ActionsManager";
+import { Pager } from "@/components/ui/Pager";
 import type { Person } from "@/components/PeoplePicker";
 
-export default async function ActionsPage() {
+const PAGE_SIZE = 50;
+
+export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
   const { tenant, user, role } = await requireContext();
   const supabase = await createClient();
   const isAdmin = role === "owner" || role === "admin";
+  const page = Math.max(1, Number((await searchParams).p) || 1);
+  const from = (page - 1) * PAGE_SIZE;
 
   const [
-    { data: actions }, { data: pilares }, { data: blocos }, { data: itens },
+    { data: actions, count: actionsTotal }, { data: pilares }, { data: blocos }, { data: itens },
     { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
     { data: members }, { data: profilesData },
   ] = await Promise.all([
-    supabase.from("actions").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(300),
+    supabase.from("actions").select("*", { count: "exact" }).eq("tenant_id", tenant.id).order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
     supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_blocos").select("id, name, pilar_id").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),
@@ -122,19 +127,22 @@ export default async function ActionsPage() {
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
-    <ActionsManager
-      actions={rows}
-      currentUserId={user.id}
-      isAdmin={isAdmin}
-      people={people}
-      pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name }))}
-      blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id }))}
-      itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, blocoId: i.bloco_id }))}
-      kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))}
-      tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
-      series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
-      occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
-      aiEnabled={tenant.has_openai_key}
-    />
+    <>
+      <ActionsManager
+        actions={rows}
+        currentUserId={user.id}
+        isAdmin={isAdmin}
+        people={people}
+        pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name }))}
+        blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id }))}
+        itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, blocoId: i.bloco_id }))}
+        kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))}
+        tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
+        series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
+        occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
+        aiEnabled={tenant.has_openai_key}
+      />
+      <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal ?? 0} />
+    </>
   );
 }
