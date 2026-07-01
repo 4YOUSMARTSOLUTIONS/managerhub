@@ -16,6 +16,7 @@ import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { createRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
 import { createHoliday, deleteHoliday } from "@/lib/actions/holidays";
+import { ImportHolidaysDialog } from "@/components/ImportHolidaysDialog";
 import { formatDate } from "@/lib/format";
 import {
   createDepartment, deleteDepartment,
@@ -289,16 +290,19 @@ export default async function SettingsPage() {
       title={`Feriados · ${holidays?.length ?? 0}`}
       padded={false}
       action={
-        <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
-          <div>
-            <label className="label">Data</label>
-            <input name="day" type="date" className="input" required />
-          </div>
-          <div>
-            <label className="label">Nome</label>
-            <input name="name" className="input" required placeholder="Ex.: Aniversário da cidade" />
-          </div>
-        </FormModal>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <ImportHolidaysDialog />
+          <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
+            <div>
+              <label className="label">Data</label>
+              <input name="day" type="date" className="input" required />
+            </div>
+            <div>
+              <label className="label">Nome</label>
+              <input name="name" className="input" required placeholder="Ex.: Aniversário da cidade" />
+            </div>
+          </FormModal>
+        </div>
       }
     >
       <div className="muted" style={{ fontSize: "0.82rem", padding: "0.9rem 1.25rem 0", margin: "0 0 0.8rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>

@@ -32,3 +32,36 @@ export async function deleteHoliday(formData: FormData): Promise<void> {
   revalidatePath("/configuracoes");
   revalidatePath("/salas");
 }
+
+export type HolidayImportRow = { day: string; name: string };
+
+/** Importação em lote (planilha .xlsx). O parse do arquivo é feito no cliente;
+ *  aqui só validamos e gravamos (upsert por data). */
+export async function importHolidays(
+  rows: HolidayImportRow[],
+): Promise<{ imported: number; skipped: number; error?: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const seen = new Set<string>();
+    const valid: { tenant_id: string; day: string; name: string }[] = [];
+    for (const r of rows ?? []) {
+      const day = String(r?.day ?? "").trim();
+      const name = String(r?.name ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !name) continue;
+      if (seen.has(day)) continue;
+      seen.add(day);
+      valid.push({ tenant_id: tenantId, day, name });
+    }
+    const skipped = (rows?.length ?? 0) - valid.length;
+    if (valid.length === 0) return { imported: 0, skipped, error: "Nenhuma linha válida — verifique as colunas Data e Nome." };
+
+    const { error } = await supabase.from("holidays").upsert(valid, { onConflict: "tenant_id,day" });
+    if (error) return { imported: 0, skipped, error: error.message };
+
+    revalidatePath("/configuracoes");
+    revalidatePath("/salas");
+    return { imported: valid.length, skipped };
+  } catch (e) {
+    return { imported: 0, skipped: 0, error: (e as Error).message };
+  }
+}
