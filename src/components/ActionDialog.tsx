@@ -83,7 +83,7 @@ export function ActionDialog({
     if (editing) {
       const p = editing.payload;
       setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
-      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id ?? "");
+      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || "all");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
       setDemandas(p.demandas.map((d, i) => ({ description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
       setFiles(editing.headerFiles);
@@ -197,6 +197,7 @@ export function ActionDialog({
     setError(""); setSaved("");
     const cleanDemandas = demandas.filter((d) => d.description.trim());
     if (cleanDemandas.length === 0) { setError("Informe ao menos uma ação."); return; }
+    if (units && units.length > 0 && !unitId) { setError("Selecione a unidade (ou “Todas as unidades”)."); return; }
     if (!requesterId) { setError("Informe o solicitante."); return; }
     if (!dueDate) { setError("Informe o prazo da ação."); return; }
     if (isSdpo && (!pilarId || !blocoId || !itemId)) { setError("Para SDPO, informe Pilar, Bloco e Item."); return; }
@@ -209,7 +210,7 @@ export function ActionDialog({
           is_sdpo: isSdpo,
           pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
           meeting_series_id: seriesId,
-          kpi_id: kpiId, tool_id: toolId, unit_id: unitId,
+          kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
           requester_id: requesterId, due_date: dueDate, priority, cc,
           demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
         },
@@ -225,7 +226,7 @@ export function ActionDialog({
       is_sdpo: isSdpo,
       pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
-      kpi_id: kpiId, tool_id: toolId, unit_id: unitId,
+      kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
       requester_id: requesterId, due_date: dueDate, priority, cc,
       demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
     };
@@ -292,6 +293,18 @@ export function ActionDialog({
             </div>
           )}
 
+          {/* Unidade (primeiro campo, obrigatório) */}
+          {units && units.length > 0 && (
+            <div style={{ maxWidth: 320 }}>
+              <label className="label">Unidade <span style={{ color: "#dc2626" }}>*</span></label>
+              <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                <option value="" disabled>Selecione…</option>
+                <option value="all">Todas as unidades</option>
+                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          )}
+
           {/* SDPO */}
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", fontWeight: 600 }}>
             <input type="checkbox" checked={isSdpo} onChange={(e) => setIsSdpo(e.target.checked)} />
@@ -349,22 +362,11 @@ export function ActionDialog({
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: units && units.length ? "220px 1fr" : "220px", gap: "0.8rem" }}>
-            <div>
-              <label className="label">Prioridade</label>
-              <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
-                {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            {units && units.length > 0 && (
-              <div>
-                <label className="label">Unidade <span className="soft">(opcional)</span></label>
-                <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                  <option value="">Todas as unidades</option>
-                  {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-            )}
+          <div style={{ maxWidth: 220 }}>
+            <label className="label">Prioridade</label>
+            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+              {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
           </div>
 
           {/* Solicitante + Em cópia */}
