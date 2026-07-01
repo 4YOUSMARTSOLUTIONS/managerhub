@@ -314,11 +314,13 @@ export async function setTicketStatus(formData: FormData): Promise<void> {
   revalidatePath("/dashboard");
 }
 
-export async function deleteTicket(formData: FormData): Promise<void> {
+export async function deleteTicket(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
-  await supabase.from("tickets").delete().eq("id", String(formData.get("id")));
+  const { error } = await supabase.from("tickets").delete().eq("id", String(formData.get("id")));
+  if (error) return { error: error.message };
   revalidatePath("/chamados");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 // ---------- Configuração: Setores ----------

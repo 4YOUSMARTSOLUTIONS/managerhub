@@ -68,6 +68,7 @@ export default async function TicketsPage() {
     requesterName: (t.requester as { full_name: string | null } | null)?.full_name ?? null,
     createdAt: t.created_at,
     resolvedAt: t.resolved_at,
+    updatedAt: t.updated_at,
     npsScore: t.nps_score,
     npsComment: t.nps_comment,
     attachments: attByTicket.get(t.id) ?? [],
