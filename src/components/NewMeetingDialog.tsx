@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createMeeting, updateMeeting } from "@/lib/actions/meetings";
 import { initialActionState } from "@/lib/actions/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { MEETING_STATUS } from "@/lib/constants";
+import { holidayName } from "@/lib/holidays";
 import type { CalRoom, CalMeeting } from "./RoomCalendar";
 
 export type Prefill = {
@@ -25,6 +27,7 @@ export function NewMeetingDialog({
   rooms,
   routines,
   people,
+  customHolidays = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -33,12 +36,16 @@ export function NewMeetingDialog({
   rooms: CalRoom[];
   routines: Routine[];
   people: Person[];
+  customHolidays?: { day: string; name: string }[];
 }) {
   const [state, action] = useActionState(editing ? updateMeeting : createMeeting, initialActionState);
   const [seriesId, setSeriesId] = useState("");
   const [title, setTitle] = useState("");
   const [participants, setParticipants] = useState<string[]>([]);
   const [localErr, setLocalErr] = useState("");
+  const [holidayWarn, setHolidayWarn] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const confirmedRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -47,6 +54,8 @@ export function NewMeetingDialog({
       setTitle(editing?.title ?? "");
       setParticipants(editing?.participantIds ?? []);
       setLocalErr("");
+      setHolidayWarn(null);
+      confirmedRef.current = false;
     }
   }, [open, editing]);
 
@@ -68,18 +77,25 @@ export function NewMeetingDialog({
   const startDefault = editing ? editing.startInput : (initial?.startInput ?? "");
   const endDefault = editing ? editing.endInput : (initial?.endInput ?? "");
 
-  const onSubmit = (e: React.FormEvent) => {
-    if (participants.length === 0) { e.preventDefault(); setLocalErr("Selecione ao menos um participante."); }
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    if (participants.length === 0) { e.preventDefault(); setLocalErr("Selecione ao menos um participante."); return; }
+    if (!confirmedRef.current) {
+      const v = (e.currentTarget.elements.namedItem("starts_at") as HTMLInputElement | null)?.value;
+      const hn = v ? holidayName(new Date(v), customHolidays) : null;
+      if (hn) { e.preventDefault(); setHolidayWarn(hn); return; }
+    }
+    confirmedRef.current = false;
   };
 
   return (
+    <>
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 520, boxShadow: "var(--shadow)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{editing ? "Editar reunião" : "Nova reunião"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
-        <form action={action} onSubmit={onSubmit}>
+        <form action={action} onSubmit={onSubmit} ref={formRef}>
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <input type="hidden" name="series_id" value={seriesId} />
           <input type="hidden" name="participants" value={JSON.stringify(participants)} />
@@ -152,5 +168,15 @@ export function NewMeetingDialog({
         </form>
       </div>
     </div>
+    <ConfirmDialog
+      open={!!holidayWarn}
+      title="Atenção: feriado"
+      message={<>O dia escolhido é <strong>{holidayWarn}</strong> (feriado). Normalmente não há expediente. Deseja agendar mesmo assim?</>}
+      confirmLabel="Agendar mesmo assim"
+      cancelLabel="Voltar"
+      onConfirm={() => { confirmedRef.current = true; setHolidayWarn(null); formRef.current?.requestSubmit(); }}
+      onClose={() => setHolidayWarn(null)}
+    />
+    </>
   );
 }

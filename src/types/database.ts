@@ -469,6 +469,12 @@ export type Database = {
         Update: { series_id?: string; unit_id?: string }
         Relationships: []
       }
+      holidays: {
+        Row: { id: string; tenant_id: string; day: string; name: string; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; day: string; name: string; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; day?: string; name?: string; created_by?: string | null; created_at?: string }
+        Relationships: []
+      }
       sdpo_pilares: {
         Row: { id: string; tenant_id: string; name: string; created_at: string }
         Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
@@ -962,6 +968,9 @@ export type Database = {
       save_meeting_series: { Args: { p_data: Json }; Returns: string }
       sync_series_bookings: { Args: { p_series: string }; Returns: undefined }
       topup_all_series_bookings: { Args: Record<string, never>; Returns: undefined }
+      easter_sunday: { Args: { p_year: number }; Returns: string }
+      national_holiday_name: { Args: { p_date: string }; Returns: string | null }
+      is_holiday: { Args: { p_tenant: string; p_date: string }; Returns: boolean }
       register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       start_meeting_occurrence: { Args: { p_series_id: string }; Returns: string }
       finish_meeting_occurrence: { Args: { p_data: Json }; Returns: string }

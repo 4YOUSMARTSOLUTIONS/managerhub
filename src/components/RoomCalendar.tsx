@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { deleteMeeting } from "@/lib/actions/meetings";
+import { holidayName } from "@/lib/holidays";
 import type { Prefill } from "./NewMeetingDialog";
 
 export type CalRoom = { id: string; name: string; color: string };
@@ -69,6 +70,7 @@ export function RoomCalendar({
   onViewChange,
   cursor,
   onCursorChange,
+  customHolidays = [],
 }: {
   meetings: CalMeeting[];
   rooms: CalRoom[];
@@ -80,6 +82,7 @@ export function RoomCalendar({
   onViewChange: (v: View) => void;
   cursor: Date;
   onCursorChange: React.Dispatch<React.SetStateAction<Date>>;
+  customHolidays?: { day: string; name: string }[];
 }) {
   const setView = onViewChange;
   const setCursor = onCursorChange;
@@ -202,13 +205,13 @@ export function RoomCalendar({
 
       <div style={{ padding: "0 1rem 1rem" }}>
         {view === "month" && (
-          <MonthView cursor={cursor} today={today} events={events} onPick={setDetail} onDay={openDay} onSlot={(d) => newAt(d, DEFAULT_HOUR * 60)} />
+          <MonthView cursor={cursor} today={today} events={events} holidays={customHolidays} onPick={setDetail} onDay={openDay} onSlot={(d) => newAt(d, DEFAULT_HOUR * 60)} />
         )}
         {view === "week" && (
-          <TimeGrid days={weekDays} startHour={range.start} endHour={range.end} today={today} events={events} onPick={setDetail} onSlot={newAt} />
+          <TimeGrid days={weekDays} startHour={range.start} endHour={range.end} today={today} events={events} holidays={customHolidays} onPick={setDetail} onSlot={newAt} />
         )}
         {view === "day" && (
-          <TimeGrid days={[startOfDay(cursor)]} startHour={range.start} endHour={range.end} today={today} events={events} onPick={setDetail} onSlot={newAt} />
+          <TimeGrid days={[startOfDay(cursor)]} startHour={range.start} endHour={range.end} today={today} events={events} holidays={customHolidays} onPick={setDetail} onSlot={newAt} />
         )}
 
         {roomFilter === "all" && rooms.length > 0 && (
@@ -259,6 +262,7 @@ function MonthView({
   cursor,
   today,
   events,
+  holidays,
   onPick,
   onDay,
   onSlot,
@@ -266,6 +270,7 @@ function MonthView({
   cursor: Date;
   today: Date;
   events: Ev[];
+  holidays: { day: string; name: string }[];
   onPick: (e: Ev) => void;
   onDay: (d: Date) => void;
   onSlot: (d: Date) => void;
@@ -283,13 +288,14 @@ function MonthView({
           .sort((a, b) => a.start.getTime() - b.start.getTime());
         const visible = dayEvents.slice(0, 3);
         const extra = dayEvents.length - visible.length;
+        const hol = holidayName(day, holidays);
         return (
           <div
             key={day.toISOString()}
-            className={`cal-day${day.getMonth() !== month ? " cal-out" : ""}`}
+            className={`cal-day${day.getMonth() !== month ? " cal-out" : ""}${hol ? " cal-holiday" : ""}`}
             style={{ cursor: "pointer" }}
             onClick={() => onSlot(day)}
-            title="Clique para agendar"
+            title={hol ? `${hol} (feriado) · clique para agendar` : "Clique para agendar"}
           >
             <span
               className={`cal-daynum${sameDay(day, today) ? " cal-today" : ""}`}
@@ -298,6 +304,7 @@ function MonthView({
             >
               {day.getDate()}
             </span>
+            {hol && <span className="cal-holiday-tag" title={hol}>{hol}</span>}
             {visible.map((e) => {
               const color = e.room?.color ?? DEFAULT_COLOR;
               return (
@@ -330,6 +337,7 @@ function TimeGrid({
   endHour,
   today,
   events,
+  holidays,
   onPick,
   onSlot,
 }: {
@@ -338,6 +346,7 @@ function TimeGrid({
   endHour: number;
   today: Date;
   events: Ev[];
+  holidays: { day: string; name: string }[];
   onPick: (e: Ev) => void;
   onSlot: (day: Date, minutes: number) => void;
 }) {
@@ -357,12 +366,16 @@ function TimeGrid({
     <div className="cal-week-wrap">
       <div className="cal-week-head" style={{ gridTemplateColumns: cols }}>
         <div />
-        {days.map((d) => (
-          <div key={d.toISOString()}>
-            <div className="cal-wd">{WEEKDAYS[(d.getDay() + 6) % 7]}</div>
-            <div className={`cal-wn${sameDay(d, today) ? " cal-today" : ""}`}>{d.getDate()}</div>
-          </div>
-        ))}
+        {days.map((d) => {
+          const hol = holidayName(d, holidays);
+          return (
+            <div key={d.toISOString()}>
+              <div className="cal-wd">{WEEKDAYS[(d.getDay() + 6) % 7]}</div>
+              <div className={`cal-wn${sameDay(d, today) ? " cal-today" : ""}`}>{d.getDate()}</div>
+              {hol && <div className="cal-holiday-tag" title={hol}>{hol}</div>}
+            </div>
+          );
+        })}
       </div>
       <div className="cal-week-body" style={{ gridTemplateColumns: cols }}>
         <div className="cal-timecol">

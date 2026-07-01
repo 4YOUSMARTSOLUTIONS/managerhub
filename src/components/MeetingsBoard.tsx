@@ -15,6 +15,7 @@ export function MeetingsBoard({
   people,
   userId,
   role,
+  customHolidays = [],
 }: {
   meetings: CalMeeting[];
   rooms: CalRoom[];
@@ -22,6 +23,7 @@ export function MeetingsBoard({
   people: Person[];
   userId: string;
   role: Enums<"member_role">;
+  customHolidays?: { day: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [prefill, setPrefill] = useState<Prefill | undefined>(undefined);
@@ -65,6 +67,7 @@ export function MeetingsBoard({
           onViewChange={setView}
           cursor={cursor}
           onCursorChange={setCursor}
+          customHolidays={customHolidays}
         />
       </div>
 
@@ -78,7 +81,7 @@ export function MeetingsBoard({
         onEdit={openEdit}
       />
 
-      <NewMeetingDialog open={open} onClose={() => setOpen(false)} initial={prefill} editing={editing} rooms={rooms} routines={routines} people={people} />
+      <NewMeetingDialog open={open} onClose={() => setOpen(false)} initial={prefill} editing={editing} rooms={rooms} routines={routines} people={people} customHolidays={customHolidays} />
     </>
   );
 }

@@ -8,7 +8,7 @@ export default async function MeetingsPage() {
   const { tenant, user, role } = await requireContext();
   const supabase = await createClient();
 
-  const [{ data: meetings }, { data: rooms }, { data: series }, { data: seriesParts }, { data: members }, { data: meetingParts }] = await Promise.all([
+  const [{ data: meetings }, { data: rooms }, { data: series }, { data: seriesParts }, { data: members }, { data: meetingParts }, { data: holidays }] = await Promise.all([
     supabase
       .from("meetings")
       .select("*, rooms(id, name, color), creator:profiles!created_by(full_name)")
@@ -19,7 +19,9 @@ export default async function MeetingsPage() {
     supabase.from("meeting_series_participants").select("series_id, user_id"),
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
     supabase.from("meeting_participants").select("meeting_id, user_id"),
+    supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
   ]);
+  const customHolidays = (holidays ?? []).map((h) => ({ day: h.day, name: h.name }));
 
   const partsByMeeting = new Map<string, string[]>();
   for (const p of meetingParts ?? []) {
@@ -64,7 +66,7 @@ export default async function MeetingsPage() {
 
   return (
     <div>
-      <MeetingsBoard meetings={calMeetings} rooms={calRooms} routines={routines} people={people} userId={user.id} role={role} />
+      <MeetingsBoard meetings={calMeetings} rooms={calRooms} routines={routines} people={people} userId={user.id} role={role} customHolidays={customHolidays} />
     </div>
   );
 }

@@ -15,6 +15,8 @@ import { TicketManagersEditor } from "@/components/TicketManagersEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { createRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
+import { createHoliday, deleteHoliday } from "@/lib/actions/holidays";
+import { formatDate } from "@/lib/format";
 import {
   createDepartment, deleteDepartment,
   createSubdepartment, deleteSubdepartment, createPosition, deletePosition,
@@ -45,7 +47,7 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const [
     { data: memberships }, { data: units }, { data: departments },
-    { data: subdepartments }, { data: positions }, { data: levels }, { data: rooms },
+    { data: subdepartments }, { data: positions }, { data: levels }, { data: rooms }, { data: holidays },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -54,6 +56,7 @@ export default async function SettingsPage() {
     supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("holidays").select("*").eq("tenant_id", tenant.id).order("day"),
   ]);
 
   const [{ data: pilares }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools }] = await Promise.all([
@@ -277,6 +280,54 @@ export default async function SettingsPage() {
         <EmptyState title="Nenhuma sala cadastrada" description="Crie a primeira sala para começar a agendar reuniões." />
       )}
     </Section>
+
+    <div style={{ marginTop: "1.5rem" }}>
+    <Section
+      title={`Feriados · ${holidays?.length ?? 0}`}
+      padded={false}
+      action={
+        <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
+          <div>
+            <label className="label">Data</label>
+            <input name="day" type="date" className="input" required />
+          </div>
+          <div>
+            <label className="label">Nome</label>
+            <input name="name" className="input" required placeholder="Ex.: Aniversário da cidade" />
+          </div>
+        </FormModal>
+      }
+    >
+      <p className="muted" style={{ fontSize: "0.82rem", margin: "0 0 0.8rem" }}>
+        Os feriados <strong>nacionais</strong> (fixos e móveis) já são reconhecidos automaticamente e sinalizados no
+        calendário de salas. Cadastre aqui apenas feriados <strong>próprios</strong> (estaduais, municipais ou pontos
+        facultativos da empresa). Ao agendar num feriado, o sistema avisa — mas não impede.
+      </p>
+      {holidays && holidays.length > 0 ? (
+        <table className="table">
+          <thead>
+            <tr><th>Data</th><th>Feriado</th><th style={{ textAlign: "right" }}>Ações</th></tr>
+          </thead>
+          <tbody>
+            {holidays.map((h) => (
+              <tr key={h.id}>
+                <td className="muted">{formatDate(h.day)}</td>
+                <td style={{ fontWeight: 600 }}>{h.name}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <form action={deleteHoliday} style={{ display: "inline" }}>
+                    <input type="hidden" name="id" value={h.id} />
+                    <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <EmptyState title="Nenhum feriado próprio cadastrado" description="Os feriados nacionais já são automáticos. Adicione aqui apenas feriados locais da empresa." />
+      )}
+    </Section>
+    </div>
     </div>
   );
 
