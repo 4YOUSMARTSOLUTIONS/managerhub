@@ -280,8 +280,11 @@ export default async function SettingsPage() {
         <EmptyState title="Nenhuma sala cadastrada" description="Crie a primeira sala para começar a agendar reuniões." />
       )}
     </Section>
+    </div>
+  );
 
-    <div style={{ marginTop: "1.5rem" }}>
+  const feriadosTab = (
+    <div style={{ maxWidth: 760 }}>
     <Section
       title={`Feriados · ${holidays?.length ?? 0}`}
       padded={false}
@@ -327,7 +330,6 @@ export default async function SettingsPage() {
         <EmptyState title="Nenhum feriado próprio cadastrado" description="Os feriados nacionais já são automáticos. Adicione aqui apenas feriados locais da empresa." />
       )}
     </Section>
-    </div>
     </div>
   );
 
@@ -484,6 +486,7 @@ export default async function SettingsPage() {
     { id: "sdpo", label: "Programa de Excelência", content: sdpoTab },
     { id: "chamados", label: "Chamados", content: chamadosTab },
     { id: "salas", label: "Salas", content: salasTab },
+    { id: "feriados", label: "Feriados", content: feriadosTab },
     { id: "integracoes", label: "Integrações", content: integracoesTab },
   ];
 
