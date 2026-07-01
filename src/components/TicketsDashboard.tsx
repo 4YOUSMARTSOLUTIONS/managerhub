@@ -124,14 +124,12 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.2rem" }}>
-        <StatCard label="Chamados no período" value={String(data.total)} hint={`${data.resolved} resolvidos · ${data.openCohort} em aberto`} tone="blue" />
-        <StatCard label="Dentro do SLA" value={data.pctWithin == null ? "—" : `${data.pctWithin}%`} hint={`${data.within} no prazo`} tone="green" />
-        <StatCard label="Fora do SLA" value={data.pctOutside == null ? "—" : `${data.pctOutside}%`} hint={`${data.outside} fora do prazo`} tone="red" />
+        <StatCard label="Chamados no período" value={String(data.total)} hint={`${data.resolved} resolvidos · ${data.openCohort} em aberto · ${data.semResp} sem dono`} tone="blue" />
+        <StatCard label="SLA no prazo" value={data.pctWithin == null ? "—" : `${data.pctWithin}%`} hint={`${data.within} no prazo · ${data.outside} fora`} tone="green" />
         <StatCard label="NPS" value={data.nps.total === 0 ? "—" : String(data.nps.nps)} hint={`média ${data.nps.media}/10 · ${data.nps.total} aval.`} tone={npsTone} />
         <StatCard label="Tempo médio" value={data.avgDur == null ? "—" : formatDuration(data.avgDur)} hint="resolução (abertura→conclusão)" tone="purple" />
         <StatCard label="Taxa de resolução" value={data.taxaResolucao == null ? "—" : `${data.taxaResolucao}%`} hint={`${data.resolved}/${data.total} da coorte`} tone="amber" />
         <StatCard label="Backlog (abertos)" value={String(data.backlog)} hint="estado atual" tone="blue" />
-        <StatCard label="Sem responsável" value={String(data.semResp)} hint="abertos sem dono" tone={data.semResp > 0 ? "red" : "gray"} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
