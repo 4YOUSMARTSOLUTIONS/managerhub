@@ -11,7 +11,7 @@ import { NpsRating } from "@/components/NpsRating";
 import { deleteTicket } from "@/lib/actions/tickets";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
-import { formatDateTime, isOverdue } from "@/lib/format";
+import { formatDateTime, isOverdue, shortName } from "@/lib/format";
 
 const TERMINAL = ["resolved", "closed", "cancelled"];
 import type { Enums } from "@/types/database";
@@ -111,17 +111,17 @@ export function TicketsManager({
                     <td><Badge tone={PRIORITY_TONE[t.priority]}>{PRIORITY[t.priority]}</Badge></td>
                     <td>
                       {t.requesterName ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }} title={t.requesterName}>
                           <Avatar name={t.requesterName} />
-                          <span className="muted" style={{ fontSize: "0.85rem" }}>{t.requesterName}</span>
+                          <span className="muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{shortName(t.requesterName)}</span>
                         </span>
                       ) : <span className="soft">—</span>}
                     </td>
                     <td>
                       {t.assigneeName ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }} title={t.assigneeName}>
                           <Avatar name={t.assigneeName} />
-                          <span className="muted" style={{ fontSize: "0.85rem" }}>{t.assigneeName}</span>
+                          <span className="muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>{shortName(t.assigneeName)}</span>
                         </span>
                       ) : <span className="soft">—</span>}
                     </td>

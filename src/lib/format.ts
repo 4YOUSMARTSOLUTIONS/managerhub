@@ -1,5 +1,13 @@
 const TZ = "America/Sao_Paulo";
 
+/** Encurta um nome completo para "Primeiro Último" (ignora nomes do meio). */
+export function shortName(value: string | null | undefined): string {
+  if (!value) return "—";
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? "—";
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("pt-BR", {
