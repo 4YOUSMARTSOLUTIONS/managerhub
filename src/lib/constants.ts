@@ -1,5 +1,8 @@
 import type { Enums } from "@/types/database";
 
+// tamanho de página dos registros de reunião ("Carregar mais")
+export const OCC_PAGE_SIZE = 300;
+
 // ---------- Reuniões ----------
 export const MEETING_STATUS: Record<Enums<"meeting_status">, string> = {
   scheduled: "Agendada",

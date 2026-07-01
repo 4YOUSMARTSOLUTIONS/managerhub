@@ -6,8 +6,7 @@ import { parseTor, type ParsedTor, type TextItem } from "@/lib/tor-parser";
 import { dispatchSeriesInvite } from "./meetings";
 import type { ActionState } from "./types";
 import type { OccurrenceRow } from "@/components/MeetingRecords";
-
-export const OCC_PAGE_SIZE = 300;
+import { OCC_PAGE_SIZE } from "@/lib/constants";
 
 /** Próxima página de registros (ocorrências), para "Carregar mais" sem perder o estado da tela. */
 export async function loadMoreOccurrences(offset: number): Promise<OccurrenceRow[]> {
