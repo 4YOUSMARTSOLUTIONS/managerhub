@@ -78,6 +78,7 @@ export function TicketsManager({
                 <th>Setor</th>
                 <th>Categoria</th>
                 <th>Prioridade</th>
+                <th>Solicitante</th>
                 <th>Responsável</th>
                 <th>Prazo</th>
                 <th>Status</th>
@@ -104,6 +105,14 @@ export function TicketsManager({
                     <td>{t.sectorName ? <Badge tone="purple">{t.sectorName}</Badge> : <span className="soft">—</span>}</td>
                     <td className="muted" style={{ fontSize: "0.85rem" }}>{t.categoryName ?? "—"}</td>
                     <td><Badge tone={PRIORITY_TONE[t.priority]}>{PRIORITY[t.priority]}</Badge></td>
+                    <td>
+                      {t.requesterName ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
+                          <Avatar name={t.requesterName} />
+                          <span className="muted" style={{ fontSize: "0.85rem" }}>{t.requesterName}</span>
+                        </span>
+                      ) : <span className="soft">—</span>}
+                    </td>
                     <td>
                       {t.assigneeName ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>

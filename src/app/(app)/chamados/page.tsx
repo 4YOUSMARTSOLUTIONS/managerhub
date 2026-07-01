@@ -11,14 +11,24 @@ export default async function TicketsPage() {
   const isAdmin = role === "owner" || role === "admin" || role === "manager";
   const supabase = await createClient();
 
+  const { data: myMembership } = await supabase
+    .from("memberships")
+    .select("is_ticket_manager")
+    .eq("tenant_id", tenant.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const canTreat = role === "owner" || role === "admin" || !!myMembership?.is_ticket_manager;
+
   const unitIds = effectiveUnitFilter(unitScope);
-  const ticketsQuery = supabase
+  let ticketsQuery = supabase
     .from("tickets")
     .select(
       "*, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)",
     )
     .order("created_at", { ascending: false })
     .limit(200);
+  // usuário comum (não gestor de chamados) só enxerga os chamados que ele mesmo abriu
+  if (!canTreat) ticketsQuery = ticketsQuery.eq("requester_id", user.id);
 
   const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }] =
     await Promise.all([
@@ -29,14 +39,6 @@ export default async function TicketsPage() {
       supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
       supabase.from("ticket_slas").select("category_id, priority, sla_value, sla_unit").eq("tenant_id", tenant.id),
     ]);
-
-  const { data: myMembership } = await supabase
-    .from("memberships")
-    .select("is_ticket_manager")
-    .eq("tenant_id", tenant.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const canTreat = role === "owner" || role === "admin" || !!myMembership?.is_ticket_manager;
 
   const ticketIds = (tickets ?? []).map((t) => t.id);
   const { data: atts } = ticketIds.length
