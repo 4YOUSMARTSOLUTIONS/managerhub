@@ -1,11 +1,11 @@
-import { requireContext } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { MeetingRecords, type SeriesRow, type OccurrenceRow } from "@/components/MeetingRecords";
 import type { OccurrenceDraft } from "@/lib/actions/meeting-records";
 import type { Person } from "@/components/PeoplePicker";
 
 export default async function MeetingRecordsPage() {
-  const { tenant } = await requireContext();
+  const { tenant, unitScope } = await requireContext();
   const supabase = await createClient();
 
   const [
@@ -56,6 +56,10 @@ export default async function MeetingRecordsPage() {
     arr.push(ul.unit_id);
     unitsBySeries.set(ul.series_id, arr);
   }
+  // escopo de unidade global: série entra se tiver alguma unidade do escopo
+  const scopeUnitIds = effectiveUnitFilter(unitScope);
+  const seriesInScope = (seriesId: string) =>
+    !scopeUnitIds || (unitsBySeries.get(seriesId) ?? []).some((u) => scopeUnitIds.includes(u));
 
   // pessoas (membros ativos)
   const people: Person[] = (members ?? [])
@@ -71,7 +75,7 @@ export default async function MeetingRecordsPage() {
     partsBySeries.set(p.series_id, arr);
   }
 
-  const seriesRows: SeriesRow[] = (series ?? []).map((s) => ({
+  const seriesRows: SeriesRow[] = (series ?? []).filter((s) => seriesInScope(s.id)).map((s) => ({
     id: s.id,
     name: s.name,
     periodicity: s.periodicity,
@@ -121,7 +125,7 @@ export default async function MeetingRecordsPage() {
     actBy.set(a.occurrence_id, (actBy.get(a.occurrence_id) ?? 0) + 1);
   }
 
-  const occurrences: OccurrenceRow[] = (occ ?? []).map((o) => {
+  const occurrences: OccurrenceRow[] = (occ ?? []).filter((o) => seriesInScope(o.series_id)).map((o) => {
     const counts = attBy.get(o.id) ?? { total: 0, present: 0 };
     return {
       id: o.id,

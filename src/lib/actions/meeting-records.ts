@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { parseTor, type ParsedTor, type TextItem } from "@/lib/tor-parser";
 import { dispatchSeriesInvite } from "./meetings";
 import type { ActionState } from "./types";
@@ -11,14 +12,25 @@ import { OCC_PAGE_SIZE } from "@/lib/constants";
 /** Próxima página de registros (ocorrências), para "Carregar mais" sem perder o estado da tela. */
 export async function loadMoreOccurrences(offset: number): Promise<OccurrenceRow[]> {
   const { supabase, tenantId } = await actionContext();
-  const { data: occ } = await supabase
+
+  // respeita o escopo de unidade global (via séries linkadas às unidades)
+  const { unitScope } = await requireContext();
+  const scopeUnitIds = effectiveUnitFilter(unitScope);
+  let scopeSeriesIds: string[] | null = null;
+  if (scopeUnitIds) {
+    const { data: links } = await supabase.from("meeting_series_units").select("series_id").in("unit_id", scopeUnitIds);
+    scopeSeriesIds = [...new Set((links ?? []).map((l) => l.series_id))];
+  }
+
+  let q = supabase
     .from("meeting_occurrences")
     .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
     .order("started_at", { ascending: false, nullsFirst: false })
-    .order("occurred_on", { ascending: false })
-    .range(offset, offset + OCC_PAGE_SIZE - 1);
+    .order("occurred_on", { ascending: false });
+  if (scopeSeriesIds) q = q.in("series_id", scopeSeriesIds);
+  const { data: occ } = await q.range(offset, offset + OCC_PAGE_SIZE - 1);
 
   const rows = occ ?? [];
   const occIds = rows.map((o) => o.id);

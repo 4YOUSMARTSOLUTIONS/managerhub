@@ -6,7 +6,7 @@ import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite } from "@/compon
 import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 
 export default async function GoalsPage() {
-  const { tenant, user, role } = await requireContext();
+  const { tenant, user, role, unitScope } = await requireContext();
   const isAdmin = role === "owner" || role === "admin";
   const supabase = await createClient();
 
@@ -140,10 +140,11 @@ export default async function GoalsPage() {
         <AreaGoalsFarol
           goals={areaRows}
           departments={areaDepartments}
-          units={areaUnits}
+          units={unitScope.units}
           members={areaMembers}
           isAdmin={isAdmin}
           currentUserId={user.id}
+          scopedUnitId={unitScope.activeUnitId}
         />
       ),
     },

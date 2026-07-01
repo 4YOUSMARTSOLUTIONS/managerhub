@@ -1,12 +1,13 @@
-import { requireContext } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { MeetingsBoard } from "@/components/MeetingsBoard";
 import type { CalMeeting } from "@/components/RoomCalendar";
 import type { Person } from "@/components/PeoplePicker";
 
 export default async function MeetingsPage() {
-  const { tenant, user, role } = await requireContext();
+  const { tenant, user, role, unitScope } = await requireContext();
   const supabase = await createClient();
+  const scopeUnitIds = effectiveUnitFilter(unitScope);
 
   // Janela de datas para o calendário (evita carregar histórico inteiro e a
   // truncagem silenciosa do antigo limit(500)). Cobre folga p/ trás + horizonte
@@ -33,6 +34,13 @@ export default async function MeetingsPage() {
   ]);
   const customHolidays = (holidays ?? []).map((h) => ({ day: h.day, name: h.name }));
 
+  // escopo de unidade: séries linkadas às unidades do escopo (reuniões avulsas sempre aparecem)
+  let scopeSeriesIds: Set<string> | null = null;
+  if (scopeUnitIds) {
+    const { data: links } = await supabase.from("meeting_series_units").select("series_id").in("unit_id", scopeUnitIds);
+    scopeSeriesIds = new Set((links ?? []).map((l) => l.series_id));
+  }
+
   const partsByMeeting = new Map<string, string[]>();
   for (const p of meetingParts ?? []) {
     const arr = partsByMeeting.get(p.meeting_id) ?? [];
@@ -53,7 +61,9 @@ export default async function MeetingsPage() {
     .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-  const calMeetings: CalMeeting[] = (meetings ?? []).map((m) => {
+  const calMeetings: CalMeeting[] = (meetings ?? [])
+    .filter((m) => !scopeSeriesIds || m.series_id === null || scopeSeriesIds.has(m.series_id))
+    .map((m) => {
     const room = m.rooms as { id: string; name: string; color: string } | null;
     const creator = m.creator as { full_name: string | null } | null;
     return {

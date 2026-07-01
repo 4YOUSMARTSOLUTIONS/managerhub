@@ -68,7 +68,7 @@ function resolveValue(g: AreaGoalRow, period: string, unitSel: string): Resolved
 }
 
 export function AreaGoalsFarol({
-  goals, departments, units, members, isAdmin, currentUserId,
+  goals, departments, units, members, isAdmin, currentUserId, scopedUnitId = null,
 }: {
   goals: AreaGoalRow[];
   departments: Opt[];
@@ -76,10 +76,11 @@ export function AreaGoalsFarol({
   members: Member[];
   isAdmin: boolean;
   currentUserId: string;
+  scopedUnitId?: string | null; // unidade do filtro global (trava o seletor)
 }) {
   const [deptId, setDeptId] = useState("");
   const [month, setMonth] = useState(nowMonth());
-  const [unitSel, setUnitSel] = useState(GROUP);
+  const [unitSel, setUnitSel] = useState(scopedUnitId ?? GROUP);
   const [editGoal, setEditGoal] = useState<AreaGoalRow | null>(null);
   const [entryGoal, setEntryGoal] = useState<AreaGoalRow | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -121,13 +122,15 @@ export function AreaGoalsFarol({
           <label className="label">Competência</label>
           <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
         </div>
-        <div>
-          <label className="label">Unidade</label>
-          <select className="select" value={unitSel} onChange={(e) => setUnitSel(e.target.value)}>
-            <option value={GROUP}>Grupo (consolidado)</option>
-            {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </div>
+        {!scopedUnitId && (
+          <div>
+            <label className="label">Unidade</label>
+            <select className="select" value={unitSel} onChange={(e) => setUnitSel(e.target.value)}>
+              <option value={GROUP}>Grupo (consolidado)</option>
+              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+        )}
         {isAdmin && (
           <div style={{ marginLeft: "auto" }}>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Novo indicador</button>

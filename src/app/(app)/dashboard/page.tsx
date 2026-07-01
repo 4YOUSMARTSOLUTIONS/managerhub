@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireContext } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -29,8 +29,16 @@ type Stats = {
 };
 
 export default async function DashboardPage() {
-  const { tenant } = await requireContext();
+  const { tenant, unitScope } = await requireContext();
   const supabase = await createClient();
+
+  const unitIds = effectiveUnitFilter(unitScope);
+  const ticketsQuery = supabase
+    .from("tickets")
+    .select("id, code, title, status, category, due_date")
+    .in("status", ["open", "in_progress", "waiting"])
+    .order("created_at", { ascending: false })
+    .limit(5);
 
   const [{ data: statsRaw }, { data: meetings }, { data: actions }, { data: tickets }, { data: goals }] =
     await Promise.all([
@@ -48,12 +56,7 @@ export default async function DashboardPage() {
         .in("status", ["open", "in_progress", "blocked"])
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(5),
-      supabase
-        .from("tickets")
-        .select("id, code, title, status, category, due_date")
-        .in("status", ["open", "in_progress", "waiting"])
-        .order("created_at", { ascending: false })
-        .limit(5),
+      unitIds ? ticketsQuery.in("unit_id", unitIds) : ticketsQuery,
       supabase
         .from("goals")
         .select("id, title, unit, target_value, current_value")
