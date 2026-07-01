@@ -14,6 +14,8 @@ export type SeriesData = {
   name: string;
   periodicity: string;
   nextDate: string | null;
+  startTime: string | null;
+  autoBook: boolean;
   objetivo: string | null;
   owner: string | null;
   ownerUserId: string | null;
@@ -95,6 +97,8 @@ export function SeriesDialog({
   const [name, setName] = useState("");
   const [periodicity, setPeriodicity] = useState("mensal");
   const [nextDate, setNextDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [autoBook, setAutoBook] = useState(false);
   const [objetivo, setObjetivo] = useState("");
   const [owner, setOwner] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
@@ -120,6 +124,8 @@ export function SeriesDialog({
       setName(series?.name ?? "");
       setPeriodicity(series?.periodicity ?? "mensal");
       setNextDate(series?.nextDate ?? "");
+      setStartTime(series?.startTime ? series.startTime.slice(0, 5) : "");
+      setAutoBook(series?.autoBook ?? false);
       setObjetivo(series?.objetivo ?? "");
       setOwner(series?.owner ?? "");
       setOwnerUserId(series?.ownerUserId ?? "");
@@ -176,12 +182,13 @@ export function SeriesDialog({
     if (!durationMin || Number(durationMin) <= 0) { setError("Informe a duração da reunião."); return; }
     if (!ownerUserId) { setError("Selecione o usuário responsável (dono)."); return; }
     if (!isOnline && !roomId) { setError("Selecione uma sala ou marque a reunião como online."); return; }
+    if (autoBook && !startTime) { setError("Informe o horário de início para reservar a sala e enviar os convites."); return; }
     if (unitIds.length === 0) { setError("Selecione ao menos uma unidade."); return; }
     if (participants.length === 0) { setError("Selecione ao menos um usuário participante."); return; }
     start(async () => {
       const res = await saveSeries({
         id: series?.id,
-        name, periodicity, next_date: nextDate,
+        name, periodicity, next_date: nextDate, start_time: startTime, auto_book: autoBook,
         objetivo, owner, owner_user_id: ownerUserId,
         room_id: roomId, is_online: isOnline, participants_text: participantsText,
         duration_min: durationMin, duration_unit: durationUnit,
@@ -309,7 +316,7 @@ export function SeriesDialog({
             </p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.8rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.8rem" }}>
             <div>
               <label className="label">Duração</label>
               <input type="number" min={1} step="any" className="input" value={durationMin} onChange={(e) => setDurationMin(e.target.value)} placeholder="120" />
@@ -325,6 +332,25 @@ export function SeriesDialog({
               <label className="label">Próxima reunião</label>
               <input type="date" className="input" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
             </div>
+            <div>
+              <label className="label">Horário</label>
+              <input type="time" className="input" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Auto-reserva + convite recorrente */}
+          <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.85rem 1rem" }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.55rem", fontSize: "0.88rem", cursor: "pointer" }}>
+              <input type="checkbox" checked={autoBook} onChange={(e) => setAutoBook(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>
+                <strong>Reservar sala e enviar convites automaticamente (Outlook)</strong>
+                <span className="muted" style={{ display: "block", fontSize: "0.8rem", marginTop: 2 }}>
+                  Gera as ocorrências dos próximos 12 meses no calendário de salas (pré-reservando o horário) e envia um
+                  convite recorrente por e-mail aos participantes. Exige data, horário e sala (ou “online”). As reservas se
+                  renovam automaticamente.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>

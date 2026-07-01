@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import { parseTor, type ParsedTor, type TextItem } from "@/lib/tor-parser";
+import { dispatchSeriesInvite } from "./meetings";
 import type { ActionState } from "./types";
 
 const RP = "/reunioes";
@@ -46,6 +47,8 @@ export type SeriesInput = {
   name: string;
   periodicity: string;
   next_date: string;
+  start_time: string;
+  auto_book: boolean;
   objetivo: string;
   owner: string;
   owner_user_id: string;
@@ -75,8 +78,21 @@ export async function saveSeries(input: SeriesInput): Promise<ActionState> {
   try {
     const { supabase } = await actionContext();
     if (!input.name.trim()) return { error: "Informe o nome da reunião." };
-    const { error } = await supabase.rpc("save_meeting_series", { p_data: input });
+    const { data: seriesId, error } = await supabase.rpc("save_meeting_series", { p_data: input });
     if (error) return { error: error.message };
+
+    // Auto-reserva de sala + convite recorrente (Outlook). Best-effort: não
+    // bloqueia o salvamento da série se a reserva/convite falhar.
+    if (seriesId) {
+      try {
+        await supabase.rpc("sync_series_bookings", { p_series: seriesId as string });
+        await dispatchSeriesInvite(seriesId as string, input.auto_book ? "REQUEST" : "CANCEL");
+      } catch (e) {
+        console.error("[series] auto-reserva/convite falhou:", (e as Error).message);
+      }
+      revalidatePath("/salas");
+    }
+
     revalidatePath(RP);
     return { ok: true };
   } catch (e) {

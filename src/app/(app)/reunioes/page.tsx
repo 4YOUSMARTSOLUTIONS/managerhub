@@ -73,6 +73,8 @@ export default async function MeetingRecordsPage() {
     name: s.name,
     periodicity: s.periodicity,
     nextDate: s.next_date,
+    startTime: s.start_time,
+    autoBook: s.auto_book,
     objetivo: s.objetivo,
     owner: s.owner,
     ownerUserId: s.owner_user_id,

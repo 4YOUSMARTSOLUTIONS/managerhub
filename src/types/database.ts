@@ -452,9 +452,9 @@ export type Database = {
         Relationships: []
       }
       meeting_series: {
-        Row: { id: string; tenant_id: string; name: string; periodicity: Database["public"]["Enums"]["meeting_periodicity"]; next_date: string | null; objetivo: string | null; owner: string | null; owner_user_id: string | null; room_id: string | null; is_online: boolean; participants_text: string | null; duration_min: number | null; duration_unit: string; content: Json; general_rules: Json; how_to: Json; is_active: boolean; created_by: string | null; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; created_by?: string | null; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; created_by?: string | null; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; periodicity: Database["public"]["Enums"]["meeting_periodicity"]; next_date: string | null; start_time: string | null; auto_book: boolean; ics_sequence: number; objetivo: string | null; owner: string | null; owner_user_id: string | null; room_id: string | null; is_online: boolean; participants_text: string | null; duration_min: number | null; duration_unit: string; content: Json; general_rules: Json; how_to: Json; is_active: boolean; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; start_time?: string | null; auto_book?: boolean; ics_sequence?: number; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; start_time?: string | null; auto_book?: boolean; ics_sequence?: number; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; created_by?: string | null; created_at?: string }
         Relationships: []
       }
       meeting_series_participants: {
@@ -960,6 +960,8 @@ export type Database = {
       demanda_cancel: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
       demanda_reassign: { Args: { p_demanda: string; p_users: Json; p_note: string }; Returns: undefined }
       save_meeting_series: { Args: { p_data: Json }; Returns: string }
+      sync_series_bookings: { Args: { p_series: string }; Returns: undefined }
+      topup_all_series_bookings: { Args: Record<string, never>; Returns: undefined }
       register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       start_meeting_occurrence: { Args: { p_series_id: string }; Returns: string }
       finish_meeting_occurrence: { Args: { p_data: Json }; Returns: string }

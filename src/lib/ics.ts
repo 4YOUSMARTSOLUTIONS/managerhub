@@ -11,6 +11,7 @@ export type IcsInput = {
   location?: string | null;
   start: string; // ISO
   end: string; // ISO
+  rrule?: string | null; // ex.: "FREQ=MONTHLY;INTERVAL=1;UNTIL=20270630T120000Z"
   organizerName: string;
   organizerEmail: string;
   attendees: { name: string; email: string }[];
@@ -65,6 +66,7 @@ export function buildIcs(input: IcsInput): string {
     `DTSTAMP:${stamp}`,
     `DTSTART:${toUtc(input.start)}`,
     `DTEND:${toUtc(input.end)}`,
+    input.rrule ? `RRULE:${input.rrule}` : "",
     `SUMMARY:${esc(input.title)}`,
     input.description ? `DESCRIPTION:${esc(input.description)}` : "",
     input.location ? `LOCATION:${esc(input.location)}` : "",
