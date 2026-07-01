@@ -25,7 +25,7 @@ export default async function MeetingsPage() {
       .order("starts_at", { ascending: false })
       .limit(5000),
     supabase.from("rooms").select("id, name, color").eq("is_active", true).order("name"),
-    supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
+    supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).is("deleted_at", null).order("name"),
     supabase.from("meeting_series_participants").select("series_id, user_id"),
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
     supabase.from("meeting_participants").select("meeting_id, user_id"),

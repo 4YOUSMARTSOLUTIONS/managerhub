@@ -24,8 +24,8 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_kpis").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_tools").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenant.id).order("occurred_on", { ascending: false }).limit(500),
+    supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).is("deleted_at", null).order("name"),
+    supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenant.id).is("deleted_at", null).order("occurred_on", { ascending: false }).limit(500),
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
     // nomes: todos os membros do tenant (inclui inativos, p/ resolver autores antigos)
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id),

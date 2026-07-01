@@ -382,7 +382,7 @@ export async function updateMeeting(
       if (!data) room_id = null;
     }
     if (series_id) {
-      const { data } = await supabase.from("meeting_series").select("id").eq("id", series_id).eq("tenant_id", tenantId).maybeSingle();
+      const { data } = await supabase.from("meeting_series").select("id").eq("id", series_id).eq("tenant_id", tenantId).is("deleted_at", null).maybeSingle();
       if (!data) series_id = null;
     }
     {

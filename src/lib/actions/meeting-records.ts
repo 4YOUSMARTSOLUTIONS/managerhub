@@ -16,6 +16,7 @@ export async function loadMoreOccurrences(offset: number): Promise<OccurrenceRow
     .from("meeting_occurrences")
     .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
     .eq("tenant_id", tenantId)
+    .is("deleted_at", null)
     .order("started_at", { ascending: false, nullsFirst: false })
     .order("occurred_on", { ascending: false })
     .range(offset, offset + OCC_PAGE_SIZE - 1);
@@ -261,8 +262,20 @@ export async function toggleSeries(formData: FormData): Promise<void> {
 
 export async function deleteSeries(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
-  const { error } = await supabase.from("meeting_series").delete().eq("id", String(formData.get("id")));
+  const id = String(formData.get("id"));
+  // soft-delete: preserva histórico e não órfã as ações (FK intacta).
+  // Desativa + desliga auto-reserva para limpar reservas futuras e cancelar o convite.
+  const { error } = await supabase
+    .from("meeting_series")
+    .update({ deleted_at: new Date().toISOString(), is_active: false, auto_book: false })
+    .eq("id", id);
   if (error) return { error: error.message };
+  try {
+    await supabase.rpc("sync_series_bookings", { p_series: id }); // remove reservas futuras geradas
+    await dispatchSeriesInvite(id, "CANCEL"); // cancela a série no Outlook
+  } catch (e) {
+    console.error("[series] limpeza pós-exclusão falhou:", (e as Error).message);
+  }
   revalidatePath(RP);
   revalidatePath("/salas");
   return { ok: true };
@@ -270,7 +283,8 @@ export async function deleteSeries(formData: FormData): Promise<ActionState> {
 
 export async function deleteOccurrence(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
-  const { error } = await supabase.from("meeting_occurrences").delete().eq("id", String(formData.get("id")));
+  // soft-delete: mantém a ação vinculada (occurrence_id) e o histórico.
+  const { error } = await supabase.from("meeting_occurrences").update({ deleted_at: new Date().toISOString() }).eq("id", String(formData.get("id")));
   if (error) return { error: error.message };
   revalidatePath(RP);
   return { ok: true };

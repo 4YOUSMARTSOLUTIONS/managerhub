@@ -17,6 +17,7 @@ export default async function MeetingRecordsPage() {
       .from("meeting_series")
       .select("*")
       .eq("tenant_id", tenant.id)
+      .is("deleted_at", null)
       .order("is_active", { ascending: false })
       .order("next_date", { ascending: true, nullsFirst: false })
       .order("name"),
@@ -33,6 +34,7 @@ export default async function MeetingRecordsPage() {
       .from("meeting_occurrences")
       .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
       .eq("tenant_id", tenant.id)
+      .is("deleted_at", null)
       .order("started_at", { ascending: false, nullsFirst: false })
       .order("occurred_on", { ascending: false })
       .limit(300),
