@@ -15,12 +15,11 @@ function nowMonth() {
 }
 const OPENISH: Enums<"ticket_status">[] = ["open", "in_progress", "waiting"];
 
-export function TicketsDashboard({ tickets, sectors, units }: { tickets: TicketRow[]; sectors: Opt[]; units: Opt[] }) {
+export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; sectors: Opt[] }) {
   const [month, setMonth] = useState(nowMonth());
   const [sectorId, setSectorId] = useState("");
-  const [unitId, setUnitId] = useState("");
 
-  const matchFilters = (t: TicketRow) => (!sectorId || t.sectorId === sectorId) && (!unitId || t.unitId === unitId);
+  const matchFilters = (t: TicketRow) => !sectorId || t.sectorId === sectorId;
 
   const data = useMemo(() => {
     const cohort = tickets.filter((t) => t.createdAt.slice(0, 7) === month && matchFilters(t));
@@ -74,7 +73,7 @@ export function TicketsDashboard({ tickets, sectors, units }: { tickets: TicketR
       backlog, semResp,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickets, month, sectorId, unitId]);
+  }, [tickets, month, sectorId]);
 
   const npsTone = data.nps.total === 0 ? "gray" : data.nps.nps >= 50 ? "green" : data.nps.nps >= 0 ? "amber" : "red";
 
@@ -90,13 +89,6 @@ export function TicketsDashboard({ tickets, sectors, units }: { tickets: TicketR
           <select className="select" value={sectorId} onChange={(e) => setSectorId(e.target.value)}>
             <option value="">Todos</option>
             {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Unidade</label>
-          <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-            <option value="">Todas</option>
-            {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </div>
       </div>

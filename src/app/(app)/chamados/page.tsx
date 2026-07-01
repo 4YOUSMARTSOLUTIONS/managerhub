@@ -1,4 +1,4 @@
-import { requireContext, getMembers } from "@/lib/tenant";
+import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
@@ -7,19 +7,22 @@ import { TicketsDashboard } from "@/components/TicketsDashboard";
 import { TICKET_CATEGORY } from "@/lib/constants";
 
 export default async function TicketsPage() {
-  const { tenant, user, role } = await requireContext();
+  const { tenant, user, role, unitScope } = await requireContext();
   const isAdmin = role === "owner" || role === "admin" || role === "manager";
   const supabase = await createClient();
 
+  const unitIds = effectiveUnitFilter(unitScope);
+  const ticketsQuery = supabase
+    .from("tickets")
+    .select(
+      "*, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)",
+    )
+    .order("created_at", { ascending: false })
+    .limit(200);
+
   const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }] =
     await Promise.all([
-      supabase
-        .from("tickets")
-        .select(
-          "*, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(200),
+      unitIds ? ticketsQuery.in("unit_id", unitIds) : ticketsQuery,
       getMembers(tenant.id),
       supabase.from("ticket_sectors").select("id, name").eq("tenant_id", tenant.id).order("name"),
       supabase.from("ticket_categories").select("id, name, sector_id").eq("tenant_id", tenant.id).order("name"),
@@ -103,7 +106,7 @@ export default async function TicketsPage() {
     {
       id: "dashboard",
       label: "Dashboard",
-      content: <TicketsDashboard tickets={rows} sectors={sectorOpts} units={unitOpts} />,
+      content: <TicketsDashboard tickets={rows} sectors={sectorOpts} />,
     },
   ];
 

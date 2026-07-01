@@ -1,17 +1,21 @@
 import { signOut } from "@/lib/actions/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { UnitScopeSelect } from "@/components/UnitScopeSelect";
 import { ROLE } from "@/lib/constants";
 import type { Enums } from "@/types/database";
+import type { UnitScope } from "@/lib/tenant";
 
 export function Topbar({
   tenantName,
   userName,
   role,
+  unitScope,
 }: {
   tenantName: string;
   userName: string | null | undefined;
   role: Enums<"member_role">;
+  unitScope: UnitScope;
 }) {
   return (
     <header
@@ -30,6 +34,7 @@ export function Topbar({
     >
       <div style={{ fontWeight: 600 }}>{tenantName}</div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+        <UnitScopeSelect scope={unitScope} />
         <NotificationsBell />
         <div style={{ textAlign: "right", lineHeight: 1.2 }}>
           <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>

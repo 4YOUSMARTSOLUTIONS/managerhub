@@ -8,7 +8,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { tenant, user, role } = await requireContext();
+  const { tenant, user, role, unitScope } = await requireContext();
   const isSuperAdmin = await checkSuperAdmin();
 
   // nome do usuário a partir do perfil
@@ -18,7 +18,7 @@ export default async function AppLayout({
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar role={role} isSuperAdmin={isSuperAdmin} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Topbar tenantName={tenant.name} userName={userName} role={role} />
+        <Topbar tenantName={tenant.name} userName={userName} role={role} unitScope={unitScope} />
         <main style={{ padding: "1.75rem", flex: 1 }}>{children}</main>
       </div>
     </div>
