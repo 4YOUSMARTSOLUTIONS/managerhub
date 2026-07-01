@@ -111,7 +111,7 @@ export function NewTicketDialog({
           <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
             {sla
               ? `Prazo previsto: ${sla.value} ${TICKET_SLA_UNIT[sla.unit]} (definido pelo SLA da categoria).`
-              : "O prazo é definido automaticamente pelo SLA da categoria/prioridade configurado em Configurações."}
+              : "O prazo é definido automaticamente pelo SLA da categoria/prioridade."}
           </p>
 
           <div>
