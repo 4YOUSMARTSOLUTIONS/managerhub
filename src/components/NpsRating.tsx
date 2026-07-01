@@ -32,7 +32,7 @@ export function NpsRating({ ticketId, current, currentComment }: { ticketId: str
         <span style={{ fontSize: "0.76rem", color: "#16a34a", opacity: saved ? 1 : 0, transition: "opacity 0.2s" }}>✓ Avaliação enviada</span>
       </div>
       <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0.5rem" }}>
-        De 0 (péssimo) a 10 (excelente), o quanto você recomendaria o atendimento?
+        De 0 a 10, o quanto você recomendaria o atendimento?
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
         {Array.from({ length: 11 }, (_, n) => {
