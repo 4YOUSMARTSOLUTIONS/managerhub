@@ -22,6 +22,13 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
 
   const matchFilters = (t: TicketRow) => !sectorId || t.sectorId === sectorId;
 
+  // anos disponíveis (dos chamados + ano atual), p/ o seletor de "Ano inteiro"
+  const years = useMemo(() => {
+    const set = new Set(tickets.map((t) => t.createdAt.slice(0, 4)));
+    set.add(nowMonth().slice(0, 4));
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [tickets]);
+
   const data = useMemo(() => {
     const inPeriod = (t: TicketRow) =>
       period === "year" ? t.createdAt.slice(0, 4) === month.slice(0, 4) : t.createdAt.slice(0, 7) === month;
@@ -94,10 +101,19 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
             <option value="year">Ano inteiro</option>
           </select>
         </div>
-        <div>
-          <label className="label">{period === "year" ? "Competência (usa o ano)" : "Competência"}</label>
-          <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
-        </div>
+        {period === "month" ? (
+          <div>
+            <label className="label">Competência</label>
+            <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
+          </div>
+        ) : (
+          <div>
+            <label className="label">Ano</label>
+            <select className="select" value={month.slice(0, 4)} onChange={(e) => setMonth(`${e.target.value}-01`)}>
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="label">Setor</label>
           <select className="select" value={sectorId} onChange={(e) => setSectorId(e.target.value)}>
