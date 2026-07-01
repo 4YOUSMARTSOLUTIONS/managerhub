@@ -89,6 +89,11 @@ export default async function TicketsPage() {
 
   const tabs: Tab[] = [
     {
+      id: "dashboard",
+      label: "Dashboard",
+      content: <TicketsDashboard tickets={rows} sectors={sectorOpts} />,
+    },
+    {
       id: "chamados",
       label: "Chamados",
       content: (
@@ -104,11 +109,6 @@ export default async function TicketsPage() {
           canTreat={canTreat}
         />
       ),
-    },
-    {
-      id: "dashboard",
-      label: "Dashboard",
-      content: <TicketsDashboard tickets={rows} sectors={sectorOpts} />,
     },
   ];
 
