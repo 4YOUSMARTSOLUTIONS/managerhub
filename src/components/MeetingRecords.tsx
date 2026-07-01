@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PERIODICITY } from "@/lib/constants";
-import { formatDate, formatTime, formatDuration } from "@/lib/format";
+import { formatDate, formatTime, formatDateTime, formatDuration } from "@/lib/format";
 import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
@@ -328,6 +328,14 @@ export function MeetingRecords({
           <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.8rem" }} className="soft">
             Até <input type="date" className="input" value={recTo} onChange={(e) => setRecTo(e.target.value)} style={{ width: "auto", padding: "0.35rem 0.5rem", fontSize: "0.82rem" }} />
           </label>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setRecQuery(""); setRecSeries("all"); setRecUnit("all"); setRecResp("all"); setRecPeriod("all"); setRecPart("all"); setRecFrom(""); setRecTo(""); }}
+            title="Limpar todos os filtros"
+          >
+            Limpar filtros
+          </button>
         </div>
       )}
       {history.length === 0 ? (
@@ -352,7 +360,7 @@ export function MeetingRecords({
               <tr key={o.id} style={{ opacity: o.status === "cancelled" ? 0.6 : 1 }}>
                 <td style={{ fontWeight: 600 }}>{o.seriesName}</td>
                 <td className="muted">{seriesById.get(o.seriesId)?.ownerUserName ?? seriesById.get(o.seriesId)?.owner ?? "—"}</td>
-                <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDate(o.occurredOn)}</td>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{o.startedAt ? formatDateTime(o.startedAt) : formatDate(o.occurredOn)}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{o.status === "cancelled" ? "—" : formatDuration(o.durationSeconds)}</td>
                 <td className="muted">{o.presentCount}/{o.totalCount}</td>
                 <td className="muted">{o.actionsCount > 0 ? <Badge tone="blue">{o.actionsCount}</Badge> : "—"}</td>

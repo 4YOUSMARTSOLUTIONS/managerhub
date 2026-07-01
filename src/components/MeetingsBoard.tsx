@@ -48,7 +48,7 @@ export function MeetingsBoard({
         subtitle="Agende e acompanhe a ocupação das salas."
         action={
           <button className="btn btn-primary" onClick={() => openNew()}>
-            + Nova reunião
+            Agendar reunião
           </button>
         }
       />

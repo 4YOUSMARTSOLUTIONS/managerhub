@@ -169,7 +169,15 @@ export function SeriesDialog({
 
   const submit = () => {
     setError("");
+    if (!name.trim()) { setError("Informe o nome da reunião."); return; }
+    if (!objetivo.trim()) { setError("Informe o objetivo da reunião."); return; }
+    if (!periodicity) { setError("Selecione a frequência."); return; }
+    if (!nextDate) { setError("Informe a data da próxima reunião."); return; }
+    if (!durationMin || Number(durationMin) <= 0) { setError("Informe a duração da reunião."); return; }
+    if (!ownerUserId) { setError("Selecione o usuário responsável (dono)."); return; }
     if (!isOnline && !roomId) { setError("Selecione uma sala ou marque a reunião como online."); return; }
+    if (unitIds.length === 0) { setError("Selecione ao menos uma unidade."); return; }
+    if (participants.length === 0) { setError("Selecione ao menos um usuário participante."); return; }
     start(async () => {
       const res = await saveSeries({
         id: series?.id,
@@ -293,7 +301,7 @@ export function SeriesDialog({
               </select>
               <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
                 <input type="checkbox" checked={isOnline} onChange={(e) => setIsOnline(e.target.checked)} />
-                Também online
+                {roomId ? "Também online" : "Online"}
               </label>
             </div>
             <p className="soft" style={{ fontSize: "0.78rem", margin: "0.3rem 0 0" }}>
