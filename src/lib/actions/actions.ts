@@ -174,7 +174,7 @@ export async function getDemandaTimeline(demandaId: string): Promise<{ events: T
   };
 }
 
-export async function deleteAction(formData: FormData): Promise<void> {
+export async function deleteAction(formData: FormData): Promise<ActionState> {
   const { supabase, tenantId } = await actionContext();
   const id = String(formData.get("id"));
   // remove anexos do storage (best-effort, mas registra falha p/ não deixar órfão silencioso)
@@ -183,9 +183,11 @@ export async function deleteAction(formData: FormData): Promise<void> {
     const { error: rmErr } = await supabase.storage.from(BUCKET).remove(atts.map((a) => a.path));
     if (rmErr) console.error("[actions] falha ao remover anexos do storage:", rmErr.message);
   }
-  await supabase.from("actions").delete().eq("id", id).eq("tenant_id", tenantId);
+  const { error } = await supabase.from("actions").delete().eq("id", id).eq("tenant_id", tenantId);
+  if (error) return { error: error.message };
   revalidatePath("/acoes");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 // URL assinada para download de anexo

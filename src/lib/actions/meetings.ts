@@ -446,40 +446,45 @@ export async function updateMeeting(
   }
 }
 
-export async function setMeetingStatus(formData: FormData): Promise<void> {
+export async function setMeetingStatus(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));
   const status = String(formData.get("status")) as Enums<"meeting_status">;
   // .select() confirma que a linha é do tenant (RLS) antes de acionar o e-mail via service-role
-  const { data: updated } = await supabase.from("meetings").update({ status }).eq("id", id).select("id");
-  if (!updated || updated.length === 0) return; // não é do tenant / RLS bloqueou
+  const { data: updated, error } = await supabase.from("meetings").update({ status }).eq("id", id).select("id");
+  if (error) return { error: error.message };
+  if (!updated || updated.length === 0) return { error: "Reunião não encontrada ou sem permissão." };
   if (status === "cancelled") await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
   revalidatePath("/salas");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
-export async function deleteMeeting(formData: FormData): Promise<void> {
+export async function deleteMeeting(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
   const id = String(formData.get("id"));
 
   // leitura via RLS confirma a posse antes de qualquer ação com service-role
   const { data: m } = await supabase.from("meetings").select("series_slot").eq("id", id).maybeSingle();
-  if (!m) return; // não é do tenant / não existe — não aciona o e-mail
+  if (!m) return { error: "Reunião não encontrada ou sem permissão." };
 
   // Ocorrência gerada por uma série: não apaga (a renovação recriaria o dia).
   // Marca como cancelada + destacada — vira uma "lápide" que a série respeita.
   if (m.series_slot) {
-    await supabase.from("meetings").update({ status: "cancelled", series_detached: true }).eq("id", id);
+    const { error } = await supabase.from("meetings").update({ status: "cancelled", series_detached: true }).eq("id", id);
+    if (error) return { error: error.message };
     // remove essa ocorrência do convite recorrente no Outlook (RECURRENCE-ID + CANCEL)
     await dispatchOccurrenceOverride(id, "CANCEL");
     revalidatePath("/salas");
     revalidatePath("/dashboard");
-    return;
+    return { ok: true };
   }
 
   // envia o cancelamento ANTES de excluir (precisa dos participantes)
   await dispatchInvite(id, "CANCEL", { bump: true, label: "Reunião cancelada" });
-  await supabase.from("meetings").delete().eq("id", id);
+  const { error } = await supabase.from("meetings").delete().eq("id", id);
+  if (error) return { error: error.message };
   revalidatePath("/salas");
   revalidatePath("/dashboard");
+  return { ok: true };
 }

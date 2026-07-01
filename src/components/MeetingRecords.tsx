@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PERIODICITY } from "@/lib/constants";
 import { formatDate, formatTime, formatDateTime, formatDuration } from "@/lib/format";
 import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, type OccurrenceDraft } from "@/lib/actions/meeting-records";
+import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
 import { SearchSelect } from "./SearchSelect";
@@ -277,10 +278,17 @@ export function MeetingRecords({
                       <input type="hidden" name="is_active" value={String(s.isActive)} />
                       <button className="icon-btn" type="submit" title={s.isActive ? "Inativar" : "Ativar"}><Ico d={ICON.power} /></button>
                     </form>
-                    <form action={deleteSeries} style={{ display: "inline-flex" }}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <button className="icon-btn icon-btn-danger" type="submit" title="Excluir"><Ico d={ICON.trash} /></button>
-                    </form>
+                    <ConfirmActionButton
+                      action={deleteSeries}
+                      fields={{ id: s.id }}
+                      className="icon-btn icon-btn-danger"
+                      buttonTitle="Excluir"
+                      title="Excluir reunião (TOR)"
+                      message={<>Excluir <strong>{s.name}</strong>? Todo o histórico de registros dessa série será removido.</>}
+                      confirmLabel="Excluir"
+                    >
+                      <Ico d={ICON.trash} />
+                    </ConfirmActionButton>
                   </div>
                 </td>
               </tr>
@@ -371,10 +379,17 @@ export function MeetingRecords({
                 <td><Badge tone={OCC_STATUS[o.status].tone}>{OCC_STATUS[o.status].label}</Badge></td>
                 <td className="muted">{o.registeredByName ?? "—"}</td>
                 <td style={{ textAlign: "right" }}>
-                  <form action={deleteOccurrence} style={{ display: "inline-flex" }}>
-                    <input type="hidden" name="id" value={o.id} />
-                    <button className="icon-btn icon-btn-danger" type="submit" title="Excluir registro"><Ico d={ICON.trash} /></button>
-                  </form>
+                  <ConfirmActionButton
+                    action={deleteOccurrence}
+                    fields={{ id: o.id }}
+                    className="icon-btn icon-btn-danger"
+                    buttonTitle="Excluir registro"
+                    title="Excluir registro"
+                    message="Excluir este registro de reunião?"
+                    confirmLabel="Excluir"
+                  >
+                    <Ico d={ICON.trash} />
+                  </ConfirmActionButton>
                 </td>
               </tr>
             ))}

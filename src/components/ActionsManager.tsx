@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus } from "@/lib/constants";
 import { formatDate, isOverdue } from "@/lib/format";
 import { deleteAction } from "@/lib/actions/actions";
+import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { ActionDialog, type Opt, type BlocoOpt, type ItemOpt, type OccOpt } from "./ActionDialog";
 import { DemandaPanel, type DemandaInfo } from "./DemandaPanel";
 import type { Person } from "./PeoplePicker";
@@ -147,12 +148,17 @@ export function ActionsManager({
                           <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a, di)}>Tratar</button>
                             {first && (
-                              <form action={deleteAction} style={{ display: "inline-flex" }}>
-                                <input type="hidden" name="id" value={a.id} />
-                                <button className="icon-btn icon-btn-danger" type="submit" title="Excluir ação">
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                                </button>
-                              </form>
+                              <ConfirmActionButton
+                                action={deleteAction}
+                                fields={{ id: a.id }}
+                                className="icon-btn icon-btn-danger"
+                                buttonTitle="Excluir ação"
+                                title="Excluir ação"
+                                message="Excluir esta ação e todas as suas demandas?"
+                                confirmLabel="Excluir"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                              </ConfirmActionButton>
                             )}
                           </div>
                         </td>

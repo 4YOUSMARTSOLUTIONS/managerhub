@@ -100,6 +100,7 @@ export function RoomCalendar({
   const [rangeKey, setRangeKey] = useState<string>("comercial");
   const [detail, setDetail] = useState<Ev | null>(null);
   const [confirmDel, setConfirmDel] = useState<Ev | null>(null);
+  const [delErr, setDelErr] = useState("");
   const [delPending, startDel] = useTransition();
   const router = useRouter();
   const today = new Date();
@@ -246,7 +247,9 @@ export function RoomCalendar({
         <ConfirmDialog
           open
           title="Excluir reunião"
-          message={<>Excluir <strong>{confirmDel.title}</strong>? Os participantes com e-mail recebem um cancelamento.</>}
+          message={delErr
+            ? <span style={{ color: "#dc2626" }}>{delErr}</span>
+            : <>Excluir <strong>{confirmDel.title}</strong>? Os participantes com e-mail recebem um cancelamento.</>}
           confirmLabel="Excluir"
           cancelLabel="Voltar"
           tone="danger"
@@ -256,12 +259,14 @@ export function RoomCalendar({
             startDel(async () => {
               const fd = new FormData();
               fd.append("id", ev.id);
-              await deleteMeeting(fd);
+              const res = await deleteMeeting(fd);
+              if (res?.error) { setDelErr(res.error); return; }
               setConfirmDel(null);
+              setDelErr("");
               router.refresh();
             });
           }}
-          onClose={() => setConfirmDel(null)}
+          onClose={() => { setConfirmDel(null); setDelErr(""); }}
         />
       )}
     </div>

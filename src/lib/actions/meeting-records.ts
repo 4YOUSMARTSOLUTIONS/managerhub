@@ -209,14 +209,19 @@ export async function toggleSeries(formData: FormData): Promise<void> {
   revalidatePath(RP);
 }
 
-export async function deleteSeries(formData: FormData): Promise<void> {
+export async function deleteSeries(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
-  await supabase.from("meeting_series").delete().eq("id", String(formData.get("id")));
+  const { error } = await supabase.from("meeting_series").delete().eq("id", String(formData.get("id")));
+  if (error) return { error: error.message };
   revalidatePath(RP);
+  revalidatePath("/salas");
+  return { ok: true };
 }
 
-export async function deleteOccurrence(formData: FormData): Promise<void> {
+export async function deleteOccurrence(formData: FormData): Promise<ActionState> {
   const { supabase } = await actionContext();
-  await supabase.from("meeting_occurrences").delete().eq("id", String(formData.get("id")));
+  const { error } = await supabase.from("meeting_occurrences").delete().eq("id", String(formData.get("id")));
+  if (error) return { error: error.message };
   revalidatePath(RP);
+  return { ok: true };
 }

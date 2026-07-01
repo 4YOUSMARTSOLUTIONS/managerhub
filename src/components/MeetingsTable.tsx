@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { deleteMeeting } from "@/lib/actions/meetings";
+import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { MEETING_STATUS, MEETING_STATUS_TONE } from "@/lib/constants";
 import { formatDateTime, formatTime } from "@/lib/format";
 import type { CalMeeting, View } from "./RoomCalendar";
@@ -111,10 +112,16 @@ export function MeetingsTable({
                     {canManage ? (
                       <div style={{ display: "inline-flex", gap: "0.4rem", justifyContent: "flex-end" }}>
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onEdit(m)}>Editar</button>
-                        <form action={deleteMeeting} style={{ display: "inline" }}>
-                          <input type="hidden" name="id" value={m.id} />
-                          <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
-                        </form>
+                        <ConfirmActionButton
+                          action={deleteMeeting}
+                          fields={{ id: m.id }}
+                          className="btn btn-danger btn-sm"
+                          title="Excluir reunião"
+                          message={<>Excluir <strong>{m.title}</strong>?</>}
+                          confirmLabel="Excluir"
+                        >
+                          Excluir
+                        </ConfirmActionButton>
                       </div>
                     ) : (
                       <span className="soft" style={{ fontSize: "0.78rem" }} title="Apenas o criador, admin ou owner">—</span>
