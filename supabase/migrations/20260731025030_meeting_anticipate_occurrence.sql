@@ -1,3 +1,4 @@
+
 -- Antecipar reunião: iniciar antes da data agendada informando a próxima reunião.
 
 alter table public.meeting_occurrences add column if not exists advance_on_finish boolean not null default true;
@@ -115,3 +116,4 @@ begin
 
   return v_occ.id;
 end; $function$;
+

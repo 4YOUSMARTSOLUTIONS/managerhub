@@ -42,3 +42,6 @@ next-env.d.ts
 
 # dev server log
 dev.log
+
+# Supabase CLI (artefatos locais do link)
+supabase/.temp/

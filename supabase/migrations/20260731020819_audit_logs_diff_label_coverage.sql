@@ -1,3 +1,4 @@
+
 -- Logs profissionais: rótulo legível do registro + diff campo a campo (de/para) + cobertura ampla.
 
 alter table public.audit_logs add column if not exists entity_label text;
@@ -52,7 +53,8 @@ begin
   values (v_tenant, auth.uid(), tg_op, tg_table_name, v_entity_id, v_label, v_changes);
 
   if (tg_op = 'DELETE') then return old; else return new; end if;
-end; $function$;
+end;
+$function$;
 
 -- amplia a cobertura para os cadastros e entidades operacionais (sem duplicar os já existentes)
 do $$
@@ -77,3 +79,4 @@ begin
     end if;
   end loop;
 end $$;
+
