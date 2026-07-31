@@ -55,17 +55,22 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
 
   function downloadTemplate() {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Ação", "Responsáveis", "Solicitante", "Prazo", "Prioridade", "Unidade", "KPI", "Ferramenta", "Pilar", "Seção", "Bloco", "Item", "Comentários"],
-      ["Renegociar contrato com fornecedor X", "João Silva; Maria Souza", "Luiz Nobre", "30/09/2026", "Alta", "MATRIZ", "", "PDCA", "", "", "", "", "31/08/2026 | João Silva | Fornecedor pediu reunião\n05/09/2026 | Maria Souza | Aguardando proposta revisada"],
-      ["Revisar layout do depósito", "Maria Souza", "Luiz Nobre", "2026-10-15", "Média", "Todas as unidades", "", "", "", "", "", "", ""],
+      ["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "Pilar", "Seção", "Bloco", "Item", "Comentários"],
+      ["Renegociar contrato com fornecedor X", "João Silva; Maria Souza", "Luiz Nobre", "Luiz Nobre", "10/08/2026", "RLP - Reunião de Limpa Pauta", "30/09/2026", "20/09/2026", "Concluída", "Alta", "MATRIZ", "", "PDCA", "", "", "", "", "31/08/2026 | João Silva | Fornecedor pediu reunião\n05/09/2026 | Maria Souza | Aguardando proposta"],
+      ["Revisar layout do depósito", "Maria Souza", "Luiz Nobre", "Maria Souza", "05/09/2026", "", "2026-10-15", "", "Em andamento", "Média", "Todas as unidades", "", "", "", "", "", "", ""],
     ]);
-    ws["!cols"] = [{ wch: 40 }, { wch: 26 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 40 }, { wch: 26 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 28 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Como preencher"],
       ["Ação", "Descrição da ação/demanda (obrigatório)"],
       ["Responsáveis", "Nome(s) completo(s) como cadastrado(s), separados por ; — opcional"],
       ["Solicitante", "Nome completo do solicitante. Se vazio, usa você (quem importa)"],
-      ["Prazo", "Data no formato DD/MM/AAAA ou AAAA-MM-DD — opcional"],
+      ["Criada por", "Nome completo de quem criou a ação no sistema antigo. Se vazio, usa você"],
+      ["Data de criação", "Data em que a ação foi criada (DD/MM/AAAA ou AAAA-MM-DD). Se vazio, usa a data de hoje"],
+      ["Reunião", "Nome da reunião (série) em que a ação foi criada, se aplicável — opcional"],
+      ["Prazo", "Data limite da ação (DD/MM/AAAA ou AAAA-MM-DD) — opcional"],
+      ["Data de conclusão", "Data em que foi concluída (se status Concluída/Cancelada) — opcional"],
+      ["Status", "Aberta, Em andamento, Bloqueada, Concluída ou Cancelada (padrão: Aberta; ou Concluída se houver data de conclusão)"],
       ["Prioridade", "Baixa, Média, Alta ou Urgente (padrão: Média)"],
       ["Unidade", "Nome da unidade cadastrada. Use \"Todas as unidades\" (ou deixe vazio) para valer para todas"],
       ["KPI", "Nome do KPI cadastrado — opcional"],
@@ -74,7 +79,7 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
       ["Bloco", "Bloco dentro da seção (opcional, usado no DPO)"],
       ["Comentários", "Histórico de comentários (opcional). Um por linha na célula (Alt+Enter). Cada linha: \"data | autor | texto\". Data e autor são opcionais; sem autor cadastrado, entra como você."],
     ]);
-    wsI["!cols"] = [{ wch: 22 }, { wch: 78 }];
+    wsI["!cols"] = [{ wch: 22 }, { wch: 92 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ações");
     XLSX.utils.book_append_sheet(wb, wsI, "Instruções");
@@ -96,7 +101,12 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
         descricao: find("acao", "ação", "acoes", "descricao", "tarefa"),
         responsaveis: find("responsav", "responsáv"),
         solicitante: find("solicitante"),
-        prazo: find("prazo", "data"),
+        criadaPor: find("criada por", "criado por", "criador", "autor"),
+        dataCriacao: find("data de criacao", "data criacao", "criacao", "criação", "abertura"),
+        reuniao: find("reuniao", "reunião", "serie", "série"),
+        prazo: find("prazo"),
+        dataConclusao: find("data de conclusao", "conclusao", "conclusão", "conclu", "finalizacao", "fechamento"),
+        status: find("status", "situacao", "situação"),
         prioridade: find("prioridade"),
         unidade: find("unidade"),
         kpi: find("kpi", "indicador"),
@@ -119,7 +129,12 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
           descricao,
           responsaveis: str(r, idx.responsaveis),
           solicitante: str(r, idx.solicitante),
+          criadaPor: str(r, idx.criadaPor),
+          dataCriacao: toISODate(idx.dataCriacao >= 0 ? r[idx.dataCriacao] : ""),
+          reuniao: str(r, idx.reuniao),
           prazo: toISODate(idx.prazo >= 0 ? r[idx.prazo] : ""),
+          dataConclusao: toISODate(idx.dataConclusao >= 0 ? r[idx.dataConclusao] : ""),
+          status: str(r, idx.status),
           prioridade: str(r, idx.prioridade),
           unidade: str(r, idx.unidade),
           kpi: str(r, idx.kpi),
@@ -158,7 +173,7 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
 
             <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
               <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
-                Cada linha vira uma ação com uma demanda. Nomes de pessoas, unidade, KPI, ferramenta e SDPO são resolvidos pelos cadastros; o que não for encontrado é listado para ajuste depois.
+                Migração do histórico: cada linha vira uma ação preservando a <strong>data de criação</strong>, quem <strong>criou</strong>, a <strong>reunião</strong>, o <strong>status</strong> e a <strong>data de conclusão</strong> informados. Nomes de pessoas, reunião, unidade, KPI, ferramenta e SDPO são resolvidos pelos cadastros; o que não for encontrado é listado para ajuste depois.
               </p>
               <div><button type="button" className="btn btn-ghost btn-sm" onClick={downloadTemplate}>↓ Baixar modelo</button></div>
               <div>

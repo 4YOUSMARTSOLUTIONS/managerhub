@@ -89,11 +89,25 @@ const PRIORITY_BY_INPUT: Record<string, Enums<"priority_level">> = {
   urgente: "urgent", urgent: "urgent",
 };
 
+// rótulos de status aceitos na planilha → enum action_status
+const STATUS_BY_INPUT: Record<string, Enums<"action_status">> = {
+  aberta: "open", aberto: "open", open: "open", pendente: "open", "a fazer": "open",
+  "em andamento": "in_progress", andamento: "in_progress", "em progresso": "in_progress", in_progress: "in_progress", fazendo: "in_progress",
+  bloqueada: "blocked", bloqueado: "blocked", blocked: "blocked", impedida: "blocked", impedido: "blocked",
+  concluida: "done", concluido: "done", concluída: "done", concluído: "done", done: "done", feita: "done", feito: "done", finalizada: "done", finalizado: "done",
+  cancelada: "cancelled", cancelado: "cancelled", cancelled: "cancelled", canceled: "cancelled",
+};
+
 export type ActionImportRow = {
   descricao: string;
   responsaveis: string;
   solicitante: string;
-  prazo: string; // yyyy-mm-dd (já normalizado no cliente) ou ""
+  dataCriacao: string; // yyyy-mm-dd (normalizado no cliente) ou ""
+  criadaPor: string;
+  reuniao: string;
+  prazo: string; // yyyy-mm-dd ou ""
+  dataConclusao: string; // yyyy-mm-dd ou ""
+  status: string;
   prioridade: string;
   unidade: string;
   kpi: string;
@@ -119,7 +133,7 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
     const { supabase, tenantId, userId, role } = await actionContext();
     if (role !== "owner") return { ...base, error: "Apenas o proprietário pode importar ações." };
 
-    const [{ data: mems }, { data: units }, { data: kpis }, { data: tools }, { data: pilares }, { data: secoesData }, { data: blocos }, { data: itens }] = await Promise.all([
+    const [{ data: mems }, { data: units }, { data: kpis }, { data: tools }, { data: pilares }, { data: secoesData }, { data: blocos }, { data: itens }, { data: series }] = await Promise.all([
       supabase.from("memberships").select("user_id, profiles(full_name)").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       supabase.from("action_kpis").select("id, name").eq("tenant_id", tenantId),
@@ -128,6 +142,7 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
       supabase.from("sdpo_secoes").select("id, name").eq("tenant_id", tenantId),
       supabase.from("sdpo_blocos").select("id, name").eq("tenant_id", tenantId),
       supabase.from("sdpo_itens").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId).is("deleted_at", null),
     ]);
 
     const userByName = new Map<string, string>();
@@ -142,6 +157,8 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
     };
     const unitMap = idByName(units), kpiMap = idByName(kpis), toolMap = idByName(tools);
     const pilarMap = idByName(pilares), secaoMap = idByName(secoesData), blocoMap = idByName(blocos), itemMap = idByName(itens);
+    const seriesMap = idByName(series);
+    const isoDate = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test((s ?? "").trim()) ? s.trim() : "");
 
     const peopleNotFound = new Set<string>();
     const refsNotFound = new Set<string>();
@@ -177,27 +194,35 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
         .map(resolvePerson).filter((x): x is string => !!x);
 
       const requester = (r.solicitante ?? "").trim() ? (resolvePerson(r.solicitante) ?? userId) : userId;
+      const createdBy = (r.criadaPor ?? "").trim() ? (resolvePerson(r.criadaPor) ?? userId) : userId;
       const pilar_id = resolveRef(r.pilar, pilarMap, "Pilar");
       const secao_id = resolveRef(r.secao, secaoMap, "Seção");
       const bloco_id = resolveRef(r.bloco, blocoMap, "Bloco");
       const item_id = resolveRef(r.item, itemMap, "Item");
       const is_sdpo = !!(pilar_id && secao_id && item_id);
+      const meeting_series_id = resolveRef(r.reuniao, seriesMap, "Reunião");
+      const status = STATUS_BY_INPUT[normTxt(r.status ?? "")] ?? (isoDate(r.dataConclusao) ? "done" : "open");
 
       const p_data = {
         is_sdpo,
         pilar_id, secao_id, bloco_id, item_id,
-        meeting_series_id: "", occurrence_id: "",
+        meeting_series_id,
         kpi_id: resolveRef(r.kpi, kpiMap, "KPI"),
         tool_id: resolveRef(r.ferramenta, toolMap, "Ferramenta"),
         unit_id: resolveUnit(r.unidade),
         requester_id: requester,
-        due_date: /^\d{4}-\d{2}-\d{2}$/.test((r.prazo ?? "").trim()) ? r.prazo.trim() : "",
+        created_by: createdBy,
+        created_at: isoDate(r.dataCriacao),
+        completed_at: isoDate(r.dataConclusao),
+        status,
+        due_date: isoDate(r.prazo),
         priority: PRIORITY_BY_INPUT[normTxt(r.prioridade ?? "")] ?? "medium",
         cc: [] as string[],
-        demandas: [{ description: descricao, assignees }],
+        description: descricao,
+        assignees,
       };
 
-      const { data: result, error } = await supabase.rpc("create_action", { p_data });
+      const { data: result, error } = await supabase.rpc("import_action", { p_data });
       if (error) return { ...base, peopleNotFound: [...peopleNotFound], refsNotFound: [...refsNotFound], error: `Linha "${descricao}": ${error.message}` };
       base.created += 1;
 

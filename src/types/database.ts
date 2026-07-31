@@ -1225,6 +1225,7 @@ export type Database = {
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
+      import_action: { Args: { p_data: Json }; Returns: Json }
       demanda_comment: { Args: { p_demanda: string; p_body: string }; Returns: undefined }
       add_demanda_comment_import: { Args: { p_demanda: string; p_body: string; p_actor?: string | null; p_at?: string | null; p_author_label?: string | null }; Returns: undefined }
       demanda_set_status: { Args: { p_demanda: string; p_status: Database["public"]["Enums"]["action_status"] }; Returns: undefined }

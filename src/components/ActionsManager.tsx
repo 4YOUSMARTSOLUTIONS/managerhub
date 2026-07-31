@@ -196,8 +196,12 @@ export function ActionsManager({
               <ExportButton
                 filename="acoes.xlsx"
                 sheetName="Ações"
-                headers={["Ação", "Responsáveis", "Solicitante", "Prazo", "Prioridade", "Unidade", "KPI", "Ferramenta", "Pilar", "Seção", "Bloco", "Item", "Comentários"]}
-                rows={actions.flatMap((a) => a.demandas.map((d) => { const dd = d.dueDate; const brDate = dd && dd.length >= 10 ? `${dd.slice(8, 10)}/${dd.slice(5, 7)}/${dd.slice(0, 4)}` : (dd ?? ""); return [d.description, d.assigneeNames.join("; "), a.requesterName ?? "", brDate, PRIORITY[a.priority], a.unitName ?? "", a.kpiName ?? "", a.toolName ?? "", a.pilarName ?? "", a.secaoName ?? "", a.blocoName ?? "", a.itemName ?? "", ""]; }))}
+                headers={["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "Pilar", "Seção", "Bloco", "Item", "Comentários"]}
+                rows={actions.flatMap((a) => a.demandas.map((d) => {
+                  const br = (s: string | null) => (s && s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : (s ?? ""));
+                  const st: Record<string, string> = { open: "Aberta", in_progress: "Em andamento", blocked: "Bloqueada", done: "Concluída", cancelled: "Cancelada" };
+                  return [d.description, d.assigneeNames.join("; "), a.requesterName ?? "", "", br(a.createdAt), a.seriesName ?? "", br(d.dueDate), "", st[d.status] ?? d.status, PRIORITY[a.priority], a.unitName ?? "", a.kpiName ?? "", a.toolName ?? "", a.pilarName ?? "", a.secaoName ?? "", a.blocoName ?? "", a.itemName ?? "", ""];
+                }))}
               />
             )}
             <button className="btn btn-primary" onClick={() => setOpen(true)}>+ Nova ação</button>
