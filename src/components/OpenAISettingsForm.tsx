@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { setOpenAISettings } from "@/lib/actions/ai";
 import { initialActionState } from "@/lib/actions/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { TRANSCRIBE_MODELS, TRANSCRIBE_MODEL_LABEL } from "@/lib/constants";
 
 const MODELS = [
   { value: "gpt-4.1-mini", label: "GPT-4.1 mini (padrão)" },
@@ -18,14 +19,28 @@ const MODELS = [
 export function OpenAISettingsForm({
   hasKey,
   model,
+  transcribeModel,
   canEdit,
 }: {
   hasKey: boolean;
   model: string;
+  transcribeModel: string;
   canEdit: boolean;
 }) {
   const [state, action] = useActionState(setOpenAISettings, initialActionState);
   const [saved, setSaved] = useState("");
+  const [modelSel, setModelSel] = useState(MODELS.some((m) => m.value === model) ? model : "gpt-4.1-mini");
+  const [transcribeSel, setTranscribeSel] = useState(
+    (TRANSCRIBE_MODELS as readonly string[]).includes(transcribeModel) ? transcribeModel : "gpt-4o-mini-transcribe",
+  );
+
+  // ressincroniza os selects com o valor persistido após salvar (revalidação)
+  useEffect(() => {
+    setModelSel(MODELS.some((m) => m.value === model) ? model : "gpt-4.1-mini");
+  }, [model]);
+  useEffect(() => {
+    setTranscribeSel((TRANSCRIBE_MODELS as readonly string[]).includes(transcribeModel) ? transcribeModel : "gpt-4o-mini-transcribe");
+  }, [transcribeModel]);
 
   useEffect(() => {
     if (state.ok) {
@@ -69,13 +84,25 @@ export function OpenAISettingsForm({
 
       <div>
         <label className="label">Modelo</label>
-        <select name="openai_model" className="input" defaultValue={MODELS.some((m) => m.value === model) ? model : "gpt-4.1-mini"}>
+        <select name="openai_model" className="input" value={modelSel} onChange={(e) => setModelSel(e.target.value)}>
           {MODELS.map((m) => (
             <option key={m.value} value={m.value}>{m.label}</option>
           ))}
         </select>
         <p className="soft" style={{ fontSize: "0.78rem", marginTop: "0.3rem" }}>
           Padrão: gpt-4.1-mini (econômico e suficiente para organizar texto).
+        </p>
+      </div>
+
+      <div>
+        <label className="label">Modelo de transcrição</label>
+        <select name="openai_transcribe_model" className="input" value={transcribeSel} onChange={(e) => setTranscribeSel(e.target.value)}>
+          {TRANSCRIBE_MODELS.map((m) => (
+            <option key={m} value={m}>{TRANSCRIBE_MODEL_LABEL[m]}</option>
+          ))}
+        </select>
+        <p className="soft" style={{ fontSize: "0.78rem", marginTop: "0.3rem" }}>
+          Usado para transcrever o áudio das reuniões gravadas. O diarize identifica os locutores.
         </p>
       </div>
 

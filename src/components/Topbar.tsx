@@ -1,55 +1,51 @@
-import { signOut } from "@/lib/actions/auth";
-import { Avatar } from "@/components/ui/Avatar";
+"use client";
+
+import { Menu } from "lucide-react";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { UnitScopeSelect } from "@/components/UnitScopeSelect";
-import { ROLE } from "@/lib/constants";
-import type { Enums } from "@/types/database";
-import type { UnitScope } from "@/lib/tenant";
+import { CompanyScopeSelect } from "@/components/CompanyScopeSelect";
+import { AdminViewToggle } from "@/components/AdminViewToggle";
+import type { UnitScope, CompanyScope } from "@/lib/tenant";
 
 export function Topbar({
   tenantName,
-  userName,
-  role,
   unitScope,
+  onMenu,
+  platformOnly = false,
+  companyScope = null,
 }: {
   tenantName: string;
-  userName: string | null | undefined;
-  role: Enums<"member_role">;
   unitScope: UnitScope;
+  onMenu?: () => void;
+  /** modo owner de plataforma (sem empresa): esconde seletor de unidade e sino */
+  platformOnly?: boolean;
+  /** super admin: seletor de empresa no topo */
+  companyScope?: CompanyScope | null;
 }) {
   return (
-    <header
-      style={{
-        height: 60,
-        borderBottom: "1px solid var(--border)",
-        background: "var(--surface)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 1.5rem",
-        position: "sticky",
-        top: 0,
-        zIndex: 10,
-      }}
-    >
-      <div style={{ fontWeight: 600 }}>{tenantName}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-        <UnitScopeSelect scope={unitScope} />
-        <NotificationsBell />
-        <div style={{ textAlign: "right", lineHeight: 1.2 }}>
-          <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-            {userName ?? "Usuário"}
-          </div>
-          <div className="soft" style={{ fontSize: "0.72rem" }}>
-            {ROLE[role]}
-          </div>
+    <header className="app-topbar">
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
+        <button type="button" className="icon-btn menu-btn" onClick={onMenu} aria-label="Abrir menu">
+          <Menu size={17} />
+        </button>
+        <div
+          style={{
+            fontWeight: 600,
+            letterSpacing: "-0.01em",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {tenantName}
         </div>
-        <Avatar name={userName} />
-        <form action={signOut}>
-          <button className="btn btn-ghost btn-sm" type="submit">
-            Sair
-          </button>
-        </form>
+        {companyScope && <AdminViewToggle viewAll={companyScope.viewAll} />}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
+        {companyScope && <CompanyScopeSelect scope={companyScope} />}
+        {!platformOnly && <UnitScopeSelect scope={unitScope} />}
+        {!platformOnly && <NotificationsBell />}
       </div>
     </header>
   );

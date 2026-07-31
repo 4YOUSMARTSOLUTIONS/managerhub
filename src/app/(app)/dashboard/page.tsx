@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CalendarCheck, DoorOpen, ListChecks, Target, Ticket, Users } from "lucide-react";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -77,17 +78,17 @@ export default async function DashboardPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
           gap: "1rem",
-          marginBottom: "1.5rem",
+          marginBottom: "1.75rem",
         }}
       >
-        <StatCard label="Reuniões hoje" value={s.meetings_today ?? 0} hint={`${s.meetings_upcoming ?? 0} agendadas no total`} tone="blue" />
-        <StatCard label="Salas ativas" value={s.rooms_total ?? 0} tone="purple" />
-        <StatCard label="Ações abertas" value={s.actions_open ?? 0} hint={`${s.actions_overdue ?? 0} atrasadas`} tone={s.actions_overdue ? "red" : "amber"} />
-        <StatCard label="Chamados abertos" value={s.tickets_open ?? 0} hint={`${s.tickets_overdue ?? 0} atrasados`} tone={s.tickets_overdue ? "red" : "amber"} />
-        <StatCard label="Metas ativas" value={s.goals_active ?? 0} hint={`${s.goals_at_risk ?? 0} em risco`} tone="green" />
-        <StatCard label="Membros" value={s.members_total ?? 0} tone="gray" />
+        <StatCard label="Reuniões hoje" value={s.meetings_today ?? 0} hint={`${s.meetings_upcoming ?? 0} agendadas no total`} tone="blue" icon={<CalendarCheck size={17} />} />
+        <StatCard label="Salas ativas" value={s.rooms_total ?? 0} tone="purple" icon={<DoorOpen size={17} />} />
+        <StatCard label="Ações abertas" value={s.actions_open ?? 0} hint={`${s.actions_overdue ?? 0} atrasadas`} tone={s.actions_overdue ? "red" : "amber"} icon={<ListChecks size={17} />} />
+        <StatCard label="Chamados abertos" value={s.tickets_open ?? 0} hint={`${s.tickets_overdue ?? 0} atrasados`} tone={s.tickets_overdue ? "red" : "amber"} icon={<Ticket size={17} />} />
+        <StatCard label="Metas ativas" value={s.goals_active ?? 0} hint={`${s.goals_at_risk ?? 0} em risco`} tone="green" icon={<Target size={17} />} />
+        <StatCard label="Membros" value={s.members_total ?? 0} tone="gray" icon={<Users size={17} />} />
       </div>
 
       <div
@@ -123,7 +124,7 @@ export default async function DashboardPage() {
                   <tr key={a.id}>
                     <td style={{ fontWeight: 500 }}>{a.title}</td>
                     <td><Badge tone={ACTION_STATUS_TONE[a.status]}>{ACTION_STATUS[a.status]}</Badge></td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap", color: isOverdue(a.due_date) ? "#dc2626" : "var(--text-soft)" }}>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap", color: isOverdue(a.due_date) ? "var(--mh-danger)" : "var(--text-soft)" }}>
                       {formatDate(a.due_date)}
                     </td>
                   </tr>

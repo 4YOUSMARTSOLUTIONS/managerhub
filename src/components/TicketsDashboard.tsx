@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CircleAlert, CircleCheck, Clock, Layers, Star, Ticket, TrendingUp, UserX } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Badge } from "@/components/ui/Badge";
 import { TICKET_STATUS, TICKET_STATUS_TONE } from "@/lib/constants";
@@ -124,14 +125,14 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "1rem", marginBottom: "1.2rem" }}>
-        <StatCard label="Chamados no período" value={String(data.total)} hint={`${data.resolved} resolvidos · ${data.openCohort} em aberto`} tone="blue" />
-        <StatCard label="Dentro do SLA" value={data.pctWithin == null ? "—" : `${data.pctWithin}%`} hint={`${data.within} no prazo`} tone="green" />
-        <StatCard label="Fora do SLA" value={data.pctOutside == null ? "—" : `${data.pctOutside}%`} hint={`${data.outside} fora do prazo`} tone="red" />
-        <StatCard label="NPS" value={data.nps.total === 0 ? "—" : String(data.nps.nps)} hint={`média ${data.nps.media}/10 · ${data.nps.total} aval.`} tone={npsTone} />
-        <StatCard label="Tempo médio" value={data.avgDur == null ? "—" : formatDuration(data.avgDur)} hint="resolução (abertura→conclusão)" tone="purple" />
-        <StatCard label="Taxa de resolução" value={data.taxaResolucao == null ? "—" : `${data.taxaResolucao}%`} hint={`${data.resolved}/${data.total} da coorte`} tone="amber" />
-        <StatCard label="Backlog (abertos)" value={String(data.backlog)} hint="estado atual" tone="blue" />
-        <StatCard label="Sem responsável" value={String(data.semResp)} hint="abertos sem dono" tone={data.semResp > 0 ? "red" : "gray"} />
+        <StatCard label="Chamados no período" value={String(data.total)} hint={`${data.resolved} resolvidos · ${data.openCohort} em aberto`} tone="blue" icon={<Ticket size={17} />} />
+        <StatCard label="Dentro do SLA" value={data.pctWithin == null ? "—" : `${data.pctWithin}%`} hint={`${data.within} no prazo`} tone="green" icon={<CircleCheck size={17} />} />
+        <StatCard label="Fora do SLA" value={data.pctOutside == null ? "—" : `${data.pctOutside}%`} hint={`${data.outside} fora do prazo`} tone="red" icon={<CircleAlert size={17} />} />
+        <StatCard label="NPS" value={data.nps.total === 0 ? "—" : String(data.nps.nps)} hint={`média ${data.nps.media}/10 · ${data.nps.total} aval.`} tone={npsTone} icon={<Star size={17} />} />
+        <StatCard label="Tempo médio" value={data.avgDur == null ? "—" : formatDuration(data.avgDur)} hint="resolução (abertura→conclusão)" tone="purple" icon={<Clock size={17} />} />
+        <StatCard label="Taxa de resolução" value={data.taxaResolucao == null ? "—" : `${data.taxaResolucao}%`} hint={`${data.resolved}/${data.total} da coorte`} tone="amber" icon={<TrendingUp size={17} />} />
+        <StatCard label="Backlog (abertos)" value={String(data.backlog)} hint="estado atual" tone="blue" icon={<Layers size={17} />} />
+        <StatCard label="Sem responsável" value={String(data.semResp)} hint="abertos sem dono" tone={data.semResp > 0 ? "red" : "gray"} icon={<UserX size={17} />} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
@@ -145,7 +146,7 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
                   <span>{s.name} <span className="soft">· {s.total}</span></span>
                   <span style={{ fontWeight: 600 }}>{pct == null ? "—" : `${pct}% SLA`}</span>
                 </div>
-                <div className="progress-track"><div className="progress-fill" style={{ width: `${pct ?? 0}%`, background: pct == null ? "var(--border)" : pct >= 100 ? "#16a34a" : pct >= 80 ? "#b45309" : "#dc2626" }} /></div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${pct ?? 0}%`, background: pct == null ? "var(--border)" : pct >= 100 ? "var(--mh-success)" : pct >= 80 ? "var(--mh-warning)" : "var(--mh-danger)" }} /></div>
               </div>
             );
           })}
@@ -161,7 +162,7 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
                   <span>{s.name} <span className="soft">· {s.total}</span></span>
                   <span style={{ fontWeight: 600 }}>{pct == null ? "—" : `${pct}% SLA`}</span>
                 </div>
-                <div className="progress-track"><div className="progress-fill" style={{ width: `${pct ?? 0}%`, background: pct == null ? "var(--border)" : pct >= 100 ? "#16a34a" : pct >= 80 ? "#b45309" : "#dc2626" }} /></div>
+                <div className="progress-track"><div className="progress-fill" style={{ width: `${pct ?? 0}%`, background: pct == null ? "var(--border)" : pct >= 100 ? "var(--mh-success)" : pct >= 80 ? "var(--mh-warning)" : "var(--mh-danger)" }} /></div>
               </div>
             );
           })}

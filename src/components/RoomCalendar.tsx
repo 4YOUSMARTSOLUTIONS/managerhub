@@ -10,7 +10,7 @@ import { deleteMeeting } from "@/lib/actions/meetings";
 import { holidayName, isSunday } from "@/lib/holidays";
 import type { Prefill } from "./NewMeetingDialog";
 
-export type CalRoom = { id: string; name: string; color: string };
+export type CalRoom = { id: string; name: string; color: string; capacity: number | null; location: string | null; resources: string[] };
 export type CalMeeting = {
   id: string;
   title: string;
@@ -31,7 +31,7 @@ export type View = "month" | "week" | "day";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const HOUR_PX = 48;
-const DEFAULT_COLOR = "#6b7280";
+const DEFAULT_COLOR = "var(--mh-text-2)";
 const DEFAULT_HOUR = 9;
 
 const RANGES = [
@@ -229,10 +229,37 @@ export function RoomCalendar({
         {roomFilter === "all" && rooms.length > 0 && (
           <div className="cal-legend">
             {rooms.map((r) => (
-              <span key={r.id}><i style={{ background: r.color }} /> {r.name}</span>
+              <span key={r.id} title={[r.capacity ? `${r.capacity} lugares` : "", r.location ?? "", r.resources.join(", ")].filter(Boolean).join(" · ")}>
+                <i style={{ background: r.color }} /> {r.name}
+              </span>
             ))}
           </div>
         )}
+
+        {roomFilter !== "all" && (() => {
+          const r = rooms.find((x) => x.id === roomFilter);
+          if (!r) return null;
+          return (
+            <div className="card" style={{ marginTop: "0.9rem", padding: "0.85rem 1.1rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.6rem" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", fontWeight: 600 }}>
+                <i style={{ width: 10, height: 10, borderRadius: 3, background: r.color, display: "inline-block" }} />
+                {r.name}
+              </span>
+              {(r.capacity || r.location) && (
+                <span className="muted" style={{ fontSize: "0.82rem" }}>
+                  {r.capacity ? `${r.capacity} lugares` : ""}
+                  {r.capacity && r.location ? " · " : ""}
+                  {r.location ?? ""}
+                </span>
+              )}
+              {r.resources.length > 0 ? (
+                <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                  {r.resources.map((res) => <Badge key={res} tone="gray">{res}</Badge>)}
+                </span>
+              ) : <span className="soft" style={{ fontSize: "0.82rem" }}>Sem recursos cadastrados.</span>}
+            </div>
+          );
+        })()}
       </div>
 
       {detail && (
@@ -248,7 +275,7 @@ export function RoomCalendar({
           open
           title="Excluir reunião"
           message={delErr
-            ? <span style={{ color: "#dc2626" }}>{delErr}</span>
+            ? <span style={{ color: "var(--mh-danger)" }}>{delErr}</span>
             : <>Excluir <strong>{confirmDel.title}</strong>? Os participantes com e-mail recebem um cancelamento.</>}
           confirmLabel="Excluir"
           cancelLabel="Voltar"
@@ -329,7 +356,7 @@ function MonthView({
               return (
                 <div
                   key={e.id}
-                  className={`cal-chip${e.status === "cancelled" ? " cal-cancelled" : ""}`}
+                  className={`cal-chip${e.status === "cancelled" ? " cal-cancelled" : ""}${e.status === "in_progress" ? " cal-live" : ""}`}
                   style={{ ["--c" as string]: color, background: color + "14" }}
                   title={`${e.title} · ${fmtTime(e.start)}–${fmtTime(e.end)}${e.room ? " · " + e.room.name : ""}`}
                   onClick={(ev) => { ev.stopPropagation(); onPick(e); }}
@@ -423,7 +450,7 @@ function TimeGrid({
                 return (
                   <div
                     key={e.id}
-                    className="cal-event"
+                    className={`cal-event${e.status === "in_progress" ? " cal-live" : ""}`}
                     style={{
                       top,
                       height,
@@ -500,9 +527,9 @@ function DetailModal({ ev, onClose, onEdit, onDelete }: { ev: Ev; onClose: () =>
   return (
     <div
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 1rem", zIndex: 60 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 1rem", zIndex: 60 }}
     >
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 440, boxShadow: "var(--shadow)" }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 440, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{ev.title}</h2>
           <button onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
@@ -515,10 +542,24 @@ function DetailModal({ ev, onClose, onEdit, onDelete }: { ev: Ev; onClose: () =>
           </Row>
           <Row label="Sala">
             {ev.room ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-                <i style={{ width: 10, height: 10, borderRadius: 3, background: ev.room.color, display: "inline-block" }} />
-                {ev.room.name}
-              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
+                  <i style={{ width: 10, height: 10, borderRadius: 3, background: ev.room.color, display: "inline-block" }} />
+                  {ev.room.name}
+                </span>
+                {(ev.room.capacity || ev.room.location) && (
+                  <span className="muted" style={{ fontSize: "0.8rem" }}>
+                    {ev.room.capacity ? `${ev.room.capacity} lugares` : ""}
+                    {ev.room.capacity && ev.room.location ? " · " : ""}
+                    {ev.room.location ?? ""}
+                  </span>
+                )}
+                {ev.room.resources.length > 0 && (
+                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                    {ev.room.resources.map((r) => <Badge key={r} tone="gray">{r}</Badge>)}
+                  </span>
+                )}
+              </div>
             ) : <span className="soft">Sem sala</span>}
           </Row>
           <Row label="Status"><Badge tone={MEETING_STATUS_TONE[ev.status]}>{MEETING_STATUS[ev.status]}</Badge></Row>

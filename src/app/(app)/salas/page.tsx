@@ -3,8 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { MeetingsBoard } from "@/components/MeetingsBoard";
 import type { CalMeeting } from "@/components/RoomCalendar";
 import type { Person } from "@/components/PeoplePicker";
+import { moduleGate } from "@/lib/module-gate";
 
 export default async function MeetingsPage() {
+  const gate = await moduleGate("salas");
+  if (gate) return gate;
+
   const { tenant, user, role, unitScope } = await requireContext();
   const supabase = await createClient();
   const scopeUnitIds = effectiveUnitFilter(unitScope);
@@ -19,13 +23,13 @@ export default async function MeetingsPage() {
   const [{ data: meetings }, { data: rooms }, { data: series }, { data: seriesParts }, { data: members }, { data: meetingParts }, { data: holidays }] = await Promise.all([
     supabase
       .from("meetings")
-      .select("*, rooms(id, name, color), creator:profiles!created_by(full_name)")
+      .select("*, rooms(id, name, color, capacity, location, resources), creator:profiles!created_by(full_name)")
       .eq("tenant_id", tenant.id)
       .gte("starts_at", winStart)
       .lt("starts_at", winEnd)
       .order("starts_at", { ascending: false })
       .limit(5000),
-    supabase.from("rooms").select("id, name, color").eq("is_active", true).order("name"),
+    supabase.from("rooms").select("id, name, color, capacity, location, resources").eq("is_active", true).order("name"),
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).is("deleted_at", null).order("name"),
     supabase.from("meeting_series_participants").select("series_id, user_id"),
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
@@ -64,7 +68,7 @@ export default async function MeetingsPage() {
   const calMeetings: CalMeeting[] = (meetings ?? [])
     .filter((m) => !scopeSeriesIds || m.series_id === null || scopeSeriesIds.has(m.series_id))
     .map((m) => {
-    const room = m.rooms as { id: string; name: string; color: string } | null;
+    const room = m.rooms as { id: string; name: string; color: string; capacity: number | null; location: string | null; resources: string[] } | null;
     const creator = m.creator as { full_name: string | null } | null;
     return {
       id: m.id,
@@ -73,7 +77,7 @@ export default async function MeetingsPage() {
       starts_at: m.starts_at,
       ends_at: m.ends_at,
       status: m.status,
-      room: room ? { id: room.id, name: room.name, color: room.color } : null,
+      room: room ? { id: room.id, name: room.name, color: room.color, capacity: room.capacity, location: room.location, resources: room.resources ?? [] } : null,
       created_by: m.created_by,
       creatorName: creator?.full_name ?? null,
       seriesId: m.series_id,
@@ -82,7 +86,7 @@ export default async function MeetingsPage() {
       endInput: toLocalInput(m.ends_at),
     };
   });
-  const calRooms = (rooms ?? []).map((r) => ({ id: r.id, name: r.name, color: r.color }));
+  const calRooms = (rooms ?? []).map((r) => ({ id: r.id, name: r.name, color: r.color, capacity: r.capacity, location: r.location, resources: r.resources ?? [] }));
 
   return (
     <div>

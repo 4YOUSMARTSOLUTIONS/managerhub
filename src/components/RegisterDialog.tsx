@@ -11,7 +11,10 @@ import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { TorView } from "./TorView";
 import { ElapsedTimer } from "./ElapsedTimer";
-import { ActionDialog, type Opt, type BlocoOpt, type ItemOpt, type CollectedAction } from "./ActionDialog";
+import { ActionDialog, type Opt, type SecaoOpt, type BlocoOpt, type ItemOpt, type CollectedAction } from "./ActionDialog";
+import { confirmDialog } from "@/components/ui/confirm";
+import { InfoHint } from "@/components/ui/InfoHint";
+import { MeetingRecordingPanel } from "./MeetingRecordingPanel";
 import type { SeriesData } from "./SeriesDialog";
 
 export function RegisterDialog({
@@ -24,6 +27,7 @@ export function RegisterDialog({
   draft,
   onDraftChange,
   pilares,
+  secoes,
   blocos,
   itens,
   kpis,
@@ -39,6 +43,7 @@ export function RegisterDialog({
   draft?: OccurrenceDraft | null;
   onDraftChange?: (draft: OccurrenceDraft) => void;
   pilares: Opt[];
+  secoes: SecaoOpt[];
   blocos: BlocoOpt[];
   itens: ItemOpt[];
   kpis: Opt[];
@@ -46,10 +51,16 @@ export function RegisterDialog({
   aiEnabled: boolean;
 }) {
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  // unidades da reunião (para o formulário de ação): a ação herda/seleciona entre as unidades da série
+  const seriesUnits = useMemo(
+    () => (series ? series.unitIds.map((id, i) => ({ id, name: series.unitNames[i] ?? "—" })) : []),
+    [series],
+  );
   const [present, setPresent] = useState<Record<string, boolean>>({});
   const [attendees, setAttendees] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [decisions, setDecisions] = useState("");
+  const [transcript, setTranscript] = useState("");
   const [collected, setCollected] = useState<CollectedAction[]>([]);
   const [actionOpen, setActionOpen] = useState(false);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -61,7 +72,6 @@ export function RegisterDialog({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [aiActionsDraft, setAiActionsDraft] = useState("");
-  const [aiActionsOpen, setAiActionsOpen] = useState(false);
   const [aiActionsLoading, setAiActionsLoading] = useState(false);
   const [aiActionsError, setAiActionsError] = useState("");
   const [draftSaved, setDraftSaved] = useState(false);
@@ -73,19 +83,21 @@ export function RegisterDialog({
       skipAutosave.current = true; // não regravar logo após hidratar
       setError(""); setActionOpen(false); setEditingIdx(null);
       setAiOpen(false); setAiLoading(false); setAiError(""); setDraftSaved(false);
-      setAiActionsOpen(false); setAiActionsLoading(false); setAiActionsError("");
+      setAiActionsLoading(false); setAiActionsError("");
       if (draft) {
         // restaura o rascunho (anexos não são guardados)
         setAttendees(draft.attendees ?? []);
         setPresent(draft.present ?? {});
         setNotes(draft.notes ?? "");
         setDecisions(draft.decisions ?? "");
+        setTranscript(draft.transcript ?? "");
         setAdvance(draft.advance ?? series.periodicity !== "sob_demanda");
         setAiDraft(draft.aiDraft ?? "");
         setAiActionsDraft(draft.aiActionsDraft ?? "");
         setCollected((draft.collected ?? []).map((c) => ({
           payload: c.payload,
           summary: c.summary,
+          source: c.source,
           headerFiles: [],
           demandaFiles: c.payload.demandas.map(() => []),
         })));
@@ -93,7 +105,7 @@ export function RegisterDialog({
         const ids = series.participantIds;
         setAttendees(ids);
         setPresent(Object.fromEntries(ids.map((id) => [id, true])));
-        setNotes(""); setDecisions(""); setCollected([]);
+        setNotes(""); setDecisions(""); setTranscript(""); setCollected([]);
         setAiDraft(""); setAiActionsDraft(""); setAdvance(series.periodicity !== "sob_demanda");
       }
     }
@@ -105,14 +117,14 @@ export function RegisterDialog({
     if (skipAutosave.current) { skipAutosave.current = false; return; }
     const t = setTimeout(async () => {
       const payload: OccurrenceDraft = {
-        notes, decisions, attendees, present, advance, aiDraft, aiActionsDraft,
-        collected: collected.map((c) => ({ payload: c.payload, summary: c.summary })),
+        notes, decisions, transcript, attendees, present, advance, aiDraft, aiActionsDraft,
+        collected: collected.map((c) => ({ payload: c.payload, summary: c.summary, source: c.source })),
       };
       const r = await saveOccurrenceDraft(occurrenceId, payload);
       if (r.ok) { setDraftSaved(true); setTimeout(() => setDraftSaved(false), 1500); }
     }, 1000);
     return () => clearTimeout(t);
-  }, [open, occurrenceId, notes, decisions, attendees, present, advance, aiDraft, aiActionsDraft, collected]);
+  }, [open, occurrenceId, notes, decisions, transcript, attendees, present, advance, aiDraft, aiActionsDraft, collected]);
 
   if (!open || !series) return null;
 
@@ -130,11 +142,13 @@ export function RegisterDialog({
   const submit = () => {
     setError("");
     if (!occurrenceId) { setError("Reunião inválida."); return; }
+    if (!notes.trim()) { setError("Preencha as anotações da reunião para finalizar."); return; }
     start(async () => {
       const res = await finishOccurrence({
         occurrence_id: occurrenceId,
         notes,
         decisions,
+        transcript,
         advance_next: advance,
         attendance: attendees.map((id) => ({ user_id: id, present: !!present[id] })),
       });
@@ -176,23 +190,38 @@ export function RegisterDialog({
 
   const runActionsAI = async () => {
     setAiActionsError("");
-    if (!aiActionsDraft.trim()) { setAiActionsError("Escreva ou cole o que foi combinado na reunião (tarefas e responsáveis)."); return; }
+    // fonte = anotações da reunião (evita redigitar); usa também as decisões como contexto
+    const base = [notes.trim(), decisions.trim() ? `Decisões: ${decisions.trim()}` : ""].filter(Boolean).join("\n\n");
+    if (!base) { setAiActionsError("Preencha as anotações da reunião primeiro, a IA sugere as ações a partir delas."); return; }
+    // se já houver ações sugeridas antes pela IA, regerar SUBSTITUI esse lote (evita duplicar)
+    const hadAi = collected.some((c) => c.source === "ai");
+    if (hadAi) {
+      const ok = await confirmDialog({
+        title: "Regerar ações com IA",
+        message: "As ações sugeridas pela IA anteriormente serão substituídas por esta nova sugestão a partir das anotações atuais. As ações adicionadas ou editadas por você à mão são mantidas.",
+        confirmLabel: "Substituir e gerar",
+      });
+      if (!ok) return;
+    }
     setAiActionsLoading(true);
     const presentIds = attendees.filter((id) => present[id]);
     const candidates = people.map((p) => ({ id: p.id, name: p.name }));
-    // catálogo SDPO numerado: só itens com pilar/bloco resolvidos
+    // catálogo SDPO numerado: itens com seção/pilar resolvidos; bloco é opcional
     const sdpoItens = itens
       .map((it) => {
-        const b = blocos.find((x) => x.id === it.blocoId);
-        const p = b ? pilares.find((x) => x.id === b.pilarId) : undefined;
-        if (!b || !p) return null;
-        return { item_id: it.id, bloco_id: b.id, pilar_id: p.id, label: `${p.name} > ${b.name} > ${it.name}` };
+        const s = secoes.find((x) => x.id === it.secaoId);
+        const p = pilares.find((x) => x.id === it.pilarId);
+        if (!s || !p) return null;
+        const b = it.blocoId ? blocos.find((x) => x.id === it.blocoId) : undefined;
+        if (it.blocoId && !b) return null;
+        const label = b ? `${p.name} > ${s.name} > ${b.name} > ${it.name}` : `${p.name} > ${s.name} > ${it.name}`;
+        return { item_id: it.id, secao_id: s.id, bloco_id: b?.id ?? "", pilar_id: p.id, label };
       })
-      .filter((x): x is { item_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
+      .filter((x): x is { item_id: string; secao_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
     const today = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD no fuso local
 
     const res = await generateActionsAI({
-      draft: aiActionsDraft,
+      draft: base,
       objetivo: series.objetivo,
       pautaItens: series.content.map((c) => c.item).filter(Boolean),
       candidates,
@@ -210,7 +239,7 @@ export function RegisterDialog({
       return {
         // reunião travada nesta ocorrência; ocorrência é vinculada ao finalizar
         payload: {
-          is_sdpo: p.is_sdpo, pilar_id: p.pilar_id, bloco_id: p.bloco_id, item_id: p.item_id,
+          is_sdpo: p.is_sdpo, pilar_id: p.pilar_id, secao_id: p.secao_id, bloco_id: p.bloco_id, item_id: p.item_id,
           meeting_series_id: series.id, kpi_id: p.kpi_id, tool_id: p.tool_id,
           requester_id: p.requester_id || defaultRequester,
           due_date: p.due_date, priority: p.priority, cc: p.cc,
@@ -219,17 +248,18 @@ export function RegisterDialog({
         headerFiles: [],
         demandaFiles: p.demandas.map(() => []),
         summary: s.summary,
+        source: "ai",
       };
     });
-    setCollected((cs) => [...cs, ...novos]);
-    setAiActionsOpen(false);
+    // substitui o lote anterior da IA; mantém as manuais/editadas
+    setCollected((cs) => [...cs.filter((c) => c.source !== "ai"), ...novos]);
   };
 
   // ao fechar, garante o salvamento do estado atual (cobre a janela do debounce)
   const handleClose = () => {
     const payload: OccurrenceDraft = {
       notes, decisions, attendees, present, advance, aiDraft, aiActionsDraft,
-      collected: collected.map((c) => ({ payload: c.payload, summary: c.summary })),
+      collected: collected.map((c) => ({ payload: c.payload, summary: c.summary, source: c.source })),
     };
     onDraftChange?.(payload); // mantém em memória para reabrir na mesma sessão
     if (occurrenceId) void saveOccurrenceDraft(occurrenceId, payload);
@@ -237,26 +267,27 @@ export function RegisterDialog({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
-      <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: actionOpen ? "transparent" : "rgba(3, 6, 14, 0.6)", backdropFilter: actionOpen ? "none" : "blur(4px)", WebkitBackdropFilter: actionOpen ? "none" : "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
+      {/* card da reunião: oculto (mas preservado) enquanto "Nova ação" está aberto */}
+      <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--mh-shadow-e3)", display: actionOpen ? "none" : undefined }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <div>
             <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Finalizar reunião</h2>
             <p className="muted" style={{ margin: "0.15rem 0 0", fontSize: "0.85rem" }}>{series.name} · {PERIODICITY[series.periodicity as keyof typeof PERIODICITY]}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <span style={{ fontSize: "0.76rem", color: "#16a34a", opacity: draftSaved ? 1 : 0, transition: "opacity 0.2s" }}>✓ Rascunho salvo</span>
+            <span style={{ fontSize: "0.76rem", color: "var(--mh-success)", opacity: draftSaved ? 1 : 0, transition: "opacity 0.2s" }}>✓ Rascunho salvo</span>
             <button type="button" onClick={handleClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
           </div>
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
           {startedAt && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.8rem", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 9, padding: "0.6rem 0.9rem" }}>
-              <div className="soft" style={{ fontSize: "0.83rem", color: "#1d4ed8" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.8rem", background: "var(--mh-info-soft)", border: "1px solid color-mix(in srgb, var(--mh-info) 32%, transparent)", borderRadius: 9, padding: "0.6rem 0.9rem" }}>
+              <div className="soft" style={{ fontSize: "0.83rem", color: "var(--mh-info)" }}>
                 Iniciada às {formatTime(startedAt)} · em andamento
               </div>
-              <ElapsedTimer startedAt={startedAt} style={{ fontSize: "1.1rem", color: "#1d4ed8" }} />
+              <ElapsedTimer startedAt={startedAt} style={{ fontSize: "1.1rem", color: "var(--mh-info)" }} />
             </div>
           )}
 
@@ -287,6 +318,14 @@ export function RegisterDialog({
             <PeoplePicker people={people} selected={attendees} onChange={onAttendeesChange} placeholder="Adicionar participante…" />
           </div>
 
+          {occurrenceId && (
+            <MeetingRecordingPanel
+              occurrenceId={occurrenceId}
+              onUseTranscript={aiEnabled ? (t) => { setAiDraft(t); setAiOpen(true); } : undefined}
+              onSaveTranscript={(t) => setTranscript((prev) => (prev.trim() ? `${prev.trim()}\n\n${t}` : t))}
+            />
+          )}
+
           {aiEnabled && (
             <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)" }}>
               {!aiOpen ? (
@@ -297,7 +336,7 @@ export function RegisterDialog({
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <label className="label" style={{ margin: 0 }}>Rascunho / transcrição da reunião</label>
                   <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
-                    Escreva pontos soltos ou cole a transcrição. A IA organiza em Anotações e Decisões — você pode editar depois.
+                    Escreva pontos soltos ou cole a transcrição. A IA organiza em Anotações e Decisões, você pode editar depois.
                   </p>
                   <textarea
                     className="textarea"
@@ -307,7 +346,7 @@ export function RegisterDialog({
                     style={{ minHeight: 100 }}
                     disabled={aiLoading}
                   />
-                  {aiError && <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0 }}>{aiError}</p>}
+                  {aiError && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: 0 }}>{aiError}</p>}
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     <button type="button" className="btn btn-primary btn-sm" onClick={runAI} disabled={aiLoading}>
                       {aiLoading ? "Gerando…" : "Gerar"}
@@ -322,13 +361,34 @@ export function RegisterDialog({
           )}
 
           <div>
-            <label className="label">Anotações</label>
-            <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Resumo, discussões e pontos tratados…" />
+            <label className="label" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+              Anotações <span style={{ color: "var(--mh-danger)" }}>*</span>
+              <InfoHint label="O que descrever nas anotações para ajudar a IA">
+                <span style={{ fontSize: "0.72rem" }}>
+                  Ao descrever as anotações, cite quando fizer sentido:
+                  <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.1rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+                    <li><strong>Prioridade</strong> (baixa, média, alta, urgente)</li>
+                    <li><strong>Prazo</strong> (ex.: “até sexta”, “em 15 dias”, “30/09/2026”)</li>
+                    <li><strong>Pilar / Bloco / Item</strong> (SDPO)</li>
+                    <li><strong>KPI</strong> relacionado</li>
+                    <li><strong>Ferramenta de gestão</strong> (ex.: PDCA, 5W2H)</li>
+                    <li><strong>Solicitante</strong> e quem fica <strong>em cópia</strong></li>
+                    <li><strong>Ação</strong> e <strong>responsável(is)</strong></li>
+                  </ul>
+                </span>
+              </InfoHint>
+            </label>
+            <textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Resumo, discussões e pontos tratados… (obrigatório)" />
           </div>
 
           <div>
             <label className="label">Decisões</label>
             <textarea className="textarea" value={decisions} onChange={(e) => setDecisions(e.target.value)} placeholder="Deliberações tomadas na reunião…" style={{ minHeight: 60 }} />
+          </div>
+
+          <div>
+            <label className="label">Transcrição</label>
+            <textarea className="textarea" value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="Transcrição da gravação (use “Salvar transcrição” na gravação, ou cole aqui)…" style={{ minHeight: 60 }} />
           </div>
 
           {/* Ações da reunião (formulário completo) */}
@@ -339,41 +399,24 @@ export function RegisterDialog({
             </div>
 
             {aiEnabled && (
-              <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)", marginBottom: "0.6rem" }}>
-                {!aiActionsOpen ? (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAiActionsOpen(true)}>
-                    ✨ Sugerir ações com IA
-                  </button>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                    <label className="label" style={{ margin: 0 }}>O que foi combinado na reunião</label>
-                    <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
-                      Descreva as tarefas e quem ficou responsável. A IA monta as ações (com responsáveis, prazo e classificação SDPO quando der) — você revisa e edita cada uma antes de finalizar.
-                    </p>
-                    <textarea
-                      className="textarea"
-                      value={aiActionsDraft}
-                      onChange={(e) => setAiActionsDraft(e.target.value)}
-                      placeholder="Ex.: João vai negociar com o fornecedor até sexta; Maria revisa o relatório de vendas e apresenta na próxima…"
-                      style={{ minHeight: 100 }}
-                      disabled={aiActionsLoading}
-                    />
-                    {aiActionsError && <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0 }}>{aiActionsError}</p>}
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={runActionsAI} disabled={aiActionsLoading}>
-                        {aiActionsLoading ? "Gerando…" : "Gerar ações"}
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setAiActionsOpen(false); setAiActionsError(""); }} disabled={aiActionsLoading}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
+              <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)", marginBottom: "0.6rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start" }} onClick={runActionsAI} disabled={aiActionsLoading || !notes.trim()}>
+                  {aiActionsLoading ? "Gerando ações…" : "✨ Sugerir ações a partir das anotações"}
+                </button>
+                {!notes.trim() && (
+                  <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: 0 }}>
+                    Preencha as anotações da reunião primeiro, a IA sugere as ações a partir delas.
+                  </p>
                 )}
+                <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+                  A IA lê as anotações (e decisões) acima e monta as ações, com responsáveis, prazo e classificação SDPO quando der. Você revisa e edita cada uma antes de finalizar.
+                </p>
+                {aiActionsError && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: 0 }}>{aiActionsError}</p>}
               </div>
             )}
 
             {collected.length === 0 ? (
-              <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma ação. Use “+ Nova ação” para abrir o formulário completo — a reunião já vem preenchida.</p>
+              <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma ação. Use “+ Nova ação” para abrir o formulário completo, a reunião já vem preenchida.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                 {collected.map((ca, i) => {
@@ -406,7 +449,7 @@ export function RegisterDialog({
             </label>
           )}
 
-          {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
+          {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
@@ -425,6 +468,7 @@ export function RegisterDialog({
         onClose={() => { setActionOpen(false); setEditingIdx(null); }}
         people={people}
         pilares={pilares}
+        secoes={secoes}
         blocos={blocos}
         itens={itens}
         kpis={kpis}
@@ -432,11 +476,16 @@ export function RegisterDialog({
         series={[]}
         occurrences={[]}
         onCollect={(a) => {
-          setCollected((cs) => (editingIdx !== null ? cs.map((c, idx) => (idx === editingIdx ? a : c)) : [...cs, a]));
+          // criada ou editada à mão vira "manual" — assim não é substituída ao regerar por IA
+          const m: CollectedAction = { ...a, source: "manual" };
+          setCollected((cs) => (editingIdx !== null ? cs.map((c, idx) => (idx === editingIdx ? m : c)) : [...cs, m]));
           setEditingIdx(null);
         }}
         editing={editingIdx !== null ? collected[editingIdx] : null}
         lockedSeries={{ id: series.id, name: series.name }}
+        units={seriesUnits}
+        defaultUnitId={seriesUnits.length === 1 ? seriesUnits[0].id : undefined}
+        aiEnabled={aiEnabled}
       />
     </div>
   );

@@ -22,7 +22,7 @@ export function ConfirmActionButton({
   cancelLabel = "Cancelar",
   tone = "danger",
 }: {
-  action: (fd: FormData) => Promise<ActionState>;
+  action: (fd: FormData) => Promise<ActionState | void>;
   fields: Record<string, string>;
   children: React.ReactNode;
   className?: string;
@@ -56,7 +56,7 @@ export function ConfirmActionButton({
       <ConfirmDialog
         open={open}
         title={title}
-        message={err ? <span style={{ color: "#dc2626" }}>{err}</span> : message}
+        message={err ? <span style={{ color: "var(--mh-danger)" }}>{err}</span> : message}
         confirmLabel={confirmLabel}
         cancelLabel={cancelLabel}
         tone={tone}

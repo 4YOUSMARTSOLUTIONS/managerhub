@@ -7,12 +7,12 @@ import { initialActionState } from "@/lib/actions/types";
 import { PRIORITY, TICKET_SLA_UNIT, options } from "@/lib/constants";
 import type { Enums } from "@/types/database";
 
-export type Opt = { id: string; name: string };
-export type CatOpt = { id: string; name: string; sectorId: string };
-export type SlaOpt = { categoryId: string; priority: Enums<"priority_level">; value: number; unit: Enums<"ticket_sla_unit"> };
+export type Opt = { id: string; name: string; active?: boolean };
+export type CatOpt = { id: string; name: string; sectorId: string; active?: boolean };
+export type SlaOpt = { categoryId: string; priority: Enums<"priority_level"> | null; value: number; unit: Enums<"ticket_sla_unit"> };
 
 export function NewTicketDialog({
-  open, onClose, sectors, categories, units, slas,
+  open, onClose, sectors, categories, units, slas, slaMode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +20,7 @@ export function NewTicketDialog({
   categories: CatOpt[];
   units: Opt[];
   slas: SlaOpt[];
+  slaMode: "priority" | "category";
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -33,10 +34,12 @@ export function NewTicketDialog({
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const cats = useMemo(() => categories.filter((c) => c.sectorId === sectorId), [categories, sectorId]);
+  // novo chamado usa só setores/categorias ativos
+  const activeSectors = useMemo(() => sectors.filter((s) => s.active !== false), [sectors]);
+  const cats = useMemo(() => categories.filter((c) => c.sectorId === sectorId && c.active !== false), [categories, sectorId]);
   const sla = useMemo(
-    () => slas.find((s) => s.categoryId === categoryId && s.priority === priority),
-    [slas, categoryId, priority],
+    () => slas.find((s) => s.categoryId === categoryId && (slaMode === "category" ? s.priority == null : s.priority === priority)),
+    [slas, categoryId, priority, slaMode],
   );
 
   if (!open) return null;
@@ -68,8 +71,8 @@ export function NewTicketDialog({
   };
 
   return (
-    <div onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Abrir chamado</h2>
           <button type="button" onClick={close} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
@@ -89,7 +92,7 @@ export function NewTicketDialog({
               <label className="label">Setor</label>
               <select className="select" value={sectorId} onChange={(e) => { setSectorId(e.target.value); setCategoryId(""); }}>
                 <option value="">Selecione…</option>
-                {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {activeSectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
@@ -101,17 +104,19 @@ export function NewTicketDialog({
             </div>
           </div>
 
-          <div style={{ maxWidth: 260 }}>
-            <label className="label">Prioridade <span className="soft">(sua percepção)</span></label>
-            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Enums<"priority_level">)}>
-              {options(PRIORITY).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+          {slaMode !== "category" && (
+            <div style={{ maxWidth: 260 }}>
+              <label className="label">Prioridade <span className="soft">(sua percepção)</span></label>
+              <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Enums<"priority_level">)}>
+                {options(PRIORITY).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
 
           <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
             {sla
               ? `Prazo previsto: ${sla.value} ${TICKET_SLA_UNIT[sla.unit]} (definido pelo SLA da categoria).`
-              : "O prazo é definido automaticamente pelo SLA da categoria/prioridade."}
+              : "O prazo é definido automaticamente pelo SLA da categoria."}
           </p>
 
           <div>
@@ -133,14 +138,14 @@ export function NewTicketDialog({
                   <div key={i} style={{ position: "relative" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={URL.createObjectURL(f)} alt={f.name} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />
-                    <button type="button" onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))} aria-label="Remover" style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", border: "none", background: "#dc2626", color: "#fff", cursor: "pointer", fontSize: "0.8rem", lineHeight: 1 }}>×</button>
+                    <button type="button" onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))} aria-label="Remover" style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", border: "none", background: "var(--mh-danger)", color: "#fff", cursor: "pointer", fontSize: "0.8rem", lineHeight: 1 }}>×</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
+          {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>

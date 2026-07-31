@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { importHolidays, type HolidayImportRow } from "@/lib/actions/holidays";
 import { formatDate } from "@/lib/format";
+import { IconImport } from "@/components/ui/ImpExpIcons";
 
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
@@ -22,8 +24,10 @@ function toISODay(v: unknown): string {
   return "";
 }
 
-export function ImportHolidaysDialog() {
-  const [open, setOpen] = useState(false);
+export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: { open?: boolean; onClose?: () => void; hideTrigger?: boolean } = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : internalOpen;
   const [rows, setRows] = useState<HolidayImportRow[]>([]);
   const [ignored, setIgnored] = useState(0);
   const [fileName, setFileName] = useState("");
@@ -35,7 +39,7 @@ export function ImportHolidaysDialog() {
   function reset() {
     setRows([]); setIgnored(0); setFileName(""); setParseError(""); setSummary(null);
   }
-  function close() { setOpen(false); reset(); }
+  function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
   function downloadTemplate() {
     const ws = XLSX.utils.aoa_to_sheet([
@@ -92,16 +96,21 @@ export function ImportHolidaysDialog() {
   async function doImport() {
     setImporting(true);
     const res = await importHolidays(rows);
-    setImporting(false); setSummary(res);
-    if (!res.error) router.refresh();
+    setImporting(false);
+    if (res.error) { setSummary(res); return; }
+    const parts = [`${res.imported} importado(s)`];
+    if (res.skipped > 0) parts.push(`${res.skipped} ignorado(s)`);
+    toast.success(`Importação concluída: ${parts.join(", ")}.`);
+    router.refresh();
+    close();
   }
 
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>↑ Importar planilha</button>
+      {!hideTrigger && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setInternalOpen(true)}><IconImport /> Importar planilha</button>}
       {open && (
-        <div onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
-          <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 540, boxShadow: "var(--shadow)" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
+          <div className="card" style={{ width: "100%", maxWidth: 540, boxShadow: "var(--mh-shadow-e3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
               <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Importar feriados (.xlsx)</h2>
               <button type="button" onClick={close} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
@@ -121,7 +130,7 @@ export function ImportHolidaysDialog() {
                 <input type="file" accept=".xlsx,.xls,.csv" className="input" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
               </div>
 
-              {parseError && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
+              {parseError && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
 
               {fileName && !summary && (
                 <div className="card card-pad" style={{ fontSize: "0.88rem" }}>

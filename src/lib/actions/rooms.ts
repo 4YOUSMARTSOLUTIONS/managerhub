@@ -14,7 +14,9 @@ export async function createRoom(
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { error: "Informe o nome da sala." };
 
-    const capacity = Number(formData.get("capacity") ?? 1) || 1;
+    const capacityRaw = String(formData.get("capacity") ?? "").trim();
+    const capacity = Number(capacityRaw);
+    if (!capacityRaw || !Number.isFinite(capacity) || capacity < 1) return { error: "Informe a capacidade da sala (mínimo 1)." };
     const location = String(formData.get("location") ?? "").trim() || null;
     const color = String(formData.get("color") ?? "#2563eb");
     const resources = String(formData.get("resources") ?? "")
@@ -30,6 +32,41 @@ export async function createRoom(
       color,
       resources,
     });
+    if (error) return { error: error.message };
+
+    revalidatePath("/configuracoes");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function updateRoom(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+
+    const id = String(formData.get("id") ?? "").trim();
+    if (!id) return { error: "Sala inválida." };
+    const name = String(formData.get("name") ?? "").trim();
+    if (!name) return { error: "Informe o nome da sala." };
+
+    const capacityRaw = String(formData.get("capacity") ?? "").trim();
+    const capacity = Number(capacityRaw);
+    if (!capacityRaw || !Number.isFinite(capacity) || capacity < 1) return { error: "Informe a capacidade da sala (mínimo 1)." };
+    const location = String(formData.get("location") ?? "").trim() || null;
+    const color = String(formData.get("color") ?? "#2563eb");
+    const resources = String(formData.get("resources") ?? "")
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean);
+
+    const { error } = await supabase
+      .from("rooms")
+      .update({ name, capacity, location, color, resources })
+      .eq("id", id);
     if (error) return { error: error.message };
 
     revalidatePath("/configuracoes");

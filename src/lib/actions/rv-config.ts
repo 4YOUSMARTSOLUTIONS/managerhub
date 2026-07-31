@@ -1,0 +1,171 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { actionContext } from "./context";
+import type { ActionState } from "./types";
+
+const normTxt = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+const parseNum = (v: unknown): number | null => {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  let s = String(v).trim();
+  if (s === "") return null;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = Number(s);
+  return Number.isNaN(n) ? null : n;
+};
+
+export type RvConfigInput = {
+  scope: "position" | "user";
+  position_id?: string | null;
+  user_id?: string | null;
+  effective_from: string; // YYYY-MM (competência de início da vigência)
+  value: number;
+};
+
+/** Cria/atualiza uma vigência de RV (por função ou por colaborador). Owner/admin. */
+export async function upsertRvConfig(input: RvConfigInput): Promise<ActionState> {
+  try {
+    const { supabase, tenantId, userId, role } = await actionContext();
+    if (role !== "owner" && role !== "admin") return { error: "Apenas owner/admin podem configurar a remuneração variável." };
+
+    const m = (input.effective_from ?? "").trim().match(/^(\d{4})-(\d{2})$/);
+    if (!m) return { error: "Informe a competência de início da vigência (MM/AAAA)." };
+    const effective_from = `${input.effective_from}-01`;
+    const value = Math.max(0, Number(input.value) || 0);
+
+    if (input.scope === "position" && !input.position_id) return { error: "Informe a função." };
+    if (input.scope === "user" && !input.user_id) return { error: "Informe o colaborador." };
+
+    // upsert manual (índices únicos são parciais; onConflict do PostgREST não os cobre)
+    let sel = supabase
+      .from("individual_rv_config")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("scope", input.scope)
+      .eq("effective_from", effective_from);
+    sel = input.scope === "position" ? sel.eq("position_id", input.position_id!) : sel.eq("user_id", input.user_id!);
+    const { data: existing } = await sel.maybeSingle();
+
+    const payload = {
+      tenant_id: tenantId,
+      scope: input.scope,
+      position_id: input.scope === "position" ? input.position_id! : null,
+      user_id: input.scope === "user" ? input.user_id! : null,
+      effective_from,
+      value,
+      created_by: userId,
+    };
+    const { error } = existing?.id
+      ? await supabase.from("individual_rv_config").update(payload).eq("id", existing.id)
+      : await supabase.from("individual_rv_config").insert(payload);
+    if (error) return { error: error.message };
+
+    revalidatePath("/configuracoes");
+    revalidatePath("/metas");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------- Importação em lote (.xlsx) ----------
+export type RvConfigImportRow = { name: string; period: string; value: string };
+
+/** Importa vigências de RV (por função ou por colaborador), casando o nome com o cadastro. */
+export async function importRvConfig(
+  scope: "position" | "user",
+  rows: RvConfigImportRow[],
+): Promise<{ imported: number; invalid: number; notFound: number; error?: string }> {
+  try {
+    const { supabase, tenantId, userId, role } = await actionContext();
+    if (role !== "owner" && role !== "admin") return { imported: 0, invalid: 0, notFound: 0, error: "Apenas owner/admin podem configurar a remuneração variável." };
+
+    // nome → id (função ou colaborador ativo)
+    const idByName = new Map<string, string>();
+    if (scope === "position") {
+      const { data } = await supabase.from("positions").select("id, name").eq("tenant_id", tenantId);
+      for (const p of data ?? []) idByName.set(normTxt(p.name), p.id);
+    } else {
+      const { data } = await supabase.from("memberships").select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId);
+      for (const m of data ?? []) {
+        if (!m.is_active) continue;
+        const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
+        if (nm) idByName.set(normTxt(nm), m.user_id);
+      }
+    }
+
+    const { data: existing } = await supabase
+      .from("individual_rv_config")
+      .select("id, position_id, user_id, effective_from")
+      .eq("tenant_id", tenantId)
+      .eq("scope", scope);
+    const key = (targetId: string, ef: string) => `${targetId}|${ef}`;
+    const existingMap = new Map((existing ?? []).map((e) => [key((scope === "position" ? e.position_id : e.user_id) ?? "", e.effective_from), e.id]));
+
+    const inserts: Record<string, unknown>[] = [];
+    const updates: { id: string; payload: Record<string, unknown> }[] = [];
+    let invalid = 0;
+    let notFound = 0;
+    for (const r of rows ?? []) {
+      const name = (r.name ?? "").trim();
+      const pm = (r.period ?? "").trim().match(/^(\d{4})-(\d{2})$/);
+      const value = parseNum(r.value);
+      if (!name || !pm || value == null) { invalid++; continue; }
+      const targetId = idByName.get(normTxt(name));
+      if (!targetId) { notFound++; continue; }
+      const ef = `${r.period}-01`;
+      const payload = {
+        tenant_id: tenantId, scope,
+        position_id: scope === "position" ? targetId : null,
+        user_id: scope === "user" ? targetId : null,
+        effective_from: ef, value: Math.max(0, value), created_by: userId,
+      };
+      const k = key(targetId, ef);
+      const id = existingMap.get(k);
+      if (id && id !== "pending") updates.push({ id, payload });
+      else { inserts.push(payload); existingMap.set(k, "pending"); }
+    }
+
+    let imported = 0;
+    if (inserts.length) {
+      const { error } = await supabase.from("individual_rv_config").insert(inserts as never);
+      if (error) return { imported: 0, invalid, notFound, error: error.message };
+      imported += inserts.length;
+    }
+    for (const u of updates) {
+      const { error } = await supabase.from("individual_rv_config").update(u.payload as never).eq("id", u.id);
+      if (error) return { imported, invalid, notFound, error: error.message };
+      imported += 1;
+    }
+    if (imported === 0) {
+      return {
+        imported: 0, invalid, notFound,
+        error: notFound > 0
+          ? `Nenhum item importado — ${scope === "position" ? "função" : "colaborador"} não encontrado (confira o nome exato).`
+          : "Nenhuma linha válida — confira Competência (MM/AAAA) e Valor.",
+      };
+    }
+    revalidatePath("/configuracoes");
+    revalidatePath("/metas");
+    return { imported, invalid, notFound };
+  } catch (e) {
+    return { imported: 0, invalid: 0, notFound: 0, error: (e as Error).message };
+  }
+}
+
+/** Exclui uma vigência de RV. Owner/admin. */
+export async function deleteRvConfig(id: string): Promise<ActionState> {
+  try {
+    const { supabase, role } = await actionContext();
+    if (role !== "owner" && role !== "admin") return { error: "Apenas owner/admin podem configurar a remuneração variável." };
+    const { error } = await supabase.from("individual_rv_config").delete().eq("id", id);
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    revalidatePath("/metas");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

@@ -1,3 +1,4 @@
+import { Building2, CircleCheck, CirclePause, CircleX, Users } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/platform";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -6,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { AdminTabs } from "@/components/admin/AdminTabs";
 import { createCompany, setCompanyStatus, deleteCompany, setUnitsLimit } from "@/lib/actions/platform";
 import { TENANT_STATUS, TENANT_STATUS_TONE } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
@@ -63,7 +65,7 @@ function UnitsCell({ count, limit }: { count: number; limit: number | null }) {
   const atLimit = limit !== null && count >= limit;
   return (
     <span style={{ fontVariantNumeric: "tabular-nums" }}>
-      <span style={{ fontWeight: 600, color: atLimit ? "#dc2626" : "inherit" }}>{count}</span>
+      <span style={{ fontWeight: 600, color: atLimit ? "var(--mh-danger)" : "inherit" }}>{count}</span>
       <span className="soft"> / {limit !== null ? limit : "∞"}</span>
     </span>
   );
@@ -125,13 +127,14 @@ export default async function AdminPage() {
           </FormModal>
         }
       />
+      <AdminTabs />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-        <StatCard label="Empresas"    value={s.companies_total    ?? 0} tone="blue" />
-        <StatCard label="Ativas"      value={s.companies_active   ?? 0} tone="green" />
-        <StatCard label="Suspensas"   value={s.companies_suspended ?? 0} tone={s.companies_suspended ? "amber" : "gray"} />
-        <StatCard label="Desativadas" value={s.companies_inactive  ?? 0} tone={s.companies_inactive  ? "red"   : "gray"} />
-        <StatCard label="Usuários ativos" value={s.users_distinct ?? 0} hint={`${s.users_total ?? 0} vínculos`} tone="purple" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.75rem" }}>
+        <StatCard label="Empresas"    value={s.companies_total    ?? 0} tone="blue"  icon={<Building2 size={17} />} />
+        <StatCard label="Ativas"      value={s.companies_active   ?? 0} tone="green" icon={<CircleCheck size={17} />} />
+        <StatCard label="Suspensas"   value={s.companies_suspended ?? 0} tone={s.companies_suspended ? "amber" : "gray"} icon={<CirclePause size={17} />} />
+        <StatCard label="Desativadas" value={s.companies_inactive  ?? 0} tone={s.companies_inactive  ? "red"   : "gray"} icon={<CircleX size={17} />} />
+        <StatCard label="Usuários ativos" value={s.users_distinct ?? 0} hint={`${s.users_total ?? 0} vínculos`} tone="purple" icon={<Users size={17} />} />
       </div>
 
       <Section title={`Empresas · ${companies?.length ?? 0}`} padded={false}>

@@ -3,15 +3,20 @@ import { createClient } from "@/lib/supabase/server";
 import { MeetingRecords, type SeriesRow, type OccurrenceRow } from "@/components/MeetingRecords";
 import type { OccurrenceDraft } from "@/lib/actions/meeting-records";
 import type { Person } from "@/components/PeoplePicker";
+import { moduleGate } from "@/lib/module-gate";
+import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 
 export default async function MeetingRecordsPage() {
-  const { tenant, unitScope } = await requireContext();
+  const gate = await moduleGate("reunioes");
+  if (gate) return gate;
+
+  const { tenant, unitScope, user, role } = await requireContext();
   const supabase = await createClient();
 
   const [
     { data: series }, { data: parts }, { data: unitLinks }, { data: unitsData },
     { data: members }, { data: roomsData }, { data: occ },
-    { data: pilares }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
+    { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
   ] = await Promise.all([
     supabase
       .from("meeting_series")
@@ -32,17 +37,18 @@ export default async function MeetingRecordsPage() {
     supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     supabase
       .from("meeting_occurrences")
-      .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
+      .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, auto_finished, meeting_link, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
       .eq("tenant_id", tenant.id)
       .is("deleted_at", null)
       .order("started_at", { ascending: false, nullsFirst: false })
       .order("occurred_on", { ascending: false })
       .limit(300),
-    supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_blocos").select("id, name, pilar_id").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_kpis").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_tools").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_itens").select("id, name, pilar_id, secao_id, bloco_id, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_kpis").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
   ]);
 
   const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
@@ -75,6 +81,15 @@ export default async function MeetingRecordsPage() {
     partsBySeries.set(p.series_id, arr);
   }
 
+  // data/hora da última reunião realizada (finalizada) por série.
+  // occ já vem ordenado por started_at desc, então o primeiro finalizado de cada série é o mais recente.
+  const lastHeldBySeries = new Map<string, string>();
+  for (const o of occ ?? []) {
+    if (o.status !== "finished") continue;
+    if (lastHeldBySeries.has(o.series_id)) continue;
+    lastHeldBySeries.set(o.series_id, o.started_at ?? o.occurred_on);
+  }
+
   const seriesRows: SeriesRow[] = (series ?? []).filter((s) => seriesInScope(s.id)).map((s) => ({
     id: s.id,
     name: s.name,
@@ -99,19 +114,26 @@ export default async function MeetingRecordsPage() {
     unitIds: unitsBySeries.get(s.id) ?? [],
     unitNames: (unitsBySeries.get(s.id) ?? []).map((id) => unitById.get(id)).filter((x): x is string => !!x),
     isActive: s.is_active,
+    isPrivate: s.is_private,
+    lastHeldDate: lastHeldBySeries.get(s.id) ?? null,
   }));
 
   // contagens de presença/ações por registro
   const occIds = (occ ?? []).map((o) => o.id);
-  const [{ data: att }, { data: acts }] = await Promise.all([
+  const [{ data: att }, { data: acts }, { data: recs }] = await Promise.all([
     occIds.length
       ? supabase.from("meeting_attendance").select("occurrence_id, present").in("occurrence_id", occIds)
       : Promise.resolve({ data: [] as { occurrence_id: string; present: boolean }[] }),
     occIds.length
-      ? supabase.from("action_items").select("occurrence_id").in("occurrence_id", occIds)
+      ? supabase.from("actions").select("occurrence_id").in("occurrence_id", occIds)
       : Promise.resolve({ data: [] as { occurrence_id: string | null }[] }),
+    occIds.length
+      ? supabase.from("meeting_recordings").select("occurrence_id").in("occurrence_id", occIds)
+      : Promise.resolve({ data: [] as { occurrence_id: string }[] }),
   ]);
 
+  const recBy = new Map<string, number>();
+  for (const r of recs ?? []) recBy.set(r.occurrence_id, (recBy.get(r.occurrence_id) ?? 0) + 1);
   const attBy = new Map<string, { total: number; present: number }>();
   for (const a of att ?? []) {
     const cur = attBy.get(a.occurrence_id) ?? { total: 0, present: 0 };
@@ -133,6 +155,8 @@ export default async function MeetingRecordsPage() {
       seriesName: (o.meeting_series as { name: string } | null)?.name ?? "—",
       occurredOn: o.occurred_on,
       status: o.status,
+      autoFinished: o.auto_finished ?? false,
+      meetingLink: o.meeting_link ?? null,
       startedAt: o.started_at,
       endedAt: o.ended_at,
       durationSeconds: o.duration_seconds,
@@ -140,6 +164,8 @@ export default async function MeetingRecordsPage() {
       presentCount: counts.present,
       totalCount: counts.total,
       actionsCount: actBy.get(o.id) ?? 0,
+      recordingsCount: recBy.get(o.id) ?? 0,
+      registeredById: o.registered_by ?? null,
       registeredByName: (o.registrant as { full_name: string | null } | null)?.full_name ?? null,
     };
   });
@@ -151,12 +177,15 @@ export default async function MeetingRecordsPage() {
       people={people}
       rooms={rooms}
       units={units}
-      pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name }))}
-      blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id }))}
-      itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, blocoId: i.bloco_id }))}
-      kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))}
-      tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
-      aiEnabled={tenant.has_openai_key}
+      pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }))}
+      secoes={(secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }))}
+      blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id, secaoId: b.secao_id, active: b.active }))}
+      itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, pilarId: i.pilar_id, secaoId: i.secao_id, blocoId: i.bloco_id, active: i.active }))}
+      kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active }))}
+      tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active }))}
+      aiEnabled={(await getPlatformIntegrationFlags()).hasOpenAI}
+      currentUserId={user.id}
+      role={role}
     />
   );
 }

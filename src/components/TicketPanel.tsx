@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTicketTriage, getTicketAttachmentUrl, getTicketComments, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
+import { updateTicketTriage, requestTicketConclusion, decideTicketConclusion, getTicketAttachmentUrl, getTicketComments, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
 import { Avatar } from "@/components/ui/Avatar";
 import { SearchSelect } from "@/components/SearchSelect";
 import { NpsRating } from "@/components/NpsRating";
@@ -13,7 +13,7 @@ import type { Enums } from "@/types/database";
 import type { TicketRow, Opt, CatOpt, Member } from "./TicketsManager";
 
 export function TicketPanel({
-  open, onClose, ticket, sectors, categories, members, canEdit, canComment, canRate,
+  open, onClose, ticket, sectors, categories, members, slaMode, canEdit, canComment, canRate, canApprove,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,9 +21,11 @@ export function TicketPanel({
   sectors: Opt[];
   categories: CatOpt[];
   members: Member[];
+  slaMode: "priority" | "category";
   canEdit: boolean;
   canComment: boolean;
   canRate: boolean;
+  canApprove: boolean;
 }) {
   const [status, setStatus] = useState<Enums<"ticket_status">>("open");
   const [priority, setPriority] = useState<Enums<"priority_level">>("medium");
@@ -63,6 +65,8 @@ export function TicketPanel({
 
   if (!open || !ticket) return null;
 
+  const awaitingApproval = !!ticket.approvalRequestedAt;
+
   const save = () => {
     if (!ticket) return;
     setError("");
@@ -92,11 +96,15 @@ export function TicketPanel({
     });
   };
 
-  // conclui o chamado: status vai automaticamente para Resolvido.
+  // conclui o chamado: NÃO encerra direto — fica "aguardando de acordo" do solicitante.
   // exige ao menos um comentário/tratamento (envia o texto pendente, se houver).
   const conclude = () => {
     if (!ticket) return;
     const pendingComment = commentText.trim();
+    if (!assigneeId) {
+      setError("Atribua um responsável antes de concluir o chamado.");
+      return;
+    }
     if (comments.length === 0 && !pendingComment) {
       setError("Registre ao menos um comentário/tratamento antes de concluir o chamado.");
       return;
@@ -108,15 +116,42 @@ export function TicketPanel({
         if (c.error) { setError(c.error); return; }
         setCommentText("");
       }
-      const res = await updateTicketTriage({
+      // persiste a triagem (inclui o responsável selecionado) antes de solicitar a conclusão
+      const saved = await updateTicketTriage({
         ticket_id: ticket.id,
-        status: "resolved",
         priority,
         sector_id: sectorId || null,
         category_id: categoryId || null,
         assignee_id: assigneeId || null,
       });
+      if (saved.error) { setError(saved.error); return; }
+      const res = await requestTicketConclusion(ticket.id);
       if (res.error) { setError(res.error); return; }
+      onClose();
+      router.refresh();
+    });
+  };
+
+  // solicitante dá o "de acordo" (encerra) ou recusa (reabre p/ atendimento)
+  const approve = () => {
+    if (!ticket) return;
+    setError("");
+    start(async () => {
+      const res = await decideTicketConclusion(ticket.id, true, "");
+      if (res.error) { setError(res.error); return; }
+      onClose();
+      router.refresh();
+    });
+  };
+  const reopen = () => {
+    if (!ticket) return;
+    const note = commentText.trim();
+    if (!note) { setError("Explique o motivo ao reabrir (recusar a conclusão)."); return; }
+    setError("");
+    start(async () => {
+      const res = await decideTicketConclusion(ticket.id, false, note);
+      if (res.error) { setError(res.error); return; }
+      setCommentText("");
       onClose();
       router.refresh();
     });
@@ -136,8 +171,8 @@ export function TicketPanel({
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 60, overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <div>
             <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{ticket.code ? `${ticket.code} · ` : ""}{ticket.title}</h2>
@@ -180,15 +215,18 @@ export function TicketPanel({
                 <div>
                   <label className="label">Status</label>
                   <select className="select" value={status} onChange={(e) => setStatus(e.target.value as Enums<"ticket_status">)}>
-                    {options(TICKET_STATUS).filter((o) => o.value !== "closed").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {options(TICKET_STATUS).filter((o) => o.value !== "closed" && (o.value !== "resolved" || status === "resolved")).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
+                  <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>Para encerrar, use “Concluir” — o chamado só é resolvido após o de acordo do solicitante.</p>
                 </div>
-                <div>
-                  <label className="label">Prioridade</label>
-                  <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Enums<"priority_level">)}>
-                    {options(PRIORITY).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
+                {slaMode !== "category" && (
+                  <div>
+                    <label className="label">Prioridade</label>
+                    <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as Enums<"priority_level">)}>
+                      {options(PRIORITY).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
                 <div>
@@ -211,9 +249,11 @@ export function TicketPanel({
                 <SearchSelect options={members} value={assigneeId} onChange={setAssigneeId} placeholder="Buscar responsável…" emptyHint="Nenhum colaborador" />
               </div>
               <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
-                Ao mudar a prioridade ou a categoria, o prazo é recalculado pelo SLA e o solicitante é notificado.
+                {slaMode === "category"
+                  ? "Ao mudar a categoria, o prazo é recalculado pelo SLA da categoria e o solicitante é notificado."
+                  : "Ao mudar a prioridade ou a categoria, o prazo é recalculado pelo SLA e o solicitante é notificado."}
               </p>
-              {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+              {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
             </>
           ) : (
             <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Somente o gestor de chamados (ou owner/admin) pode tratar este chamado.</p>
@@ -258,14 +298,32 @@ export function TicketPanel({
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>{canEdit ? "Cancelar" : "Fechar"}</button>
-          {canEdit && status !== "resolved" && status !== "cancelled" && (
-            <button type="button" className="btn" style={{ background: "#16a34a", color: "#fff" }} disabled={pending} onClick={conclude} title="Marca o chamado como Resolvido">
-              {pending ? "…" : "✓ Concluir"}
-            </button>
-          )}
-          {canEdit && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Salvando…" : "Salvar"}</button>}
+        {/* solicitante: dar o "de acordo" ou reabrir */}
+        {canApprove && (
+          <div style={{ padding: "0.9rem 1.25rem", background: "var(--mh-warning-soft)", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--mh-warning)" }}>
+              O atendimento foi concluído e aguarda o seu <strong>de acordo</strong>. Se resolveu, aprove; caso contrário, reabra explicando o motivo no comentário.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem" }}>
+              <button type="button" className="btn btn-ghost" disabled={pending} onClick={reopen} title="Recusar a conclusão e reabrir o chamado">↩ Reabrir</button>
+              <button type="button" className="btn" style={{ background: "var(--mh-success)", color: "#fff" }} disabled={pending} onClick={approve} title="Concordar com a conclusão e encerrar">{pending ? "…" : "✓ Aprovar conclusão"}</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+          <span className="soft" style={{ fontSize: "0.78rem" }}>
+            {awaitingApproval ? "Aguardando o de acordo do solicitante." : ""}
+          </span>
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>{canEdit ? "Cancelar" : "Fechar"}</button>
+            {canEdit && !awaitingApproval && status !== "resolved" && status !== "cancelled" && (
+              <button type="button" className="btn" style={{ background: "var(--mh-success)", color: "#fff" }} disabled={pending} onClick={conclude} title="Conclui o atendimento e envia para o de acordo do solicitante">
+                {pending ? "…" : "✓ Concluir"}
+              </button>
+            )}
+            {canEdit && <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Salvando…" : "Salvar"}</button>}
+          </div>
         </div>
       </div>
     </div>

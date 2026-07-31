@@ -6,11 +6,11 @@ import { createEmployee, updateEmployee } from "@/lib/actions/employees";
 import { initialActionState } from "@/lib/actions/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { GENDER, UNIT_KIND, USER_TYPE, options } from "@/lib/constants";
+import { GENDER, ROLE, UNIT_KIND, USER_TYPE, options } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 
-export type Option = { id: string; name: string };
-export type SubdeptOption = { id: string; name: string; department_id: string };
+export type Option = { id: string; name: string; active?: boolean };
+export type SubdeptOption = { id: string; name: string; department_id: string; active?: boolean };
 export type UnitOption = { id: string; name: string; kind: keyof typeof UNIT_KIND };
 export type EmployeeData = {
   userId: string;
@@ -60,6 +60,7 @@ export function EmployeeDialog({
   positions,
   levels,
   people,
+  canSetOwner = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -70,6 +71,8 @@ export function EmployeeDialog({
   positions: Option[];
   levels: Option[];
   people: Option[];
+  /** super admin: pode definir/alterar o papel Proprietário (owner) */
+  canSetOwner?: boolean;
 }) {
   const isEdit = !!employee;
   const action = isEdit ? updateEmployee : createEmployee;
@@ -85,18 +88,28 @@ export function EmployeeDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
+  // ao (re)abrir para outro colaborador, sincroniza o setor selecionado (campo controlado)
+  useEffect(() => {
+    if (open) setDeptId(employee?.departmentId ?? "");
+  }, [open, employee]);
+
   if (!open) return null;
 
-  const subs = subdepartments.filter((s) => s.department_id === deptId);
+  // mostra só ativos, mas preserva o que já está atribuído ao colaborador (ao editar)
+  const act = <T extends { active?: boolean; id: string }>(list: T[], sel: string | null | undefined) =>
+    list.filter((o) => o.active !== false || o.id === sel);
+  const deptList = act(departments, employee?.departmentId);
+  const positionList = act(positions, employee?.positionId);
+  const levelList = act(levels, employee?.positionLevelId);
+  const subs = act(subdepartments.filter((s) => s.department_id === deptId), employee?.subdepartmentId);
 
   return (
     <div
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 70, overflowY: "auto" }}
+      style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 70, overflowY: "auto" }}
     >
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--shadow)" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{isEdit ? "Editar usuário" : "Novo usuário"}</h2>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{isEdit ? "Editar colaborador" : "Novo colaborador"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
@@ -151,13 +164,14 @@ export function EmployeeDialog({
                 <input name="employee_code" className="input" required defaultValue={employee?.employeeCode ?? ""} />
               </Field>
               <Field label="Tipo de usuário" req>
-                {employee?.role === "owner" ? (
+                {employee?.role === "owner" && !canSetOwner ? (
                   <>
                     <input type="hidden" name="role" value="owner" />
-                    <input className="input" value="Proprietário" disabled />
+                    <input className="input" value={ROLE.owner} disabled />
                   </>
                 ) : (
                   <select name="role" className="select" required defaultValue={employee?.role ?? "member"}>
+                    {canSetOwner && <option value="owner">{ROLE.owner}</option>}
                     {Object.entries(USER_TYPE).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 )}
@@ -167,12 +181,12 @@ export function EmployeeDialog({
               <Field label="Setor" req>
                 <select name="department_id" className="select" required value={deptId} onChange={(e) => setDeptId(e.target.value)}>
                   <option value="">Selecione…</option>
-                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  {deptList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </Field>
-              <Field label="Subsetor" req>
-                <select name="subdepartment_id" className="select" required defaultValue={employee?.subdepartmentId ?? ""} key={deptId}>
-                  <option value="">Selecione…</option>
+              <Field label="Subsetor">
+                <select name="subdepartment_id" className="select" defaultValue={employee?.subdepartmentId ?? ""} key={deptId}>
+                  <option value="">— Nenhum —</option>
                   {subs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </Field>
@@ -181,13 +195,13 @@ export function EmployeeDialog({
               <Field label="Função" req>
                 <select name="position_id" className="select" required defaultValue={employee?.positionId ?? ""}>
                   <option value="">Selecione…</option>
-                  {positions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {positionList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </Field>
               <Field label="Perfil da função">
                 <select name="position_level_id" className="select" defaultValue={employee?.positionLevelId ?? ""}>
                   <option value="">—</option>
-                  {levels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {levelList.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </Field>
             </div>
@@ -213,13 +227,13 @@ export function EmployeeDialog({
             )}
 
             {state.error && (
-              <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{state.error}</p>
+              <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{state.error}</p>
             )}
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-            <SubmitButton>{isEdit ? "Salvar" : "Criar usuário"}</SubmitButton>
+            <SubmitButton>{isEdit ? "Salvar" : "Criar colaborador"}</SubmitButton>
           </div>
         </form>
       </div>

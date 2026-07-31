@@ -1,4 +1,5 @@
 import type { Enums } from "@/types/database";
+import { isOverdue } from "@/lib/format";
 
 // tamanho de página dos registros de reunião ("Carregar mais")
 export const OCC_PAGE_SIZE = 300;
@@ -75,6 +76,23 @@ export function effStatus(status: Enums<"action_status">, overdue: boolean, pend
   return "andamento";
 }
 
+/**
+ * Status efetivo de UM responsável dentro da demanda (conclusão por pessoa).
+ * Quem já concluiu (completedAt) ou já enviou a parte (doneRequestedAt) NÃO conta
+ * como atrasada/andamento — só quem ainda não executou.
+ */
+export function assigneeEffStatus(
+  a: { doneRequestedAt: string | null; completedAt: string | null },
+  dueDate: string | null,
+  cancelled: boolean,
+): EffStatus {
+  if (a.completedAt) return "concluida";
+  if (cancelled) return "cancelada";
+  if (a.doneRequestedAt) return "aguardando";
+  if (dueDate && isOverdue(dueDate)) return "atrasada";
+  return "andamento";
+}
+
 // ---------- Chamados ----------
 export const TICKET_STATUS: Record<Enums<"ticket_status">, string> = {
   open: "Aberto",
@@ -99,7 +117,12 @@ export const TICKET_STATUS_TONE: Record<Enums<"ticket_status">, Tone> = {
 export function ticketStatusView(
   status: Enums<"ticket_status">,
   overdue: boolean,
+  awaitingApproval = false,
 ): { label: string; tone: Tone } {
+  // aguardando o "de acordo" do solicitante para concluir definitivamente
+  if (awaitingApproval && !["resolved", "closed", "cancelled"].includes(status)) {
+    return { label: "Aguardando de acordo", tone: "amber" };
+  }
   if (overdue && !["resolved", "closed", "cancelled"].includes(status)) {
     return { label: "Atrasado", tone: "red" };
   }
@@ -145,15 +168,188 @@ export const GOAL_DIRECTION: Record<Enums<"goal_direction">, string> = {
   menor_melhor: "Menor é melhor",
 };
 
-export const FAROL_LABEL: Record<"atingida" | "nao_atingida" | "pendente", string> = {
+export const FAROL_LABEL: Record<"atingida" | "parcial" | "nao_atingida" | "pendente", string> = {
   atingida: "Atingida",
+  parcial: "Parcial",
   nao_atingida: "Não atingida",
   pendente: "Pendente",
 };
 
-export const FAROL_TONE: Record<"atingida" | "nao_atingida" | "pendente", Tone> = {
+export const FAROL_TONE: Record<"atingida" | "parcial" | "nao_atingida" | "pendente", Tone> = {
   atingida: "green",
+  parcial: "amber",
   nao_atingida: "red",
+  pendente: "gray",
+};
+
+// status de fechamento mensal (aprovação da meta apurada)
+export const GOAL_ENTRY_STATUS: Record<Enums<"goal_entry_status">, string> = {
+  aberta: "Em apuração",
+  aprovada: "Aprovada",
+  reprovada: "Reprovada — revisar",
+};
+
+export const GOAL_ENTRY_STATUS_TONE: Record<Enums<"goal_entry_status">, Tone> = {
+  aberta: "gray",
+  aprovada: "green",
+  reprovada: "red",
+};
+
+// ---------- Feedbacks ----------
+export const FEEDBACK_TYPE_LABEL: Record<Enums<"feedback_type">, string> = {
+  reconhecimento: "Reconhecimento",
+  construtivo: "Construtivo",
+  neutro: "Neutro",
+};
+export const FEEDBACK_TYPE_TONE: Record<Enums<"feedback_type">, Tone> = {
+  reconhecimento: "green",
+  construtivo: "amber",
+  neutro: "gray",
+};
+export const FEEDBACK_VISIBILITY_LABEL: Record<Enums<"feedback_visibility">, string> = {
+  compartilhado: "Compartilhado",
+  privado: "Nota privada",
+};
+export const FEEDBACK_CHANNEL_LABEL: Record<Enums<"feedback_channel">, string> = {
+  presencial: "Presencial",
+  reuniao_1a1: "Reunião 1:1",
+  videochamada: "Videochamada",
+  mensagem: "Mensagem",
+  outro: "Outro",
+};
+// estado de aplicação (conversado com o colaborador)
+export const FEEDBACK_APPLIED_LABEL = { registrado: "Registrado", aplicado: "Aplicado" } as const;
+
+// PDI — status das ações de desenvolvimento
+export const PDI_STATUS_LABEL: Record<Enums<"pdi_action_status">, string> = {
+  pendente: "Pendente",
+  em_andamento: "Em andamento",
+  conclusao_solicitada: "Conclusão solicitada",
+  concluida: "Concluída",
+  cancelada: "Cancelada",
+};
+export const PDI_STATUS_TONE: Record<Enums<"pdi_action_status">, Tone> = {
+  pendente: "gray",
+  em_andamento: "blue",
+  conclusao_solicitada: "amber",
+  concluida: "green",
+  cancelada: "red",
+};
+
+// ---------- Checklists ----------
+export const CHECKLIST_ITEM_TYPE_LABEL: Record<Enums<"checklist_item_type">, string> = {
+  conformidade: "Conformidade",
+  sim_nao: "Sim / Não",
+  texto: "Texto",
+  numero: "Número",
+  selecao: "Seleção",
+  nota: "Nota / escala",
+};
+export const CHECKLIST_FREQUENCY_LABEL: Record<Enums<"checklist_frequency">, string> = {
+  unica: "Data fixa (única)",
+  diaria: "Diária",
+  semanal: "Semanal",
+  mensal: "Mensal",
+  anual: "Anual",
+};
+export const CHECKLIST_VISIBILITY_LABEL: Record<Enums<"checklist_visibility">, string> = {
+  todos: "Todos os usuários",
+  usuarios: "Usuários específicos",
+  cargos: "Cargos específicos",
+  areas: "Áreas específicas",
+};
+export const CHECKLIST_RUN_STATUS_LABEL: Record<Enums<"checklist_run_status">, string> = {
+  em_andamento: "Em andamento",
+  concluida: "Concluída",
+};
+export const CHECKLIST_CONFORMIDADE_LABEL: Record<"conforme" | "nao_conforme" | "na", string> = {
+  conforme: "Conforme",
+  nao_conforme: "Não conforme",
+  na: "N.A.",
+};
+export const CHECKLIST_CONFORMIDADE_TONE: Record<"conforme" | "nao_conforme" | "na", Tone> = {
+  conforme: "green",
+  nao_conforme: "red",
+  na: "gray",
+};
+export const WEEKDAYS_PT = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+export const CHECKLIST_TASK_STATUS_LABEL: Record<Enums<"checklist_task_status">, string> = {
+  pendente: "Pendente",
+  em_andamento: "Em tratamento",
+  concluida: "Concluída",
+  cancelada: "Cancelada",
+};
+export const CHECKLIST_TASK_STATUS_TONE: Record<Enums<"checklist_task_status">, Tone> = {
+  pendente: "red",
+  em_andamento: "amber",
+  concluida: "green",
+  cancelada: "gray",
+};
+
+// ---------- Diário de bordo (agenda) ----------
+export const AGENDA_STATUS_LABEL: Record<Enums<"agenda_log_status">, string> = {
+  pendente: "Pendente",
+  feito: "Realizada",
+  parcial: "Parcial",
+  nao_feito: "Não realizada",
+};
+export const AGENDA_STATUS_TONE: Record<Enums<"agenda_log_status">, Tone> = {
+  pendente: "gray",
+  feito: "green",
+  parcial: "amber",
+  nao_feito: "red",
+};
+export const AGENDA_FREQUENCY_LABEL: Record<Enums<"agenda_frequency">, string> = {
+  diaria: "Diária",
+  semanal: "Semanal",
+  mensal: "Mensal",
+  unica: "Data única",
+};
+/** Peso de cada status no cálculo de aderência. */
+export const AGENDA_STATUS_WEIGHT: Record<Enums<"agenda_log_status">, number> = {
+  pendente: 0,
+  feito: 1,
+  parcial: 0.5,
+  nao_feito: 0,
+};
+/** Jornada diária padrão em minutos (8h). */
+export const AGENDA_WORKDAY_MINUTES = 8 * 60;
+
+// ---------- Gravação/transcrição de reuniões ----------
+export const RECORDING_STATUS_LABEL: Record<Enums<"recording_transcript_status">, string> = {
+  pendente: "Pendente",
+  processando: "Processando",
+  concluida: "Concluída",
+  falha: "Falha",
+};
+export const RECORDING_STATUS_TONE: Record<Enums<"recording_transcript_status">, Tone> = {
+  pendente: "gray",
+  processando: "amber",
+  concluida: "green",
+  falha: "red",
+};
+/** Modelos de transcrição da OpenAI disponíveis (rótulos p/ Configurações). */
+export const TRANSCRIBE_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "gpt-4o-transcribe-diarize"] as const;
+export const TRANSCRIBE_MODEL_LABEL: Record<(typeof TRANSCRIBE_MODELS)[number], string> = {
+  "gpt-4o-mini-transcribe": "gpt-4o-mini-transcribe (melhor custo-benefício)",
+  "gpt-4o-transcribe": "gpt-4o-transcribe (mais preciso)",
+  "gpt-4o-transcribe-diarize": "gpt-4o-transcribe-diarize (com locutores)",
+};
+
+// ---------- PNR (Programa Nacional de Revendas) ----------
+export const PNR_TIER_LABEL: Record<"total" | "alta" | "baixa" | "zero" | "pendente", string> = {
+  total: "Meta cheia",
+  alta: "Parcial alta",
+  baixa: "Parcial baixa",
+  zero: "Não atingida",
+  pendente: "Pendente",
+};
+
+export const PNR_TIER_TONE: Record<"total" | "alta" | "baixa" | "zero" | "pendente", Tone> = {
+  total: "green",
+  alta: "amber",
+  baixa: "amber",
+  zero: "red",
   pendente: "gray",
 };
 
@@ -171,6 +367,7 @@ export const AREA_GOAL_KIND_FULL: Record<Enums<"area_goal_kind">, string> = {
 export const CONSOLIDATION_LABEL: Record<Enums<"area_consolidation">, string> = {
   soma: "Soma",
   media: "Média",
+  razao: "Razão (nº ÷ total)",
   manual: "Manual",
 };
 

@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { confirmDialog } from "@/components/ui/confirm";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -11,6 +14,8 @@ import { USER_TYPE } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
 import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
+import { IconImport } from "@/components/ui/ImpExpIcons";
+import { ExportButton } from "@/components/ui/ExportButton";
 
 export type EmployeeRow = EmployeeData & {
   departmentName: string | null;
@@ -41,7 +46,7 @@ function Ico({ d }: { d: string }) {
   );
 }
 
-const MAX_VISIBLE = 100;
+const PAGE_SIZE = 50;
 
 export function UsersManager({
   employees,
@@ -52,6 +57,7 @@ export function UsersManager({
   levels,
   people,
   currentUserId,
+  isSuperAdmin = false,
 }: {
   employees: EmployeeRow[];
   units: UnitOption[];
@@ -61,32 +67,94 @@ export function UsersManager({
   levels: Option[];
   people: Option[];
   currentUserId: string;
+  /** dono do SaaS: pode gerir o papel Proprietário e agir sobre owners */
+  isSuperAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<EmployeeRow | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
+  const [editing, setEditing] = useState<EmployeeRow | undefined>(undefined);
   const [query, setQuery] = useState("");
+  const [deptFilter, setDeptFilter] = useState("");
+  const [posFilter, setPosFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [page, setPage] = useState(1);
+
+  const router = useRouter();
+  const [, startTransition] = useTransition();
 
   const openCreate = () => { setEditing(undefined); setOpen(true); };
   const openEdit = (e: EmployeeRow) => { setEditing(e); setOpen(true); };
 
+  async function toggleActive(userId: string, makeActive: boolean, name: string | null) {
+    // inativar corta o acesso da pessoa: confirma antes. Reativar é direto.
+    if (!makeActive) {
+      const ok = await confirmDialog({
+        title: "Inativar colaborador",
+        message: `Inativar ${name ?? "este colaborador"}? Ele perde o acesso ao sistema até ser reativado.`,
+        confirmLabel: "Inativar",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    const fd = new FormData();
+    fd.set("user_id", userId);
+    fd.set("active", String(makeActive));
+    startTransition(async () => {
+      const res = await setMemberActive(fd);
+      if (res?.error) { toast.error(res.error); return; }
+      toast.success(makeActive ? "Colaborador ativado." : "Colaborador inativado.");
+      router.refresh();
+    });
+  }
+
+  async function remove(userId: string, name: string | null) {
+    const ok = await confirmDialog({
+      title: "Excluir usuário",
+      message: `Excluir ${name ?? "este usuário"}? Esta ação não pode ser desfeita.`,
+      confirmLabel: "Excluir",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const fd = new FormData();
+    fd.set("user_id", userId);
+    startTransition(async () => {
+      const res = await removeUser(fd);
+      if (res?.error) { toast.error(res.error); return; }
+      toast.success(`${name ?? "Usuário"} removido.`);
+      router.refresh();
+    });
+  }
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return employees;
     const qd = onlyDigits(q);
-    return employees.filter((e) =>
-      (e.fullName ?? "").toLowerCase().includes(q) ||
-      (e.employeeCode ?? "").toLowerCase().includes(q) ||
-      (qd.length >= 3 && (e.cpf ?? "").includes(qd)),
-    );
-  }, [employees, query]);
+    return employees.filter((e) => {
+      if (q && !(
+        (e.fullName ?? "").toLowerCase().includes(q) ||
+        (e.employeeCode ?? "").toLowerCase().includes(q) ||
+        (qd.length >= 3 && (e.cpf ?? "").includes(qd))
+      )) return false;
+      if (deptFilter && e.departmentId !== deptFilter) return false;
+      if (posFilter && e.positionId !== posFilter) return false;
+      if (statusFilter === "active" && !e.active) return false;
+      if (statusFilter === "inactive" && e.active) return false;
+      return true;
+    });
+  }, [employees, query, deptFilter, posFilter, statusFilter]);
 
-  const visible = filtered.slice(0, MAX_VISIBLE);
+  // sempre que os filtros mudam, volta para a primeira página
+  useEffect(() => { setPage(1); }, [query, deptFilter, posFilter, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const start = (pageClamped - 1) * PAGE_SIZE;
+  const visible = filtered.slice(start, start + PAGE_SIZE);
+  const hasFilters = !!(query || deptFilter || posFilter || statusFilter !== "all");
 
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.9rem 1.1rem", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Usuários · {employees.length}</h2>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Colaboradores · {employees.length}</h2>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
           <input
             className="input"
@@ -95,9 +163,38 @@ export function UsersManager({
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: 280, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}
           />
-          <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}>↑ Importar em lote</button>
-          <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo usuário</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>
+          <ExportButton
+            filename="colaboradores.xlsx"
+            sheetName="Colaboradores"
+            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail"]}
+            rows={employees.map((e) => {
+              const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
+              const sub = e.subdepartmentId ? subdepartments.find((s) => s.id === e.subdepartmentId)?.name ?? "" : "";
+              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", sub, brDate(e.birthDate), e.cpf ?? "", "", e.gender ?? "", e.phone ?? "", e.email ?? ""];
+            })}
+          />
+          <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>
         </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", padding: "0.75rem 1.1rem", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+        <select className="select" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} style={{ width: 200, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
+          <option value="">Todos os setores</option>
+          {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <select className="select" value={posFilter} onChange={(e) => setPosFilter(e.target.value)} style={{ width: 200, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
+          <option value="">Todas as funções</option>
+          {positions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")} style={{ width: 160, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
+          <option value="all">Todos os status</option>
+          <option value="active">Ativos</option>
+          <option value="inactive">Inativos</option>
+        </select>
+        {hasFilters && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setQuery(""); setDeptFilter(""); setPosFilter(""); setStatusFilter("all"); }}>Limpar filtros</button>
+        )}
       </div>
 
       {visible.length > 0 ? (
@@ -106,7 +203,7 @@ export function UsersManager({
             <tr>
               <th>Matrícula</th>
               <th>CPF</th>
-              <th>Usuário</th>
+              <th>Colaborador</th>
               <th>Setor / Função</th>
               <th>Tipo</th>
               <th>Status</th>
@@ -116,6 +213,8 @@ export function UsersManager({
           <tbody>
             {visible.map((e) => {
               const isSelf = e.userId === currentUserId;
+              // owner só pode ser inativado/removido pelo dono do SaaS (super admin)
+              const canAct = !isSelf && (e.role !== "owner" || isSuperAdmin);
               return (
                 <tr key={e.userId} style={{ opacity: e.active ? 1 : 0.6 }}>
                   <td className="muted">{e.employeeCode ?? "—"}</td>
@@ -136,25 +235,18 @@ export function UsersManager({
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                       <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
-                      {!isSelf && e.role !== "owner" && (
-                        <form action={setMemberActive} style={{ display: "inline-flex" }}>
-                          <input type="hidden" name="user_id" value={e.userId} />
-                          <input type="hidden" name="active" value={String(!e.active)} />
-                          <button className="icon-btn" type="submit" title={e.active ? "Inativar" : "Ativar"}><Ico d={ICON.power} /></button>
-                        </form>
+                      {canAct && (
+                        <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
                       )}
-                      <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">
+                      <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" triggerTitle="Redefinir senha" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">
                         <input type="hidden" name="user_id" value={e.userId} />
                         <div>
                           <label className="label">Nova senha</label>
                           <PasswordInput autoComplete="new-password" minLength={6} placeholder="Mínimo 6 caracteres" />
                         </div>
                       </FormModal>
-                      {!isSelf && e.role !== "owner" && (
-                        <form action={removeUser} style={{ display: "inline-flex" }}>
-                          <input type="hidden" name="user_id" value={e.userId} />
-                          <button className="icon-btn icon-btn-danger" type="submit" title="Remover"><Ico d={ICON.trash} /></button>
-                        </form>
+                      {canAct && (
+                        <button className="icon-btn icon-btn-danger" type="button" title="Remover" onClick={() => remove(e.userId, e.fullName)}><Ico d={ICON.trash} /></button>
                       )}
                     </div>
                   </td>
@@ -164,12 +256,20 @@ export function UsersManager({
           </tbody>
         </table>
       ) : (
-        <EmptyState title={query ? "Nenhum usuário encontrado" : "Nenhum usuário"} description={query ? "Tente outro nome, CPF ou matrícula." : undefined} />
+        <EmptyState title={hasFilters ? "Nenhum colaborador encontrado" : "Nenhum colaborador"} description={hasFilters ? "Tente outros filtros ou termo de busca." : undefined} />
       )}
 
-      {filtered.length > MAX_VISIBLE && (
-        <div className="soft" style={{ padding: "0.75rem 1.1rem", fontSize: "0.82rem", borderTop: "1px solid var(--border)" }}>
-          Mostrando {MAX_VISIBLE} de {filtered.length}. Refine a busca para encontrar usuários específicos.
+      {filtered.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.75rem 1.1rem", fontSize: "0.82rem", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+          <span className="soft">
+            {start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} de {filtered.length}
+            {filtered.length !== employees.length ? ` (${employees.length} no total)` : ""}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button className="btn btn-ghost btn-sm" disabled={pageClamped <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</button>
+            <span className="muted">Página {pageClamped} de {totalPages}</span>
+            <button className="btn btn-ghost btn-sm" disabled={pageClamped >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Próxima</button>
+          </div>
         </div>
       )}
 
@@ -183,6 +283,7 @@ export function UsersManager({
         positions={positions}
         levels={levels}
         people={people}
+        canSetOwner={isSuperAdmin}
       />
 
       <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />

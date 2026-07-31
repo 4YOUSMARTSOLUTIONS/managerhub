@@ -10,24 +10,34 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PERIODICITY } from "@/lib/constants";
 import { formatDate, formatTime, formatDateTime, formatDuration } from "@/lib/format";
-import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, cancelOccurrence, loadMoreOccurrences, type OccurrenceDraft } from "@/lib/actions/meeting-records";
+import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, anticipateOccurrence, cancelOccurrence, loadMoreOccurrences, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { OCC_PAGE_SIZE } from "@/lib/constants";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
+import { MeetingRecordingsViewer } from "./MeetingRecordingsViewer";
+import { MeetingOccurrenceDetail } from "./MeetingOccurrenceDetail";
+import { MeetingFollowDialog } from "./MeetingFollowDialog";
+import { SeriesViewDialog } from "./SeriesViewDialog";
+import { StartMeetingDialog } from "./StartMeetingDialog";
 import { SearchSelect } from "./SearchSelect";
 import { ElapsedTimer } from "./ElapsedTimer";
-import type { Opt, BlocoOpt, ItemOpt } from "./ActionDialog";
+import type { Opt, SecaoOpt, BlocoOpt, ItemOpt } from "./ActionDialog";
 import type { Person } from "./PeoplePicker";
+import type { Enums } from "@/types/database";
+import { Filter, Globe } from "lucide-react";
+import { toast } from "sonner";
 
 export type OccStatus = "in_progress" | "finished" | "cancelled";
-export type SeriesRow = SeriesData & { isActive: boolean };
+export type SeriesRow = SeriesData & { isActive: boolean; lastHeldDate: string | null };
 export type OccurrenceRow = {
   id: string;
   seriesId: string;
   seriesName: string;
   occurredOn: string;
   status: OccStatus;
+  autoFinished: boolean;
+  meetingLink: string | null;
   startedAt: string | null;
   endedAt: string | null;
   durationSeconds: number | null;
@@ -35,6 +45,8 @@ export type OccurrenceRow = {
   presentCount: number;
   totalCount: number;
   actionsCount: number;
+  recordingsCount: number;
+  registeredById: string | null;
   registeredByName: string | null;
 };
 
@@ -48,6 +60,7 @@ const ICON = {
   edit: "M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z|m15 5 4 4",
   power: "M12 2v10|M18.36 6.64a9 9 0 1 1-12.73 0",
   trash: "M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6|M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z|M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
 };
 function Ico({ d }: { d: string }) {
   return (
@@ -66,11 +79,14 @@ export function MeetingRecords({
   rooms,
   units,
   pilares,
+  secoes,
   blocos,
   itens,
   kpis,
   tools,
   aiEnabled,
+  currentUserId,
+  role,
 }: {
   series: SeriesRow[];
   occurrences: OccurrenceRow[];
@@ -78,31 +94,48 @@ export function MeetingRecords({
   rooms: Room[];
   units: Unit[];
   pilares: Opt[];
+  secoes: SecaoOpt[];
   blocos: BlocoOpt[];
   itens: ItemOpt[];
   kpis: Opt[];
   tools: Opt[];
   aiEnabled: boolean;
+  currentUserId: string;
+  role: Enums<"member_role">;
 }) {
+  // criação de reunião restrita a owner/admin/manager (member não cria)
+  const canCreate = role === "owner" || role === "admin" || role === "manager";
+  // dono, gerencial (manager) e owner sempre; pública → admin também; privada → participantes também. Criador não edita.
+  const canEditSeries = (s: SeriesRow) =>
+    role === "owner" || role === "manager"
+    || s.ownerUserId === currentUserId
+    || (s.isPrivate ? s.participantIds.includes(currentUserId) : role === "admin");
   const router = useRouter();
   const [pending, start] = useTransition();
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [editing, setEditing] = useState<SeriesData | undefined>(undefined);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishOcc, setFinishOcc] = useState<OccurrenceRow | null>(null);
+  const [viewerOcc, setViewerOcc] = useState<OccurrenceRow | null>(null);
+  const [detailOcc, setDetailOcc] = useState<OccurrenceRow | null>(null);
+  const [followOcc, setFollowOcc] = useState<OccurrenceRow | null>(null);
+  const [viewSeries, setViewSeries] = useState<SeriesRow | null>(null);
+  const [overtimeOcc, setOvertimeOcc] = useState<OccurrenceRow | null>(null);
+  const [snoozes, setSnoozes] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, OccurrenceDraft>>({});
 
   // filtros — reuniões cadastradas (padrão: só ativas)
+  const [seriesFiltersOpen, setSeriesFiltersOpen] = useState(false);
+  const [recFiltersOpen, setRecFiltersOpen] = useState(false);
   const [seriesQuery, setSeriesQuery] = useState("");
   const [seriesStatus, setSeriesStatus] = useState<"all" | "active" | "inactive">("active");
   const [seriesPeriod, setSeriesPeriod] = useState("all");
-  const [seriesUnit, setSeriesUnit] = useState("all");
+  // unidade: filtrada pelo seletor global do topo, não por esta tela
   const [seriesResp, setSeriesResp] = useState("all");
   const [seriesPart, setSeriesPart] = useState("all");
   // filtros — registros
   const [recQuery, setRecQuery] = useState("");
   const [recSeries, setRecSeries] = useState("all");
-  const [recUnit, setRecUnit] = useState("all");
   const [recResp, setRecResp] = useState("all");
   const [recPeriod, setRecPeriod] = useState("all");
   const [recPart, setRecPart] = useState("all");
@@ -137,28 +170,58 @@ export function MeetingRecords({
   const inProgressBySeries = useMemo(() => new Map(inProgress.map((o) => [o.seriesId, o])), [inProgress]);
   const history = useMemo(() => occ.filter((o) => o.status !== "in_progress"), [occ]);
 
+  // duração prevista (min) de uma reunião a partir da série
+  const plannedMin = (s: SeriesRow | undefined) => (s ? (s.durationMin ?? 0) * (s.durationUnit === "h" ? 60 : 1) : 0);
+  const plannedLabel = (s: SeriesRow | undefined) => (s && s.durationUnit === "h" ? `${s.durationMin}h` : `${plannedMin(s)} min`);
+
+  // alerta de estouro de tempo: para quem iniciou a reunião ou é dono; reavisa a cada 15 min até finalizar
+  useEffect(() => {
+    if (inProgress.length === 0) return;
+    const tick = () => {
+      setOvertimeOcc((cur) => {
+        if (cur) return cur; // já há um alerta aberto
+        const now = Date.now();
+        for (const o of inProgress) {
+          const s = seriesById.get(o.seriesId);
+          if (!s || !o.startedAt) continue;
+          const mine = o.registeredById === currentUserId || s.ownerUserId === currentUserId;
+          if (!mine) continue;
+          const planned = plannedMin(s);
+          if (planned <= 0) continue;
+          const elapsedMin = (now - new Date(o.startedAt).getTime()) / 60000;
+          if (elapsedMin >= planned && now >= (snoozes[o.id] ?? 0)) return o;
+        }
+        return null;
+      });
+    };
+    tick();
+    const t = setInterval(tick, 30000);
+    return () => clearInterval(t);
+  }, [inProgress, seriesById, currentUserId, snoozes]);
+
   const openCreate = () => { setEditing(undefined); setSeriesOpen(true); };
   const openEdit = (s: SeriesRow) => { setEditing(s); setSeriesOpen(true); };
   const openFinish = (o: OccurrenceRow) => { setFinishOcc(o); setFinishOpen(true); };
   const [confirmStart, setConfirmStart] = useState<SeriesRow | null>(null);
+  // quando true, o início é antes da data agendada → fluxo de antecipação (pede a próxima reunião)
+  const [anticipating, setAnticipating] = useState(false);
   const doStart = (s: SeriesRow) => {
     const pad = (n: number) => String(n).padStart(2, "0");
     const d = new Date();
     const todayStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    if (s.nextDate && s.nextDate > todayStr) {
-      alert(`A próxima reunião está agendada para ${formatDate(s.nextDate)}. Para iniciar antes, edite a data da próxima reunião.`);
-      return;
-    }
+    setAnticipating(!!(s.nextDate && s.nextDate > todayStr));
     setConfirmStart(s);
   };
 
-  const runStart = () => {
+  const runStart = (roomId: string, link: string, nextDate?: string, nextTime?: string) => {
     const s = confirmStart;
     if (!s) return;
     start(async () => {
-      const r = await startOccurrence(s.id);
+      const r = anticipating && nextDate
+        ? await anticipateOccurrence(s.id, { roomId: roomId || null, link, nextDate, nextTime })
+        : await startOccurrence(s.id, { roomId: roomId || null, link });
+      if (r.error) { toast.error(r.error); return; } // mantém o diálogo aberto p/ trocar a sala
       setConfirmStart(null);
-      if (r.error) { alert(r.error); return; }
       router.refresh();
     });
   };
@@ -170,7 +233,7 @@ export function MeetingRecords({
     start(async () => {
       const r = await cancelOccurrence(id);
       setConfirmCancel(null);
-      if (r.error) { alert(r.error); return; }
+      if (r.error) { toast.error(r.error); return; }
       router.refresh();
     });
   };
@@ -181,14 +244,13 @@ export function MeetingRecords({
       if (seriesStatus === "active" && !s.isActive) return false;
       if (seriesStatus === "inactive" && s.isActive) return false;
       if (seriesPeriod !== "all" && s.periodicity !== seriesPeriod) return false;
-      if (seriesUnit !== "all" && !(s.unitIds ?? []).includes(seriesUnit)) return false;
       if (seriesResp !== "all" && s.ownerUserId !== seriesResp) return false;
       if (seriesPart !== "all" && !(s.participantIds ?? []).includes(seriesPart)) return false;
       if (!q) return true;
       const hay = norm([s.name, s.owner ?? "", s.ownerUserName ?? "", ...(s.unitNames ?? []), PERIODICITY[s.periodicity as keyof typeof PERIODICITY]].join(" "));
       return hay.includes(q);
     });
-  }, [series, seriesQuery, seriesStatus, seriesPeriod, seriesUnit, seriesResp, seriesPart]);
+  }, [series, seriesQuery, seriesStatus, seriesPeriod, seriesResp, seriesPart]);
 
   const filteredOcc = useMemo(() => {
     const q = norm(recQuery.trim());
@@ -197,50 +259,80 @@ export function MeetingRecords({
       if (recFrom && o.occurredOn < recFrom) return false;
       if (recTo && o.occurredOn > recTo) return false;
       const s = seriesById.get(o.seriesId);
-      if (recUnit !== "all" && !(s?.unitIds ?? []).includes(recUnit)) return false;
       if (recResp !== "all" && s?.ownerUserId !== recResp) return false;
       if (recPeriod !== "all" && s?.periodicity !== recPeriod) return false;
       if (recPart !== "all" && !(s?.participantIds ?? []).includes(recPart)) return false;
       if (!q) return true;
       return norm(`${o.seriesName} ${o.registeredByName ?? ""}`).includes(q);
     });
-  }, [history, recQuery, recSeries, recFrom, recTo, recUnit, recResp, recPeriod, recPart, seriesById]);
+  }, [history, recQuery, recSeries, recFrom, recTo, recResp, recPeriod, recPart, seriesById]);
 
-  const seriesFilterStyle = { padding: "0.42rem 0.6rem", fontSize: "0.85rem" };
+  const filterFieldStyle = { display: "flex", flexDirection: "column", gap: "0.3rem" } as const;
+  const filterPanelStyle = { padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)", background: "var(--mh-surface-2)" } as const;
+  const filterGridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.85rem" } as const;
+
+  const seriesActive = [seriesResp !== "all", seriesPeriod !== "all", seriesPart !== "all", seriesStatus !== "active"].filter(Boolean).length;
+  const clearSeries = () => { setSeriesResp("all"); setSeriesPeriod("all"); setSeriesPart("all"); setSeriesStatus("active"); };
+  const recActive = [recQuery.trim(), recSeries !== "all", recResp !== "all", recPeriod !== "all", recPart !== "all", recFrom, recTo].filter(Boolean).length;
+  const clearRec = () => { setRecQuery(""); setRecSeries("all"); setRecResp("all"); setRecPeriod("all"); setRecPart("all"); setRecFrom(""); setRecTo(""); };
+
   const seriesTab = (
     <Section
       title={`Reuniões cadastradas · ${filteredSeries.length}${filteredSeries.length !== series.length ? ` de ${series.length}` : ""}`}
       padded={false}
+      action={series.length > 0 ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, justifyContent: "flex-end", minWidth: 0 }}>
+          <input className="input" placeholder="Buscar por nome, dono, unidade…" value={seriesQuery} onChange={(e) => setSeriesQuery(e.target.value)} style={{ flex: 1, maxWidth: 420, minWidth: 0 }} />
+          {seriesActive > 0 && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={clearSeries}>Limpar filtros</button>
+          )}
+          <button
+            type="button"
+            className={`btn btn-sm ${seriesFiltersOpen || seriesActive > 0 ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setSeriesFiltersOpen((v) => !v)}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}
+          >
+            <Filter size={15} />
+            Filtros
+            {seriesActive > 0 && <Badge tone="blue">{seriesActive}</Badge>}
+          </button>
+        </div>
+      ) : undefined}
     >
-      {series.length > 0 && (
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.8rem 1.1rem", borderBottom: "1px solid var(--border)" }}>
-          <input className="input" placeholder="Buscar por nome…" value={seriesQuery} onChange={(e) => setSeriesQuery(e.target.value)} style={{ flex: "1 1 200px", minWidth: 160, ...seriesFilterStyle }} />
-          {units.length > 0 && (
-            <select className="select" value={seriesUnit} onChange={(e) => setSeriesUnit(e.target.value)} style={{ width: "auto", ...seriesFilterStyle }} title="Unidade">
-              <option value="all">Todas as unidades</option>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          )}
-          {respOptions.length > 0 && (
-            <select className="select" value={seriesResp} onChange={(e) => setSeriesResp(e.target.value)} style={{ width: "auto", maxWidth: 200, ...seriesFilterStyle }} title="Usuário responsável">
-              <option value="all">Todos os responsáveis</option>
-              {respOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          )}
-          <select className="select" value={seriesPeriod} onChange={(e) => setSeriesPeriod(e.target.value)} style={{ width: "auto", ...seriesFilterStyle }} title="Frequência">
-            <option value="all">Toda frequência</option>
-            {(Object.entries(PERIODICITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          {partOptions.length > 0 && (
-            <div style={{ width: 200 }} title="Usuário participante">
-              <SearchSelect options={partOptions} value={seriesPart === "all" ? "" : seriesPart} onChange={(id) => setSeriesPart(id || "all")} placeholder="Participante…" emptyHint="Nenhum participante" />
+      {series.length > 0 && seriesFiltersOpen && (
+        <div style={filterPanelStyle}>
+          <div style={filterGridStyle}>
+            {respOptions.length > 0 && (
+              <div style={filterFieldStyle}>
+                <span className="label" style={{ margin: 0 }}>Responsável</span>
+                <select className="select" value={seriesResp} onChange={(e) => setSeriesResp(e.target.value)}>
+                  <option value="all">Todos</option>
+                  {respOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Frequência</span>
+              <select className="select" value={seriesPeriod} onChange={(e) => setSeriesPeriod(e.target.value)}>
+                <option value="all">Todas</option>
+                {(Object.entries(PERIODICITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
             </div>
-          )}
-          <select className="select" value={seriesStatus} onChange={(e) => setSeriesStatus(e.target.value as "all" | "active" | "inactive")} style={{ width: "auto", ...seriesFilterStyle }} title="Status">
-            <option value="active">Ativas</option>
-            <option value="inactive">Inativas</option>
-            <option value="all">Ativas e inativas</option>
-          </select>
+            {partOptions.length > 0 && (
+              <div style={filterFieldStyle}>
+                <span className="label" style={{ margin: 0 }}>Participante</span>
+                <SearchSelect options={partOptions} value={seriesPart === "all" ? "" : seriesPart} onChange={(id) => setSeriesPart(id || "all")} placeholder="Participante…" emptyHint="Nenhum participante" />
+              </div>
+            )}
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Status</span>
+              <select className="select" value={seriesStatus} onChange={(e) => setSeriesStatus(e.target.value as "all" | "active" | "inactive")}>
+                <option value="active">Ativas</option>
+                <option value="inactive">Inativas</option>
+                <option value="all">Ativas e inativas</option>
+              </select>
+            </div>
+          </div>
         </div>
       )}
       {series.length === 0 ? (
@@ -253,6 +345,7 @@ export function MeetingRecords({
               <th>Dono</th>
               <th>Periodicidade</th>
               <th>Unidades</th>
+              <th>Última realizada</th>
               <th>Próxima</th>
               <th>Participantes</th>
               <th>Status</th>
@@ -262,7 +355,7 @@ export function MeetingRecords({
           <tbody>
             {filteredSeries.map((s) => (
               <tr key={s.id} style={{ opacity: s.isActive ? 1 : 0.55 }}>
-                <td style={{ fontWeight: 600 }}>{s.name}</td>
+                <td style={{ fontWeight: 600 }}>{s.name}{s.isPrivate && <Badge tone="purple">Privada</Badge>}</td>
                 <td className="muted">{s.ownerUserName ?? s.owner ?? "—"}</td>
                 <td className="muted">{PERIODICITY[s.periodicity as keyof typeof PERIODICITY]}</td>
                 <td className="muted">
@@ -272,35 +365,41 @@ export function MeetingRecords({
                       ? "Todas"
                       : s.unitNames.join(", ")}
                 </td>
-                <td className="muted" style={{ whiteSpace: "nowrap" }}>{s.nextDate ? formatDate(s.nextDate) : "—"}</td>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{s.lastHeldDate ? formatDateTime(s.lastHeldDate) : "—"}</td>
+                <td className="muted" style={{ whiteSpace: "nowrap" }}>{s.nextDate ? `${formatDate(s.nextDate)}${s.startTime ? " " + s.startTime.slice(0, 5) : ""}` : "—"}</td>
                 <td className="muted">{s.participantIds.length}</td>
                 <td><Badge tone={s.isActive ? "green" : "gray"}>{s.isActive ? "Ativa" : "Inativa"}</Badge></td>
                 <td style={{ textAlign: "right" }}>
                   <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end", alignItems: "center" }}>
                     {s.isActive && (
                       inProgressBySeries.has(s.id) ? (
-                        <button className="btn btn-sm" style={{ background: "var(--blue-50, #eff6ff)", color: "#1d4ed8", border: "1px solid #bfdbfe" }} onClick={() => openFinish(inProgressBySeries.get(s.id)!)}>● Em andamento</button>
+                        <button className="btn btn-sm" style={{ background: "var(--blue-50, var(--mh-info-soft))", color: "var(--mh-info)", border: "1px solid color-mix(in srgb, var(--mh-info) 32%, transparent)" }} onClick={() => openFinish(inProgressBySeries.get(s.id)!)}>● Em andamento</button>
                       ) : (
                         <button className="btn btn-primary btn-sm" disabled={pending} onClick={() => doStart(s)}>Iniciar</button>
                       )
                     )}
-                    <button className="icon-btn" title="Editar" onClick={() => openEdit(s)}><Ico d={ICON.edit} /></button>
-                    <form action={toggleSeries} style={{ display: "inline-flex" }}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <input type="hidden" name="is_active" value={String(s.isActive)} />
-                      <button className="icon-btn" type="submit" title={s.isActive ? "Inativar" : "Ativar"}><Ico d={ICON.power} /></button>
-                    </form>
-                    <ConfirmActionButton
-                      action={deleteSeries}
-                      fields={{ id: s.id }}
-                      className="icon-btn icon-btn-danger"
-                      buttonTitle="Excluir"
-                      title="Excluir reunião (TOR)"
-                      message={<>Excluir <strong>{s.name}</strong>? Todo o histórico de registros dessa série será removido.</>}
-                      confirmLabel="Excluir"
-                    >
-                      <Ico d={ICON.trash} />
-                    </ConfirmActionButton>
+                    <button className="icon-btn" title="Ver informações da reunião" onClick={() => setViewSeries(s)}><Ico d={ICON.eye} /></button>
+                    {canEditSeries(s) && (
+                      <>
+                        <button className="icon-btn" title="Editar" onClick={() => openEdit(s)}><Ico d={ICON.edit} /></button>
+                        <form action={toggleSeries} style={{ display: "inline-flex" }}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <input type="hidden" name="is_active" value={String(s.isActive)} />
+                          <button className="icon-btn" type="submit" title={s.isActive ? "Inativar" : "Ativar"}><Ico d={ICON.power} /></button>
+                        </form>
+                        <ConfirmActionButton
+                          action={deleteSeries}
+                          fields={{ id: s.id }}
+                          className="icon-btn icon-btn-danger"
+                          buttonTitle="Excluir"
+                          title="Excluir reunião (TOR)"
+                          message={<>Excluir <strong>{s.name}</strong>? Todo o histórico de registros dessa série será removido.</>}
+                          confirmLabel="Excluir"
+                        >
+                          <Ico d={ICON.trash} />
+                        </ConfirmActionButton>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -317,49 +416,69 @@ export function MeetingRecords({
     <Section
       title={`Registros · ${filteredOcc.length}${filteredOcc.length !== history.length ? ` de ${history.length}` : ""}`}
       padded={false}
-    >
-      {history.length > 0 && (
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.8rem 1.1rem", borderBottom: "1px solid var(--border)" }}>
-          <input className="input" placeholder="Buscar por nome…" value={recQuery} onChange={(e) => setRecQuery(e.target.value)} style={{ flex: "1 1 180px", minWidth: 150, ...seriesFilterStyle }} />
-          <select className="select" value={recSeries} onChange={(e) => setRecSeries(e.target.value)} style={{ width: "auto", maxWidth: 190, ...seriesFilterStyle }} title="Reunião">
-            <option value="all">Todas as reuniões</option>
-            {series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          {units.length > 0 && (
-            <select className="select" value={recUnit} onChange={(e) => setRecUnit(e.target.value)} style={{ width: "auto", ...seriesFilterStyle }} title="Unidade">
-              <option value="all">Todas as unidades</option>
-              {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+      action={history.length > 0 ? (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+          {recActive > 0 && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={clearRec}>Limpar filtros</button>
           )}
-          {respOptions.length > 0 && (
-            <select className="select" value={recResp} onChange={(e) => setRecResp(e.target.value)} style={{ width: "auto", maxWidth: 190, ...seriesFilterStyle }} title="Usuário responsável">
-              <option value="all">Todos os responsáveis</option>
-              {respOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          )}
-          <select className="select" value={recPeriod} onChange={(e) => setRecPeriod(e.target.value)} style={{ width: "auto", ...seriesFilterStyle }} title="Frequência">
-            <option value="all">Toda frequência</option>
-            {(Object.entries(PERIODICITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          {partOptions.length > 0 && (
-            <div style={{ width: 190 }} title="Usuário participante">
-              <SearchSelect options={partOptions} value={recPart === "all" ? "" : recPart} onChange={(id) => setRecPart(id || "all")} placeholder="Participante…" emptyHint="Nenhum participante" />
-            </div>
-          )}
-          <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.8rem" }} className="soft">
-            De <input type="date" className="input" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} style={{ width: "auto", padding: "0.35rem 0.5rem", fontSize: "0.82rem" }} />
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.8rem" }} className="soft">
-            Até <input type="date" className="input" value={recTo} onChange={(e) => setRecTo(e.target.value)} style={{ width: "auto", padding: "0.35rem 0.5rem", fontSize: "0.82rem" }} />
-          </label>
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => { setRecQuery(""); setRecSeries("all"); setRecUnit("all"); setRecResp("all"); setRecPeriod("all"); setRecPart("all"); setRecFrom(""); setRecTo(""); }}
-            title="Limpar todos os filtros"
+            className={`btn btn-sm ${recFiltersOpen || recActive > 0 ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setRecFiltersOpen((v) => !v)}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
           >
-            Limpar filtros
+            <Filter size={15} />
+            Filtros
+            {recActive > 0 && <Badge tone="blue">{recActive}</Badge>}
           </button>
+        </div>
+      ) : undefined}
+    >
+      {history.length > 0 && recFiltersOpen && (
+        <div style={filterPanelStyle}>
+          <div style={filterGridStyle}>
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Buscar</span>
+              <input className="input" placeholder="Reunião, registrado por…" value={recQuery} onChange={(e) => setRecQuery(e.target.value)} style={{ width: "100%" }} />
+            </div>
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Reunião</span>
+              <select className="select" value={recSeries} onChange={(e) => setRecSeries(e.target.value)}>
+                <option value="all">Todas</option>
+                {series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            {respOptions.length > 0 && (
+              <div style={filterFieldStyle}>
+                <span className="label" style={{ margin: 0 }}>Responsável</span>
+                <select className="select" value={recResp} onChange={(e) => setRecResp(e.target.value)}>
+                  <option value="all">Todos</option>
+                  {respOptions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Frequência</span>
+              <select className="select" value={recPeriod} onChange={(e) => setRecPeriod(e.target.value)}>
+                <option value="all">Todas</option>
+                {(Object.entries(PERIODICITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            {partOptions.length > 0 && (
+              <div style={filterFieldStyle}>
+                <span className="label" style={{ margin: 0 }}>Participante</span>
+                <SearchSelect options={partOptions} value={recPart === "all" ? "" : recPart} onChange={(id) => setRecPart(id || "all")} placeholder="Participante…" emptyHint="Nenhum participante" />
+              </div>
+            )}
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Data de</span>
+              <input type="date" className="input" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
+            </div>
+            <div style={filterFieldStyle}>
+              <span className="label" style={{ margin: 0 }}>Data até</span>
+              <input type="date" className="input" value={recTo} onChange={(e) => setRecTo(e.target.value)} />
+            </div>
+          </div>
         </div>
       )}
       {history.length === 0 ? (
@@ -382,26 +501,39 @@ export function MeetingRecords({
           <tbody>
             {filteredOcc.map((o) => (
               <tr key={o.id} style={{ opacity: o.status === "cancelled" ? 0.6 : 1 }}>
-                <td style={{ fontWeight: 600 }}>{o.seriesName}</td>
+                <td style={{ fontWeight: 600 }}>
+                  <button type="button" onClick={() => setDetailOcc(o)} title="Ver detalhes da reunião" style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--mh-primary-600, var(--text))", cursor: "pointer", textAlign: "left" }}>
+                    {o.seriesName}
+                  </button>
+                </td>
                 <td className="muted">{seriesById.get(o.seriesId)?.ownerUserName ?? seriesById.get(o.seriesId)?.owner ?? "—"}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{o.startedAt ? formatDateTime(o.startedAt) : formatDate(o.occurredOn)}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{o.status === "cancelled" ? "—" : formatDuration(o.durationSeconds)}</td>
                 <td className="muted">{o.presentCount}/{o.totalCount}</td>
                 <td className="muted">{o.actionsCount > 0 ? <Badge tone="blue">{o.actionsCount}</Badge> : "—"}</td>
-                <td><Badge tone={OCC_STATUS[o.status].tone}>{OCC_STATUS[o.status].label}</Badge></td>
+                <td>
+                  <Badge tone={OCC_STATUS[o.status].tone}>{OCC_STATUS[o.status].label}</Badge>
+                  {o.autoFinished && <Badge tone="amber">Automática</Badge>}
+                </td>
                 <td className="muted">{o.registeredByName ?? "—"}</td>
                 <td style={{ textAlign: "right" }}>
-                  <ConfirmActionButton
-                    action={deleteOccurrence}
-                    fields={{ id: o.id }}
-                    className="icon-btn icon-btn-danger"
-                    buttonTitle="Excluir registro"
-                    title="Excluir registro"
-                    message="Excluir este registro de reunião?"
-                    confirmLabel="Excluir"
-                  >
-                    <Ico d={ICON.trash} />
-                  </ConfirmActionButton>
+                  <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end", alignItems: "center" }}>
+                    <button type="button" className="icon-btn" title="Ver detalhes" onClick={() => setDetailOcc(o)}><Ico d={ICON.eye} /></button>
+                    {o.recordingsCount > 0 && (
+                      <button type="button" className="icon-btn" title={`Gravações (${o.recordingsCount})`} onClick={() => setViewerOcc(o)}>🎙</button>
+                    )}
+                    <ConfirmActionButton
+                      action={deleteOccurrence}
+                      fields={{ id: o.id }}
+                      className="icon-btn icon-btn-danger"
+                      buttonTitle="Excluir registro"
+                      title="Excluir registro"
+                      message="Excluir este registro de reunião?"
+                      confirmLabel="Excluir"
+                    >
+                      <Ico d={ICON.trash} />
+                    </ConfirmActionButton>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -425,23 +557,29 @@ export function MeetingRecords({
       <PageHeader
         title="Reuniões"
         subtitle="Cadastre as reuniões recorrentes, inicie e finalize cada acontecimento."
-        action={<button className="btn btn-primary" onClick={openCreate}>+ Nova reunião</button>}
+        action={canCreate ? <button className="btn btn-primary" onClick={openCreate}>+ Nova reunião</button> : undefined}
       />
 
       {inProgress.length > 0 && (
         <div style={{ marginBottom: "1.25rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
           {inProgress.map((o) => (
-            <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", border: "1px solid #bfdbfe", background: "linear-gradient(0deg, var(--surface), var(--surface)), #eff6ff", borderRadius: 12, padding: "0.9rem 1.1rem" }}>
+            <div key={o.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", border: "1px solid color-mix(in srgb, var(--mh-info) 32%, transparent)", background: "linear-gradient(0deg, var(--surface), var(--surface)), var(--mh-info-soft)", borderRadius: 12, padding: "0.9rem 1.1rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.9rem", minWidth: 0 }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#2563eb", flexShrink: 0, boxShadow: "0 0 0 4px rgba(37,99,235,0.15)" }} />
+                <span className="live-dot" title="Reunião acontecendo agora" aria-label="Ao vivo" />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.seriesName}</div>
                   <div className="soft" style={{ fontSize: "0.8rem" }}>Em andamento{o.startedAt ? ` · iniciada às ${formatTime(o.startedAt)}` : ""}</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.9rem" }}>
-                {o.startedAt && <ElapsedTimer startedAt={o.startedAt} style={{ fontSize: "1.15rem", color: "#1d4ed8" }} />}
+                {o.startedAt && <ElapsedTimer startedAt={o.startedAt} style={{ fontSize: "1.15rem", color: "var(--mh-info)" }} />}
+                {o.meetingLink && (
+                  <a href={o.meetingLink} target="_blank" rel="noopener noreferrer" className="icon-btn" title="Acessar reunião online" style={{ color: "var(--mh-info)" }}>
+                    <Globe size={17} />
+                  </a>
+                )}
                 <button className="btn btn-primary btn-sm" onClick={() => openFinish(o)}>Registros da reunião</button>
+                <button className="btn btn-warning btn-sm" onClick={() => setFollowOcc(o)}>Realizar follow</button>
                 <button className="btn btn-ghost btn-sm" disabled={pending} onClick={() => doCancel(o.id)}>Cancelar</button>
               </div>
             </div>
@@ -467,20 +605,66 @@ export function MeetingRecords({
         draft={finishOcc ? (drafts[finishOcc.id] ?? finishOcc.draft) : null}
         onDraftChange={(d) => { if (finishOcc) setDrafts((p) => ({ ...p, [finishOcc.id]: d })); }}
         pilares={pilares}
+        secoes={secoes}
         blocos={blocos}
         itens={itens}
         kpis={kpis}
         tools={tools}
         aiEnabled={aiEnabled}
       />
+      {detailOcc && (
+        <MeetingOccurrenceDetail occurrenceId={detailOcc.id} onClose={() => setDetailOcc(null)} />
+      )}
+      {viewSeries && (
+        <SeriesViewDialog
+          series={viewSeries}
+          people={people}
+          unitCount={units.length}
+          durationLabel={plannedLabel(viewSeries)}
+          onClose={() => setViewSeries(null)}
+        />
+      )}
+      {followOcc && (
+        <MeetingFollowDialog
+          open
+          onClose={() => setFollowOcc(null)}
+          seriesId={followOcc.seriesId}
+          seriesName={followOcc.seriesName}
+          occurrenceId={followOcc.id}
+          people={people}
+          currentUserId={currentUserId}
+          isAdmin={role === "owner" || role === "admin"}
+        />
+      )}
+      {viewerOcc && (
+        <MeetingRecordingsViewer
+          occurrenceId={viewerOcc.id}
+          title={`${viewerOcc.seriesName} · ${formatDate(viewerOcc.occurredOn)}`}
+          onClose={() => setViewerOcc(null)}
+        />
+      )}
       <ConfirmDialog
+        open={!!overtimeOcc}
+        title="Tempo da reunião esgotado"
+        message={overtimeOcc ? <>A reunião <strong>{overtimeOcc.seriesName}</strong> já passou do tempo previsto de <strong>{plannedLabel(seriesById.get(overtimeOcc.seriesId))}</strong>. Deseja finalizá-la agora?</> : ""}
+        confirmLabel="Finalizar reunião"
+        cancelLabel="Continuar reunião"
+        tone="danger"
+        onConfirm={() => { if (overtimeOcc) openFinish(overtimeOcc); setOvertimeOcc(null); }}
+        onClose={() => { if (overtimeOcc) setSnoozes((p) => ({ ...p, [overtimeOcc.id]: Date.now() + 15 * 60 * 1000 })); setOvertimeOcc(null); }}
+      />
+      <StartMeetingDialog
         open={!!confirmStart}
-        title="Iniciar reunião"
-        message={<>Iniciar <strong>{confirmStart?.name}</strong> agora? O cronômetro começará a contar.</>}
-        confirmLabel="Iniciar"
+        seriesName={confirmStart?.name ?? ""}
+        defaultRoomId={confirmStart?.roomId ?? null}
+        rooms={rooms}
         pending={pending}
         onConfirm={runStart}
         onClose={() => setConfirmStart(null)}
+        anticipate={anticipating}
+        scheduledLabel={confirmStart?.nextDate ? `${formatDate(confirmStart.nextDate)}${confirmStart.startTime ? " " + confirmStart.startTime.slice(0, 5) : ""}` : null}
+        defaultNextDate={confirmStart?.nextDate ?? ""}
+        defaultNextTime={confirmStart?.startTime ?? ""}
       />
       <ConfirmDialog
         open={!!confirmCancel}

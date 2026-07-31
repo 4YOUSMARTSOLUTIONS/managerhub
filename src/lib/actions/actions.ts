@@ -10,6 +10,7 @@ const BUCKET = "action-attachments";
 export type ActionPayload = {
   is_sdpo: boolean;
   pilar_id: string;
+  secao_id: string;
   bloco_id: string;
   item_id: string;
   meeting_series_id: string;
@@ -33,8 +34,8 @@ export async function createAction(formData: FormData): Promise<ActionState> {
     if (demandas.length === 0) return { error: "Informe ao menos uma demanda." };
     if (!payload.requester_id) return { error: "Informe o solicitante." };
     if (!payload.due_date) return { error: "Informe o prazo da ação." };
-    if (payload.is_sdpo && (!payload.pilar_id || !payload.bloco_id || !payload.item_id)) {
-      return { error: "Para ações do Programa de Excelência, informe Pilar, Bloco e Item." };
+    if (payload.is_sdpo && (!payload.pilar_id || !payload.secao_id || !payload.item_id)) {
+      return { error: "Para ações do Programa de Excelência, informe Pilar, Seção e Item." };
     }
 
     const { data: result, error } = await supabase.rpc("create_action", { p_data: { ...payload, demandas } });
@@ -75,6 +76,154 @@ export async function createAction(formData: FormData): Promise<ActionState> {
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
+  }
+}
+
+// ---------- Importação de ações (owner) ----------
+const normTxt = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+
+const PRIORITY_BY_INPUT: Record<string, Enums<"priority_level">> = {
+  baixa: "low", low: "low",
+  media: "medium", "média": "medium", medium: "medium", normal: "medium",
+  alta: "high", high: "high",
+  urgente: "urgent", urgent: "urgent",
+};
+
+export type ActionImportRow = {
+  descricao: string;
+  responsaveis: string;
+  solicitante: string;
+  prazo: string; // yyyy-mm-dd (já normalizado no cliente) ou ""
+  prioridade: string;
+  unidade: string;
+  kpi: string;
+  ferramenta: string;
+  pilar: string;
+  secao: string;
+  bloco: string;
+  item: string;
+  comentarios: { at: string; author: string; text: string }[]; // já parseados no cliente
+};
+
+export type ActionImportResult = {
+  created: number;
+  skipped: number;
+  peopleNotFound: string[];
+  refsNotFound: string[];
+  error?: string;
+};
+
+export async function importActions(rows: ActionImportRow[]): Promise<ActionImportResult> {
+  const base: ActionImportResult = { created: 0, skipped: 0, peopleNotFound: [], refsNotFound: [] };
+  try {
+    const { supabase, tenantId, userId, role } = await actionContext();
+    if (role !== "owner") return { ...base, error: "Apenas o proprietário pode importar ações." };
+
+    const [{ data: mems }, { data: units }, { data: kpis }, { data: tools }, { data: pilares }, { data: secoesData }, { data: blocos }, { data: itens }] = await Promise.all([
+      supabase.from("memberships").select("user_id, profiles(full_name)").eq("tenant_id", tenantId),
+      supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("action_kpis").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("action_tools").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_secoes").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_blocos").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_itens").select("id, name").eq("tenant_id", tenantId),
+    ]);
+
+    const userByName = new Map<string, string>();
+    for (const m of mems ?? []) {
+      const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
+      if (nm) userByName.set(normTxt(nm), m.user_id as string);
+    }
+    const idByName = (list: { id: string; name: string }[] | null) => {
+      const map = new Map<string, string>();
+      for (const x of list ?? []) map.set(normTxt(x.name), x.id);
+      return map;
+    };
+    const unitMap = idByName(units), kpiMap = idByName(kpis), toolMap = idByName(tools);
+    const pilarMap = idByName(pilares), secaoMap = idByName(secoesData), blocoMap = idByName(blocos), itemMap = idByName(itens);
+
+    const peopleNotFound = new Set<string>();
+    const refsNotFound = new Set<string>();
+    const resolvePerson = (raw: string) => {
+      const key = normTxt(raw);
+      if (!key) return null;
+      const id = userByName.get(key);
+      if (!id) peopleNotFound.add(raw.trim());
+      return id ?? null;
+    };
+    const resolveRef = (raw: string, map: Map<string, string>, label: string) => {
+      const key = normTxt(raw);
+      if (!key) return "";
+      const id = map.get(key);
+      if (!id) refsNotFound.add(`${label}: ${raw.trim()}`);
+      return id ?? "";
+    };
+    // Unidade: vazio, "Todas" ou "Todas as unidades" = sem unidade específica (todas), sem alerta.
+    const resolveUnit = (raw: string) => {
+      const key = normTxt(raw);
+      if (!key || key === "todas" || key === "todas as unidades") return "";
+      const id = unitMap.get(key);
+      if (!id) refsNotFound.add(`Unidade: ${(raw ?? "").trim()}`);
+      return id ?? "";
+    };
+
+    for (const r of rows) {
+      const descricao = (r.descricao ?? "").trim();
+      if (!descricao) { base.skipped += 1; continue; }
+
+      const assignees = (r.responsaveis ?? "")
+        .split(/[;,\n]/).map((x) => x.trim()).filter(Boolean)
+        .map(resolvePerson).filter((x): x is string => !!x);
+
+      const requester = (r.solicitante ?? "").trim() ? (resolvePerson(r.solicitante) ?? userId) : userId;
+      const pilar_id = resolveRef(r.pilar, pilarMap, "Pilar");
+      const secao_id = resolveRef(r.secao, secaoMap, "Seção");
+      const bloco_id = resolveRef(r.bloco, blocoMap, "Bloco");
+      const item_id = resolveRef(r.item, itemMap, "Item");
+      const is_sdpo = !!(pilar_id && secao_id && item_id);
+
+      const p_data = {
+        is_sdpo,
+        pilar_id, secao_id, bloco_id, item_id,
+        meeting_series_id: "", occurrence_id: "",
+        kpi_id: resolveRef(r.kpi, kpiMap, "KPI"),
+        tool_id: resolveRef(r.ferramenta, toolMap, "Ferramenta"),
+        unit_id: resolveUnit(r.unidade),
+        requester_id: requester,
+        due_date: /^\d{4}-\d{2}-\d{2}$/.test((r.prazo ?? "").trim()) ? r.prazo.trim() : "",
+        priority: PRIORITY_BY_INPUT[normTxt(r.prioridade ?? "")] ?? "medium",
+        cc: [] as string[],
+        demandas: [{ description: descricao, assignees }],
+      };
+
+      const { data: result, error } = await supabase.rpc("create_action", { p_data });
+      if (error) return { ...base, peopleNotFound: [...peopleNotFound], refsNotFound: [...refsNotFound], error: `Linha "${descricao}": ${error.message}` };
+      base.created += 1;
+
+      // comentários (histórico do sistema antigo): sem notificar, preservando data/autor
+      const demandaId = ((result ?? {}) as { demanda_ids?: string[] }).demanda_ids?.[0];
+      if (demandaId) {
+        for (const c of r.comentarios ?? []) {
+          const text = (c.text ?? "").trim();
+          if (!text) continue;
+          const actorId = c.author?.trim() ? resolvePerson(c.author) : null;
+          await supabase.rpc("add_demanda_comment_import", {
+            p_demanda: demandaId,
+            p_body: text,
+            p_actor: actorId,
+            p_at: /^\d{4}-\d{2}-\d{2}/.test((c.at ?? "").trim()) ? c.at.trim() : null,
+            p_author_label: c.author?.trim() || null,
+          });
+        }
+      }
+    }
+
+    revalidatePath("/acoes");
+    revalidatePath("/dashboard");
+    return { ...base, peopleNotFound: [...peopleNotFound], refsNotFound: [...refsNotFound] };
+  } catch (e) {
+    return { ...base, error: (e as Error).message };
   }
 }
 
@@ -148,6 +297,39 @@ export async function demandaReassign(demandaId: string, userIds: string[], note
   try {
     const { supabase } = await actionContext();
     const { error } = await supabase.rpc("demanda_reassign", { p_demanda: demandaId, p_users: userIds, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+/** Responsável marca "concluí minha parte" (auto-aprova se for o solicitante). */
+export async function demandaAssigneeSubmit(demandaId: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_assignee_submit", { p_demanda: demandaId });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+/** Solicitante aprova/reprova a parte de um responsável. */
+export async function demandaAssigneeDecide(demandaId: string, userId: string, approve: boolean, note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_assignee_decide", { p_demanda: demandaId, p_user: userId, p_approve: approve, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+/** Reabre a parte de um responsável específico. */
+export async function demandaAssigneeReopen(demandaId: string, userId: string, note: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_assignee_reopen", { p_demanda: demandaId, p_user: userId, p_note: note });
     if (error) return { error: error.message };
     rv();
     return { ok: true };

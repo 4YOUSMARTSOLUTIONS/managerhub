@@ -1,18 +1,27 @@
+/** Assinatura da empresa dona do produto (login + sidebar).
+ *  Oculta provisoriamente — vire para `true` para reexibir. */
+export const SHOW_BRAND_OWNER: boolean = false;
+export const BRAND_OWNER = "4YOU SMART SOLUTIONS";
+
 export function BrandLogo({
   size = 28,
-  radius = 7,
+  radius = 8,
+  glow = false,
 }: {
   size?: number;
   radius?: number;
+  /** halo de acento — usar no login e em superfícies escuras */
+  glow?: boolean;
 }) {
-  const icon = Math.round(size * 0.6);
+  const icon = Math.round(size * 0.56);
   return (
     <span
       style={{
         width: size,
         height: size,
         borderRadius: radius,
-        background: "var(--primary)",
+        background: "var(--mh-brand-gradient)",
+        boxShadow: glow ? "var(--mh-brand-glow)" : undefined,
         color: "#fff",
         display: "inline-flex",
         alignItems: "center",
@@ -28,15 +37,35 @@ export function BrandLogo({
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="2.1"
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <rect x="3" y="3" width="7" height="9" rx="1" />
-        <rect x="14" y="3" width="7" height="5" rx="1" />
-        <rect x="14" y="12" width="7" height="9" rx="1" />
-        <rect x="3" y="16" width="7" height="5" rx="1" />
+        <rect x="3" y="3" width="7" height="9" rx="1.4" />
+        <rect x="14" y="3" width="7" height="5" rx="1.4" />
+        <rect x="14" y="12" width="7" height="9" rx="1.4" />
+        <rect x="3" y="16" width="7" height="5" rx="1.4" />
       </svg>
+    </span>
+  );
+}
+
+/** Wordmark com texto em gradiente — usar ao lado do BrandLogo. */
+export function BrandWordmark({ size = "1.05rem" }: { size?: string }) {
+  return (
+    <span
+      style={{
+        fontWeight: 800,
+        fontSize: size,
+        letterSpacing: "-0.02em",
+        background: "var(--mh-brand-gradient)",
+        WebkitBackgroundClip: "text",
+        backgroundClip: "text",
+        color: "transparent",
+        whiteSpace: "nowrap",
+      }}
+    >
+      MANAGER HUB
     </span>
   );
 }

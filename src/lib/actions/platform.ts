@@ -71,6 +71,53 @@ export async function deleteCompany(formData: FormData): Promise<void> {
   revalidatePath("/admin");
 }
 
+/** Cria um novo owner de plataforma (super admin) sem empresa vinculada. */
+export async function createPlatformOwner(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const supabase = await authedClient();
+    const name = String(formData.get("owner_name") ?? "").trim();
+    const email = String(formData.get("owner_email") ?? "").trim();
+    const password = String(formData.get("owner_password") ?? "");
+    if (!name || !email) return { error: "Informe nome e e-mail do owner." };
+    if (password.length < 6) return { error: "A senha deve ter ao menos 6 caracteres." };
+
+    const { error } = await supabase.rpc("platform_create_owner", { p_email: email, p_password: password, p_name: name });
+    if (error) return { error: error.message };
+    revalidatePath("/admin/owners");
+    return { ok: true, message: "Owner criado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Promove um usuário já existente (por e-mail) a owner de plataforma. */
+export async function grantPlatformAdmin(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const supabase = await authedClient();
+    const email = String(formData.get("email") ?? "").trim();
+    if (!email) return { error: "Informe o e-mail do usuário." };
+    const { error } = await supabase.rpc("platform_grant_admin", { p_email: email });
+    if (error) return { error: error.message };
+    revalidatePath("/admin/owners");
+    return { ok: true, message: "Usuário promovido a owner." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Revoga o super admin de um owner (trava o último no banco). */
+export async function revokePlatformAdmin(formData: FormData): Promise<ActionState> {
+  try {
+    const supabase = await authedClient();
+    const { error } = await supabase.rpc("platform_revoke_admin", { p_user: String(formData.get("user_id")) });
+    if (error) return { error: error.message };
+    revalidatePath("/admin/owners");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function setUnitsLimit(
   _prev: ActionState,
   formData: FormData,

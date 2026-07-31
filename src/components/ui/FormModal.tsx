@@ -13,6 +13,7 @@ type Action = (
 export function FormModal({
   triggerLabel,
   triggerClassName = "btn btn-primary",
+  triggerTitle,
   title,
   action,
   submitLabel = "Salvar",
@@ -21,6 +22,7 @@ export function FormModal({
 }: {
   triggerLabel: React.ReactNode;
   triggerClassName?: string;
+  triggerTitle?: string;
   title: string;
   action: Action;
   submitLabel?: string;
@@ -49,6 +51,8 @@ export function FormModal({
       <button
         type="button"
         className={triggerClassName}
+        title={triggerTitle}
+        aria-label={triggerTitle}
         onClick={() => setOpen(true)}
       >
         {triggerLabel}
@@ -56,11 +60,10 @@ export function FormModal({
 
       {open && (
         <div
-          onClick={() => setOpen(false)}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(17,24,39,0.45)",
+            background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
             display: "flex",
             alignItems: "flex-start",
             justifyContent: "center",
@@ -72,7 +75,7 @@ export function FormModal({
           <div
             onClick={(e) => e.stopPropagation()}
             className="card"
-            style={{ width: "100%", maxWidth: width, boxShadow: "var(--shadow)" }}
+            style={{ width: "100%", maxWidth: width, boxShadow: "var(--mh-shadow-e3)" }}
           >
             <div
               style={{
@@ -116,10 +119,10 @@ export function FormModal({
                 {state.error && (
                   <p
                     style={{
-                      color: "#dc2626",
+                      color: "var(--mh-danger)",
                       fontSize: "0.85rem",
                       margin: 0,
-                      background: "#fef2f2",
+                      background: "var(--mh-danger-soft)",
                       padding: "0.5rem 0.7rem",
                       borderRadius: 8,
                     }}

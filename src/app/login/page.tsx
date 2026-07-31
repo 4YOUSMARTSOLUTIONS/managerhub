@@ -25,9 +25,22 @@ export default function LoginPage() {
           <PasswordInput />
         </div>
         {state.error && (
-          <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0 }}>{state.error}</p>
+          <p
+            role="alert"
+            style={{
+              color: "var(--mh-danger)",
+              background: "var(--mh-danger-soft)",
+              border: "1px solid color-mix(in srgb, var(--mh-danger) 30%, transparent)",
+              borderRadius: "var(--mh-radius-sm)",
+              padding: "0.55rem 0.7rem",
+              fontSize: "0.85rem",
+              margin: 0,
+            }}
+          >
+            {state.error}
+          </p>
         )}
-        <SubmitButton className="btn btn-primary" >Entrar</SubmitButton>
+        <SubmitButton className="btn btn-primary btn-block" pendingLabel="Entrando…">Entrar</SubmitButton>
       </form>
     </AuthShell>
   );

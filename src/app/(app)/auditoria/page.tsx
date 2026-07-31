@@ -1,27 +1,8 @@
 import { requireContext, getMembers } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Section } from "@/components/ui/Section";
-import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatDateTime } from "@/lib/format";
-import type { Tone } from "@/lib/constants";
-
-const ENTITY_LABEL: Record<string, string> = {
-  rooms: "Sala",
-  meetings: "Reunião",
-  action_items: "Ação",
-  tickets: "Chamado",
-  goals: "Meta",
-  goal_updates: "Progresso de meta",
-  memberships: "Membro",
-};
-
-const ACTION_LABEL: Record<string, { label: string; tone: Tone }> = {
-  INSERT: { label: "Criou", tone: "green" },
-  UPDATE: { label: "Atualizou", tone: "amber" },
-  DELETE: { label: "Removeu", tone: "red" },
-};
+import { AuditLogViewer, type AuditRow } from "@/components/AuditLogViewer";
 
 export default async function AuditPage() {
   const { tenant, role } = await requireContext();
@@ -30,8 +11,8 @@ export default async function AuditPage() {
   if (!canView) {
     return (
       <div>
-        <PageHeader title="Auditoria" />
-        <EmptyState title="Acesso restrito" description="Apenas gestores e administradores podem ver o log de auditoria." />
+        <PageHeader title="Logs do sistema" />
+        <EmptyState title="Acesso restrito" description="Apenas gestores e administradores podem ver os logs do sistema." />
       </div>
     );
   }
@@ -40,51 +21,37 @@ export default async function AuditPage() {
   const [{ data: logs }, members] = await Promise.all([
     supabase
       .from("audit_logs")
-      .select("*")
+      .select("id, created_at, actor_id, action, entity_type, entity_id, entity_label, changes")
       .order("created_at", { ascending: false })
-      .limit(150),
+      .limit(300),
     getMembers(tenant.id),
   ]);
 
-  const nameOf = new Map(members.map((m) => [m.profile?.id, m.profile?.full_name]));
+  const nameOf = new Map<string, string>();
+  for (const m of members) if (m.profile?.id) nameOf.set(m.profile.id, m.profile.full_name ?? m.profile.email ?? "—");
+
+  // resolve autores que não estão entre os membros (ex.: super admin)
+  const missing = [...new Set((logs ?? []).map((l) => l.actor_id).filter((id): id is string => !!id && !nameOf.has(id)))];
+  if (missing.length) {
+    const { data: profs } = await supabase.from("profiles").select("id, full_name, email").in("id", missing);
+    for (const p of profs ?? []) nameOf.set(p.id, p.full_name ?? p.email ?? "—");
+  }
+
+  const rows: AuditRow[] = (logs ?? []).map((l) => ({
+    id: l.id,
+    createdAt: l.created_at,
+    actorName: l.actor_id ? nameOf.get(l.actor_id) ?? null : null,
+    action: l.action,
+    entityType: l.entity_type,
+    entityLabel: l.entity_label,
+    entityId: l.entity_id,
+    changes: (l.changes as Record<string, unknown> | null) ?? null,
+  }));
 
   return (
     <div>
-      <PageHeader title="Auditoria" subtitle="Registro de todas as alterações feitas no sistema." />
-
-      <Section title={`${logs?.length ?? 0} evento(s) recentes`} padded={false}>
-        {logs && logs.length > 0 ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Quando</th>
-                <th>Autor</th>
-                <th>Ação</th>
-                <th>Tipo</th>
-                <th>Registro</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((l) => {
-                const act = ACTION_LABEL[l.action] ?? { label: l.action, tone: "gray" as Tone };
-                return (
-                  <tr key={l.id}>
-                    <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDateTime(l.created_at)}</td>
-                    <td>{nameOf.get(l.actor_id ?? "") ?? <span className="soft">Sistema</span>}</td>
-                    <td><Badge tone={act.tone}>{act.label}</Badge></td>
-                    <td className="muted">{ENTITY_LABEL[l.entity_type] ?? l.entity_type}</td>
-                    <td className="soft" style={{ fontVariantNumeric: "tabular-nums", fontSize: "0.78rem" }}>
-                      {String(l.entity_id).slice(0, 8)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <EmptyState title="Nenhum evento registrado" description="As ações dos usuários aparecerão aqui automaticamente." />
-        )}
-      </Section>
+      <PageHeader title="Logs do sistema" subtitle="Registro de todas as alterações feitas no sistema: quem, o quê, quando e onde." />
+      <AuditLogViewer rows={rows} />
     </div>
   );
 }

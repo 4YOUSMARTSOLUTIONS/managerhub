@@ -3,10 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { ActionsManager, type ActionRow } from "@/components/ActionsManager";
 import { Pager } from "@/components/ui/Pager";
 import type { Person } from "@/components/PeoplePicker";
+import { moduleGate } from "@/lib/module-gate";
+import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 
 const PAGE_SIZE = 50;
 
 export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
+  const gate = await moduleGate("acoes");
+  if (gate) return gate;
+
   const { tenant, user, role, unitScope } = await requireContext();
   const supabase = await createClient();
   const isAdmin = role === "owner" || role === "admin";
@@ -23,16 +28,17 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     .range(from, from + PAGE_SIZE - 1);
 
   const [
-    { data: actions, count: actionsTotal }, { data: pilares }, { data: blocos }, { data: itens },
+    { data: actions, count: actionsTotal }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
     { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
     { data: members }, { data: profilesData },
   ] = await Promise.all([
     unitIds ? actionsQuery.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : actionsQuery,
-    supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_blocos").select("id, name, pilar_id").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_itens").select("id, name, bloco_id").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_kpis").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_tools").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_itens").select("id, name, pilar_id, secao_id, bloco_id, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_kpis").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).is("deleted_at", null).order("name"),
     supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenant.id).is("deleted_at", null).order("occurred_on", { ascending: false }).limit(500),
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
@@ -50,14 +56,15 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const demandaIds = (demandas ?? []).map((d) => d.id);
   const [{ data: assigneeRows }, { data: pendingReqs }] = demandaIds.length
     ? await Promise.all([
-        supabase.from("action_demanda_assignees").select("demanda_id, user_id").in("demanda_id", demandaIds),
+        supabase.from("action_demanda_assignees").select("demanda_id, user_id, done_requested_at, completed_at").in("demanda_id", demandaIds),
         supabase.from("demanda_requests").select("demanda_id").eq("status", "pending").in("demanda_id", demandaIds),
       ])
-    : [{ data: [] as { demanda_id: string; user_id: string }[] }, { data: [] as { demanda_id: string }[] }];
+    : [{ data: [] as { demanda_id: string; user_id: string; done_requested_at: string | null; completed_at: string | null }[] }, { data: [] as { demanda_id: string }[] }];
 
   // mapas de nomes
   const nameById = new Map((profilesData ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
   const pilarName = new Map((pilares ?? []).map((p) => [p.id, p.name]));
+  const secaoName = new Map((secoes ?? []).map((s) => [s.id, s.name]));
   const blocoName = new Map((blocos ?? []).map((b) => [b.id, b.name]));
   const itemName = new Map((itens ?? []).map((i) => [i.id, i.name]));
   const kpiName = new Map((kpis ?? []).map((k) => [k.id, k.name]));
@@ -67,6 +74,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
 
   const assigneesByDemanda = new Map<string, string[]>();
   const assigneeIdsByDemanda = new Map<string, string[]>();
+  const assigneeStatesByDemanda = new Map<string, { id: string; name: string; doneRequestedAt: string | null; completedAt: string | null }[]>();
   for (const r of assigneeRows ?? []) {
     const arr = assigneesByDemanda.get(r.demanda_id) ?? [];
     arr.push(nameById.get(r.user_id) ?? "—");
@@ -74,6 +82,9 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     const ids = assigneeIdsByDemanda.get(r.demanda_id) ?? [];
     ids.push(r.user_id);
     assigneeIdsByDemanda.set(r.demanda_id, ids);
+    const st = assigneeStatesByDemanda.get(r.demanda_id) ?? [];
+    st.push({ id: r.user_id, name: nameById.get(r.user_id) ?? "—", doneRequestedAt: r.done_requested_at, completedAt: r.completed_at });
+    assigneeStatesByDemanda.set(r.demanda_id, st);
   }
   const pendingByDemanda = new Map<string, number>();
   for (const r of pendingReqs ?? []) pendingByDemanda.set(r.demanda_id, (pendingByDemanda.get(r.demanda_id) ?? 0) + 1);
@@ -92,6 +103,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
       id: d.id, description: d.description, status: d.status, dueDate: d.due_date,
       assigneeNames: assigneesByDemanda.get(d.id) ?? [],
       assigneeIds: assigneeIdsByDemanda.get(d.id) ?? [],
+      assigneeStates: assigneeStatesByDemanda.get(d.id) ?? [],
       pendingCount: pendingByDemanda.get(d.id) ?? 0,
       attachments: attsByDemanda.get(d.id) ?? [],
     });
@@ -116,6 +128,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     code: a.code,
     isSdpo: a.is_sdpo,
     pilarName: a.pilar_id ? pilarName.get(a.pilar_id) ?? null : null,
+    secaoName: a.secao_id ? secaoName.get(a.secao_id) ?? null : null,
     blocoName: a.bloco_id ? blocoName.get(a.bloco_id) ?? null : null,
     itemName: a.item_id ? itemName.get(a.item_id) ?? null : null,
     seriesName: a.meeting_series_id ? seriesName.get(a.meeting_series_id) ?? null : null,
@@ -125,6 +138,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     unitName: a.unit_id ? unitById.get(a.unit_id) ?? null : null,
     requesterId: a.requester_id,
     requesterName: a.requester_id ? nameById.get(a.requester_id) ?? null : null,
+    createdAt: a.created_at,
     priority: a.priority,
     dueDate: a.due_date,
     demandas: demandasByAction.get(a.id) ?? [],
@@ -142,16 +156,18 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         actions={rows}
         currentUserId={user.id}
         isAdmin={isAdmin}
+        isOwner={role === "owner"}
         people={people}
-        pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name }))}
-        blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id }))}
-        itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, blocoId: i.bloco_id }))}
-        kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))}
-        tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))}
+        pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }))}
+        secoes={(secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }))}
+        blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id, secaoId: b.secao_id, active: b.active }))}
+        itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, pilarId: i.pilar_id, secaoId: i.secao_id, blocoId: i.bloco_id, active: i.active }))}
+        kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active }))}
+        tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active }))}
         series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
         occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
         units={unitScope.units}
-        aiEnabled={tenant.has_openai_key}
+        aiEnabled={(await getPlatformIntegrationFlags()).hasOpenAI}
       />
       <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal ?? 0} />
     </>

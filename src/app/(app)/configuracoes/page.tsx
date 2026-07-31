@@ -7,33 +7,48 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { CompanyForm } from "@/components/CompanyForm";
-import { OpenAISettingsForm } from "@/components/OpenAISettingsForm";
-import { ResendSettingsForm } from "@/components/ResendSettingsForm";
+import { Pencil, Power, RotateCcw, Trash2 } from "lucide-react";
 import { RegistryList } from "@/components/RegistryList";
+import { ImportSdpoDialog } from "@/components/ImportSdpoDialog";
+import { ImportStructureDialog } from "@/components/ImportStructureDialog";
+import { ImportListDialog } from "@/components/ImportListDialog";
+import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { TicketSlaEditor } from "@/components/TicketSlaEditor";
+import { ImportTicketStructureDialog } from "@/components/ImportTicketStructureDialog";
+import { ImportTicketSlaDialog } from "@/components/ImportTicketSlaDialog";
 import { TicketManagersEditor } from "@/components/TicketManagersEditor";
+import { RvConfigEditor } from "@/components/RvConfigEditor";
+import { addFeedbackCompetencyForm, removeFeedbackCompetencyForm, toggleFeedbackCompetencyForm } from "@/lib/actions/feedbacks";
+import { FeedbackCadenceEditor } from "@/components/FeedbackCadenceEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
-import { createRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
+import { createRoom, updateRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
 import { createHoliday, deleteHoliday } from "@/lib/actions/holidays";
 import { ImportHolidaysDialog } from "@/components/ImportHolidaysDialog";
+import { ExportButton } from "@/components/ui/ExportButton";
+import { PRIORITY, TICKET_SLA_UNIT } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import {
-  createDepartment, deleteDepartment,
-  createSubdepartment, deleteSubdepartment, createPosition, deletePosition,
-  createPositionLevel, deletePositionLevel,
+  createDepartment, deleteDepartment, setDepartmentActive,
+  createSubdepartment, deleteSubdepartment, setSubdepartmentActive,
+  createPosition, deletePosition, setPositionActive,
+  createPositionLevel, deletePositionLevel, setPositionLevelActive,
 } from "@/lib/actions/registry";
 import {
-  createPilar, deletePilar, createBloco, deleteBloco, createItem, deleteItem,
-  createKpi, deleteKpi, createTool, deleteTool,
+  createProgram, deleteProgram, setProgramActive,
+  createPilar, deletePilar, setPilarActive,
+  createSecao, deleteSecao, setSecaoActive,
+  createBloco, deleteBloco, setBlocoActive, createItem, deleteItem, setItemActive,
+  createKpi, deleteKpi, setKpiActive, createTool, deleteTool, setToolActive,
+  importKpis, importTools,
 } from "@/lib/actions/sdpo";
 import {
-  createTicketSector, deleteTicketSector,
-  createTicketCategory, deleteTicketCategory,
+  createTicketSector, deleteTicketSector, setTicketSectorActive,
+  createTicketCategory, deleteTicketCategory, setTicketCategoryActive,
 } from "@/lib/actions/tickets";
 
 export default async function SettingsPage() {
-  const { tenant, role, user } = await requireContext();
+  const { tenant, role, user, isSuperAdmin } = await requireContext();
   const canAdmin = role === "owner" || role === "admin";
 
   if (!canAdmin) {
@@ -60,19 +75,68 @@ export default async function SettingsPage() {
     supabase.from("holidays").select("*").eq("tenant_id", tenant.id).order("day"),
   ]);
 
-  const [{ data: pilares }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools }] = await Promise.all([
+  const [{ data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools }] = await Promise.all([
+    supabase.from("sdpo_programas").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_pilares").select("*").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("sdpo_secoes").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_blocos").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_itens").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_kpis").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_tools").select("*").eq("tenant_id", tenant.id).order("name"),
   ]);
 
-  const [{ data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }] = await Promise.all([
+  const [{ data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules }] = await Promise.all([
     supabase.from("ticket_sectors").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("ticket_categories").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("ticket_slas").select("*").eq("tenant_id", tenant.id),
+    supabase.from("individual_rv_config").select("id, scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id).order("effective_from", { ascending: false }),
+    supabase.from("feedback_competencies").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("feedback_cadence_rules").select("id, department_id, position_id, cadence_days").eq("tenant_id", tenant.id),
   ]);
+
+  // ids já usados em ações — excluir só é permitido quando nunca usado (senão: desativar)
+  const { data: sdpoUsage } = await supabase.from("actions").select("pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id").eq("tenant_id", tenant.id);
+  const usedPilar = new Set<string>();
+  const usedSecao = new Set<string>();
+  const usedBloco = new Set<string>();
+  const usedItem = new Set<string>();
+  const usedKpi = new Set<string>();
+  const usedTool = new Set<string>();
+  for (const a of sdpoUsage ?? []) {
+    if (a.pilar_id) usedPilar.add(a.pilar_id);
+    if (a.secao_id) usedSecao.add(a.secao_id);
+    if (a.bloco_id) usedBloco.add(a.bloco_id);
+    if (a.item_id) usedItem.add(a.item_id);
+    if (a.kpi_id) usedKpi.add(a.kpi_id);
+    if (a.tool_id) usedTool.add(a.tool_id);
+  }
+
+  // uso dos demais catálogos (estrutura, chamados, competências)
+  const [{ data: agUse }, { data: clUse }, { data: tkUse }, { data: fcLinks }] = await Promise.all([
+    supabase.from("area_goals").select("department_id, subdepartment_id").eq("tenant_id", tenant.id),
+    supabase.from("checklists").select("department_id, subdepartment_id").eq("tenant_id", tenant.id),
+    supabase.from("tickets").select("sector_id, category_id").eq("tenant_id", tenant.id),
+    supabase.from("feedback_competency_links").select("competency_id").eq("tenant_id", tenant.id),
+  ]);
+  const usedDept = new Set<string>();
+  const usedSubdept = new Set<string>();
+  const usedPosition = new Set<string>();
+  const usedLevel = new Set<string>();
+  const usedSector = new Set<string>();
+  const usedCategory = new Set<string>();
+  const usedCompetency = new Set<string>();
+  for (const m of memberships ?? []) {
+    if (m.department_id) usedDept.add(m.department_id);
+    if (m.subdepartment_id) usedSubdept.add(m.subdepartment_id);
+    if (m.position_id) usedPosition.add(m.position_id);
+    if (m.position_level_id) usedLevel.add(m.position_level_id);
+  }
+  for (const g of agUse ?? []) { if (g.department_id) usedDept.add(g.department_id); if (g.subdepartment_id) usedSubdept.add(g.subdepartment_id); }
+  for (const c of clUse ?? []) { if (c.department_id) usedDept.add(c.department_id); if (c.subdepartment_id) usedSubdept.add(c.subdepartment_id); }
+  for (const r of fbCadenceRules ?? []) { if (r.department_id) usedDept.add(r.department_id); if (r.position_id) usedPosition.add(r.position_id); }
+  for (const r of rvConfigsData ?? []) { if (r.position_id) usedPosition.add(r.position_id); }
+  for (const t of tkUse ?? []) { if (t.sector_id) usedSector.add(t.sector_id); if (t.category_id) usedCategory.add(t.category_id); }
+  for (const l of fcLinks ?? []) { if (l.competency_id) usedCompetency.add(l.competency_id); }
 
   const mems = memberships ?? [];
 
@@ -126,10 +190,29 @@ export default async function SettingsPage() {
 
   const people = (profilesData ?? []).map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
   const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind }));
-  const deptOpts = (departments ?? []).map((d) => ({ id: d.id, name: d.name }));
-  const subOpts = (subdepartments ?? []).map((s) => ({ id: s.id, name: s.name, department_id: s.department_id }));
-  const posOpts = (positions ?? []).map((p) => ({ id: p.id, name: p.name }));
-  const levelOpts = (levels ?? []).map((l) => ({ id: l.id, name: l.name }));
+  const deptOpts = (departments ?? []).map((d) => ({ id: d.id, name: d.name, active: d.active }));
+  const subOpts = (subdepartments ?? []).map((s) => ({ id: s.id, name: s.name, department_id: s.department_id, active: s.active }));
+  const posOpts = (positions ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }));
+  const levelOpts = (levels ?? []).map((l) => ({ id: l.id, name: l.name, active: l.active }));
+
+  // remuneração variável (metas individuais)
+  const rvConfigs = (rvConfigsData ?? []).map((c) => ({
+    id: c.id,
+    scope: c.scope as "position" | "user",
+    positionId: c.position_id,
+    userId: c.user_id,
+    effectiveFrom: c.effective_from,
+    value: c.value,
+  }));
+  const rvMembers = mems
+    .filter((m) => m.is_active)
+    .map((m) => ({
+      userId: m.user_id,
+      name: profById.get(m.user_id)?.full_name ?? profById.get(m.user_id)?.email ?? "—",
+      positionId: m.position_id,
+      positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   // ---------- Conteúdo das abas ----------
   const empresaTab = (
@@ -144,17 +227,6 @@ export default async function SettingsPage() {
     </div>
   );
 
-  const integracoesTab = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 760 }}>
-      <Section title="Integração com IA (OpenAI)">
-        <OpenAISettingsForm hasKey={tenant.has_openai_key} model={tenant.openai_model} canEdit={role === "owner"} />
-      </Section>
-      <Section title="Envio de e-mail / Convites (Resend)">
-        <ResendSettingsForm hasKey={tenant.has_resend_key} canEdit={role === "owner"} />
-      </Section>
-    </div>
-  );
-
   const usuariosTab = (
     <UsersManager
       employees={employees}
@@ -165,6 +237,7 @@ export default async function SettingsPage() {
       levels={levelOpts}
       people={people}
       currentUserId={user.id}
+      isSuperAdmin={isSuperAdmin}
     />
   );
 
@@ -175,7 +248,7 @@ export default async function SettingsPage() {
         {
           id: "setores",
           label: "Setores",
-          content: <RegistryList title="Setores" items={deptOpts} createAction={createDepartment} deleteAction={deleteDepartment} placeholder="Nome do setor" />,
+          content: <RegistryList title="Setores" items={deptOpts.map((d) => ({ ...d, canDelete: !usedDept.has(d.id) }))} createAction={createDepartment} deleteAction={deleteDepartment} toggleAction={setDepartmentActive} placeholder="Nome do setor" headerAction={<><ImportStructureDialog /><ExportButton filename="setores.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={deptOpts.map((d) => [d.name, "", ""])} /></>} />,
         },
         {
           id: "subsetores",
@@ -183,17 +256,18 @@ export default async function SettingsPage() {
           content: (
             <RegistryList
               title="Subsetores"
-              description="Cada subsetor pertence a um setor."
-              items={subOpts.map((s) => ({ id: s.id, name: s.name, meta: deptById.get(s.department_id)?.name ?? undefined }))}
+              items={subOpts.map((s) => ({ id: s.id, name: s.name, meta: deptById.get(s.department_id)?.name ?? undefined, active: s.active, canDelete: !usedSubdept.has(s.id) }))}
               createAction={createSubdepartment}
               deleteAction={deleteSubdepartment}
+              toggleAction={setSubdepartmentActive}
               placeholder="Nome do subsetor"
               metaLabel="Setor"
               emptyText="Nenhum subsetor. Cadastre setores primeiro."
+              headerAction={<><ImportStructureDialog /><ExportButton filename="subsetores.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={subOpts.map((s) => [deptById.get(s.department_id)?.name ?? "", s.name, ""])} /></>}
               extraFields={
                 <select name="department_id" className="select" required style={{ width: "auto" }}>
                   <option value="">Setor…</option>
-                  {deptOpts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  {deptOpts.filter((d) => d.active).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               }
             />
@@ -202,12 +276,12 @@ export default async function SettingsPage() {
         {
           id: "funcoes",
           label: "Funções",
-          content: <RegistryList title="Funções" items={posOpts} createAction={createPosition} deleteAction={deletePosition} placeholder="Nome da função" />,
+          content: <RegistryList title="Funções" items={posOpts.map((p) => ({ ...p, canDelete: !usedPosition.has(p.id) }))} createAction={createPosition} deleteAction={deletePosition} toggleAction={setPositionActive} placeholder="Nome da função" headerAction={<><ImportStructureDialog /><ExportButton filename="funcoes.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={posOpts.map((p) => ["", "", p.name])} /></>} />,
         },
         {
           id: "perfis",
           label: "Perfis de função",
-          content: <RegistryList title="Perfis de função" description="Ex.: Júnior, Pleno, Sênior." items={levelOpts} createAction={createPositionLevel} deleteAction={deletePositionLevel} placeholder="Ex.: Júnior, Pleno, Sênior" />,
+          content: <RegistryList title="Perfis de função" description="Ex.: Júnior, Pleno, Sênior." items={levelOpts.map((l) => ({ ...l, canDelete: !usedLevel.has(l.id) }))} createAction={createPositionLevel} deleteAction={deletePositionLevel} toggleAction={setPositionLevelActive} placeholder="Ex.: Júnior, Pleno, Sênior" />,
         },
       ]}
     />
@@ -231,7 +305,7 @@ export default async function SettingsPage() {
             </div>
             <div>
               <label className="label">Capacidade</label>
-              <input name="capacity" type="number" min={1} defaultValue={6} className="input" />
+              <input name="capacity" type="number" min={1} required className="input" placeholder="6" />
             </div>
           </div>
           <div>
@@ -240,7 +314,7 @@ export default async function SettingsPage() {
           </div>
           <div>
             <label className="label">Cor</label>
-            <input name="color" type="color" defaultValue="#4f46e5" className="input" style={{ height: 42, padding: 4 }} />
+            <input name="color" type="color" defaultValue="var(--mh-primary-500)" className="input" style={{ height: 42, padding: 4 }} />
           </div>
         </FormModal>
       }
@@ -248,7 +322,7 @@ export default async function SettingsPage() {
       {rooms && rooms.length > 0 ? (
         <table className="table">
           <thead>
-            <tr><th>Sala</th><th>Localização</th><th>Capacidade</th><th>Status</th><th style={{ textAlign: "right" }}>Ações</th></tr>
+            <tr><th>Sala</th><th>Localização</th><th>Capacidade</th><th>Recursos</th><th>Status</th><th style={{ textAlign: "right" }}>Ações</th></tr>
           </thead>
           <tbody>
             {rooms.map((r) => (
@@ -261,17 +335,66 @@ export default async function SettingsPage() {
                 </td>
                 <td className="muted">{r.location ?? "—"}</td>
                 <td className="muted">{r.capacity} pessoas</td>
+                <td>
+                  {(r.resources ?? []).length > 0 ? (
+                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                      {(r.resources ?? []).map((res: string) => <Badge key={res} tone="gray">{res}</Badge>)}
+                    </span>
+                  ) : <span className="soft">—</span>}
+                </td>
                 <td><Badge tone={r.is_active ? "green" : "gray"}>{r.is_active ? "Ativa" : "Inativa"}</Badge></td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  <form action={toggleRoom} style={{ display: "inline" }}>
-                    <input type="hidden" name="id" value={r.id} />
-                    <input type="hidden" name="is_active" value={String(r.is_active)} />
-                    <button className="btn btn-ghost btn-sm" type="submit">{r.is_active ? "Desativar" : "Ativar"}</button>
-                  </form>{" "}
-                  <form action={deleteRoom} style={{ display: "inline" }}>
-                    <input type="hidden" name="id" value={r.id} />
-                    <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
-                  </form>
+                  <span style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
+                    <FormModal
+                      triggerLabel={<Pencil size={16} />}
+                      triggerClassName="icon-btn"
+                      triggerTitle="Editar"
+                      title={`Editar sala · ${r.name}`}
+                      action={updateRoom}
+                      submitLabel="Salvar"
+                    >
+                      <input type="hidden" name="id" value={r.id} />
+                      <div>
+                        <label className="label">Nome</label>
+                        <input name="name" className="input" required defaultValue={r.name} placeholder="Sala Principal" />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "0.8rem" }}>
+                        <div>
+                          <label className="label">Localização</label>
+                          <input name="location" className="input" defaultValue={r.location ?? ""} placeholder="3º andar" />
+                        </div>
+                        <div>
+                          <label className="label">Capacidade</label>
+                          <input name="capacity" type="number" min={1} required defaultValue={r.capacity} className="input" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label">Recursos (separados por vírgula)</label>
+                        <input name="resources" className="input" defaultValue={(r.resources ?? []).join(", ")} placeholder="TV, Webcam, Quadro branco" />
+                      </div>
+                      <div>
+                        <label className="label">Cor</label>
+                        <input name="color" type="color" defaultValue={r.color ?? "#2563eb"} className="input" style={{ height: 42, padding: 4 }} />
+                      </div>
+                    </FormModal>
+                    <form action={toggleRoom} style={{ display: "inline-flex" }}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <input type="hidden" name="is_active" value={String(r.is_active)} />
+                      <button className="icon-btn" type="submit" title={r.is_active ? "Desativar" : "Ativar"} aria-label={r.is_active ? "Desativar" : "Ativar"}>
+                        {r.is_active ? <Power size={16} /> : <RotateCcw size={16} />}
+                      </button>
+                    </form>
+                    <ConfirmActionButton
+                      action={deleteRoom}
+                      fields={{ id: r.id }}
+                      className="icon-btn icon-btn-danger"
+                      buttonTitle="Excluir"
+                      title="Excluir sala"
+                      message={<>Excluir a sala <strong>{r.name}</strong>? Esta ação não pode ser desfeita.</>}
+                    >
+                      <Trash2 size={16} />
+                    </ConfirmActionButton>
+                  </span>
                 </td>
               </tr>
             ))}
@@ -292,6 +415,7 @@ export default async function SettingsPage() {
       action={
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <ImportHolidaysDialog />
+          <ExportButton filename="feriados.xlsx" sheetName="Feriados" headers={["Data", "Nome"]} rows={(holidays ?? []).map((h) => { const [y, m, d] = h.day.split("-"); return [`${d}/${m}/${y}`, h.name]; })} />
           <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
             <div>
               <label className="label">Data</label>
@@ -313,7 +437,7 @@ export default async function SettingsPage() {
         </p>
         <p style={{ margin: 0 }}>
           <strong>Domingo</strong> é considerado dia não útil; <strong>sábado</strong> é útil (a não ser que você o
-          cadastre como feriado acima). Ao agendar manualmente num dia não útil, o sistema avisa — mas não impede. Já as
+          cadastre como feriado acima). Ao agendar manualmente num dia não útil, o sistema avisa, mas não impede. Já as
           reuniões <strong>recorrentes</strong> que caírem em domingo ou feriado são <strong>deslocadas para o próximo dia
           útil</strong>.
         </p>
@@ -329,10 +453,16 @@ export default async function SettingsPage() {
                 <td className="muted">{formatDate(h.day)}</td>
                 <td style={{ fontWeight: 600 }}>{h.name}</td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  <form action={deleteHoliday} style={{ display: "inline" }}>
-                    <input type="hidden" name="id" value={h.id} />
-                    <button className="btn btn-danger btn-sm" type="submit">Excluir</button>
-                  </form>
+                  <ConfirmActionButton
+                    action={deleteHoliday}
+                    fields={{ id: h.id }}
+                    className="icon-btn icon-btn-danger"
+                    buttonTitle="Excluir"
+                    title="Excluir feriado"
+                    message={<>Excluir o feriado <strong>{h.name}</strong>? Esta ação não pode ser desfeita.</>}
+                  >
+                    <Trash2 size={16} />
+                  </ConfirmActionButton>
                 </td>
               </tr>
             ))}
@@ -346,20 +476,145 @@ export default async function SettingsPage() {
   );
 
   // ---------- SDPO / Programa de Excelência ----------
-  const pilarOpts = (pilares ?? []).map((p) => ({ id: p.id, name: p.name }));
-  const blocoOpts = (blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilar_id: b.pilar_id }));
-  const itemOpts = (itens ?? []).map((i) => ({ id: i.id, name: i.name, bloco_id: i.bloco_id }));
+  // Hierarquia: Programa → Pilar → Seção (global) → [Bloco opcional] → Item
+  const withCode = (code: string | null, name: string) => (code ? `${code} - ${name}` : name);
+  const programaOpts = (programas ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }));
+  const pilarOpts = (pilares ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }));
+  const secaoOpts = (secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }));
+  const blocoOpts = (blocos ?? []).map((b) => ({ id: b.id, name: b.name, code: b.code, programa_id: b.programa_id, pilar_id: b.pilar_id, secao_id: b.secao_id, active: b.active }));
+  const itemOpts = (itens ?? []).map((i) => ({ id: i.id, name: i.name, code: i.code, programa_id: i.programa_id, pilar_id: i.pilar_id, secao_id: i.secao_id, bloco_id: i.bloco_id, active: i.active }));
+  const programaById = new Map(programaOpts.map((p) => [p.id, p.name]));
   const pilarById = new Map(pilarOpts.map((p) => [p.id, p.name]));
-  const blocoById = new Map(blocoOpts.map((b) => [b.id, b.name]));
+  const secaoById = new Map(secaoOpts.map((s) => [s.id, s.name]));
+  const blocoById = new Map(blocoOpts.map((b) => [b.id, withCode(b.code, b.name)]));
+  // programa é o topo (SPO/DPO); pilar e seção são globais
+  const progPilarSecao = (programaId: string | null, pilarId: string, secaoId: string) =>
+    `${(programaId ? programaById.get(programaId) : null) ?? "—"} › ${pilarById.get(pilarId) ?? "—"} › ${secaoById.get(secaoId) ?? "—"}`;
+
+  // ordenação natural do código do item ("1", "1.0", "2", "12" → 1, 1.0, 2, 12); sem código vai por último
+  const cmpCode = (a: string | null, b: string | null) => {
+    const pa = (a ?? "").match(/\d+/g)?.map(Number) ?? [];
+    const pb = (b ?? "").match(/\d+/g)?.map(Number) ?? [];
+    if (pa.length === 0 && pb.length > 0) return 1;
+    if (pb.length === 0 && pa.length > 0) return -1;
+    const n = Math.max(pa.length, pb.length);
+    for (let i = 0; i < n; i++) { const x = pa[i] ?? -1, y = pb[i] ?? -1; if (x !== y) return x - y; }
+    return 0;
+  };
+  // itens ordenados por pilar e, dentro do pilar, pelo número do item
+  itemOpts.sort((a, b) => {
+    const pa = pilarById.get(a.pilar_id) ?? "", pb = pilarById.get(b.pilar_id) ?? "";
+    if (pa !== pb) return pa.localeCompare(pb, "pt-BR");
+    const c = cmpCode(a.code, b.code);
+    return c !== 0 ? c : a.name.localeCompare(b.name, "pt-BR");
+  });
+  // blocos ordenados por pilar e, dentro do pilar, pelo número do bloco
+  blocoOpts.sort((a, b) => {
+    const pa = pilarById.get(a.pilar_id) ?? "", pb = pilarById.get(b.pilar_id) ?? "";
+    if (pa !== pb) return pa.localeCompare(pb, "pt-BR");
+    const c = cmpCode(a.code, b.code);
+    return c !== 0 ? c : a.name.localeCompare(b.name, "pt-BR");
+  });
+
+  // exportação da estrutura do Programa de Excelência (mesmas colunas do modelo de importação)
+  const SDPO_EXPORT_HEADERS = ["Programa", "Pilar", "Seção", "Código Bloco", "Bloco", "Código Item", "Item"];
+  const blocoCodeById = new Map(blocoOpts.map((b) => [b.id, b.code]));
+  const blocoNameById = new Map(blocoOpts.map((b) => [b.id, b.name]));
+  const progNameById = (id: string | null) => (id ? programaById.get(id) ?? "" : "");
+  const blocosComItens = new Set(itemOpts.map((i) => i.bloco_id).filter((x): x is string => !!x));
+  const sdpoExportRows: (string | number | null)[][] = [
+    ...itemOpts.map((i) => [progNameById(i.programa_id), pilarById.get(i.pilar_id) ?? "", secaoById.get(i.secao_id) ?? "", i.bloco_id ? (blocoCodeById.get(i.bloco_id) ?? "") : "", i.bloco_id ? (blocoNameById.get(i.bloco_id) ?? "") : "", i.code ?? "", i.name]),
+    ...blocoOpts.filter((b) => !blocosComItens.has(b.id)).map((b) => [progNameById(b.programa_id), pilarById.get(b.pilar_id) ?? "", secaoById.get(b.secao_id) ?? "", b.code ?? "", b.name, "", ""]),
+  ];
+
+  // um programa só pode ser excluído se não tiver blocos/itens vinculados (senão: desativar)
+  const programaUsed = new Set<string>();
+  for (const b of blocoOpts) if (b.programa_id) programaUsed.add(b.programa_id);
+  for (const i of itemOpts) if (i.programa_id) programaUsed.add(i.programa_id);
+  const canDeletePrograma = (id: string) => !programaUsed.has(id);
+
+  // pode excluir só se nada da subárvore já foi usado em ações (senão: desativar)
+  const itensByBloco = new Map<string, string[]>();
+  const itensBySecao = new Map<string, string[]>();
+  const itensByPilar = new Map<string, string[]>();
+  for (const i of itemOpts) {
+    if (i.bloco_id) { const a = itensByBloco.get(i.bloco_id) ?? []; a.push(i.id); itensByBloco.set(i.bloco_id, a); }
+    const s = itensBySecao.get(i.secao_id) ?? []; s.push(i.id); itensBySecao.set(i.secao_id, s);
+    const p = itensByPilar.get(i.pilar_id) ?? []; p.push(i.id); itensByPilar.set(i.pilar_id, p);
+  }
+  const blocosBySecao = new Map<string, string[]>();
+  const blocosByPilar = new Map<string, string[]>();
+  for (const b of blocoOpts) {
+    const a = blocosBySecao.get(b.secao_id) ?? []; a.push(b.id); blocosBySecao.set(b.secao_id, a);
+    const p = blocosByPilar.get(b.pilar_id) ?? []; p.push(b.id); blocosByPilar.set(b.pilar_id, p);
+  }
+  const blocoUsedDeep = (bId: string) => usedBloco.has(bId) || (itensByBloco.get(bId) ?? []).some((id) => usedItem.has(id));
+  const secaoUsedDeep = (sId: string) => usedSecao.has(sId) || (blocosBySecao.get(sId) ?? []).some(blocoUsedDeep) || (itensBySecao.get(sId) ?? []).some((id) => usedItem.has(id));
+  const canDeletePilar = (pId: string) =>
+    !usedPilar.has(pId) &&
+    !(blocosByPilar.get(pId) ?? []).some(blocoUsedDeep) &&
+    !(itensByPilar.get(pId) ?? []).some((id) => usedItem.has(id));
+
+  // selects (forms server-rendered, sem cascata JS)
+  const programaOptions = programaOpts.filter((pr) => pr.active).map((pr) => <option key={pr.id} value={pr.id}>{pr.name}</option>);
+  const pilarOptions = pilarOpts.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>);
+  const secaoOptions = secaoOpts.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>);
+  // blocos para o form de itens: agrupados por pilar, rotulando a seção
+  const blocoOptGroups = pilarOpts.filter((p) => p.active).map((pi) => (
+    <optgroup key={pi.id} label={pi.name}>
+      {blocoOpts.filter((b) => b.active && b.pilar_id === pi.id).map((b) => <option key={b.id} value={b.id}>{(secaoById.get(b.secao_id) ?? "—") + " · " + withCode(b.code, b.name)}</option>)}
+    </optgroup>
+  ));
 
   const sdpoTab = (
     <Tabs
       variant="sub"
       tabs={[
         {
+          id: "programas",
+          label: "Programas",
+          content: (
+            <RegistryList
+              title="Programas"
+              items={programaOpts.map((p) => ({ id: p.id, name: p.name, active: p.active, canDelete: canDeletePrograma(p.id) }))}
+              createAction={createProgram}
+              deleteAction={deleteProgram}
+              toggleAction={setProgramActive}
+              placeholder="Ex.: SPO, DPO"
+            />
+          ),
+        },
+        {
           id: "pilares",
           label: "Pilares",
-          content: <RegistryList title="Pilares" description="Pilares do Programa de Excelência (SDPO)." items={pilarOpts} createAction={createPilar} deleteAction={deletePilar} placeholder="Nome do pilar" />,
+          content: (
+            <RegistryList
+              title="Pilares"
+              items={pilarOpts.map((p) => ({ id: p.id, name: p.name, active: p.active, canDelete: canDeletePilar(p.id) }))}
+              createAction={createPilar}
+              deleteAction={deletePilar}
+              toggleAction={setPilarActive}
+              placeholder="Nome do pilar"
+              emptyText="Nenhum pilar cadastrado."
+              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
+            />
+          ),
+        },
+        {
+          id: "secoes",
+          label: "Seções",
+          content: (
+            <RegistryList
+              title="Seções"
+              items={secaoOpts.map((s) => ({ id: s.id, name: s.name, active: s.active, canDelete: !secaoUsedDeep(s.id) }))}
+              createAction={createSecao}
+              deleteAction={deleteSecao}
+              toggleAction={setSecaoActive}
+              placeholder="Ex.: Gestão de Processos"
+              emptyText="Nenhuma seção cadastrada."
+              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
+            />
+          ),
         },
         {
           id: "blocos",
@@ -367,18 +622,30 @@ export default async function SettingsPage() {
           content: (
             <RegistryList
               title="Blocos"
-              description="Cada bloco pertence a um pilar."
-              items={blocoOpts.map((b) => ({ id: b.id, name: b.name, meta: pilarById.get(b.pilar_id) ?? undefined }))}
+              items={blocoOpts.map((b) => ({ id: b.id, name: withCode(b.code, b.name), meta: progPilarSecao(b.programa_id, b.pilar_id, b.secao_id), active: b.active, canDelete: !blocoUsedDeep(b.id) }))}
               createAction={createBloco}
               deleteAction={deleteBloco}
+              toggleAction={setBlocoActive}
               placeholder="Nome do bloco"
-              metaLabel="Pilar"
-              emptyText="Nenhum bloco. Cadastre pilares primeiro."
+              metaLabel="Programa / Pilar / Seção"
+              emptyText="Nenhum bloco. Cadastre programas, pilares e seções primeiro."
+              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
               extraFields={
-                <select name="pilar_id" className="select" required style={{ width: "auto" }}>
-                  <option value="">Pilar…</option>
-                  {pilarOpts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <>
+                  <input name="code" className="input" placeholder="Código (ex.: 1.0)" style={{ width: 130 }} />
+                  <select name="programa_id" className="select" required style={{ width: "auto" }}>
+                    <option value="">Programa…</option>
+                    {programaOptions}
+                  </select>
+                  <select name="pilar_id" className="select" required style={{ width: "auto" }}>
+                    <option value="">Pilar…</option>
+                    {pilarOptions}
+                  </select>
+                  <select name="secao_id" className="select" required style={{ width: "auto" }}>
+                    <option value="">Seção…</option>
+                    {secaoOptions}
+                  </select>
+                </>
               }
             />
           ),
@@ -389,18 +656,34 @@ export default async function SettingsPage() {
           content: (
             <RegistryList
               title="Itens"
-              description="Cada item pertence a um bloco."
-              items={itemOpts.map((i) => ({ id: i.id, name: i.name, meta: blocoById.get(i.bloco_id) ?? undefined }))}
+              items={itemOpts.map((i) => ({ id: i.id, name: withCode(i.code, i.name), meta: progPilarSecao(i.programa_id, i.pilar_id, i.secao_id) + (i.bloco_id ? ` › ${blocoById.get(i.bloco_id) ?? ""}` : ""), active: i.active, canDelete: !usedItem.has(i.id) }))}
               createAction={createItem}
               deleteAction={deleteItem}
+              toggleAction={setItemActive}
               placeholder="Nome do item"
-              metaLabel="Bloco"
-              emptyText="Nenhum item. Cadastre blocos primeiro."
+              metaLabel="Programa / Pilar / Seção"
+              emptyText="Nenhum item. Cadastre programas, pilares e seções primeiro."
+              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
               extraFields={
-                <select name="bloco_id" className="select" required style={{ width: "auto" }}>
-                  <option value="">Bloco…</option>
-                  {blocoOpts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
+                <>
+                  <input name="code" className="input" placeholder="Código (ex.: 1.1)" style={{ width: 130 }} />
+                  <select name="programa_id" className="select" required style={{ width: "auto" }}>
+                    <option value="">Programa…</option>
+                    {programaOptions}
+                  </select>
+                  <select name="pilar_id" className="select" required style={{ width: "auto" }}>
+                    <option value="">Pilar…</option>
+                    {pilarOptions}
+                  </select>
+                  <select name="secao_id" className="select" required style={{ width: "auto" }}>
+                    <option value="">Seção…</option>
+                    {secaoOptions}
+                  </select>
+                  <select name="bloco_id" className="select" style={{ width: "auto" }}>
+                    <option value="">Bloco (opcional)…</option>
+                    {blocoOptGroups}
+                  </select>
+                </>
               }
             />
           ),
@@ -408,27 +691,50 @@ export default async function SettingsPage() {
         {
           id: "kpis",
           label: "KPIs",
-          content: <RegistryList title="KPIs" description="Indicadores relacionados às ações." items={(kpis ?? []).map((k) => ({ id: k.id, name: k.name }))} createAction={createKpi} deleteAction={deleteKpi} placeholder="Nome do KPI" />,
+          content: <RegistryList title="KPIs" items={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active, canDelete: !usedKpi.has(k.id) }))} createAction={createKpi} deleteAction={deleteKpi} toggleAction={setKpiActive} placeholder="Nome do KPI" headerAction={<><ImportListDialog title="Importar KPIs (.xlsx)" column="KPI" noun="KPI(s)" findKeys={["kpi", "indicador"]} examples={["OTIF", "% Lojas Ideais", "Cobertura da carteira"]} templateFile="modelo_kpis.xlsx" action={importKpis} /><ExportButton filename="kpis.xlsx" sheetName="KPIs" headers={["KPI"]} rows={(kpis ?? []).map((k) => [k.name])} /></>} />,
         },
         {
           id: "ferramentas",
           label: "Ferramentas de gestão",
-          content: <RegistryList title="Ferramentas de gestão" items={(tools ?? []).map((t) => ({ id: t.id, name: t.name }))} createAction={createTool} deleteAction={deleteTool} placeholder="Ex.: 5W2H, PDCA, Ishikawa" />,
+          content: <RegistryList title="Ferramentas de gestão" items={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active, canDelete: !usedTool.has(t.id) }))} createAction={createTool} deleteAction={deleteTool} toggleAction={setToolActive} placeholder="Ex.: 5W2H, PDCA, Ishikawa" headerAction={<><ImportListDialog title="Importar Ferramentas de gestão (.xlsx)" column="Ferramenta" noun="ferramenta(s)" findKeys={["ferramenta"]} examples={["PDCA", "5W2H", "Ishikawa"]} templateFile="modelo_ferramentas.xlsx" action={importTools} /><ExportButton filename="ferramentas_gestao.xlsx" sheetName="Ferramentas" headers={["Ferramenta"]} rows={(tools ?? []).map((t) => [t.name])} /></>} />,
         },
       ]}
     />
   );
 
   // ---------- Chamados (Setores, Categorias, SLA) ----------
-  const ticketSectorOpts = (ticketSectors ?? []).map((s) => ({ id: s.id, name: s.name }));
+  const ticketSectorOpts = (ticketSectors ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }));
   const ticketSectorById = new Map(ticketSectorOpts.map((s) => [s.id, s.name]));
-  const ticketCategoryOpts = (ticketCategories ?? []).map((c) => ({ id: c.id, name: c.name, sector_id: c.sector_id }));
+  const ticketCategoryOpts = (ticketCategories ?? []).map((c) => ({ id: c.id, name: c.name, sector_id: c.sector_id, active: c.active }));
+  // um setor só pode ser excluído se ele e nenhuma de suas categorias foram usados em chamados
+  const catsBySector = new Map<string, string[]>();
+  for (const c of ticketCategoryOpts) { const a = catsBySector.get(c.sector_id) ?? []; a.push(c.id); catsBySector.set(c.sector_id, a); }
+  const canDeleteSector = (id: string) => !usedSector.has(id) && !(catsBySector.get(id) ?? []).some((cid) => usedCategory.has(cid));
+  // exportação de Setores+Categorias e de SLA (mesmas colunas dos modelos de importação)
+  const ticketStructRows: (string | number | null)[][] = [
+    ...ticketCategoryOpts.map((c) => [ticketSectorById.get(c.sector_id) ?? "", c.name]),
+    ...ticketSectorOpts.filter((s) => !(catsBySector.get(s.id) ?? []).length).map((s) => [s.name, ""]),
+  ];
+  const ticketCatById = new Map(ticketCategoryOpts.map((c) => [c.id, c]));
+  const ticketSlaRows: (string | number | null)[][] = (ticketSlas ?? []).map((s) => {
+    const cat = ticketCatById.get(s.category_id);
+    return [
+      cat ? (ticketSectorById.get(cat.sector_id) ?? "") : "",
+      cat?.name ?? "",
+      s.priority ? (PRIORITY[s.priority] ?? "") : "",
+      s.sla_value,
+      TICKET_SLA_UNIT[s.sla_unit] ?? "",
+    ];
+  });
+  const { data: mgrSectors } = await supabase.from("ticket_manager_sectors").select("user_id, sector_id").eq("tenant_id", tenant.id);
+  const sectorsByManager = new Map<string, string[]>();
+  for (const r of mgrSectors ?? []) { const a = sectorsByManager.get(r.user_id) ?? []; a.push(r.sector_id); sectorsByManager.set(r.user_id, a); }
   const ticketManagers = mems
     .filter((m) => m.is_active)
     .map((m) => ({
       userId: m.user_id,
       name: profById.get(m.user_id)?.full_name ?? profById.get(m.user_id)?.email ?? "—",
-      isManager: m.is_ticket_manager,
+      sectorIds: sectorsByManager.get(m.user_id) ?? [],
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
@@ -443,10 +749,12 @@ export default async function SettingsPage() {
             <RegistryList
               title="Setores de chamado"
               description="Áreas que atendem chamados (ex.: TI, Serviços Gerais)."
-              items={ticketSectorOpts}
+              items={ticketSectorOpts.map((s) => ({ ...s, canDelete: canDeleteSector(s.id) }))}
               createAction={createTicketSector}
               deleteAction={deleteTicketSector}
+              toggleAction={setTicketSectorActive}
               placeholder="Nome do setor"
+              headerAction={<><ImportTicketStructureDialog /><ExportButton filename="chamados_setores_categorias.xlsx" sheetName="Estrutura" headers={["Setor", "Categoria"]} rows={ticketStructRows} /></>}
             />
           ),
         },
@@ -457,16 +765,18 @@ export default async function SettingsPage() {
             <RegistryList
               title="Categorias de chamado"
               description="Cada categoria pertence a um setor (ex.: TI → Acesso, Backup, Computador)."
-              items={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, meta: ticketSectorById.get(c.sector_id) ?? undefined }))}
+              items={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, meta: ticketSectorById.get(c.sector_id) ?? undefined, active: c.active, canDelete: !usedCategory.has(c.id) }))}
               createAction={createTicketCategory}
               deleteAction={deleteTicketCategory}
+              toggleAction={setTicketCategoryActive}
               placeholder="Nome da categoria"
               metaLabel="Setor"
               emptyText="Nenhuma categoria. Cadastre setores primeiro."
+              headerAction={<><ImportTicketStructureDialog /><ExportButton filename="chamados_setores_categorias.xlsx" sheetName="Estrutura" headers={["Setor", "Categoria"]} rows={ticketStructRows} /></>}
               extraFields={
                 <select name="sector_id" className="select" required style={{ width: "auto" }}>
                   <option value="">Setor…</option>
-                  {ticketSectorOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {ticketSectorOpts.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               }
             />
@@ -476,16 +786,23 @@ export default async function SettingsPage() {
           id: "ticket-sla",
           label: "SLA",
           content: (
-            <TicketSlaEditor
-              categories={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, sectorName: ticketSectorById.get(c.sector_id) ?? "—" }))}
-              slas={(ticketSlas ?? []).map((s) => ({ category_id: s.category_id, priority: s.priority, sla_value: s.sla_value, sla_unit: s.sla_unit }))}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", maxWidth: 760 }}>
+                <ImportTicketSlaDialog />
+                <ExportButton filename="chamados_sla.xlsx" sheetName="SLA" headers={["Setor", "Categoria", "Prioridade", "Valor", "Unidade"]} rows={ticketSlaRows} />
+              </div>
+              <TicketSlaEditor
+                mode={tenant.ticket_sla_mode === "category" ? "category" : "priority"}
+                categories={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, sectorName: ticketSectorById.get(c.sector_id) ?? "—" }))}
+                slas={(ticketSlas ?? []).map((s) => ({ category_id: s.category_id, priority: s.priority, sla_value: s.sla_value, sla_unit: s.sla_unit }))}
+              />
+            </div>
           ),
         },
         {
           id: "ticket-gestores",
           label: "Gestores",
-          content: <TicketManagersEditor members={ticketManagers} />,
+          content: <TicketManagersEditor members={ticketManagers} sectors={ticketSectorOpts.map((s) => ({ id: s.id, name: s.name }))} />,
         },
       ]}
     />
@@ -494,12 +811,34 @@ export default async function SettingsPage() {
   const tabs: Tab[] = [
     { id: "empresa", label: "Empresa", content: empresaTab },
     { id: "estrutura", label: "Estrutura", content: estruturaTab },
-    { id: "usuarios", label: "Usuários", content: usuariosTab },
+    { id: "usuarios", label: "Colaboradores", content: usuariosTab },
     { id: "sdpo", label: "Programa de Excelência", content: sdpoTab },
     { id: "chamados", label: "Chamados", content: chamadosTab },
+    { id: "rv", label: "Remuneração variável", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} /> },
+    {
+      id: "feedbacks",
+      label: "Feedbacks",
+      content: (
+        <div>
+          <FeedbackCadenceEditor
+            departments={deptOpts}
+            positions={posOpts}
+            rules={(fbCadenceRules ?? []).map((r) => ({ id: r.id, departmentId: r.department_id, positionId: r.position_id, cadenceDays: r.cadence_days }))}
+          />
+          <RegistryList
+            title="Competências / valores"
+            description="Competências marcáveis nos feedbacks. Desative as que saíram de uso. O histórico será mantido."
+            items={(fbCompsData ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active, canDelete: !usedCompetency.has(c.id) }))}
+            createAction={addFeedbackCompetencyForm}
+            deleteAction={removeFeedbackCompetencyForm}
+            toggleAction={toggleFeedbackCompetencyForm}
+            placeholder="Ex.: Comunicação, Foco no cliente, Colaboração"
+          />
+        </div>
+      ),
+    },
     { id: "salas", label: "Salas", content: salasTab },
     { id: "feriados", label: "Calendário e Feriados", content: feriadosTab },
-    { id: "integracoes", label: "Integrações", content: integracoesTab },
   ];
 
   return (

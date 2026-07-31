@@ -46,6 +46,22 @@ export function TorView({ series, participantNames }: { series: SeriesData; part
         <Field label="Usuários participantes"><span className="muted">{participantNames.join(", ")}</span></Field>
       )}
 
+      {series.generalRules.length > 0 && (
+        <Field label="Regras Gerais">
+          <ol style={{ margin: "0.2rem 0 0", paddingLeft: "1.1rem" }} className="muted">
+            {series.generalRules.map((r, i) => <li key={i} style={{ marginBottom: 2 }}>{r}</li>)}
+          </ol>
+        </Field>
+      )}
+
+      {series.howTo.length > 0 && (
+        <Field label="Como Realizar">
+          <ol style={{ margin: "0.2rem 0 0", paddingLeft: "1.1rem" }} className="muted">
+            {series.howTo.map((r, i) => <li key={i} style={{ marginBottom: 2 }}>{r}</li>)}
+          </ol>
+        </Field>
+      )}
+
       {series.content.length > 0 && (
         <div>
           <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 4 }}>Conteúdo / Pauta</div>
@@ -62,22 +78,6 @@ export function TorView({ series, participantNames }: { series: SeriesData; part
             </tbody>
           </table>
         </div>
-      )}
-
-      {series.generalRules.length > 0 && (
-        <Field label="Regras Gerais">
-          <ol style={{ margin: "0.2rem 0 0", paddingLeft: "1.1rem" }} className="muted">
-            {series.generalRules.map((r, i) => <li key={i} style={{ marginBottom: 2 }}>{r}</li>)}
-          </ol>
-        </Field>
-      )}
-
-      {series.howTo.length > 0 && (
-        <Field label="Como Realizar">
-          <ol style={{ margin: "0.2rem 0 0", paddingLeft: "1.1rem" }} className="muted">
-            {series.howTo.map((r, i) => <li key={i} style={{ marginBottom: 2 }}>{r}</li>)}
-          </ol>
-        </Field>
       )}
     </div>
   );

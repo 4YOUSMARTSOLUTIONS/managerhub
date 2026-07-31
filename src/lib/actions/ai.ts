@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
-import { createServiceClient } from "@/lib/supabase/admin";
+import { getPlatformOpenAI } from "@/lib/platform-integrations";
 import type { ActionState } from "./types";
 
 /** Owner grava/atualiza a chave da OpenAI e o modelo (validação owner-only na RPC). */
@@ -11,21 +11,23 @@ export async function setOpenAISettings(_prev: ActionState, formData: FormData):
     const { supabase } = await actionContext();
     const key = String(formData.get("openai_api_key") ?? "").trim();
     const model = String(formData.get("openai_model") ?? "").trim();
+    const transcribeModel = String(formData.get("openai_transcribe_model") ?? "").trim();
     const clear = String(formData.get("clear") ?? "") === "1";
 
     if (!clear && key && !key.startsWith("sk-")) {
-      return { error: "Chave inválida — a chave da OpenAI normalmente começa com \"sk-\"." };
+      return { error: "Chave inválida, a chave da OpenAI normalmente começa com \"sk-\"." };
     }
 
-    const { error } = await supabase.rpc("set_openai_settings", {
+    const { error } = await supabase.rpc("platform_set_openai", {
       p_key: key,
       p_model: model,
+      p_transcribe_model: transcribeModel,
       p_clear: clear,
     });
     if (error) return { error: error.message };
 
-    revalidatePath("/configuracoes");
-    revalidatePath("/reunioes");
+    revalidatePath("/admin/integracoes");
+    revalidatePath("/", "layout");
     return { ok: true, message: clear ? "Chave removida." : "Configuração salva." };
   } catch (e) {
     return { error: (e as Error).message };
@@ -43,10 +45,10 @@ export async function setResendSettings(_prev: ActionState, formData: FormData):
       return { error: "Chave inválida — a chave do Resend normalmente começa com \"re_\"." };
     }
 
-    const { error } = await supabase.rpc("set_resend_key", { p_key: key, p_clear: clear });
+    const { error } = await supabase.rpc("platform_set_resend", { p_key: key, p_clear: clear });
     if (error) return { error: error.message };
 
-    revalidatePath("/configuracoes");
+    revalidatePath("/admin/integracoes");
     return { ok: true, message: clear ? "Chave removida." : "Configuração salva." };
   } catch (e) {
     return { error: (e as Error).message };
@@ -99,24 +101,20 @@ export async function generateMeetingAI(input: GenerateMeetingInput): Promise<Ge
     const draft = (input.draft ?? "").trim();
     if (!draft) return { error: "Escreva ou cole um rascunho/transcrição da reunião para a IA organizar." };
 
-    const { tenantId } = await actionContext();
+    await actionContext(); // garante sessão
 
-    // Leitura segura da chave (bypass de RLS, só no servidor)
-    const admin = createServiceClient();
-    const [{ data: secret }, { data: tenant }] = await Promise.all([
-      admin.from("tenant_secrets").select("openai_api_key").eq("tenant_id", tenantId).maybeSingle(),
-      admin.from("tenants").select("openai_model").eq("id", tenantId).maybeSingle(),
-    ]);
-
-    const apiKey = secret?.openai_api_key?.trim();
+    // Chave centralizada na plataforma (contas do owner), lida só no servidor.
+    const { apiKey, model } = await getPlatformOpenAI();
     if (!apiKey) {
-      return { error: "IA não configurada. Peça ao proprietário para configurar a chave da OpenAI em Configurações." };
+      return { error: "IA não configurada. Peça ao proprietário do sistema para configurar a chave da OpenAI." };
     }
-    const model = tenant?.openai_model?.trim() || "gpt-4.1-mini";
 
+    // Contexto (objetivo/pauta/presentes) é APENAS referência para interpretar o rascunho.
+    // NÃO deve ser resumido como se tivesse sido discutido: senão a IA transforma os itens
+    // da pauta em anotações mesmo que o rascunho não os mencione.
     const contexto = [
       input.objetivo ? `Objetivo da reunião: ${input.objetivo}` : null,
-      input.pautaItens && input.pautaItens.length ? `Pauta: ${input.pautaItens.filter(Boolean).join("; ")}` : null,
+      input.pautaItens && input.pautaItens.length ? `Pauta prevista: ${input.pautaItens.filter(Boolean).join("; ")}` : null,
       input.presentes && input.presentes.length ? `Presentes: ${input.presentes.join(", ")}` : null,
     ]
       .filter(Boolean)
@@ -124,14 +122,18 @@ export async function generateMeetingAI(input: GenerateMeetingInput): Promise<Ge
 
     const system =
       "Você é um assistente que organiza registros de reuniões corporativas em português do Brasil. " +
-      "A partir de um rascunho/transcrição e do contexto da reunião, produza um JSON com exatamente duas chaves: " +
-      "\"anotacoes\" (resumo claro e organizado das discussões e pontos tratados, em tópicos quando fizer sentido) e " +
+      "Produza um JSON com exatamente duas chaves: " +
+      "\"anotacoes\" (resumo claro e organizado APENAS do que consta no rascunho/transcrição, em tópicos quando fizer sentido) e " +
       "\"decisoes\" (as deliberações/decisões efetivamente tomadas, em tópicos; string vazia se não houver). " +
       "Ambos os valores DEVEM ser strings de texto (use quebras de linha e \"- \" para tópicos); nunca arrays ou objetos. " +
-      "Seja fiel ao rascunho: NÃO invente decisões, números ou compromissos que não estejam no texto. " +
+      "REGRA CRÍTICA DE FIDELIDADE: baseie-se EXCLUSIVAMENTE no rascunho/transcrição. " +
+      "NÃO invente, não expanda nem preencha lacunas. NÃO adicione assuntos, números, KPIs, compromissos ou tópicos que não estejam escritos no rascunho. " +
+      "O \"Objetivo\" e a \"Pauta prevista\" são apenas referência para você entender o rascunho: NÃO os trate como coisas que foram discutidas e NÃO os transforme em anotações. " +
+      "Se um item da pauta não aparece no rascunho, ele NÃO entra nas anotações. " +
+      "Se o rascunho for curto, as anotações também serão curtas, refletindo só o que foi escrito. " +
       "Não inclua nada além do JSON.";
 
-    const user = `${contexto ? contexto + "\n\n" : ""}Rascunho/transcrição:\n${draft}`;
+    const user = `${contexto ? "Contexto (somente referência, NÃO resumir):\n" + contexto + "\n\n" : ""}Rascunho/transcrição (única fonte para as anotações e decisões):\n${draft}`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -202,7 +204,7 @@ export type GenerateActionsInput = {
   objetivo?: string | null;
   pautaItens?: string[];
   candidates?: { id: string; name: string }[];
-  sdpoItens?: { item_id: string; bloco_id: string; pilar_id: string; label: string }[];
+  sdpoItens?: { item_id: string; secao_id: string; bloco_id: string; pilar_id: string; label: string }[];
   kpis?: { id: string; name: string }[];
   tools?: { id: string; name: string }[];
   series?: { id: string; name: string }[];
@@ -214,6 +216,7 @@ export type GenerateActionsInput = {
 export type SuggestedActionPayload = {
   is_sdpo: boolean;
   pilar_id: string;
+  secao_id: string;
   bloco_id: string;
   item_id: string;
   meeting_series_id: string;
@@ -241,19 +244,12 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
     const draft = (input.draft ?? "").trim();
     if (!draft) return { error: "Escreva ou cole um rascunho/transcrição da reunião para a IA sugerir ações." };
 
-    const { tenantId } = await actionContext();
+    await actionContext(); // garante sessão
 
-    const admin = createServiceClient();
-    const [{ data: secret }, { data: tenant }] = await Promise.all([
-      admin.from("tenant_secrets").select("openai_api_key").eq("tenant_id", tenantId).maybeSingle(),
-      admin.from("tenants").select("openai_model").eq("id", tenantId).maybeSingle(),
-    ]);
-
-    const apiKey = secret?.openai_api_key?.trim();
+    const { apiKey, model } = await getPlatformOpenAI();
     if (!apiKey) {
-      return { error: "IA não configurada. Peça ao proprietário para configurar a chave da OpenAI em Configurações." };
+      return { error: "IA não configurada. Peça ao proprietário do sistema para configurar a chave da OpenAI." };
     }
-    const model = tenant?.openai_model?.trim() || "gpt-4.1-mini";
 
     const candidates = input.candidates ?? [];
     const sdpoItens = input.sdpoItens ?? [];
@@ -299,6 +295,8 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       "Regras: para nomes (responsaveis, solicitante, em_copia) use SOMENTE nomes que aparecem na lista de Pessoas; " +
       "para índices use SOMENTE valores válidos dos catálogos fornecidos (nunca invente índices); " +
       "preencha um campo APENAS quando a informação estiver clara no texto — caso contrário use null (ou array vazio). " +
+      "\"ferramenta_index\": preencha SOMENTE se o texto mencionar EXPLICITAMENTE o nome de uma das Ferramentas de gestão listadas " +
+      "(ex.: \"usar 5W2H\", \"aplicar PDCA\"); NUNCA infira ou deduza uma ferramenta a partir do contexto — na dúvida, use null. " +
       "seja fiel ao texto — NÃO invente nada que não esteja no rascunho. " +
       (input.single
         ? "IMPORTANTE: consolide TUDO em UMA única ação (um único objeto no array \"acoes\") com quantas demandas forem necessárias. "
@@ -363,6 +361,18 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       return Number.isInteger(i) && i >= 0 && i < arr.length ? arr[i].id : "";
     };
 
+    // normaliza (minúsculas, sem acento) para checar menção literal no texto
+    const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const draftNorm = normalize(draft);
+    // ferramenta de gestão só vale se o nome aparecer EXPLICITAMENTE no rascunho
+    const toolIdIfMentioned = (raw: unknown): string => {
+      const id = idAt(raw, tools);
+      if (!id) return "";
+      const tool = tools.find((t) => t.id === id);
+      const name = tool ? normalize(tool.name).trim() : "";
+      return name.length >= 2 && draftNorm.includes(name) ? id : "";
+    };
+
     const actions = rawAcoes
       .map((a) => {
         const obj = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
@@ -393,7 +403,7 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
           Number.isInteger(idx) && idx >= 0 && idx < sdpoItens.length ? sdpoItens[idx] : null;
 
         const kpi_id = idAt(obj.kpi_index, kpis);
-        const tool_id = idAt(obj.ferramenta_index, tools);
+        const tool_id = toolIdIfMentioned(obj.ferramenta_index);
         const meeting_series_id = idAt(obj.reuniao_index, seriesList);
 
         // referência da reunião: casa a data informada com uma ocorrência da reunião escolhida
@@ -416,6 +426,7 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
         const payload: SuggestedActionPayload = {
           is_sdpo: !!sdpo,
           pilar_id: sdpo?.pilar_id ?? "",
+          secao_id: sdpo?.secao_id ?? "",
           bloco_id: sdpo?.bloco_id ?? "",
           item_id: sdpo?.item_id ?? "",
           meeting_series_id,

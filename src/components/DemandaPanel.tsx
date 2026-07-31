@@ -4,15 +4,18 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { ACTION_STATUS, PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus } from "@/lib/constants";
+import { ACTION_STATUS, PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus, assigneeEffStatus } from "@/lib/constants";
 import { formatDate, formatDateTime, isOverdue } from "@/lib/format";
 import {
   getDemandaTimeline, demandaComment, demandaRequest,
   demandaDecide, demandaReopen, demandaCancel, demandaReassign, getAttachmentUrl,
+  demandaAssigneeSubmit, demandaAssigneeDecide, demandaAssigneeReopen,
   type TimelineEvent, type PendingReq,
 } from "@/lib/actions/actions";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import type { Enums } from "@/types/database";
+
+export type AssigneeState = { id: string; name: string; doneRequestedAt: string | null; completedAt: string | null };
 
 export type DemandaInfo = {
   id: string;
@@ -23,11 +26,14 @@ export type DemandaInfo = {
   priority: Enums<"priority_level">;
   assigneeIds: string[];
   assigneeNames: string[];
+  /** estado de conclusão por responsável (conclusão por pessoa) */
+  assigneeStates: AssigneeState[];
   attachments: { id: string; filename: string; path: string }[];
   requesterName: string | null;
   ccNames: string[];
   isSdpo: boolean;
   pilarName: string | null;
+  secaoName: string | null;
   blocoName: string | null;
   itemName: string | null;
   kpiName: string | null;
@@ -122,7 +128,6 @@ export function DemandaPanel({
   const finalizada = status === "done" || status === "cancelled";
   const overdue = !!due && !finalizada && isOverdue(due);
   const hasPendingPrazo = requests.some((r) => r.type === "prazo");
-  const hasPendingConclusao = requests.some((r) => r.type === "conclusao");
   const eff = effStatus(status, overdue, requests.length > 0);
 
   const run = (fn: () => Promise<{ ok?: boolean; error?: string }>) => {
@@ -137,12 +142,12 @@ export function DemandaPanel({
   };
 
   const Btn = ({ m, label, tone }: { m: string; label: string; tone?: string }) => (
-    <button type="button" className="btn btn-ghost btn-sm" style={tone === "danger" ? { color: "#dc2626" } : undefined} onClick={() => { setMode(mode === m ? "" : m); setNote(""); setDueInput(""); }}>{label}</button>
+    <button type="button" className="btn btn-ghost btn-sm" style={tone === "danger" ? { color: "var(--mh-danger)" } : undefined} onClick={() => { setMode(mode === m ? "" : m); setNote(""); setDueInput(""); }}>{label}</button>
   );
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 65, overflowY: "auto" }}>
-      <div className="card" style={{ width: "100%", maxWidth: 640, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 65, overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 640, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", gap: "0.75rem" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -159,12 +164,12 @@ export function DemandaPanel({
         <div style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
           {/* informações da ação */}
           <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.85rem 1rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem" }}>
-            <Field label="Prazo"><span style={{ color: due && !finalizada && isOverdue(due) ? "#dc2626" : undefined }}>{due ? formatDate(due) : "—"}</span></Field>
+            <Field label="Prazo"><span style={{ color: due && !finalizada && isOverdue(due) ? "var(--mh-danger)" : undefined }}>{due ? formatDate(due) : "—"}</span></Field>
             <Field label="Responsáveis">{demanda.assigneeNames.length > 0 ? demanda.assigneeNames.join(", ") : <span className="soft">Sem responsável</span>}</Field>
             <Field label="Solicitante">{demanda.requesterName ?? "—"}</Field>
             {(demanda.ccNames ?? []).length > 0 && <Field label="Em cópia"><span className="muted">{demanda.ccNames.join(", ")}</span></Field>}
-            {demanda.isSdpo && (demanda.pilarName || demanda.blocoName || demanda.itemName) && (
-              <Field label="SDPO"><span className="muted">{[demanda.pilarName, demanda.blocoName, demanda.itemName].filter(Boolean).join(" › ")}</span></Field>
+            {demanda.isSdpo && (demanda.pilarName || demanda.secaoName || demanda.blocoName || demanda.itemName) && (
+              <Field label="SDPO"><span className="muted">{[demanda.pilarName, demanda.secaoName, demanda.blocoName, demanda.itemName].filter(Boolean).join(" › ")}</span></Field>
             )}
             {demanda.kpiName && <Field label="KPI">{demanda.kpiName}</Field>}
             {demanda.toolName && <Field label="Ferramenta">{demanda.toolName}</Field>}
@@ -181,7 +186,7 @@ export function DemandaPanel({
 
           {/* Pedidos pendentes */}
           {requests.map((r) => (
-            <div key={r.id} style={{ border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 9, padding: "0.7rem 0.9rem" }}>
+            <div key={r.id} style={{ border: "1px solid color-mix(in srgb, var(--mh-warning) 32%, transparent)", background: "var(--mh-warning-soft)", borderRadius: 9, padding: "0.7rem 0.9rem" }}>
               <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
                 {r.type === "prazo" ? `Pedido de prorrogação para ${r.newDueDate ? formatDate(r.newDueDate) : "—"}` : "Pedido de conclusão"}
               </div>
@@ -196,10 +201,57 @@ export function DemandaPanel({
             </div>
           ))}
 
+          {/* Conclusão por responsável */}
+          {demanda.assigneeStates.length > 0 && (
+            <div>
+              <label className="label">Conclusão por responsável</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {demanda.assigneeStates.map((a) => {
+                  const aEff = assigneeEffStatus(a, due, status === "cancelled");
+                  const awaiting = !!a.doneRequestedAt && !a.completedAt;
+                  return (
+                    <div key={a.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{a.name}</span>
+                        <Badge tone={EFF_STATUS_TONE[aEff]}>{EFF_STATUS_LABEL[aEff]}</Badge>
+                      </div>
+                      {a.id === currentUserId && !a.completedAt && !a.doneRequestedAt && !finalizada && (
+                        <div style={{ marginTop: "0.45rem" }}>
+                          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaAssigneeSubmit(demanda.id))}>Concluí minha parte</button>
+                        </div>
+                      )}
+                      {a.id === currentUserId && awaiting && (
+                        <div className="soft" style={{ fontSize: "0.78rem", marginTop: 4 }}>Aguardando aprovação do solicitante.</div>
+                      )}
+                      {isRequester && awaiting && (
+                        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.45rem", alignItems: "center", flexWrap: "wrap" }}>
+                          <input className="input" placeholder="Observação (opcional)" value={mode === `adec:${a.id}` ? note : ""} onChange={(e) => { setMode(`adec:${a.id}`); setNote(e.target.value); }} style={{ flex: "1 1 180px", padding: "0.35rem 0.6rem", fontSize: "0.82rem" }} />
+                          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaAssigneeDecide(demanda.id, a.id, true, mode === `adec:${a.id}` ? note : ""))}>Aprovar</button>
+                          <button type="button" className="btn btn-danger btn-sm" disabled={pending} onClick={() => run(() => demandaAssigneeDecide(demanda.id, a.id, false, mode === `adec:${a.id}` ? note : ""))}>Reprovar</button>
+                        </div>
+                      )}
+                      {canManage && a.completedAt && status !== "cancelled" && (
+                        mode === `arop:${a.id}` ? (
+                          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.45rem", alignItems: "center", flexWrap: "wrap" }}>
+                            <input className="input" placeholder="Motivo (opcional)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: "1 1 180px", padding: "0.35rem 0.6rem", fontSize: "0.82rem" }} />
+                            <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaAssigneeReopen(demanda.id, a.id, note))}>Reabrir parte</button>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: "0.45rem" }}>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMode(`arop:${a.id}`); setNote(""); }}>Reabrir parte</button>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Ações de tratamento */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
             {isAssignee && !finalizada && !hasPendingPrazo && <Btn m="prazo" label="Solicitar prorrogação" />}
-            {isAssignee && !finalizada && !hasPendingConclusao && <Btn m="conclusao" label="Solicitar conclusão" />}
             {canManage && !finalizada && <Btn m="reassign" label="Reatribuir" />}
             {canManage && !finalizada && <Btn m="cancel" label="Cancelar" tone="danger" />}
             {canManage && status === "done" && <Btn m="reopen" label="Reabrir" />}
@@ -211,12 +263,6 @@ export function DemandaPanel({
               <input type="date" className="input" value={dueInput} min={due ?? undefined} onChange={(e) => setDueInput(e.target.value)} style={{ width: "auto" }} />
               <input className="input" placeholder="Justificativa (opcional)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: "1 1 200px" }} />
               <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaRequest(demanda.id, "prazo", dueInput, note))}>Enviar pedido</button>
-            </div>
-          )}
-          {mode === "conclusao" && (
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-              <input className="input" placeholder="Comentário sobre a solução (opcional)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: "1 1 240px" }} />
-              <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaRequest(demanda.id, "conclusao", "", note))}>Solicitar conclusão</button>
             </div>
           )}
           {mode === "cancel" && (
@@ -239,7 +285,7 @@ export function DemandaPanel({
             </div>
           )}
 
-          {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
+          {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
 
           {/* Comentário */}
           <div>

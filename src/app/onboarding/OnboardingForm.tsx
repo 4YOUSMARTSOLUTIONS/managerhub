@@ -20,7 +20,7 @@ export function OnboardingForm() {
           <input id="name" name="name" type="text" className="input" required autoFocus placeholder="Ex.: Minha Empresa Ltda" />
         </div>
         {state.error && (
-          <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0 }}>{state.error}</p>
+          <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{state.error}</p>
         )}
         <SubmitButton className="btn btn-primary">Criar e continuar</SubmitButton>
       </form>

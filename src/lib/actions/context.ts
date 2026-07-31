@@ -1,8 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
+import type { Enums } from "@/types/database";
 
 /**
  * Contexto para uso dentro de Server Actions (não redireciona, lança erro).
- * Retorna o cliente, o usuário e o tenant ativo (primeira membership).
+ * Retorna o cliente, o usuário e o tenant ativo.
+ *
+ * Owner de plataforma (super admin): opera na EMPRESA SELECIONADA no topo
+ * (`my_active_tenant`), como papel "owner" — mesmo sem membership. Assim as
+ * actions gravam/leem na empresa certa, igual ao `requireContext`.
  */
 export async function actionContext() {
   const supabase = await createClient();
@@ -10,6 +15,14 @@ export async function actionContext() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+
+  const { data: isSuper } = await supabase.rpc("is_super_admin");
+  if (isSuper) {
+    const { data: activeId } = await supabase.rpc("my_active_tenant");
+    if (activeId) {
+      return { supabase, userId: user.id, tenantId: activeId as string, role: "owner" as Enums<"member_role"> };
+    }
+  }
 
   const { data } = await supabase
     .from("memberships")

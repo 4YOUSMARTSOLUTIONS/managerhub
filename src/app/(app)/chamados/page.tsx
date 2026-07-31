@@ -5,19 +5,24 @@ import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { TicketsManager, type TicketRow } from "@/components/TicketsManager";
 import { TicketsDashboard } from "@/components/TicketsDashboard";
 import { TICKET_CATEGORY } from "@/lib/constants";
+import { moduleGate } from "@/lib/module-gate";
 
 export default async function TicketsPage() {
+  const gate = await moduleGate("chamados");
+  if (gate) return gate;
+
   const { tenant, user, role, unitScope } = await requireContext();
   const isAdmin = role === "owner" || role === "admin" || role === "manager";
   const supabase = await createClient();
 
-  const { data: myMembership } = await supabase
-    .from("memberships")
-    .select("is_ticket_manager")
+  // escopo de chamados: owner/admin veem tudo; gestor vê só os setores que gerencia; demais só os que abriram
+  const fullAccess = role === "owner" || role === "admin";
+  const { data: myMgr } = await supabase
+    .from("ticket_manager_sectors")
+    .select("sector_id")
     .eq("tenant_id", tenant.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const canTreat = role === "owner" || role === "admin" || !!myMembership?.is_ticket_manager;
+    .eq("user_id", user.id);
+  const managedSectorIds = (myMgr ?? []).map((r) => r.sector_id);
 
   const unitIds = effectiveUnitFilter(unitScope);
   let ticketsQuery = supabase
@@ -27,15 +32,18 @@ export default async function TicketsPage() {
     )
     .order("created_at", { ascending: false })
     .limit(200);
-  // usuário comum (não gestor de chamados) só enxerga os chamados que ele mesmo abriu
-  if (!canTreat) ticketsQuery = ticketsQuery.eq("requester_id", user.id);
+  if (!fullAccess) {
+    ticketsQuery = managedSectorIds.length > 0
+      ? ticketsQuery.or(`sector_id.in.(${managedSectorIds.join(",")}),requester_id.eq.${user.id}`)
+      : ticketsQuery.eq("requester_id", user.id);
+  }
 
   const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }] =
     await Promise.all([
       unitIds ? ticketsQuery.in("unit_id", unitIds) : ticketsQuery,
       getMembers(tenant.id),
-      supabase.from("ticket_sectors").select("id, name").eq("tenant_id", tenant.id).order("name"),
-      supabase.from("ticket_categories").select("id, name, sector_id").eq("tenant_id", tenant.id).order("name"),
+      supabase.from("ticket_sectors").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+      supabase.from("ticket_categories").select("id, name, sector_id, active").eq("tenant_id", tenant.id).order("name"),
       supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
       supabase.from("ticket_slas").select("category_id, priority, sla_value, sla_unit").eq("tenant_id", tenant.id),
     ]);
@@ -74,6 +82,7 @@ export default async function TicketsPage() {
     createdAt: t.created_at,
     resolvedAt: t.resolved_at,
     updatedAt: t.updated_at,
+    approvalRequestedAt: t.approval_requested_at,
     npsScore: t.nps_score,
     npsComment: t.nps_comment,
     attachments: attByTicket.get(t.id) ?? [],
@@ -84,7 +93,7 @@ export default async function TicketsPage() {
     .filter((m) => m.id)
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-  const sectorOpts = (sectors ?? []).map((s) => ({ id: s.id, name: s.name }));
+  const sectorOpts = (sectors ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }));
   const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name }));
 
   const tabs: Tab[] = [
@@ -100,13 +109,15 @@ export default async function TicketsPage() {
         <TicketsManager
           tickets={rows}
           sectors={sectorOpts}
-          categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name, sectorId: c.sector_id }))}
+          categories={(categories ?? []).map((c) => ({ id: c.id, name: c.name, sectorId: c.sector_id, active: c.active }))}
           units={unitOpts}
           slas={(slas ?? []).map((s) => ({ categoryId: s.category_id, priority: s.priority, value: s.sla_value, unit: s.sla_unit }))}
+          slaMode={tenant.ticket_sla_mode === "category" ? "category" : "priority"}
           members={members2}
           currentUserId={user.id}
           isAdmin={isAdmin}
-          canTreat={canTreat}
+          fullAccess={fullAccess}
+          managedSectorIds={managedSectorIds}
         />
       ),
     },

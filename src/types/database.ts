@@ -12,6 +12,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      agendas: {
+        Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; owner_id: string; responsible_id: string; can_responsible_edit: boolean; active: boolean; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; owner_id: string; responsible_id: string; can_responsible_edit?: boolean; active?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string | null; name?: string; description?: string | null; owner_id?: string; responsible_id?: string; can_responsible_edit?: boolean; active?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      agenda_tasks: {
+        Row: { id: string; tenant_id: string; agenda_id: string; title: string; description: string | null; scheduled_time: string | null; duration_minutes: number; frequency: Database["public"]["Enums"]["agenda_frequency"]; weekdays: number[]; day_of_month: number | null; fixed_date: string | null; sort: number; active: boolean; flexible: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; agenda_id: string; title: string; description?: string | null; scheduled_time?: string | null; duration_minutes?: number; frequency?: Database["public"]["Enums"]["agenda_frequency"]; weekdays?: number[]; day_of_month?: number | null; fixed_date?: string | null; sort?: number; active?: boolean; flexible?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; agenda_id?: string; title?: string; description?: string | null; scheduled_time?: string | null; duration_minutes?: number; frequency?: Database["public"]["Enums"]["agenda_frequency"]; weekdays?: number[]; day_of_month?: number | null; fixed_date?: string | null; sort?: number; active?: boolean; flexible?: boolean; created_at?: string }
+        Relationships: []
+      }
+      agenda_logs: {
+        Row: { id: string; tenant_id: string; agenda_id: string; task_id: string; log_date: string; status: Database["public"]["Enums"]["agenda_log_status"]; note: string | null; actual_minutes: number | null; done_by: string | null; done_at: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; agenda_id: string; task_id: string; log_date: string; status?: Database["public"]["Enums"]["agenda_log_status"]; note?: string | null; actual_minutes?: number | null; done_by?: string | null; done_at?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; agenda_id?: string; task_id?: string; log_date?: string; status?: Database["public"]["Enums"]["agenda_log_status"]; note?: string | null; actual_minutes?: number | null; done_by?: string | null; done_at?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      agenda_log_comments: {
+        Row: { id: string; tenant_id: string; log_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; log_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; log_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: []
+      }
+      agenda_log_attachments: {
+        Row: { id: string; tenant_id: string; log_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; log_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; log_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string; created_at?: string }
+        Relationships: []
+      }
       action_items: {
         Row: {
           assignee_id: string | null
@@ -92,6 +122,7 @@ export type Database = {
           changes: Json | null
           created_at: string
           entity_id: string | null
+          entity_label: string | null
           entity_type: string
           id: number
           summary: string | null
@@ -103,6 +134,7 @@ export type Database = {
           changes?: Json | null
           created_at?: string
           entity_id?: string | null
+          entity_label?: string | null
           entity_type: string
           id?: never
           summary?: string | null
@@ -114,6 +146,7 @@ export type Database = {
           changes?: Json | null
           created_at?: string
           entity_id?: string | null
+          entity_label?: string | null
           entity_type?: string
           id?: never
           summary?: string | null
@@ -427,28 +460,52 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; name?: string; kind?: Database["public"]["Enums"]["unit_kind"]; cnpj?: string | null; created_at?: string }
         Relationships: []
       }
+      unit_modules: {
+        Row: { tenant_id: string; unit_id: string; module_key: string; state: Database["public"]["Enums"]["unit_module_state"]; updated_at: string; updated_by: string | null }
+        Insert: { tenant_id: string; unit_id: string; module_key: string; state?: Database["public"]["Enums"]["unit_module_state"]; updated_at?: string; updated_by?: string | null }
+        Update: { tenant_id?: string; unit_id?: string; module_key?: string; state?: Database["public"]["Enums"]["unit_module_state"]; updated_at?: string; updated_by?: string | null }
+        Relationships: []
+      }
+      platform_module_flags: {
+        Row: { module_key: string; under_construction: boolean; updated_at: string }
+        Insert: { module_key: string; under_construction?: boolean; updated_at?: string }
+        Update: { module_key?: string; under_construction?: boolean; updated_at?: string }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: { id: boolean; openai_api_key: string | null; resend_api_key: string | null; openai_model: string; openai_transcribe_model: string; updated_at: string }
+        Insert: { id?: boolean; openai_api_key?: string | null; resend_api_key?: string | null; openai_model?: string; openai_transcribe_model?: string; updated_at?: string }
+        Update: { id?: boolean; openai_api_key?: string | null; resend_api_key?: string | null; openai_model?: string; openai_transcribe_model?: string; updated_at?: string }
+        Relationships: []
+      }
+      module_interest: {
+        Row: { id: string; tenant_id: string; unit_id: string; module_key: string; user_id: string; hits: number; created_at: string; last_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id: string; module_key: string; user_id: string; hits?: number; created_at?: string; last_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string; module_key?: string; user_id?: string; hits?: number; created_at?: string; last_at?: string }
+        Relationships: []
+      }
       departments: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       subdepartments: {
-        Row: { id: string; tenant_id: string; department_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; department_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; department_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; department_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; department_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; department_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       positions: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       position_levels: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       membership_units: {
@@ -458,9 +515,9 @@ export type Database = {
         Relationships: []
       }
       meeting_series: {
-        Row: { id: string; tenant_id: string; name: string; periodicity: Database["public"]["Enums"]["meeting_periodicity"]; next_date: string | null; start_time: string | null; auto_book: boolean; ics_sequence: number; objetivo: string | null; owner: string | null; owner_user_id: string | null; room_id: string | null; is_online: boolean; participants_text: string | null; duration_min: number | null; duration_unit: string; content: Json; general_rules: Json; how_to: Json; is_active: boolean; deleted_at: string | null; created_by: string | null; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; start_time?: string | null; auto_book?: boolean; ics_sequence?: number; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; start_time?: string | null; auto_book?: boolean; ics_sequence?: number; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; periodicity: Database["public"]["Enums"]["meeting_periodicity"]; next_date: string | null; start_time: string | null; auto_book: boolean; ics_sequence: number; objetivo: string | null; owner: string | null; owner_user_id: string | null; room_id: string | null; is_online: boolean; participants_text: string | null; duration_min: number | null; duration_unit: string; content: Json; general_rules: Json; how_to: Json; is_active: boolean; is_private: boolean; deleted_at: string | null; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; start_time?: string | null; auto_book?: boolean; ics_sequence?: number; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; is_private?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; periodicity?: Database["public"]["Enums"]["meeting_periodicity"]; next_date?: string | null; start_time?: string | null; auto_book?: boolean; ics_sequence?: number; objetivo?: string | null; owner?: string | null; owner_user_id?: string | null; room_id?: string | null; is_online?: boolean; participants_text?: string | null; duration_min?: number | null; duration_unit?: string; content?: Json; general_rules?: Json; how_to?: Json; is_active?: boolean; is_private?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string }
         Relationships: []
       }
       meeting_series_participants: {
@@ -475,46 +532,64 @@ export type Database = {
         Update: { series_id?: string; unit_id?: string }
         Relationships: []
       }
+      meeting_recordings: {
+        Row: { id: string; tenant_id: string; occurrence_id: string; path: string; filename: string; size: number | null; content_type: string | null; duration_seconds: number | null; source: string; transcript: string | null; transcript_status: Database["public"]["Enums"]["recording_transcript_status"]; transcript_error: string | null; transcribed_at: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; occurrence_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; duration_seconds?: number | null; source?: string; transcript?: string | null; transcript_status?: Database["public"]["Enums"]["recording_transcript_status"]; transcript_error?: string | null; transcribed_at?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; occurrence_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; duration_seconds?: number | null; source?: string; transcript?: string | null; transcript_status?: Database["public"]["Enums"]["recording_transcript_status"]; transcript_error?: string | null; transcribed_at?: string | null; uploaded_by?: string | null; created_at?: string }
+        Relationships: []
+      }
       holidays: {
         Row: { id: string; tenant_id: string; day: string; name: string; created_by: string | null; created_at: string }
         Insert: { id?: string; tenant_id: string; day: string; name: string; created_by?: string | null; created_at?: string }
         Update: { id?: string; tenant_id?: string; day?: string; name?: string; created_by?: string | null; created_at?: string }
         Relationships: []
       }
+      sdpo_programas: {
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
+        Relationships: []
+      }
       sdpo_pilares: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
+        Relationships: []
+      }
+      sdpo_secoes: {
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       sdpo_blocos: {
-        Row: { id: string; tenant_id: string; pilar_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; pilar_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; pilar_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; programa_id: string | null; pilar_id: string; secao_id: string; name: string; code: string | null; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; programa_id?: string | null; pilar_id: string; secao_id: string; name: string; code?: string | null; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; programa_id?: string | null; pilar_id?: string; secao_id?: string; name?: string; code?: string | null; active?: boolean; created_at?: string }
         Relationships: []
       }
       sdpo_itens: {
-        Row: { id: string; tenant_id: string; bloco_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; bloco_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; bloco_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; programa_id: string | null; pilar_id: string; secao_id: string; bloco_id: string | null; name: string; code: string | null; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; programa_id?: string | null; pilar_id: string; secao_id: string; bloco_id?: string | null; name: string; code?: string | null; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; programa_id?: string | null; pilar_id?: string; secao_id?: string; bloco_id?: string | null; name?: string; code?: string | null; active?: boolean; created_at?: string }
         Relationships: []
       }
       action_kpis: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       action_tools: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       actions: {
-        Row: { id: string; code: number; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; unit_id: string | null; requester_id: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"]; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; code?: number; tenant_id: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; unit_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; code?: number; tenant_id?: string; is_sdpo?: boolean; pilar_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; unit_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; code: number; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; secao_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; unit_id: string | null; requester_id: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"]; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; code?: number; tenant_id: string; is_sdpo?: boolean; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; unit_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; code?: number; tenant_id?: string; is_sdpo?: boolean; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; unit_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       action_demandas: {
@@ -542,9 +617,9 @@ export type Database = {
         Relationships: []
       }
       action_demanda_assignees: {
-        Row: { demanda_id: string; user_id: string }
-        Insert: { demanda_id: string; user_id: string }
-        Update: { demanda_id?: string; user_id?: string }
+        Row: { demanda_id: string; user_id: string; done_requested_at: string | null; completed_at: string | null }
+        Insert: { demanda_id: string; user_id: string; done_requested_at?: string | null; completed_at?: string | null }
+        Update: { demanda_id?: string; user_id?: string; done_requested_at?: string | null; completed_at?: string | null }
         Relationships: []
       }
       action_cc: {
@@ -560,21 +635,27 @@ export type Database = {
         Relationships: []
       }
       ticket_sectors: {
-        Row: { id: string; tenant_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
+        Relationships: []
+      }
+      ticket_manager_sectors: {
+        Row: { id: string; tenant_id: string; user_id: string; sector_id: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; sector_id: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; sector_id?: string; created_at?: string }
         Relationships: []
       }
       ticket_categories: {
-        Row: { id: string; tenant_id: string; sector_id: string; name: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; sector_id: string; name: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; sector_id?: string; name?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; sector_id: string; name: string; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; sector_id: string; name: string; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; sector_id?: string; name?: string; active?: boolean; created_at?: string }
         Relationships: []
       }
       ticket_slas: {
-        Row: { id: string; tenant_id: string; category_id: string; priority: Database["public"]["Enums"]["priority_level"]; sla_value: number; sla_unit: Database["public"]["Enums"]["ticket_sla_unit"]; created_at: string }
-        Insert: { id?: string; tenant_id: string; category_id: string; priority: Database["public"]["Enums"]["priority_level"]; sla_value: number; sla_unit?: Database["public"]["Enums"]["ticket_sla_unit"]; created_at?: string }
-        Update: { id?: string; tenant_id?: string; category_id?: string; priority?: Database["public"]["Enums"]["priority_level"]; sla_value?: number; sla_unit?: Database["public"]["Enums"]["ticket_sla_unit"]; created_at?: string }
+        Row: { id: string; tenant_id: string; category_id: string; priority: Database["public"]["Enums"]["priority_level"] | null; sla_value: number; sla_unit: Database["public"]["Enums"]["ticket_sla_unit"]; created_at: string }
+        Insert: { id?: string; tenant_id: string; category_id: string; priority?: Database["public"]["Enums"]["priority_level"] | null; sla_value: number; sla_unit?: Database["public"]["Enums"]["ticket_sla_unit"]; created_at?: string }
+        Update: { id?: string; tenant_id?: string; category_id?: string; priority?: Database["public"]["Enums"]["priority_level"] | null; sla_value?: number; sla_unit?: Database["public"]["Enums"]["ticket_sla_unit"]; created_at?: string }
         Relationships: []
       }
       ticket_attachments: {
@@ -584,33 +665,189 @@ export type Database = {
         Relationships: []
       }
       individual_goals: {
-        Row: { id: string; tenant_id: string; owner_id: string; name: string; description: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; owner_id: string; name: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; owner_id?: string; name?: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; owner_id: string; name: string; description: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; partial_pct: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; owner_id: string; name: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; partial_pct?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; owner_id?: string; name?: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; partial_pct?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       individual_goal_entries: {
-        Row: { id: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value?: number | null; weight?: number; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; goal_id?: string; period?: string; target_value?: number; actual_value?: number | null; weight?: number; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: Enums<"goal_entry_status">; approved_by: string | null; approved_at: string | null; reproval_note: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value?: number | null; weight?: number; note?: string | null; partial_value?: number | null; rv_value?: number | null; approval_status?: Enums<"goal_entry_status">; approved_by?: string | null; approved_at?: string | null; reproval_note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; goal_id?: string; period?: string; target_value?: number; actual_value?: number | null; weight?: number; note?: string | null; partial_value?: number | null; rv_value?: number | null; approval_status?: Enums<"goal_entry_status">; approved_by?: string | null; approved_at?: string | null; reproval_note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      individual_rv_config: {
+        Row: { id: string; tenant_id: string; scope: string; position_id: string | null; user_id: string | null; effective_from: string; value: number; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; scope: string; position_id?: string | null; user_id?: string | null; effective_from: string; value?: number; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; scope?: string; position_id?: string | null; user_id?: string | null; effective_from?: string; value?: number; created_by?: string | null; created_at?: string }
         Relationships: []
       }
       area_goals: {
-        Row: { id: string; tenant_id: string; department_id: string | null; name: string; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; department_id?: string | null; name: string; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; department_id?: string | null; name?: string; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; department_id: string | null; subdepartment_id: string | null; unit_id: string | null; parent_id: string | null; name: string; description: string | null; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; department_id?: string | null; subdepartment_id?: string | null; unit_id?: string | null; parent_id?: string | null; name: string; description?: string | null; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; department_id?: string | null; subdepartment_id?: string | null; unit_id?: string | null; parent_id?: string | null; name?: string; description?: string | null; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       area_goal_entries: {
-        Row: { id: string; tenant_id: string; area_goal_id: string; unit_id: string | null; period: string; target_value: number | null; actual_value: number | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; area_goal_id: string; unit_id?: string | null; period: string; target_value?: number | null; actual_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; area_goal_id?: string; unit_id?: string | null; period?: string; target_value?: number | null; actual_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; area_goal_id: string; unit_id: string | null; period: string; target_value: number | null; actual_value: number | null; numerator_value: number | null; denominator_value: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; area_goal_id: string; unit_id?: string | null; period: string; target_value?: number | null; actual_value?: number | null; numerator_value?: number | null; denominator_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; area_goal_id?: string; unit_id?: string | null; period?: string; target_value?: number | null; actual_value?: number | null; numerator_value?: number | null; denominator_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      pnr_categories: {
+        Row: { id: string; tenant_id: string; name: string; sort: number; max_points: number | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; sort?: number; max_points?: number | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; sort?: number; max_points?: number | null; created_at?: string }
+        Relationships: []
+      }
+      pnr_kpis: {
+        Row: { id: string; tenant_id: string; category_id: string | null; sort: number; name: string; description: string | null; owner_id: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; max_points: number; target: number | null; partial_high: number | null; partial_low: number | null; points_high: number | null; points_low: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; category_id?: string | null; sort?: number; name: string; description?: string | null; owner_id?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; max_points?: number; target?: number | null; partial_high?: number | null; partial_low?: number | null; points_high?: number | null; points_low?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; category_id?: string | null; sort?: number; name?: string; description?: string | null; owner_id?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; max_points?: number; target?: number | null; partial_high?: number | null; partial_low?: number | null; points_high?: number | null; points_low?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      pnr_entries: {
+        Row: { id: string; tenant_id: string; kpi_id: string; period: string; actual_value: number | null; numerator_value: number | null; denominator_value: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; kpi_id: string; period: string; actual_value?: number | null; numerator_value?: number | null; denominator_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; kpi_id?: string; period?: string; actual_value?: number | null; numerator_value?: number | null; denominator_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feedback_competencies: {
+        Row: { id: string; tenant_id: string; name: string; sort: number; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; sort?: number; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; sort?: number; active?: boolean; created_at?: string }
+        Relationships: []
+      }
+      feedbacks: {
+        Row: { id: string; tenant_id: string; subject_user_id: string; author_id: string; feedback_date: string; type: Database["public"]["Enums"]["feedback_type"]; channel: Database["public"]["Enums"]["feedback_channel"] | null; title: string | null; situation: string | null; behavior: string | null; impact: string | null; next_steps: string | null; notes: string | null; visibility: Database["public"]["Enums"]["feedback_visibility"]; applied_at: string | null; acknowledged_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; subject_user_id: string; author_id: string; feedback_date: string; type: Database["public"]["Enums"]["feedback_type"]; channel?: Database["public"]["Enums"]["feedback_channel"] | null; title?: string | null; situation?: string | null; behavior?: string | null; impact?: string | null; next_steps?: string | null; notes?: string | null; visibility?: Database["public"]["Enums"]["feedback_visibility"]; applied_at?: string | null; acknowledged_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; subject_user_id?: string; author_id?: string; feedback_date?: string; type?: Database["public"]["Enums"]["feedback_type"]; channel?: Database["public"]["Enums"]["feedback_channel"] | null; title?: string | null; situation?: string | null; behavior?: string | null; impact?: string | null; next_steps?: string | null; notes?: string | null; visibility?: Database["public"]["Enums"]["feedback_visibility"]; applied_at?: string | null; acknowledged_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feedback_sessions: {
+        Row: { id: string; tenant_id: string; subject_user_id: string; author_id: string; session_date: string; reference_month: string | null; title: string | null; highlights: string | null; development: string | null; action_plan: string | null; overall: string | null; visibility: Database["public"]["Enums"]["feedback_visibility"]; applied_at: string | null; acknowledged_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; subject_user_id: string; author_id: string; session_date: string; reference_month?: string | null; title?: string | null; highlights?: string | null; development?: string | null; action_plan?: string | null; overall?: string | null; visibility?: Database["public"]["Enums"]["feedback_visibility"]; applied_at?: string | null; acknowledged_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; subject_user_id?: string; author_id?: string; session_date?: string; reference_month?: string | null; title?: string | null; highlights?: string | null; development?: string | null; action_plan?: string | null; overall?: string | null; visibility?: Database["public"]["Enums"]["feedback_visibility"]; applied_at?: string | null; acknowledged_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feedback_session_items: {
+        Row: { session_id: string; feedback_id: string; tenant_id: string }
+        Insert: { session_id: string; feedback_id: string; tenant_id: string }
+        Update: { session_id?: string; feedback_id?: string; tenant_id?: string }
+        Relationships: []
+      }
+      feedback_settings: {
+        Row: { tenant_id: string; cadence_days: number; updated_at: string }
+        Insert: { tenant_id: string; cadence_days?: number; updated_at?: string }
+        Update: { tenant_id?: string; cadence_days?: number; updated_at?: string }
+        Relationships: []
+      }
+      feedback_cadence_rules: {
+        Row: { id: string; tenant_id: string; department_id: string; position_id: string; cadence_days: number; updated_at: string }
+        Insert: { id?: string; tenant_id: string; department_id: string; position_id: string; cadence_days?: number; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; department_id?: string; position_id?: string; cadence_days?: number; updated_at?: string }
+        Relationships: []
+      }
+      pdi_actions: {
+        Row: { id: string; tenant_id: string; subject_user_id: string; created_by: string; source_feedback_id: string | null; title: string; description: string | null; status: Database["public"]["Enums"]["pdi_action_status"]; due_date: string | null; completed_at: string | null; completed_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; subject_user_id: string; created_by: string; source_feedback_id?: string | null; title: string; description?: string | null; status?: Database["public"]["Enums"]["pdi_action_status"]; due_date?: string | null; completed_at?: string | null; completed_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; subject_user_id?: string; created_by?: string; source_feedback_id?: string | null; title?: string; description?: string | null; status?: Database["public"]["Enums"]["pdi_action_status"]; due_date?: string | null; completed_at?: string | null; completed_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      pdi_action_comments: {
+        Row: { id: string; tenant_id: string; action_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; action_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; action_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: []
+      }
+      sustainability_kpis: {
+        Row: { id: string; tenant_id: string; sort: number; name: string; owner_id: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; target: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; sort?: number; name: string; owner_id?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; target?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; sort?: number; name?: string; owner_id?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; target?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      sustainability_entries: {
+        Row: { id: string; tenant_id: string; kpi_id: string; period: string; actual_value: number | null; numerator_value: number | null; denominator_value: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; kpi_id: string; period: string; actual_value?: number | null; numerator_value?: number | null; denominator_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; kpi_id?: string; period?: string; actual_value?: number | null; numerator_value?: number | null; denominator_value?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      checklists: {
+        Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; department_id: string | null; subdepartment_id: string | null; visibility: Database["public"]["Enums"]["checklist_visibility"]; default_assignee_id: string | null; auto_open_tasks: boolean; created_by: string; active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; department_id?: string | null; subdepartment_id?: string | null; visibility?: Database["public"]["Enums"]["checklist_visibility"]; default_assignee_id?: string | null; auto_open_tasks?: boolean; created_by: string; active?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string | null; name?: string; description?: string | null; department_id?: string | null; subdepartment_id?: string | null; visibility?: Database["public"]["Enums"]["checklist_visibility"]; default_assignee_id?: string | null; auto_open_tasks?: boolean; created_by?: string; active?: boolean; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      checklist_tasks: {
+        Row: { id: string; tenant_id: string; checklist_id: string; run_id: string; item_id: string; unit_id: string | null; title: string; description: string | null; assignee_id: string | null; status: Database["public"]["Enums"]["checklist_task_status"]; resolution: string | null; created_by: string; created_at: string; resolved_at: string | null }
+        Insert: { id?: string; tenant_id: string; checklist_id: string; run_id: string; item_id: string; unit_id?: string | null; title: string; description?: string | null; assignee_id?: string | null; status?: Database["public"]["Enums"]["checklist_task_status"]; resolution?: string | null; created_by: string; created_at?: string; resolved_at?: string | null }
+        Update: { id?: string; tenant_id?: string; checklist_id?: string; run_id?: string; item_id?: string; unit_id?: string | null; title?: string; description?: string | null; assignee_id?: string | null; status?: Database["public"]["Enums"]["checklist_task_status"]; resolution?: string | null; created_by?: string; created_at?: string; resolved_at?: string | null }
+        Relationships: []
+      }
+      checklist_task_comments: {
+        Row: { id: string; tenant_id: string; task_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; task_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; task_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: []
+      }
+      checklist_audiences: {
+        Row: { id: string; tenant_id: string; checklist_id: string; kind: string; ref_id: string }
+        Insert: { id?: string; tenant_id: string; checklist_id: string; kind: string; ref_id: string }
+        Update: { id?: string; tenant_id?: string; checklist_id?: string; kind?: string; ref_id?: string }
+        Relationships: []
+      }
+      checklist_items: {
+        Row: { id: string; tenant_id: string; checklist_id: string; section: string | null; sort: number; label: string; help: string | null; type: Database["public"]["Enums"]["checklist_item_type"]; required: boolean; allow_photo: boolean; allow_na: boolean; require_note_on_nc: boolean; require_photo_on_nc: boolean; options: Json | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; checklist_id: string; section?: string | null; sort?: number; label: string; help?: string | null; type?: Database["public"]["Enums"]["checklist_item_type"]; required?: boolean; allow_photo?: boolean; allow_na?: boolean; require_note_on_nc?: boolean; require_photo_on_nc?: boolean; options?: Json | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; checklist_id?: string; section?: string | null; sort?: number; label?: string; help?: string | null; type?: Database["public"]["Enums"]["checklist_item_type"]; required?: boolean; allow_photo?: boolean; allow_na?: boolean; require_note_on_nc?: boolean; require_photo_on_nc?: boolean; options?: Json | null; created_at?: string }
+        Relationships: []
+      }
+      checklist_schedules: {
+        Row: { id: string; tenant_id: string; checklist_id: string; frequency: Database["public"]["Enums"]["checklist_frequency"]; fixed_date: string | null; weekday: number | null; day_of_month: number | null; run_time: string | null; active: boolean; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; checklist_id: string; frequency: Database["public"]["Enums"]["checklist_frequency"]; fixed_date?: string | null; weekday?: number | null; day_of_month?: number | null; run_time?: string | null; active?: boolean; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; checklist_id?: string; frequency?: Database["public"]["Enums"]["checklist_frequency"]; fixed_date?: string | null; weekday?: number | null; day_of_month?: number | null; run_time?: string | null; active?: boolean; created_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      checklist_schedule_targets: {
+        Row: { id: string; tenant_id: string; schedule_id: string; kind: string; ref_id: string }
+        Insert: { id?: string; tenant_id: string; schedule_id: string; kind: string; ref_id: string }
+        Update: { id?: string; tenant_id?: string; schedule_id?: string; kind?: string; ref_id?: string }
+        Relationships: []
+      }
+      checklist_runs: {
+        Row: { id: string; tenant_id: string; checklist_id: string; schedule_id: string | null; unit_id: string | null; executor_id: string; period_key: string | null; status: Database["public"]["Enums"]["checklist_run_status"]; score: number | null; conform_count: number; nonconform_count: number; na_count: number; started_at: string; completed_at: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; checklist_id: string; schedule_id?: string | null; unit_id?: string | null; executor_id: string; period_key?: string | null; status?: Database["public"]["Enums"]["checklist_run_status"]; score?: number | null; conform_count?: number; nonconform_count?: number; na_count?: number; started_at?: string; completed_at?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; checklist_id?: string; schedule_id?: string | null; unit_id?: string | null; executor_id?: string; period_key?: string | null; status?: Database["public"]["Enums"]["checklist_run_status"]; score?: number | null; conform_count?: number; nonconform_count?: number; na_count?: number; started_at?: string; completed_at?: string | null; created_at?: string }
+        Relationships: []
+      }
+      checklist_run_answers: {
+        Row: { id: string; tenant_id: string; run_id: string; item_id: string; value_conformidade: string | null; value_bool: boolean | null; value_text: string | null; value_number: number | null; value_option: string | null; note: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; run_id: string; item_id: string; value_conformidade?: string | null; value_bool?: boolean | null; value_text?: string | null; value_number?: number | null; value_option?: string | null; note?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; run_id?: string; item_id?: string; value_conformidade?: string | null; value_bool?: boolean | null; value_text?: string | null; value_number?: number | null; value_option?: string | null; note?: string | null; created_at?: string }
+        Relationships: []
+      }
+      checklist_answer_photos: {
+        Row: { id: string; tenant_id: string; run_id: string; item_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; run_id: string; item_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; run_id?: string; item_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      feedback_competency_links: {
+        Row: { feedback_id: string; competency_id: string; tenant_id: string }
+        Insert: { feedback_id: string; competency_id: string; tenant_id: string }
+        Update: { feedback_id?: string; competency_id?: string; tenant_id?: string }
+        Relationships: []
+      }
+      feedback_attachments: {
+        Row: { id: string; tenant_id: string; feedback_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; feedback_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; feedback_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
         Relationships: []
       }
       meeting_occurrences: {
-        Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; registered_by: string | null; created_at: string; status: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at: string | null; ended_at: string | null; duration_seconds: number | null; draft: Json | null; deleted_at: string | null }
-        Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null; draft?: Json | null; deleted_at?: string | null }
-        Update: { id?: string; tenant_id?: string; series_id?: string; occurred_on?: string; notes?: string | null; decisions?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null; draft?: Json | null; deleted_at?: string | null }
+        Row: { id: string; tenant_id: string; series_id: string; occurred_on: string; notes: string | null; decisions: string | null; transcript: string | null; registered_by: string | null; created_at: string; status: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at: string | null; ended_at: string | null; duration_seconds: number | null; auto_finished: boolean; room_id: string | null; meeting_link: string | null; booking_meeting_id: string | null; draft: Json | null; deleted_at: string | null }
+        Insert: { id?: string; tenant_id: string; series_id: string; occurred_on?: string; notes?: string | null; decisions?: string | null; transcript?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null; auto_finished?: boolean; room_id?: string | null; meeting_link?: string | null; booking_meeting_id?: string | null; draft?: Json | null; deleted_at?: string | null }
+        Update: { id?: string; tenant_id?: string; series_id?: string; occurred_on?: string; notes?: string | null; decisions?: string | null; transcript?: string | null; registered_by?: string | null; created_at?: string; status?: Database["public"]["Enums"]["meeting_occurrence_status"]; started_at?: string | null; ended_at?: string | null; duration_seconds?: number | null; auto_finished?: boolean; room_id?: string | null; meeting_link?: string | null; booking_meeting_id?: string | null; draft?: Json | null; deleted_at?: string | null }
         Relationships: [
           {
             foreignKeyName: "meeting_occurrences_series_id_fkey"
@@ -624,6 +861,20 @@ export type Database = {
             columns: ["registered_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_occurrences_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_occurrences_booking_meeting_id_fkey"
+            columns: ["booking_meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
             referencedColumns: ["id"]
           },
         ]
@@ -757,8 +1008,10 @@ export type Database = {
           id: string
           name: string
           openai_model: string
+          openai_transcribe_model: string
           slug: string
           status: Database["public"]["Enums"]["tenant_status"]
+          ticket_sla_mode: string
           units_limit: number | null
           updated_at: string
         }
@@ -769,8 +1022,10 @@ export type Database = {
           id?: string
           name: string
           openai_model?: string
+          openai_transcribe_model?: string
           slug: string
           status?: Database["public"]["Enums"]["tenant_status"]
+          ticket_sla_mode?: string
           units_limit?: number | null
           updated_at?: string
         }
@@ -781,8 +1036,10 @@ export type Database = {
           id?: string
           name?: string
           openai_model?: string
+          openai_transcribe_model?: string
           slug?: string
           status?: Database["public"]["Enums"]["tenant_status"]
+          ticket_sla_mode?: string
           units_limit?: number | null
           updated_at?: string
         }
@@ -822,6 +1079,7 @@ export type Database = {
       }
       tickets: {
         Row: {
+          approval_requested_at: string | null
           assignee_id: string | null
           category: Database["public"]["Enums"]["ticket_category"]
           category_id: string | null
@@ -846,6 +1104,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approval_requested_at?: string | null
           assignee_id?: string | null
           category?: Database["public"]["Enums"]["ticket_category"]
           category_id?: string | null
@@ -870,6 +1129,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approval_requested_at?: string | null
           assignee_id?: string | null
           category?: Database["public"]["Enums"]["ticket_category"]
           category_id?: string | null
@@ -962,15 +1222,20 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
       demanda_comment: { Args: { p_demanda: string; p_body: string }; Returns: undefined }
+      add_demanda_comment_import: { Args: { p_demanda: string; p_body: string; p_actor?: string | null; p_at?: string | null; p_author_label?: string | null }; Returns: undefined }
       demanda_set_status: { Args: { p_demanda: string; p_status: Database["public"]["Enums"]["action_status"] }; Returns: undefined }
       demanda_request: { Args: { p_demanda: string; p_type: string; p_new_due: string | null; p_note: string }; Returns: undefined }
       demanda_decide: { Args: { p_request: string; p_approve: boolean; p_note: string }; Returns: undefined }
       demanda_reopen: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
       demanda_cancel: { Args: { p_demanda: string; p_note: string }; Returns: undefined }
       demanda_reassign: { Args: { p_demanda: string; p_users: Json; p_note: string }; Returns: undefined }
+      demanda_assignee_submit: { Args: { p_demanda: string }; Returns: undefined }
+      demanda_assignee_decide: { Args: { p_demanda: string; p_user: string; p_approve: boolean; p_note: string }; Returns: undefined }
+      demanda_assignee_reopen: { Args: { p_demanda: string; p_user: string; p_note: string }; Returns: undefined }
       create_meeting: { Args: { p_data: Json }; Returns: string }
       save_meeting_series: { Args: { p_data: Json }; Returns: string }
       sync_series_bookings: { Args: { p_series: string }; Returns: undefined }
@@ -980,6 +1245,7 @@ export type Database = {
       is_holiday: { Args: { p_tenant: string; p_date: string }; Returns: boolean }
       register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       start_meeting_occurrence: { Args: { p_series_id: string }; Returns: string }
+      anticipate_meeting_occurrence: { Args: { p_series_id: string; p_room_id?: string | null; p_link?: string | null; p_next_date?: string | null; p_next_time?: string | null }; Returns: string }
       finish_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       cancel_meeting_occurrence: { Args: { p_id: string }; Returns: undefined }
       save_occurrence_draft: { Args: { p_id: string; p_draft: Json }; Returns: undefined }
@@ -1003,6 +1269,44 @@ export type Database = {
         Args: { p_tenant: string; p_limit: number | null }
         Returns: undefined
       }
+      platform_module_matrix: {
+        Args: { p_tenant: string }
+        Returns: {
+          unit_id: string
+          unit_name: string
+          module_key: string
+          state: Database["public"]["Enums"]["unit_module_state"] | null
+        }[]
+      }
+      platform_set_unit_modules: {
+        Args: { p_unit: string; p_modules: string[]; p_state: Database["public"]["Enums"]["unit_module_state"] }
+        Returns: undefined
+      }
+      platform_set_tenant_modules: {
+        Args: { p_tenant: string; p_modules: string[]; p_state: Database["public"]["Enums"]["unit_module_state"] }
+        Returns: undefined
+      }
+      platform_set_module_construction: {
+        Args: { p_module: string; p_under: boolean }
+        Returns: undefined
+      }
+      platform_module_interest: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          module_key: string
+          tenant_id: string
+          tenant_name: string
+          unit_id: string
+          unit_name: string
+          users_count: number
+          hits: number
+          last_at: string
+        }[]
+      }
+      register_module_interest: {
+        Args: { p_units: string[]; p_module: string }
+        Returns: number
+      }
       platform_stats: { Args: Record<PropertyKey, never>; Returns: Json }
       platform_create_company: {
         Args: {
@@ -1021,15 +1325,37 @@ export type Database = {
         Returns: undefined
       }
       platform_delete_company: { Args: { p_tenant: string }; Returns: undefined }
+      platform_create_owner: { Args: { p_email: string; p_password: string; p_name: string }; Returns: string }
+      platform_grant_admin: { Args: { p_email: string }; Returns: undefined }
+      platform_revoke_admin: { Args: { p_user: string }; Returns: undefined }
+      platform_admins_list: { Args: Record<PropertyKey, never>; Returns: { user_id: string; email: string; full_name: string | null; created_at: string }[] }
       notify_users: { Args: { p_tenant: string; p_users: string[]; p_type: string; p_title: string; p_body: string; p_demanda: string | null }; Returns: undefined }
       set_resend_key: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
+      platform_set_openai: { Args: { p_key: string; p_model: string; p_transcribe_model: string; p_clear?: boolean }; Returns: undefined }
+      platform_set_resend: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
+      platform_integration_flags: { Args: Record<PropertyKey, never>; Returns: Json }
+      ticket_request_conclusion: { Args: { p_ticket: string }; Returns: undefined }
+      ticket_decide_conclusion: { Args: { p_ticket: string; p_approve: boolean; p_note: string }; Returns: undefined }
     }
     Enums: {
+      agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"
+      agenda_log_status: "pendente" | "feito" | "parcial" | "nao_feito"
+      recording_transcript_status: "pendente" | "processando" | "concluida" | "falha"
       action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
       goal_status: "active" | "at_risk" | "achieved" | "missed" | "archived"
       goal_direction: "maior_melhor" | "menor_melhor"
+      goal_entry_status: "aberta" | "aprovada" | "reprovada"
+      feedback_type: "reconhecimento" | "construtivo" | "neutro"
+      feedback_visibility: "compartilhado" | "privado"
+      feedback_channel: "presencial" | "reuniao_1a1" | "videochamada" | "mensagem" | "outro"
+      pdi_action_status: "pendente" | "em_andamento" | "conclusao_solicitada" | "concluida" | "cancelada"
+      checklist_visibility: "todos" | "usuarios" | "cargos" | "areas"
+      checklist_item_type: "conformidade" | "sim_nao" | "texto" | "numero" | "selecao" | "nota"
+      checklist_frequency: "unica" | "diaria" | "semanal" | "mensal" | "anual"
+      checklist_run_status: "em_andamento" | "concluida"
+      checklist_task_status: "pendente" | "em_andamento" | "concluida" | "cancelada"
       area_goal_kind: "ic" | "iv"
-      area_consolidation: "soma" | "media" | "manual"
+      area_consolidation: "soma" | "media" | "manual" | "razao"
       meeting_status: "scheduled" | "in_progress" | "done" | "cancelled"
       meeting_occurrence_status: "in_progress" | "finished" | "cancelled"
       member_role: "owner" | "admin" | "manager" | "member"
@@ -1052,6 +1378,7 @@ export type Database = {
       ticket_sla_unit: "horas" | "dias_corridos" | "dias_uteis"
       tenant_status: "active" | "suspended" | "inactive"
       unit_kind: "matriz" | "filial"
+      unit_module_state: "on" | "locked" | "hidden"
       gender_type: "masculino" | "feminino" | "outro" | "nao_informado"
       meeting_periodicity:
         | "diaria"

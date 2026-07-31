@@ -9,16 +9,17 @@ import { PRIORITY } from "@/lib/constants";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { SearchSelect } from "./SearchSelect";
 
-export type Opt = { id: string; name: string };
-export type BlocoOpt = { id: string; name: string; pilarId: string };
-export type ItemOpt = { id: string; name: string; blocoId: string };
+export type Opt = { id: string; name: string; active?: boolean };
+export type SecaoOpt = { id: string; name: string; active?: boolean };
+export type BlocoOpt = { id: string; name: string; pilarId: string; secaoId: string; active?: boolean };
+export type ItemOpt = { id: string; name: string; pilarId: string; secaoId: string; blocoId: string | null; active?: boolean };
 export type OccOpt = { id: string; seriesId: string; occurredOn: string };
 
 type Demanda = { description: string; assignees: string[]; files: File[] };
 
 export type CollectedAction = {
   payload: {
-    is_sdpo: boolean; pilar_id: string; bloco_id: string; item_id: string;
+    is_sdpo: boolean; pilar_id: string; secao_id: string; bloco_id: string; item_id: string;
     meeting_series_id: string; kpi_id: string; tool_id: string; unit_id?: string;
     requester_id: string; due_date: string; priority: string; cc: string[];
     demandas: { description: string; assignees: string[] }[];
@@ -26,16 +27,19 @@ export type CollectedAction = {
   headerFiles: File[];
   demandaFiles: File[][];
   summary: string;
+  /** origem: "ai" = sugerida pela IA (substituível ao regerar) · "manual" = criada/editada à mão */
+  source?: "ai" | "manual";
 };
 
 export function ActionDialog({
-  open, onClose, people, pilares, blocos, itens, kpis, tools, series, occurrences, units,
-  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, editing, aiEnabled,
+  open, onClose, people, pilares, secoes, blocos, itens, kpis, tools, series, occurrences, units,
+  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, defaultUnitId, editing, aiEnabled,
 }: {
   open: boolean;
   onClose: () => void;
   people: Person[];
   pilares: Opt[];
+  secoes: SecaoOpt[];
   blocos: BlocoOpt[];
   itens: ItemOpt[];
   kpis: Opt[];
@@ -47,11 +51,13 @@ export function ActionDialog({
   lockedSeries?: { id: string; name: string } | null;
   defaultRequesterId?: string;
   defaultAssignees?: string[];
+  defaultUnitId?: string;
   editing?: CollectedAction | null;
   aiEnabled?: boolean;
 }) {
   const [isSdpo, setIsSdpo] = useState(true);
   const [pilarId, setPilarId] = useState("");
+  const [secaoId, setSecaoId] = useState("");
   const [blocoId, setBlocoId] = useState("");
   const [itemId, setItemId] = useState("");
   const [seriesId, setSeriesId] = useState("");
@@ -82,23 +88,35 @@ export function ActionDialog({
     setAiOpen(false); setAiDraft(""); setAiBusy(false); setAiErr("");
     if (editing) {
       const p = editing.payload;
-      setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
-      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || "all");
+      setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
+      setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || defaultUnitId || "all");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
       setDemandas(p.demandas.map((d, i) => ({ description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
       setFiles(editing.headerFiles);
     } else {
-      setIsSdpo(true); setPilarId(""); setBlocoId(""); setItemId("");
-      setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId(""); setUnitId("");
+      setIsSdpo(true); setPilarId(""); setSecaoId(""); setBlocoId(""); setItemId("");
+      setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId(""); setUnitId(defaultUnitId ?? "");
       setDueDate(""); setPriority("medium"); setRequesterId(defaultRequesterId ?? ""); setCc([]);
       setDemandas([{ description: "", assignees: defaultAssignees ?? [], files: [] }]); setFiles([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // cascata bidirecional: filtra pelo pai se houver, senão mostra todos
-  const blocoOpts = useMemo(() => (pilarId ? blocos.filter((b) => b.pilarId === pilarId) : blocos), [blocos, pilarId]);
-  const itemOpts = useMemo(() => (blocoId ? itens.filter((i) => i.blocoId === blocoId) : itens), [itens, blocoId]);
+  // só mostra ativos, mas mantém o valor já selecionado (ao editar ação antiga)
+  const isActive = (o: { active?: boolean; id: string }, selected: string) => o.active !== false || o.id === selected;
+  const pilarOpts = useMemo(() => pilares.filter((p) => isActive(p, pilarId)), [pilares, pilarId]);
+  const kpiOpts = useMemo(() => kpis.filter((k) => isActive(k, kpiId)), [kpis, kpiId]);
+  const toolOpts = useMemo(() => tools.filter((t) => isActive(t, toolId)), [tools, toolId]);
+  // cascata: Pilar + Seção (global) → [Bloco] → Item
+  const secaoOpts = useMemo(() => secoes.filter((s) => isActive(s, secaoId)), [secoes, secaoId]);
+  const blocoOpts = useMemo(
+    () => blocos.filter((b) => (!pilarId || b.pilarId === pilarId) && (!secaoId || b.secaoId === secaoId)).filter((b) => isActive(b, blocoId)),
+    [blocos, pilarId, secaoId, blocoId],
+  );
+  const itemOpts = useMemo(() => {
+    const list = itens.filter((i) => (!pilarId || i.pilarId === pilarId) && (!secaoId || i.secaoId === secaoId) && (!blocoId || i.blocoId === blocoId));
+    return list.filter((i) => isActive(i, itemId));
+  }, [itens, pilarId, secaoId, blocoId, itemId]);
   const occOpts = useMemo(
     () => occurrences.filter((o) => !seriesId || o.seriesId === seriesId).map((o) => ({ id: o.id, name: formatDate(o.occurredOn) })),
     [occurrences, seriesId],
@@ -106,38 +124,32 @@ export function ActionDialog({
 
   if (!open) return null;
 
-  // ao escolher o pilar: se o bloco atual não pertence a ele, limpa bloco+item
+  // Pilar e Seção são independentes (seção é global). Ao mudar, limpa bloco/item incompatíveis.
   const onPilar = (id: string) => {
     setPilarId(id);
-    if (blocoId) {
-      const b = blocos.find((x) => x.id === blocoId);
-      if (!id || (b && b.pilarId !== id)) { setBlocoId(""); setItemId(""); }
-    }
+    if (blocoId) { const b = blocos.find((x) => x.id === blocoId); if (!id || (b && b.pilarId !== id)) setBlocoId(""); }
+    if (itemId) { const it = itens.find((x) => x.id === itemId); if (!id || (it && it.pilarId !== id)) setItemId(""); }
   };
-  // ao escolher o bloco: preenche o pilar automaticamente; limpa item se não pertencer
+  const onSecao = (id: string) => {
+    setSecaoId(id);
+    if (blocoId) { const b = blocos.find((x) => x.id === blocoId); if (!id || (b && b.secaoId !== id)) setBlocoId(""); }
+    if (itemId) { const it = itens.find((x) => x.id === itemId); if (!id || (it && it.secaoId !== id)) setItemId(""); }
+  };
+  // ao escolher o bloco (opcional): preenche pilar e seção; limpa item se não pertencer
   const onBloco = (id: string) => {
     setBlocoId(id);
     if (id) {
       const b = blocos.find((x) => x.id === id);
-      if (b) setPilarId(b.pilarId);
-      if (itemId) {
-        const it = itens.find((x) => x.id === itemId);
-        if (!it || it.blocoId !== id) setItemId("");
-      }
-    } else {
-      setItemId("");
+      if (b) { setPilarId(b.pilarId); setSecaoId(b.secaoId); }
+      if (itemId) { const it = itens.find((x) => x.id === itemId); if (!it || it.blocoId !== id) setItemId(""); }
     }
   };
-  // ao escolher o item: preenche bloco e pilar automaticamente
+  // ao escolher o item: preenche pilar, seção e bloco automaticamente
   const onItem = (id: string) => {
     setItemId(id);
     if (id) {
       const it = itens.find((x) => x.id === id);
-      if (it) {
-        setBlocoId(it.blocoId);
-        const b = blocos.find((x) => x.id === it.blocoId);
-        if (b) setPilarId(b.pilarId);
-      }
+      if (it) { setPilarId(it.pilarId); setSecaoId(it.secaoId); setBlocoId(it.blocoId ?? ""); }
     }
   };
 
@@ -150,15 +162,19 @@ export function ActionDialog({
     if (!aiDraft.trim()) { setAiErr("Descreva a ação e quem ficou responsável para a IA montar."); return; }
     setAiBusy(true);
     const candidates = people.map((p) => ({ id: p.id, name: p.name }));
-    // catálogo SDPO numerado: só itens com pilar/bloco resolvidos
+    // catálogo SDPO numerado: só itens ATIVOS com seção/pilar (ativos) resolvidos; bloco é opcional
     const sdpoItens = itens
       .map((it) => {
-        const b = blocos.find((x) => x.id === it.blocoId);
-        const p = b ? pilares.find((x) => x.id === b.pilarId) : undefined;
-        if (!b || !p) return null;
-        return { item_id: it.id, bloco_id: b.id, pilar_id: p.id, label: `${p.name} > ${b.name} > ${it.name}` };
+        if (it.active === false) return null;
+        const s = secoes.find((x) => x.id === it.secaoId);
+        const p = pilares.find((x) => x.id === it.pilarId);
+        if (!s || !p || s.active === false || p.active === false) return null;
+        const b = it.blocoId ? blocos.find((x) => x.id === it.blocoId) : undefined;
+        if (it.blocoId && (!b || b.active === false)) return null;
+        const label = b ? `${p.name} > ${s.name} > ${b.name} > ${it.name}` : `${p.name} > ${s.name} > ${it.name}`;
+        return { item_id: it.id, secao_id: s.id, bloco_id: b?.id ?? "", pilar_id: p.id, label };
       })
-      .filter((x): x is { item_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
+      .filter((x): x is { item_id: string; secao_id: string; bloco_id: string; pilar_id: string; label: string } => !!x);
     const today = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD no fuso local
 
     const res = await generateActionsAI({
@@ -179,9 +195,9 @@ export function ActionDialog({
     if (!first) { setAiErr("A IA não identificou ações claras no texto."); return; }
     const p = first.payload;
     setIsSdpo(p.is_sdpo);
-    setPilarId(p.pilar_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
-    setSeriesId(p.meeting_series_id); setOccurrenceId(p.occurrence_id);
-    setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId("");
+    setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
+    setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setOccurrenceId(lockedSeries ? "" : p.occurrence_id);
+    setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(defaultUnitId ?? "");
     setRequesterId(p.requester_id); setCc(p.cc);
     setPriority(p.priority); setDueDate(p.due_date);
     const allDemandas = res.actions.flatMap((a) => a.payload.demandas);
@@ -196,11 +212,11 @@ export function ActionDialog({
   const submit = () => {
     setError(""); setSaved("");
     const cleanDemandas = demandas.filter((d) => d.description.trim());
-    if (cleanDemandas.length === 0) { setError("Informe ao menos uma ação."); return; }
+    if (cleanDemandas.length === 0) { setError("Informe ao menos uma demanda."); return; }
     if (units && units.length > 0 && !unitId) { setError("Selecione a unidade (ou “Todas as unidades”)."); return; }
     if (!requesterId) { setError("Informe o solicitante."); return; }
     if (!dueDate) { setError("Informe o prazo da ação."); return; }
-    if (isSdpo && (!pilarId || !blocoId || !itemId)) { setError("Para SDPO, informe Pilar, Bloco e Item."); return; }
+    if (isSdpo && (!pilarId || !secaoId || !itemId)) { setError("Para SDPO, informe Pilar, Seção e Item."); return; }
     if (isSdpo && !seriesId) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
 
     // modo coletar: devolve a ação ao pai (não salva agora)
@@ -208,7 +224,7 @@ export function ActionDialog({
       onCollect({
         payload: {
           is_sdpo: isSdpo,
-          pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
+          pilar_id: pilarId, secao_id: secaoId, bloco_id: blocoId, item_id: itemId,
           meeting_series_id: seriesId,
           kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
           requester_id: requesterId, due_date: dueDate, priority, cc,
@@ -224,7 +240,7 @@ export function ActionDialog({
 
     const payload = {
       is_sdpo: isSdpo,
-      pilar_id: pilarId, bloco_id: blocoId, item_id: itemId,
+      pilar_id: pilarId, secao_id: secaoId, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
       kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
       requester_id: requesterId, due_date: dueDate, priority, cc,
@@ -250,16 +266,28 @@ export function ActionDialog({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "3vh 1rem", zIndex: 60, overflowY: "auto" }}>
-      <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "3vh 1rem", zIndex: 80, overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--mh-shadow-e3)", margin: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{onCollect ? (editing ? "Editar ação da reunião" : "Ação da reunião") : "Nova ação"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
         <div style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
-          {/* Sugerir com IA (só na criação direta) */}
-          {aiEnabled && !onCollect && (
+          {/* Unidade (obrigatório) — antes da IA, pois a IA não preenche a unidade */}
+          {units && units.length > 0 && (
+            <div>
+              <label className="label">Unidade <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                <option value="" disabled>Selecione…</option>
+                <option value="all">Todas as unidades</option>
+                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Sugerir com IA */}
+          {aiEnabled && (
             <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "0.7rem 0.9rem", background: "var(--surface-2)" }}>
               {!aiOpen ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAiOpen(true)}>
@@ -268,9 +296,27 @@ export function ActionDialog({
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <label className="label" style={{ margin: 0 }}>Descreva a ação</label>
-                  <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
-                    Escreva a tarefa e quem ficou responsável. A IA preenche as demandas, responsáveis, prazo, prioridade e a classificação SDPO (quando der) — você revisa e ajusta antes de criar.
-                  </p>
+                  <div style={{ border: "1px solid var(--border)", borderRadius: 9, background: "var(--surface)", padding: "0.7rem 0.85rem" }}>
+                    <p className="soft" style={{ fontSize: "0.72rem", margin: 0 }}>
+                      Para que a IA te auxilie a preencher os campos e elaborar uma ação mais completa, cite quando fizer sentido:
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.3rem 1.1rem", marginTop: "0.55rem", fontSize: "0.72rem" }}>
+                      {[
+                        <><strong>Prioridade</strong> <span className="soft">(baixa, média, alta, urgente)</span></>,
+                        <><strong>Prazo</strong> <span className="soft">(ex.: “até sexta”, “30/09/2026”)</span></>,
+                        <><strong>Pilar / Seção / Item</strong> <span className="soft">(SDPO)</span></>,
+                        <><strong>KPI</strong> <span className="soft">relacionado</span></>,
+                        <><strong>Ferramenta de gestão</strong> <span className="soft">(ex.: PDCA, 5W2H)</span></>,
+                        <><strong>Solicitante</strong> <span className="soft">e quem fica</span> <strong>em cópia</strong></>,
+                        <><strong>Ação</strong> <span className="soft">e</span> <strong>responsável(is)</strong></>,
+                      ].map((item, i) => (
+                        <span key={i} style={{ display: "flex", gap: "0.45rem", alignItems: "baseline" }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--mh-primary-500)", flexShrink: 0, transform: "translateY(-1px)" }} />
+                          <span>{item}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                   <textarea
                     className="textarea"
                     value={aiDraft}
@@ -279,7 +325,7 @@ export function ActionDialog({
                     style={{ minHeight: 90 }}
                     disabled={aiBusy}
                   />
-                  {aiErr && <p style={{ color: "#dc2626", fontSize: "0.8rem", margin: 0 }}>{aiErr}</p>}
+                  {aiErr && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: 0 }}>{aiErr}</p>}
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     <button type="button" className="btn btn-primary btn-sm" onClick={runAiActions} disabled={aiBusy}>
                       {aiBusy ? "Gerando…" : "Gerar"}
@@ -293,23 +339,17 @@ export function ActionDialog({
             </div>
           )}
 
-          {/* Unidade (obrigatório) + Prioridade */}
-          <div style={{ display: "grid", gridTemplateColumns: units && units.length ? "1fr 200px" : "200px", gap: "0.8rem" }}>
-            {units && units.length > 0 && (
-              <div>
-                <label className="label">Unidade <span style={{ color: "#dc2626" }}>*</span></label>
-                <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                  <option value="" disabled>Selecione…</option>
-                  <option value="all">Todas as unidades</option>
-                  {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-            )}
+          {/* Prioridade + Prazo */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
             <div>
               <label className="label">Prioridade</label>
               <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
                 {(Object.entries(PRIORITY) as [string, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
+            </div>
+            <div>
+              <label className="label">Prazo <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
 
@@ -320,14 +360,18 @@ export function ActionDialog({
           </label>
 
           {isSdpo && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem", background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem", background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
               <div>
                 <label className="label">Pilar</label>
-                <SearchSelect options={pilares} value={pilarId} onChange={onPilar} placeholder="Buscar pilar…" />
+                <SearchSelect options={pilarOpts} value={pilarId} onChange={onPilar} placeholder="Buscar pilar…" />
               </div>
               <div>
-                <label className="label">Bloco</label>
-                <SearchSelect options={blocoOpts} value={blocoId} onChange={onBloco} placeholder="Buscar bloco…" />
+                <label className="label">Seção</label>
+                <SearchSelect options={secaoOpts} value={secaoId} onChange={onSecao} placeholder="Buscar seção…" />
+              </div>
+              <div>
+                <label className="label">Bloco <span className="soft">(opcional)</span></label>
+                <SearchSelect options={blocoOpts} value={blocoId} onChange={onBloco} placeholder="Buscar bloco…" emptyHint="Sem blocos nesta seção" />
               </div>
               <div>
                 <label className="label">Item</label>
@@ -344,7 +388,7 @@ export function ActionDialog({
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
               <div>
-                <label className="label">Reunião {isSdpo ? <span style={{ color: "#dc2626" }}>*</span> : <span className="soft">(opcional)</span>}</label>
+                <label className="label">Reunião {isSdpo ? <span style={{ color: "var(--mh-danger)" }}>*</span> : <span className="soft">(opcional)</span>}</label>
                 <SearchSelect options={series} value={seriesId} onChange={(id) => { setSeriesId(id); setOccurrenceId(""); }} placeholder="Buscar reunião…" />
               </div>
               <div>
@@ -354,19 +398,15 @@ export function ActionDialog({
             </div>
           )}
 
-          {/* KPI + Ferramenta + Prazo */}
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
+          {/* KPI + Ferramenta */}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
             <div>
               <label className="label">KPI <span className="soft">(opcional)</span></label>
-              <SearchSelect options={kpis} value={kpiId} onChange={setKpiId} placeholder="Buscar KPI…" />
+              <SearchSelect options={kpiOpts} value={kpiId} onChange={setKpiId} placeholder="Buscar KPI…" />
             </div>
             <div>
               <label className="label">Ferramenta de gestão <span className="soft">(opcional)</span></label>
-              <SearchSelect options={tools} value={toolId} onChange={setToolId} placeholder="Buscar ferramenta…" />
-            </div>
-            <div>
-              <label className="label">Prazo <span style={{ color: "#dc2626" }}>*</span></label>
-              <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <SearchSelect options={toolOpts} value={toolId} onChange={setToolId} placeholder="Buscar ferramenta…" />
             </div>
           </div>
 
@@ -385,8 +425,8 @@ export function ActionDialog({
           {/* Ações (demandas) */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
-              <label className="label" style={{ margin: 0 }}>Ações <span className="soft">(cada uma com seu(s) responsável(is))</span></label>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDemandas((d) => [...d, { description: "", assignees: [], files: [] }])}>+ Ação</button>
+              <label className="label" style={{ margin: 0 }}>Demandas <span className="soft">(cada uma com seu(s) responsável(is))</span></label>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDemandas((d) => [...d, { description: "", assignees: [], files: [] }])}>+ Demanda</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {demandas.map((d, i) => (
@@ -394,7 +434,7 @@ export function ActionDialog({
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
                     <span className="soft" style={{ fontSize: "0.8rem", paddingTop: "0.55rem" }}>{i + 1}.</span>
                     <div style={{ flex: 1 }}>
-                      <input className="input" placeholder="Descrição da ação" value={d.description} onChange={(e) => setDemanda(i, { description: e.target.value })} />
+                      <input className="input" placeholder="Descrição da demanda" value={d.description} onChange={(e) => setDemanda(i, { description: e.target.value })} />
                       <div style={{ marginTop: "0.5rem" }}>
                         <span className="soft" style={{ fontSize: "0.78rem" }}>Responsável(is)</span>
                         <PeoplePicker people={people} selected={d.assignees} onChange={(ids) => setDemanda(i, { assignees: ids })} placeholder="Buscar responsável…" />
@@ -450,8 +490,8 @@ export function ActionDialog({
             </label>
           )}
 
-          {saved && <p style={{ color: "#047857", fontSize: "0.85rem", margin: 0, background: "#ecfdf5", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{saved}</p>}
-          {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
+          {saved && <p style={{ color: "var(--mh-success)", fontSize: "0.85rem", margin: 0, background: "var(--mh-success-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{saved}</p>}
+          {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>

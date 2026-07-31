@@ -47,7 +47,7 @@ export function UnitsManager({
             Unidades
             {unitLimit !== null ? (
               <span style={{ marginLeft: "0.4rem" }}>
-                <span style={{ color: atLimit ? "#dc2626" : "inherit" }}>{units.length}</span>
+                <span style={{ color: atLimit ? "var(--mh-danger)" : "inherit" }}>{units.length}</span>
                 <span className="soft"> / {unitLimit}</span>
               </span>
             ) : (
@@ -81,7 +81,7 @@ export function UnitsManager({
             <button className="btn btn-primary btn-sm" type="submit">Adicionar</button>
           </form>
           {createState.error && (
-            <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0.5rem 0 0" }}>{createState.error}</p>
+            <p style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: "0.5rem 0 0" }}>{createState.error}</p>
           )}
         </div>
       ) : (

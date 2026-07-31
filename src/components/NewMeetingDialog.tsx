@@ -40,6 +40,7 @@ export function NewMeetingDialog({
 }) {
   const [state, action] = useActionState(editing ? updateMeeting : createMeeting, initialActionState);
   const [seriesId, setSeriesId] = useState("");
+  const [roomId, setRoomId] = useState("");
   const [title, setTitle] = useState("");
   const [participants, setParticipants] = useState<string[]>([]);
   const [localErr, setLocalErr] = useState("");
@@ -52,6 +53,7 @@ export function NewMeetingDialog({
   useEffect(() => {
     if (open) {
       setSeriesId(editing?.seriesId ?? "");
+      setRoomId(editing ? (editing.room?.id ?? "") : (initial?.roomId ?? ""));
       setTitle(editing?.title ?? "");
       setParticipants(editing?.participantIds ?? []);
       setLocalErr("");
@@ -80,7 +82,7 @@ export function NewMeetingDialog({
   };
 
   const isRoutine = !!seriesId;
-  const roomDefault = editing ? (editing.room?.id ?? "") : (initial?.roomId ?? "");
+  const selectedRoom = rooms.find((r) => r.id === roomId) ?? null;
   const startDefault = editing ? editing.startInput : (initial?.startInput ?? "");
   const endDefault = editing ? editing.endInput : (initial?.endInput ?? "");
 
@@ -96,8 +98,8 @@ export function NewMeetingDialog({
 
   return (
     <>
-    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
-      <div className="card" style={{ width: "100%", maxWidth: 520, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 520, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{editing ? "Editar reunião" : "Nova reunião"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
@@ -134,10 +136,26 @@ export function NewMeetingDialog({
 
             <div>
               <label className="label">Sala</label>
-              <select name="room_id" className="select" defaultValue={roomDefault}>
+              <select name="room_id" className="select" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
                 <option value="">Sem sala</option>
                 {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
+              {selectedRoom && (
+                <div style={{ marginTop: "0.5rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem" }}>
+                  {(selectedRoom.capacity || selectedRoom.location) && (
+                    <span className="muted" style={{ fontSize: "0.8rem" }}>
+                      {selectedRoom.capacity ? `${selectedRoom.capacity} lugares` : ""}
+                      {selectedRoom.capacity && selectedRoom.location ? " · " : ""}
+                      {selectedRoom.location ?? ""}
+                    </span>
+                  )}
+                  {selectedRoom.resources.length > 0 ? (
+                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                      {selectedRoom.resources.map((res) => <span key={res} className="badge badge-gray">{res}</span>)}
+                    </span>
+                  ) : <span className="soft" style={{ fontSize: "0.8rem" }}>Sem recursos cadastrados.</span>}
+                </div>
+              )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
               <div>
@@ -160,15 +178,15 @@ export function NewMeetingDialog({
             )}
 
             <div>
-              <label className="label">Participantes <span style={{ color: "#dc2626" }}>*</span></label>
+              <label className="label">Participantes <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <PeoplePicker people={people} selected={participants} onChange={(ids) => { setParticipants(ids); if (ids.length) setLocalErr(""); }} placeholder="Adicionar participante…" />
             </div>
 
             {(localErr || state.error) && (
-              <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0, background: "#fef2f2", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{localErr || state.error}</p>
+              <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{localErr || state.error}</p>
             )}
             {saveWarn && (
-              <p style={{ color: "#92400e", fontSize: "0.85rem", margin: 0, background: "#fffbeb", border: "1px solid #fde68a", padding: "0.5rem 0.7rem", borderRadius: 8 }}>⚠️ {saveWarn}</p>
+              <p style={{ color: "var(--mh-warning)", fontSize: "0.85rem", margin: 0, background: "var(--mh-warning-soft)", border: "1px solid color-mix(in srgb, var(--mh-warning) 32%, transparent)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>⚠️ {saveWarn}</p>
             )}
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>

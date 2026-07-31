@@ -57,7 +57,7 @@ export function SearchSelect({
       )}
 
       {open && !value && !disabled && (
-        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9, boxShadow: "var(--shadow)", maxHeight: 240, overflowY: "auto" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9, boxShadow: "var(--mh-shadow-e3)", maxHeight: 240, overflowY: "auto" }}>
           {matches.length > 0 ? matches.map((o) => (
             <button
               key={o.id}

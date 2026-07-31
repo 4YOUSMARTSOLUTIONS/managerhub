@@ -57,22 +57,34 @@ export async function setUserPassword(
   }
 }
 
-export async function setMemberActive(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
-  const userId = String(formData.get("user_id"));
-  const active = String(formData.get("active")) === "true";
-  await supabase
-    .from("memberships")
-    .update({ is_active: active })
-    .eq("tenant_id", tenantId)
-    .eq("user_id", userId);
-  revalidatePath("/configuracoes");
+export async function setMemberActive(formData: FormData): Promise<{ error?: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const userId = String(formData.get("user_id"));
+    const active = String(formData.get("active")) === "true";
+    const { error } = await supabase
+      .from("memberships")
+      .update({ is_active: active })
+      .eq("tenant_id", tenantId)
+      .eq("user_id", userId);
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    return {};
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
-export async function removeUser(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
-  await supabase.rpc("admin_delete_user", { p_user: String(formData.get("user_id")) });
-  revalidatePath("/configuracoes");
+export async function removeUser(formData: FormData): Promise<{ error?: string }> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("admin_delete_user", { p_user: String(formData.get("user_id")) });
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    return {};
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function updateUserRole(formData: FormData): Promise<void> {

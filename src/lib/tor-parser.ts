@@ -39,8 +39,27 @@ const PERIOD_MAP: Record<string, string> = {
   "sob demanda": "sob_demanda",
 };
 
-const norm = (s: string) =>
+/** Normaliza rótulos: minúsculo, sem acento, sem ponto/dois-pontos. */
+export const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[.:]/g, "").trim();
+
+/** true se o token é só um número de sequência ("1", "1.", "1)"). */
+const isNumberToken = (s: string) => /^\d{1,3}[.)]?$/.test(s.trim());
+/** Remove um prefixo de número de sequência colado ao texto ("1. Item" -> "Item"). */
+const stripLeadingNumber = (s: string) => s.replace(/^\s*\d{1,3}[.)]\s+/, "").trim();
+
+/** Texto de frequência ("Mensal.") → chave do enum meeting_periodicity. */
+export function mapPeriodicity(raw: string): string | undefined {
+  const n = norm(raw);
+  return PERIOD_MAP[n] ?? Object.entries(PERIOD_MAP).find(([k]) => n.includes(k))?.[1];
+}
+
+/** Texto de duração ("120 min.", "2h") → valor + unidade. */
+export function parseDuration(raw: string): { value?: number; unit?: "min" | "h" } {
+  const m = raw.match(/(\d+(?:[.,]\d+)?)\s*(h|hora|horas|min|minuto|minutos|m)\b/i);
+  if (!m) return {};
+  return { value: Number(m[1].replace(",", ".")), unit: /^h/i.test(m[2]) ? "h" : "min" };
+}
 
 export function parseTor(items: TextItem[]): ParsedTor {
   const out: ParsedTor & { durationRaw?: string; frequencyRaw?: string } = {
@@ -75,17 +94,13 @@ export function parseTor(items: TextItem[]): ParsedTor {
 
   // duração -> valor + unidade
   if (out.durationRaw) {
-    const m = out.durationRaw.match(/(\d+(?:[.,]\d+)?)\s*(h|hora|horas|min|minuto|minutos|m)\b/i);
-    if (m) {
-      out.durationValue = Number(m[1].replace(",", "."));
-      out.durationUnit = /^h/i.test(m[2]) ? "h" : "min";
-    }
+    const d = parseDuration(out.durationRaw);
+    if (d.value != null) { out.durationValue = d.value; out.durationUnit = d.unit; }
     delete out.durationRaw;
   }
   // frequência -> periodicity
   if (out.frequencyRaw) {
-    const n = norm(out.frequencyRaw);
-    out.periodicity = PERIOD_MAP[n] ?? Object.entries(PERIOD_MAP).find(([k]) => n.includes(k))?.[1];
+    out.periodicity = mapPeriodicity(out.frequencyRaw);
     delete out.frequencyRaw;
   }
 
@@ -94,10 +109,12 @@ export function parseTor(items: TextItem[]): ParsedTor {
   const contentRows: { item: string; tempo: string; dono: string; y: number }[] = [];
   for (const t of tempoRows) {
     const dono = items.find((it) => it.x >= 455 && Math.abs(it.y - t.y) <= 4);
-    const texts = items
+    let texts = items
       .filter((it) => it.x >= 112 && it.x < 405 && Math.abs(it.y - t.y) <= 8)
       .sort((a, b) => b.y - a.y || a.x - b.x);
-    const item = texts.map((x) => x.str).join(" ").trim();
+    // descarta o número da sequência ("1.", "2." …) quando vem como primeiro token da linha
+    if (texts.length && isNumberToken(texts[0].str)) texts = texts.slice(1);
+    const item = stripLeadingNumber(texts.map((x) => x.str).join(" ").trim());
     if (item) contentRows.push({ item, tempo: t.str, dono: dono?.str ?? "", y: t.y });
   }
   out.content = contentRows.sort((a, b) => b.y - a.y).map(({ item, tempo, dono }) => ({ item, tempo, dono }));
@@ -119,7 +136,7 @@ export function parseTor(items: TextItem[]): ParsedTor {
         .filter((it) => it.x >= 113 && it.x < 400 && it.y <= upperY && it.y > lowerY)
         .filter((it) => !tempoRows.some((t) => Math.abs(t.y - it.y) <= 4))
         .sort((a, b) => b.y - a.y || a.x - b.x);
-      return { num, y: n.y, text: texts.map((t) => t.str).join(" ").trim() };
+      return { num, y: n.y, text: stripLeadingNumber(texts.map((t) => t.str).join(" ").trim()) };
     })
     .filter((e) => e.text);
 

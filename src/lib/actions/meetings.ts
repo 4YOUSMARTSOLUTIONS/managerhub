@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { getPlatformResend } from "@/lib/platform-integrations";
 import { buildIcs, type IcsMethod } from "@/lib/ics";
 import { sendInvite, ORGANIZER_EMAIL } from "@/lib/mailer";
 import { formatDateTime } from "@/lib/format";
@@ -77,8 +78,7 @@ async function dispatchInvite(meetingId: string, method: IcsMethod, opts: { bump
     }
 
     // chave do Resend do tenant (server-only); sem chave, não envia
-    const { data: secret } = await admin.from("tenant_secrets").select("resend_api_key").eq("tenant_id", m.tenant_id).maybeSingle();
-    const apiKey = secret?.resend_api_key?.trim();
+    const { apiKey } = await getPlatformResend();
     if (!apiKey) return "skipped";
 
     const seq = (m.ics_sequence ?? 0) + (opts.bump ? 1 : 0);
@@ -153,8 +153,7 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
     // CANCEL só faz sentido se já enviamos algo antes
     if (method === "CANCEL" && (s.ics_sequence ?? 0) === 0) return "skipped";
 
-    const { data: secret } = await admin.from("tenant_secrets").select("resend_api_key").eq("tenant_id", s.tenant_id).maybeSingle();
-    const apiKey = secret?.resend_api_key?.trim();
+    const { apiKey } = await getPlatformResend();
     if (!apiKey) return "skipped";
 
     const { data: parts } = await admin
@@ -245,8 +244,7 @@ async function dispatchOccurrenceOverride(meetingId: string, method: IcsMethod):
     const { data: s } = await admin.from("meeting_series").select("auto_book, ics_sequence, owner_user_id").eq("id", m.series_id).maybeSingle();
     if (!s?.auto_book) return "skipped";
 
-    const { data: secret } = await admin.from("tenant_secrets").select("resend_api_key").eq("tenant_id", m.tenant_id).maybeSingle();
-    const apiKey = secret?.resend_api_key?.trim();
+    const { apiKey } = await getPlatformResend();
     if (!apiKey) return "skipped";
 
     const { data: parts } = await admin.from("meeting_series_participants").select("profiles(full_name, email)").eq("series_id", m.series_id);

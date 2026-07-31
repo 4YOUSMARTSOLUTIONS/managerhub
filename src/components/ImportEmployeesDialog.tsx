@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { importEmployees, type ImportSummary } from "@/lib/actions/employees";
 
@@ -72,7 +73,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       ["Função", "Sim", "Cargo (criado automaticamente se não existir)"],
       ["Perfil Função", "Não", "Ex.: Júnior, Pleno, Sênior"],
       ["Setor", "Sim", "Criado automaticamente se não existir"],
-      ["Sub Setor", "Sim", "Subsetor dentro do setor"],
+      ["Sub Setor", "Não", "Subsetor dentro do setor (opcional)"],
       ["Data de Nascimento", "Sim", "Formato dd/mm/aaaa"],
       ["CPF", "Sim", "Com ou sem pontuação"],
       ["Demissão", "Não", "Se preenchida (dd/mm/aaaa), o colaborador entra como INATIVO"],
@@ -129,13 +130,24 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       agg.skipped += res.skipped;
       agg.errors.push(...res.errors);
     }
-    setImporting(false); setProgress(""); setSummary(agg);
+    setImporting(false); setProgress("");
     router.refresh();
+
+    const parts = [`${agg.created} criado(s)`];
+    if (agg.skipped > 0) parts.push(`${agg.skipped} já existiam`);
+    // sucesso limpo (sem erros): avisa e fecha; com erros: mantém aberto para revisão
+    if (agg.errors.length === 0) {
+      toast.success(`Importação concluída: ${parts.join(", ")}.`);
+      onClose();
+    } else {
+      setSummary(agg);
+      toast.warning(`Importação concluída com ${agg.errors.length} erro(s). Revise a lista.`);
+    }
   }
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--shadow)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Importar colaboradores</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
@@ -167,7 +179,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
             <p className="soft" style={{ fontSize: "0.78rem", margin: "0.3rem 0 0" }}>Recomende que troquem no primeiro acesso.</p>
           </div>
 
-          {parseError && <p style={{ color: "#dc2626", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
+          {parseError && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
 
           {fileName && !summary && (
             <div className="card card-pad" style={{ fontSize: "0.88rem" }}>

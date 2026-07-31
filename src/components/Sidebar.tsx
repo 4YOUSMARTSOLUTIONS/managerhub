@@ -1,121 +1,179 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BrandLogo } from "./BrandLogo";
+import {
+  AlertTriangle, CalendarCheck, ChevronDown, ClipboardCheck, DoorOpen, Lock,
+  LayoutDashboard, LayoutGrid, Layers, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
+  Boxes, BookMarked,
+} from "lucide-react";
+import { BrandLogo, BrandWordmark, BRAND_OWNER, SHOW_BRAND_OWNER } from "./BrandLogo";
+import { UserMenu } from "./UserMenu";
+import {
+  MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup,
+  type GroupKey, type ModuleDef, type ModuleKey, type ModuleState,
+} from "@/lib/modules";
 import type { Enums } from "@/types/database";
+import type { Theme } from "@/lib/theme";
 
-type Item = { href: string; label: string; icon: React.ReactNode };
+const SZ = 17;
 
-const icon = (d: string) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    {d.split("|").map((p, i) => (
-      <path key={i} d={p} />
-    ))}
-  </svg>
-);
-
-const NAV: Item[] = [
-  { href: "/dashboard", label: "Dashboard", icon: icon("M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z") },
-  { href: "/reunioes", label: "Reuniões", icon: icon("M9 11l3 3 8-8|M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9") },
-  { href: "/salas", label: "Salas de reuniões", icon: icon("M8 2v4|M16 2v4|M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z") },
-  { href: "/acoes", label: "Ações", icon: icon("M9 11l3 3L22 4|M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11") },
-  { href: "/chamados", label: "Chamados", icon: icon("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z") },
-  { href: "/metas", label: "Metas", icon: icon("M12 2a10 10 0 1 0 10 10|M12 6a6 6 0 1 0 6 6|M12 10a2 2 0 1 0 2 2") },
-  { href: "/pnr", label: "PNR", icon: icon("M3 3v18h18|M19 9l-5 5-4-4-3 3") },
-  { href: "/central-sdpo", label: "Central SDPO", icon: icon("M4 4h6v6H4z|M14 4h6v6h-6z|M4 14h6v6H4z|M14 14h6v6h-6z") },
-  { href: "/feedbacks", label: "Feedbacks", icon: icon("M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z") },
-  { href: "/checklists", label: "Checklists", icon: icon("M9 6h11|M9 12h11|M9 18h11|M4 5l1.2 1.2L7.5 4|M4 11l1.2 1.2L7.5 10|M4 17l1.2 1.2L7.5 16") },
-  { href: "/formularios", label: "Formulários", icon: icon("M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M8 13h8|M8 17h5") },
-  { href: "/seguranca", label: "Segurança", icon: icon("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z") },
-  { href: "/agenda", label: "Agenda", icon: icon("M8 2v4|M16 2v4|M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z") },
-];
-
-const MANAGER_NAV: Item[] = [
-  { href: "/auditoria", label: "Auditoria", icon: icon("M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M9 15l2 2 4-4") },
-];
-
-const ADMIN_NAV: Item[] = [
-  { href: "/configuracoes", label: "Configurações", icon: icon("M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z") },
-];
-
-const SUPER_NAV: Item[] = [
-  { href: "/admin", label: "Painel ADM", icon: icon("M12 2 2 7l10 5 10-5-10-5z|M2 17l10 5 10-5|M2 12l10 5 10-5") },
-];
+// ícones ficam no cliente; a estrutura vem do registry (src/lib/modules.ts)
+const GROUP_ICONS: Record<GroupKey, React.ReactNode> = {
+  g_reunioes: <CalendarCheck size={SZ} />,
+  g_rotina: <NotebookPen size={SZ} />,
+  g_pessoas: <Users size={SZ} />,
+  g_ferramentas: <Wrench size={SZ} />,
+  g_sdpo: <LayoutGrid size={SZ} />,
+  g_seguranca: <ShieldCheck size={SZ} />,
+};
+const MODULE_ICONS: Partial<Record<ModuleKey, React.ReactNode>> = {
+  dashboard: <LayoutDashboard size={SZ} />,
+  chamados: <Headset size={SZ} />,
+  portaria: <DoorOpen size={SZ} />,
+  multas_avarias: <AlertTriangle size={SZ} />,
+  cinco_s: <Boxes size={SZ} />,
+  padroes: <BookMarked size={SZ} />,
+  auditoria: <ClipboardCheck size={SZ} />,
+  configuracoes: <Settings size={SZ} />,
+  admin: <Layers size={SZ} />,
+};
+const GROUP_LABEL = Object.fromEntries(MODULE_GROUPS.map((g) => [g.key, g.label])) as Record<GroupKey, string>;
 
 export function Sidebar({
   role,
   isSuperAdmin = false,
+  moduleState,
+  construction,
+  platformOnly = false,
+  userName,
+  theme,
+  open = false,
+  onNavigate,
 }: {
   role: Enums<"member_role">;
   isSuperAdmin?: boolean;
+  /** estado resolvido no servidor (entitlement por unidade) */
+  moduleState: Record<ModuleKey, ModuleState>;
+  /** módulos marcados como "em construção" (global) */
+  construction: ModuleKey[];
+  /** owner de plataforma (sem empresa): mostra só o Painel ADM */
+  platformOnly?: boolean;
+  userName?: string | null;
+  theme?: Theme;
+  open?: boolean;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const underWork = new Set(construction);
   const canManage = role === "owner" || role === "admin" || role === "manager";
   const canAdmin = role === "owner" || role === "admin";
-  const items = [
-    ...NAV,
-    ...(canManage ? MANAGER_NAV : []),
-    ...(canAdmin ? ADMIN_NAV : []),
-    ...(isSuperAdmin ? SUPER_NAV : []),
-  ];
+
+  /** papel primeiro (como antes), depois o entitlement da unidade. */
+  const visible = (m: ModuleDef) => {
+    // owner de plataforma sem empresa: só o Painel ADM
+    if (platformOnly) return m.key === "admin";
+    if (m.minRole === "manager" && !canManage) return false;
+    if (m.minRole === "admin" && !canAdmin) return false;
+    if (m.minRole === "super" && !isSuperAdmin) return false;
+    return moduleState[m.key] !== "hidden";
+  };
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const groupChildren = (g: GroupKey) => modulesInGroup(g).filter(visible);
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const g of MODULE_GROUPS) if (groupChildren(g.key).some((c) => isActive(c.href))) init[g.key] = true;
+    return init;
+  });
 
   return (
-    <aside
-      style={{
-        width: 240,
-        flexShrink: 0,
-        borderRight: "1px solid var(--border)",
-        background: "var(--surface)",
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-        display: "flex",
-        flexDirection: "column",
-        padding: "1.1rem 0.85rem",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.55rem",
-          fontWeight: 800,
-          fontSize: "1.05rem",
-          padding: "0 0.5rem 1.1rem",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        <BrandLogo size={28} radius={7} />
-        MANAGER HUB
-      </div>
+    <aside className={`app-sidebar${open ? " app-sidebar-open" : ""}`}>
+      <Link href="/dashboard" className="brand-block" onClick={onNavigate}>
+        <BrandLogo size={32} radius={9} />
+        <span>
+          <BrandWordmark />
+          {SHOW_BRAND_OWNER && <span className="brand-sub">{BRAND_OWNER}</span>}
+        </span>
+      </Link>
 
-      <nav style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-        {items.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+      <nav className="nav-list">
+        {NAV_ORDER.map((entry) => {
+          if (entry.type === "module") {
+            const m = MODULE_BY_KEY[entry.key];
+            if (!visible(m)) return null;
+            const active = isActive(m.href);
+            const locked = moduleState[m.key] === "locked";
+            // cadeado ganha do capacete: mesma precedência do moduleGate
+            const building = !locked && underWork.has(m.key);
+            return (
+              <Link
+                key={m.key}
+                href={m.href}
+                onClick={onNavigate}
+                className={`nav-item${active ? " nav-item-active" : ""}${locked || building ? " nav-locked" : ""}`}
+                aria-current={active ? "page" : undefined}
+                title={locked ? "Módulo não contratado" : building ? "Em construção" : undefined}
+              >
+                {MODULE_ICONS[m.key]}
+                <span style={{ flex: 1 }}>{m.label}</span>
+                {locked && <Lock size={12} aria-label="Não contratado" />}
+              </Link>
+            );
+          }
+
+          // grupo: só aparece se algum filho estiver visível
+          const children = groupChildren(entry.key);
+          if (children.length === 0) return null;
+          const active = children.some((c) => isActive(c.href));
+          const isOpen = openGroups[entry.key] ?? false;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.7rem",
-                padding: "0.55rem 0.65rem",
-                borderRadius: 9,
-                fontSize: "0.9rem",
-                fontWeight: 500,
-                color: active ? "var(--primary)" : "var(--text-muted)",
-                background: active ? "var(--primary-soft)" : "transparent",
-              }}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
+            <div key={entry.key}>
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => setOpenGroups((s) => ({ ...s, [entry.key]: !isOpen }))}
+                className={`nav-item nav-group${active ? " nav-group-active" : ""}`}
+              >
+                {GROUP_ICONS[entry.key]}
+                <span style={{ flex: 1, textAlign: "left" }}>{GROUP_LABEL[entry.key]}</span>
+                <ChevronDown size={14} className={`nav-chevron${isOpen ? " nav-chevron-open" : ""}`} />
+              </button>
+              {isOpen && (
+                <div className="nav-children">
+                  {children.map((child) => {
+                    const cActive = isActive(child.href);
+                    const locked = moduleState[child.key] === "locked";
+                    const building = !locked && underWork.has(child.key);
+                    return (
+                      <Link
+                        key={child.key}
+                        href={child.href}
+                        onClick={onNavigate}
+                        className={`nav-child${cActive ? " nav-child-active" : ""}${locked || building ? " nav-locked" : ""}`}
+                        aria-current={cActive ? "page" : undefined}
+                        title={locked ? "Módulo não contratado" : building ? "Em construção" : undefined}
+                      >
+                        <span className="nav-dot" />
+                        <span style={{ flex: 1 }}>{child.label}</span>
+                        {locked && <Lock size={11} aria-label="Não contratado" />}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
+
+      {userName !== undefined && theme && (
+        <div style={{ marginTop: "auto", paddingTop: "0.6rem", borderTop: "1px solid var(--mh-border)" }}>
+          <UserMenu userName={userName} role={role} theme={theme} variant="sidebar" />
+        </div>
+      )}
     </aside>
   );
 }
