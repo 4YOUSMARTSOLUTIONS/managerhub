@@ -172,7 +172,11 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
     const unitMap = idByName(units), kpiMap = idByName(kpis), toolMap = idByName(tools);
     const pilarMap = idByName(pilares), secaoMap = idByName(secoesData), blocoMap = idByName(blocos), itemMap = idByName(itens);
     const seriesMap = idByName(series), programaMap = idByName(programas);
+    // due_date é coluna DATE: só o dia puro
     const isoDate = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test((s ?? "").trim()) ? s.trim() : "");
+    // created_at/completed_at são timestamp: aceita o instante ISO montado no cliente
+    // (dia puro aqui faria o banco assumir meia-noite UTC = dia anterior no Brasil)
+    const isoInstant = (s: string) => (/^\d{4}-\d{2}-\d{2}/.test((s ?? "").trim()) ? s.trim() : "");
 
     const peopleNotFound = new Set<string>();
     const refsNotFound = new Set<string>();
@@ -247,7 +251,7 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
       const awaiting = isAwaitingApproval(r.status ?? "");
       const status = awaiting
         ? "in_progress"
-        : (STATUS_BY_INPUT[normTxt(r.status ?? "")] ?? (isoDate(r.dataConclusao) ? "done" : "open"));
+        : (STATUS_BY_INPUT[normTxt(r.status ?? "")] ?? (isoInstant(r.dataConclusao) ? "done" : "open"));
 
       const p_data = {
         is_sdpo,
@@ -259,8 +263,8 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
         unit_id,
         requester_id,
         created_by: createdBy,
-        created_at: isoDate(r.dataCriacao),
-        completed_at: isoDate(r.dataConclusao),
+        created_at: isoInstant(r.dataCriacao),
+        completed_at: isoInstant(r.dataConclusao),
         status,
         awaiting_approval: awaiting,
         due_date: isoDate(r.prazo),
@@ -434,7 +438,17 @@ export async function getDemandaTimeline(demandaId: string): Promise<{ events: T
   ]);
   const nameById = new Map((profs ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
   return {
-    events: (events ?? []).map((e) => ({ id: e.id, type: e.type, actorName: e.actor_id ? nameById.get(e.actor_id) ?? null : null, body: e.body, meta: (e.meta as Record<string, unknown>) ?? {}, createdAt: e.created_at })),
+    // migração: quando o autor não é usuário desta empresa, cai no rótulo guardado
+    // em meta.author_label (nome como veio do sistema antigo)
+    events: (events ?? []).map((e) => {
+      const meta = (e.meta as Record<string, unknown>) ?? {};
+      const label = typeof meta.author_label === "string" ? meta.author_label : null;
+      return {
+        id: e.id, type: e.type,
+        actorName: (e.actor_id ? nameById.get(e.actor_id) ?? null : null) ?? label,
+        body: e.body, meta, createdAt: e.created_at,
+      };
+    }),
     requests: (reqs ?? []).map((r) => ({ id: r.id, type: r.type, newDueDate: r.new_due_date, note: r.note, requestedByName: r.requested_by ? nameById.get(r.requested_by) ?? null : null, createdAt: r.created_at })),
     status: (dem?.status ?? "open") as Enums<"action_status">,
     dueDate: dem?.due_date ?? null,

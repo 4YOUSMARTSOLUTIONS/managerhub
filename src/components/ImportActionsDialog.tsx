@@ -24,9 +24,24 @@ function toISODate(v: unknown): string {
   return "";
 }
 
+/**
+ * Converte data (e hora, quando houver) para um instante ISO no fuso do navegador.
+ *
+ * Mandar só "AAAA-MM-DD" para uma coluna de timestamp faz o banco assumir meia-noite
+ * UTC, que no Brasil vira 21:00 do DIA ANTERIOR. Por isso o dia vira um instante
+ * explícito: com a hora do arquivo quando existe, ou meio-dia local quando não existe
+ * (meio-dia nunca "vira o dia" em nenhum fuso).
+ */
+function toInstant(isoDay: string, hhmm?: string): string {
+  if (!isoDay) return "";
+  const [y, m, d] = isoDay.split("-").map(Number);
+  const [hh, mi] = hhmm ? hhmm.split(":").map(Number) : [12, 0];
+  return new Date(y, m - 1, d, hh || 0, mi || 0).toISOString();
+}
+
 // Cabeçalho do formato nativo do sistema antigo: "[dd/mm/aaaa hh:mm] AUTOR: texto".
 // Vários comentários por célula, separados por esse cabeçalho (o texto pode ter quebras de linha).
-const NATIVE_COMMENT_HEADER = /\[(\d{1,2}\/\d{1,2}\/\d{2,4})\s+\d{1,2}:\d{2}(?::\d{2})?\]\s*([^:\n]+?):\s*/g;
+const NATIVE_COMMENT_HEADER = /\[(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})(?::\d{2})?\]\s*([^:\n]+?):\s*/g;
 
 // Comentários: aceita o formato nativo "[data hora] autor: texto" (migração) OU,
 // como fallback, uma linha por comentário "data | autor | texto" (data e autor opcionais).
@@ -42,17 +57,18 @@ function parseComments(cell: unknown): { at: string; author: string; text: strin
       const start = (h.index ?? 0) + h[0].length;
       const end = i + 1 < heads.length ? (heads[i + 1].index ?? raw.length) : raw.length;
       const text = raw.slice(start, end).trim();
-      if (text) out.push({ at: toISODate(h[1]), author: h[2].trim(), text });
+      // h[2] é a hora do arquivo: preserva o horário real do comentário
+      if (text) out.push({ at: toInstant(toISODate(h[1]), h[2]), author: h[3].trim(), text });
     }
     if (out.length > 0) return out;
   }
 
   return raw.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
     const parts = line.split("|").map((p) => p.trim());
-    if (parts.length >= 3) return { at: toISODate(parts[0]), author: parts[1], text: parts.slice(2).join(" | ") };
+    if (parts.length >= 3) return { at: toInstant(toISODate(parts[0])), author: parts[1], text: parts.slice(2).join(" | ") };
     if (parts.length === 2) {
       const d = toISODate(parts[0]);
-      return d ? { at: d, author: "", text: parts[1] } : { at: "", author: parts[0], text: parts[1] };
+      return d ? { at: toInstant(d), author: "", text: parts[1] } : { at: "", author: parts[0], text: parts[1] };
     }
     return { at: "", author: "", text: parts[0] };
   }).filter((c) => c.text);
@@ -154,10 +170,11 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
           responsaveis: str(r, idx.responsaveis),
           solicitante: str(r, idx.solicitante),
           criadaPor: str(r, idx.criadaPor),
-          dataCriacao: toISODate(idx.dataCriacao >= 0 ? r[idx.dataCriacao] : ""),
+          // criação/conclusão vão para colunas de timestamp: viram instante ao meio-dia local
+          dataCriacao: toInstant(toISODate(idx.dataCriacao >= 0 ? r[idx.dataCriacao] : "")),
           reuniao: str(r, idx.reuniao),
           prazo: toISODate(idx.prazo >= 0 ? r[idx.prazo] : ""),
-          dataConclusao: toISODate(idx.dataConclusao >= 0 ? r[idx.dataConclusao] : ""),
+          dataConclusao: toInstant(toISODate(idx.dataConclusao >= 0 ? r[idx.dataConclusao] : "")),
           status: str(r, idx.status),
           prioridade: str(r, idx.prioridade),
           unidade: str(r, idx.unidade),
