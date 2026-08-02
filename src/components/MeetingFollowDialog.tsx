@@ -96,7 +96,11 @@ function AssigneeChart({ rows }: { rows: FollowDemanda[] }) {
         m.set(s.id, cur);
       }
     }
-    return [...m.values()].sort((a, b) => b.overdue - a.overdue || b.total - a.total);
+    // quem tem mais pendências primeiro; empatou, quem tem mais atraso; depois nome,
+    // senão a ordem de quem tem 1 pendência varia a cada abertura
+    return [...m.values()].sort(
+      (a, b) => b.total - a.total || b.overdue - a.overdue || a.name.localeCompare(b.name, "pt-BR"),
+    );
   }, [rows]);
 
   if (data.length === 0) {
