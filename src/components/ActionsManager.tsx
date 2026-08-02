@@ -356,7 +356,11 @@ export function ActionsManager({
                     const overdue = !!d.dueDate && !finalizada && isOverdue(d.dueDate);
                     return (
                       <tr key={d.id} style={{ borderTop: first && ri > 0 ? "2px solid var(--border-strong)" : undefined, opacity: d.status === "cancelled" ? 0.55 : 1 }}>
-                        <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>#{a.code}{a.demandas.length > 1 ? `.${di + 1}` : ""}</td>
+                        <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+                          <button type="button" className="cell-link cell-link-id" onClick={() => openPanel(d, a, di)} title="Abrir o tratamento da ação">
+                            #{a.code}{a.demandas.length > 1 ? `.${di + 1}` : ""}
+                          </button>
+                        </td>
                         <td>{first && <Badge tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
                         <td>{first && (a.isSdpo ? <Badge tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{first && (a.programaName ? <Badge tone="blue">{a.programaName}</Badge> : <span className="soft">—</span>)}</td>
@@ -386,14 +390,16 @@ export function ActionsManager({
                         </td>
                         {/* sem comentário fica apagado: destaca de longe quem não recebeu follow */}
                         <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                          <span
-                            className={d.commentCount > 0 ? undefined : "soft"}
-                            title={d.commentCount > 0 ? `${d.commentCount} comentário(s)` : "Nenhum comentário"}
+                          <button
+                            type="button"
+                            className={d.commentCount > 0 ? "cell-link" : "cell-link soft"}
+                            onClick={() => openPanel(d, a, di)}
+                            title={d.commentCount > 0 ? `Abrir e ver os ${d.commentCount} comentário(s)` : "Abrir o tratamento da ação"}
                             style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.82rem" }}
                           >
                             <MessageSquare size={13} />
                             {d.commentCount}
-                          </span>
+                          </button>
                         </td>
                         <td style={{ whiteSpace: "nowrap", color: overdue ? "var(--mh-danger)" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>

@@ -897,6 +897,30 @@ a {
 .soft {
   color: var(--text-soft);
 }
+/* conteúdo de célula que abre um painel: parece texto, age como link */
+.cell-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.cell-link:hover {
+  color: var(--primary);
+}
+.cell-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* o ID já nasce colorido: sem isso ninguém descobre que dá para clicar */
+.cell-link-id {
+  color: var(--primary);
+}
+.cell-link-id:hover {
+  text-decoration: underline;
+}
 .avatar {
   display: inline-flex;
   align-items: center;
