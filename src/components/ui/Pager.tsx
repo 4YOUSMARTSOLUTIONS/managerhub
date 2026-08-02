@@ -14,7 +14,8 @@ export function Pager({
   page: number;
   pageSize: number;
   total: number;
-  extra?: Record<string, string>;
+  /** filtros a preservar; aceita URLSearchParams para dar conta de parâmetros repetidos */
+  extra?: Record<string, string> | URLSearchParams;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;

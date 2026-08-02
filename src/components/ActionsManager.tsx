@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, effStatus, type EffStatus } from "@/lib/constants";
 import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
 import { deleteAction } from "@/lib/actions/actions";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
@@ -32,10 +33,15 @@ export type DemandaCard = {
 };
 
 /** Filtros aplicados no banco (vêm da URL). */
+/** Campos que aceitam vários valores ao mesmo tempo. */
 export type ActionFilters = {
-  q: string; priority: string; sdpo: string; status: string;
-  programa: string; pilar: string; requester: string; assignee: string; from: string; to: string;
+  q: string; sdpo: string; from: string; to: string;
+  priority: string[]; status: string[]; programa: string[];
+  pilar: string[]; requester: string[]; assignee: string[];
 };
+
+const MULTI_KEYS = ["priority", "status", "programa", "pilar", "requester", "assignee"] as const;
+type MultiKey = (typeof MULTI_KEYS)[number];
 
 /** Opções dos selects, extraídas da base inteira (não só da página). */
 export type FilterOptions = { programas: string[]; pilares: string[]; requesters: string[]; assignees: string[] };
@@ -129,17 +135,22 @@ export function ActionsManager({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  const [filtersOpen, setFiltersOpen] = useState(() => Object.values(filters).some(Boolean));
-  const [qDraft, setQDraft] = useState(filters.q);
-
-  const activeCount = Object.values(filters).filter(Boolean).length;
+  const countOf = (v: string | string[]) => (Array.isArray(v) ? (v.length > 0 ? 1 : 0) : v ? 1 : 0);
+  const activeCount = Object.values(filters).reduce((n, v) => n + countOf(v), 0);
   const hasFilters = activeCount > 0;
+
+  const [filtersOpen, setFiltersOpen] = useState(hasFilters);
+  const [qDraft, setQDraft] = useState(filters.q);
 
   const applyFilters = useCallback((patch: Partial<ActionFilters>) => {
     const next = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(patch)) {
       const param = PARAM[key as keyof ActionFilters];
-      if (value) next.set(param, value); else next.delete(param);
+      next.delete(param);
+      // multivalor vai como parâmetro repetido (?sol=A&sol=B): aceita qualquer
+      // caractere no valor, inclusive vírgula, que é comum em nomes
+      if (Array.isArray(value)) value.forEach((v) => { if (v) next.append(param, v); });
+      else if (value) next.set(param, value);
     }
     next.delete("p"); // qualquer mudança de filtro volta para a primeira página
     const qs = next.toString();
@@ -177,8 +188,10 @@ export function ActionsManager({
       })
       .map(({ a, items }) => {
         let its = items;
-        if (filters.status) its = its.filter((x) => x.eff === filters.status);
-        if (filters.assignee) its = its.filter((x) => x.d.assigneeNames.includes(filters.assignee));
+        if (filters.status.length) its = its.filter((x) => filters.status.includes(x.eff));
+        if (filters.assignee.length) {
+          its = its.filter((x) => x.d.assigneeNames.some((n) => filters.assignee.includes(n)));
+        }
         return { a, items: its };
       })
       .filter(({ items }) => items.length > 0)
@@ -238,13 +251,12 @@ export function ActionsManager({
                 <span className="label" style={{ margin: 0 }}>Buscar</span>
                 <input className="input" value={qDraft} onChange={(e) => setQDraft(e.target.value)} placeholder="#ID, descrição, responsável…" style={{ width: "100%" }} />
               </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Prioridade</span>
-                <select className="select" value={filters.priority} onChange={(e) => applyFilters({ priority: e.target.value })}>
-                  <option value="">Todas</option>
-                  {Object.entries(PRIORITY).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </label>
+              <MultiSelect
+                label="Prioridade" allLabel="Todas"
+                options={Object.entries(PRIORITY).map(([v, l]) => ({ value: v, label: l }))}
+                selected={filters.priority}
+                onChange={(v) => applyFilters({ priority: v })}
+              />
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>SDPO</span>
                 <select className="select" value={filters.sdpo} onChange={(e) => applyFilters({ sdpo: e.target.value })}>
@@ -253,41 +265,36 @@ export function ActionsManager({
                   <option value="nao">Não</option>
                 </select>
               </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Status</span>
-                <select className="select" value={filters.status} onChange={(e) => applyFilters({ status: e.target.value })}>
-                  <option value="">Todos</option>
-                  {(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => <option key={k} value={k}>{EFF_STATUS_LABEL[k]}</option>)}
-                </select>
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Programa</span>
-                <select className="select" value={filters.programa} onChange={(e) => applyFilters({ programa: e.target.value })}>
-                  <option value="">Todos</option>
-                  {programaOpts.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Pilar</span>
-                <select className="select" value={filters.pilar} onChange={(e) => applyFilters({ pilar: e.target.value })}>
-                  <option value="">Todos</option>
-                  {pilarOpts.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Solicitante</span>
-                <select className="select" value={filters.requester} onChange={(e) => applyFilters({ requester: e.target.value })}>
-                  <option value="">Todos</option>
-                  {requesterOpts.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Responsável</span>
-                <select className="select" value={filters.assignee} onChange={(e) => applyFilters({ assignee: e.target.value })}>
-                  <option value="">Todos</option>
-                  {assigneeOpts.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
+              <MultiSelect
+                label="Status"
+                options={(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => ({ value: k, label: EFF_STATUS_LABEL[k] }))}
+                selected={filters.status}
+                onChange={(v) => applyFilters({ status: v })}
+              />
+              <MultiSelect
+                label="Programa"
+                options={programaOpts.map((p) => ({ value: p, label: p }))}
+                selected={filters.programa}
+                onChange={(v) => applyFilters({ programa: v })}
+              />
+              <MultiSelect
+                label="Pilar" searchable
+                options={pilarOpts.map((p) => ({ value: p, label: p }))}
+                selected={filters.pilar}
+                onChange={(v) => applyFilters({ pilar: v })}
+              />
+              <MultiSelect
+                label="Solicitante" searchable placeholder="Digite o nome…"
+                options={requesterOpts.map((n) => ({ value: n, label: n }))}
+                selected={filters.requester}
+                onChange={(v) => applyFilters({ requester: v })}
+              />
+              <MultiSelect
+                label="Responsável" searchable placeholder="Digite o nome…"
+                options={assigneeOpts.map((n) => ({ value: n, label: n }))}
+                selected={filters.assignee}
+                onChange={(v) => applyFilters({ assignee: v })}
+              />
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Aberta de</span>
                 <input type="date" className="input" value={filters.from} onChange={(e) => applyFilters({ from: e.target.value })} />

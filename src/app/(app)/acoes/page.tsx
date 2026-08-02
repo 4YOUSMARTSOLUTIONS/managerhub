@@ -9,7 +9,15 @@ import type { Tables } from "@/types/database";
 
 const PAGE_SIZE = 50;
 
-type SP = { p?: string; q?: string; prio?: string; sdpo?: string; st?: string; prog?: string; pilar?: string; sol?: string; resp?: string; de?: string; ate?: string };
+/** Multivalor chega como parâmetro repetido (?sol=A&sol=B) e vira string[]. */
+type SP = {
+  p?: string; q?: string; sdpo?: string; de?: string; ate?: string;
+  prio?: string | string[]; st?: string | string[]; prog?: string | string[];
+  pilar?: string | string[]; sol?: string | string[]; resp?: string | string[];
+};
+
+const asList = (v: string | string[] | undefined): string[] =>
+  v == null ? [] : Array.isArray(v) ? v.filter(Boolean) : v ? [v] : [];
 
 export default async function ActionsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const gate = await moduleGate("acoes");
@@ -24,9 +32,9 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
 
   // filtros vivem na URL: a busca é feita no banco, sobre a base inteira
   const filters = {
-    q: sp.q ?? "", priority: sp.prio ?? "", sdpo: sp.sdpo ?? "", status: sp.st ?? "",
-    programa: sp.prog ?? "", pilar: sp.pilar ?? "", requester: sp.sol ?? "", assignee: sp.resp ?? "",
-    from: sp.de ?? "", to: sp.ate ?? "",
+    q: sp.q ?? "", sdpo: sp.sdpo ?? "", from: sp.de ?? "", to: sp.ate ?? "",
+    priority: asList(sp.prio), status: asList(sp.st), programa: asList(sp.prog),
+    pilar: asList(sp.pilar), requester: asList(sp.sol), assignee: asList(sp.resp),
   };
 
   const unitIds = effectiveUnitFilter(unitScope);
@@ -174,10 +182,13 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-  // mantém os filtros ao trocar de página
-  const pagerExtra: Record<string, string> = {};
-  for (const [k, v] of Object.entries({ q: sp.q, prio: sp.prio, sdpo: sp.sdpo, st: sp.st, prog: sp.prog, pilar: sp.pilar, sol: sp.sol, resp: sp.resp, de: sp.de, ate: sp.ate })) {
-    if (v) pagerExtra[k] = v;
+  // mantém os filtros ao trocar de página (multivalor vira parâmetro repetido)
+  const pagerQuery = new URLSearchParams();
+  for (const [k, v] of Object.entries({ q: sp.q, sdpo: sp.sdpo, de: sp.de, ate: sp.ate })) {
+    if (v) pagerQuery.set(k, v as string);
+  }
+  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, sol: sp.sol, resp: sp.resp })) {
+    asList(v).forEach((x) => pagerQuery.append(k, x));
   }
 
   return (
@@ -202,7 +213,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         filterOptions={(filterOpts ?? { programas: [], pilares: [], requesters: [], assignees: [] }) as FilterOptions}
         total={actionsTotal}
       />
-      <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerExtra} />
+      <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerQuery} />
     </>
   );
 }

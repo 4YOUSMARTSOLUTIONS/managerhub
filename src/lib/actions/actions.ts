@@ -508,7 +508,7 @@ export type ActionExportResult = { file?: string; filename?: string; count?: num
  * fração do que pesariam as mesmas linhas trafegando como JSON.
  */
 export async function exportActions(
-  filters: Record<string, string>,
+  filters: Record<string, string | string[]>,
   units: string[] | null,
 ): Promise<ActionExportResult> {
   try {
