@@ -131,6 +131,11 @@ export function DemandaPanel({
   const hasPendingPrazo = requests.some((r) => r.type === "prazo");
   const eff = effStatus(status, overdue, requests.length > 0);
 
+  // a criação vira a linha de autoria no cabeçalho; o histórico fica só com o
+  // que aconteceu depois (comentários e movimentações)
+  const createdEvent = events.find((e) => e.type === "created");
+  const timelineEvents = events.filter((e) => e.type !== "created");
+
   const run = (fn: () => Promise<{ ok?: boolean; error?: string }>) => {
     setError("");
     start(async () => {
@@ -149,7 +154,7 @@ export function DemandaPanel({
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 1rem", zIndex: 65, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 640, boxShadow: "var(--mh-shadow-e3)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", gap: "0.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1.4rem 1.5rem", borderBottom: "1px solid var(--border)", gap: "0.75rem" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, fontSize: "0.78rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 7, padding: "0.06rem 0.4rem" }}>{demanda.label}</span>
@@ -157,14 +162,21 @@ export function DemandaPanel({
               <Badge tone={PRIORITY_TONE[demanda.priority]}>{PRIORITY[demanda.priority]}</Badge>
               {demanda.isSdpo && <Badge tone="purple">SDPO</Badge>}
             </div>
-            <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: "0.45rem 0 0", whiteSpace: "pre-wrap" }}>{demanda.description}</h2>
+            <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: "0.85rem 0 0", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{demanda.description}</h2>
+            {/* autoria fica aqui em cima; o histórico abaixo é só de comentários */}
+            {createdEvent && (
+              <div className="soft" style={{ fontSize: "0.78rem", marginTop: "0.7rem" }}>
+                Criada por <strong style={{ fontWeight: 600 }}>{createdEvent.actorName ?? "—"}</strong>
+                {" · "}{formatDateTime(createdEvent.createdAt)}
+              </div>
+            )}
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)", flexShrink: 0 }}>×</button>
         </div>
 
-        <div style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
           {/* informações da ação */}
-          <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.85rem 1rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem" }}>
+          <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "1rem 1.15rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.9rem" }}>
             <Field label="Prazo"><span style={{ color: due && !finalizada && isOverdue(due) ? "var(--mh-danger)" : undefined }}>{due ? formatDate(due) : "—"}</span></Field>
             <Field label="Responsáveis">{demanda.assigneeNames.length > 0 ? demanda.assigneeNames.join(", ") : <span className="soft">Sem responsável</span>}</Field>
             <Field label="Solicitante">{demanda.requesterName ?? "—"}</Field>
@@ -302,7 +314,7 @@ export function DemandaPanel({
           <div>
             <label className="label">Histórico</label>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: 280, overflowY: "auto" }}>
-              {events.length === 0 ? <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem eventos.</p> : events.slice().reverse().map((e) => (
+              {timelineEvents.length === 0 ? <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem eventos.</p> : timelineEvents.slice().reverse().map((e) => (
                 <div key={e.id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
                   <Avatar name={e.actorName ?? "?"} />
                   <div style={{ flex: 1 }}>
