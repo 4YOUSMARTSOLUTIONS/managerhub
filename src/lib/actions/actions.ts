@@ -94,8 +94,16 @@ const STATUS_BY_INPUT: Record<string, Enums<"action_status">> = {
   aberta: "open", aberto: "open", open: "open", pendente: "open", "a fazer": "open",
   "em andamento": "in_progress", andamento: "in_progress", "em progresso": "in_progress", in_progress: "in_progress", fazendo: "in_progress",
   bloqueada: "blocked", bloqueado: "blocked", blocked: "blocked", impedida: "blocked", impedido: "blocked",
+  atrasada: "open", atrasado: "open", // atraso é derivado do prazo; a ação segue aberta
   concluida: "done", concluido: "done", concluída: "done", concluído: "done", done: "done", feita: "done", feito: "done", finalizada: "done", finalizado: "done",
   cancelada: "cancelled", cancelado: "cancelled", cancelled: "cancelled", canceled: "cancelled",
+};
+
+// "Aguardando aprovação" (ou "... - Aprovação Pendente"): não é um status armazenável,
+// e sim a parte enviada pelo responsável sem aprovação. Detectado à parte na importação.
+const isAwaitingApproval = (raw: string) => {
+  const s = normTxt(raw ?? "");
+  return s.includes("aguardando aprov") || s.includes("aprovacao pendente");
 };
 
 export type ActionImportRow = {
@@ -112,6 +120,8 @@ export type ActionImportRow = {
   unidade: string;
   kpi: string;
   ferramenta: string;
+  sdpo: string;
+  programa: string;
   pilar: string;
   secao: string;
   bloco: string;
@@ -124,17 +134,20 @@ export type ActionImportResult = {
   skipped: number;
   peopleNotFound: string[];
   refsNotFound: string[];
-  error?: string;
+  failed: string[]; // linhas que falharam na gravação (não abortam o restante)
+  error?: string;   // erro fatal (ex.: sem permissão) que interrompe tudo
 };
 
 export async function importActions(rows: ActionImportRow[]): Promise<ActionImportResult> {
-  const base: ActionImportResult = { created: 0, skipped: 0, peopleNotFound: [], refsNotFound: [] };
+  const base: ActionImportResult = { created: 0, skipped: 0, peopleNotFound: [], refsNotFound: [], failed: [] };
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
     if (role !== "owner") return { ...base, error: "Apenas o proprietário pode importar ações." };
 
-    const [{ data: mems }, { data: units }, { data: kpis }, { data: tools }, { data: pilares }, { data: secoesData }, { data: blocos }, { data: itens }, { data: series }] = await Promise.all([
-      supabase.from("memberships").select("user_id, profiles(full_name)").eq("tenant_id", tenantId),
+    const [{ data: mems }, { data: units }, { data: kpis }, { data: tools }, { data: pilares }, { data: secoesData }, { data: blocos }, { data: itens }, { data: series }, { data: programas }] = await Promise.all([
+      // hint obrigatório: memberships tem 2 FKs para profiles (user_id e manager_id).
+      // Sem ele o embed é ambíguo, a consulta falha e nenhum nome é resolvido.
+      supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       supabase.from("action_kpis").select("id, name").eq("tenant_id", tenantId),
       supabase.from("action_tools").select("id, name").eq("tenant_id", tenantId),
@@ -143,6 +156,7 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
       supabase.from("sdpo_blocos").select("id, name").eq("tenant_id", tenantId),
       supabase.from("sdpo_itens").select("id, name").eq("tenant_id", tenantId),
       supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId).is("deleted_at", null),
+      supabase.from("sdpo_programas").select("id, name").eq("tenant_id", tenantId),
     ]);
 
     const userByName = new Map<string, string>();
@@ -157,7 +171,7 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
     };
     const unitMap = idByName(units), kpiMap = idByName(kpis), toolMap = idByName(tools);
     const pilarMap = idByName(pilares), secaoMap = idByName(secoesData), blocoMap = idByName(blocos), itemMap = idByName(itens);
-    const seriesMap = idByName(series);
+    const seriesMap = idByName(series), programaMap = idByName(programas);
     const isoDate = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test((s ?? "").trim()) ? s.trim() : "");
 
     const peopleNotFound = new Set<string>();
@@ -189,41 +203,87 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
       const descricao = (r.descricao ?? "").trim();
       if (!descricao) { base.skipped += 1; continue; }
 
-      const assignees = (r.responsaveis ?? "")
-        .split(/[;,\n]/).map((x) => x.trim()).filter(Boolean)
-        .map(resolvePerson).filter((x): x is string => !!x);
+      // Migração: vincula quem existe; o que não casar é preservado como texto (legacy_*).
+      const legacyOf = (raw: string, id: string) => (raw?.trim() && !id ? raw.trim() : "");
 
-      const requester = (r.solicitante ?? "").trim() ? (resolvePerson(r.solicitante) ?? userId) : userId;
-      const createdBy = (r.criadaPor ?? "").trim() ? (resolvePerson(r.criadaPor) ?? userId) : userId;
+      // responsáveis: vincula os que existem; guarda os demais como texto
+      const respNames = (r.responsaveis ?? "").split(/[;,\n]/).map((x) => x.trim()).filter(Boolean);
+      const assignees: string[] = [];
+      const unresolvedResp: string[] = [];
+      for (const nm of respNames) {
+        const id = resolvePerson(nm);
+        if (id) assignees.push(id); else unresolvedResp.push(nm);
+      }
+      const legacy_assignees = unresolvedResp.join(", ");
+
+      // solicitante: sem fallback para o owner; se não casar, fica só o texto original
+      const solTxt = (r.solicitante ?? "").trim();
+      const requester_id = solTxt ? (resolvePerson(r.solicitante) ?? "") : "";
+      const legacy_requester = solTxt && !requester_id ? solTxt : "";
+
+      // criada por: created_by é obrigatório (fica o owner quando não casa), mas preserva o texto
+      const criadaTxt = (r.criadaPor ?? "").trim();
+      const criadaResolved = criadaTxt ? resolvePerson(r.criadaPor) : null;
+      const createdBy = criadaResolved ?? userId;
+      const legacy_created_by = criadaTxt && !criadaResolved ? criadaTxt : "";
+
+      const programa_id = resolveRef(r.programa, programaMap, "Programa");
       const pilar_id = resolveRef(r.pilar, pilarMap, "Pilar");
       const secao_id = resolveRef(r.secao, secaoMap, "Seção");
       const bloco_id = resolveRef(r.bloco, blocoMap, "Bloco");
       const item_id = resolveRef(r.item, itemMap, "Item");
-      const is_sdpo = !!(pilar_id && secao_id && item_id);
+      // SDPO: usa a coluna quando preenchida; se vazia, deduz da classificação completa
+      const sdpoTxt = normTxt(r.sdpo ?? "");
+      const is_sdpo = sdpoTxt
+        ? ["sim", "s", "true", "1", "sdpo"].includes(sdpoTxt)
+        : !!(pilar_id && secao_id && item_id);
       const meeting_series_id = resolveRef(r.reuniao, seriesMap, "Reunião");
-      const status = STATUS_BY_INPUT[normTxt(r.status ?? "")] ?? (isoDate(r.dataConclusao) ? "done" : "open");
+      const kpi_id = resolveRef(r.kpi, kpiMap, "KPI");
+      const tool_id = resolveRef(r.ferramenta, toolMap, "Ferramenta");
+      const unit_id = resolveUnit(r.unidade);
+      const unitTxt = (r.unidade ?? "").trim();
+      const legacy_unit = unitTxt && !unit_id && !["todas", "todas as unidades"].includes(normTxt(unitTxt)) ? unitTxt : "";
+
+      const awaiting = isAwaitingApproval(r.status ?? "");
+      const status = awaiting
+        ? "in_progress"
+        : (STATUS_BY_INPUT[normTxt(r.status ?? "")] ?? (isoDate(r.dataConclusao) ? "done" : "open"));
 
       const p_data = {
         is_sdpo,
+        programa_id,
         pilar_id, secao_id, bloco_id, item_id,
         meeting_series_id,
-        kpi_id: resolveRef(r.kpi, kpiMap, "KPI"),
-        tool_id: resolveRef(r.ferramenta, toolMap, "Ferramenta"),
-        unit_id: resolveUnit(r.unidade),
-        requester_id: requester,
+        kpi_id,
+        tool_id,
+        unit_id,
+        requester_id,
         created_by: createdBy,
         created_at: isoDate(r.dataCriacao),
         completed_at: isoDate(r.dataConclusao),
         status,
+        awaiting_approval: awaiting,
         due_date: isoDate(r.prazo),
         priority: PRIORITY_BY_INPUT[normTxt(r.prioridade ?? "")] ?? "medium",
         cc: [] as string[],
         description: descricao,
+        legacy_programa: legacyOf(r.programa, programa_id),
+        legacy_pilar: legacyOf(r.pilar, pilar_id),
+        legacy_secao: legacyOf(r.secao, secao_id),
+        legacy_bloco: legacyOf(r.bloco, bloco_id),
+        legacy_item: legacyOf(r.item, item_id),
+        legacy_requester,
+        legacy_created_by,
+        legacy_meeting: legacyOf(r.reuniao, meeting_series_id),
+        legacy_unit,
+        legacy_kpi: legacyOf(r.kpi, kpi_id),
+        legacy_tool: legacyOf(r.ferramenta, tool_id),
+        legacy_assignees,
         assignees,
       };
 
       const { data: result, error } = await supabase.rpc("import_action", { p_data });
-      if (error) return { ...base, peopleNotFound: [...peopleNotFound], refsNotFound: [...refsNotFound], error: `Linha "${descricao}": ${error.message}` };
+      if (error) { base.failed.push(`${descricao.slice(0, 60)}: ${error.message}`); continue; }
       base.created += 1;
 
       // comentários (histórico do sistema antigo): sem notificar, preservando data/autor

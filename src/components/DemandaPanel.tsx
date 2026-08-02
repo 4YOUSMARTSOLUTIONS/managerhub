@@ -4,7 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { ACTION_STATUS, PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus, assigneeEffStatus } from "@/lib/constants";
+import { ACTION_STATUS, PRIORITY, PRIORITY_TONE, effStatus, assigneeEffStatus } from "@/lib/constants";
+import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { formatDate, formatDateTime, isOverdue } from "@/lib/format";
 import {
   getDemandaTimeline, demandaComment, demandaRequest,
@@ -152,7 +153,7 @@ export function DemandaPanel({
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontWeight: 700, fontSize: "0.78rem", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 7, padding: "0.06rem 0.4rem" }}>{demanda.label}</span>
-              <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>
+              <EffStatusBadge eff={eff} overdue={overdue} />
               <Badge tone={PRIORITY_TONE[demanda.priority]}>{PRIORITY[demanda.priority]}</Badge>
               {demanda.isSdpo && <Badge tone="purple">SDPO</Badge>}
             </div>
@@ -209,11 +210,12 @@ export function DemandaPanel({
                 {demanda.assigneeStates.map((a) => {
                   const aEff = assigneeEffStatus(a, due, status === "cancelled");
                   const awaiting = !!a.doneRequestedAt && !a.completedAt;
+                  const aOverdue = !!due && !a.completedAt && status !== "cancelled" && isOverdue(due);
                   return (
                     <div key={a.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
                         <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{a.name}</span>
-                        <Badge tone={EFF_STATUS_TONE[aEff]}>{EFF_STATUS_LABEL[aEff]}</Badge>
+                        <EffStatusBadge eff={aEff} overdue={aOverdue} />
                       </div>
                       {a.id === currentUserId && !a.completedAt && !a.doneRequestedAt && !finalizada && (
                         <div style={{ marginTop: "0.45rem" }}>

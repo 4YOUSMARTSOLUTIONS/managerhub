@@ -24,11 +24,30 @@ function toISODate(v: unknown): string {
   return "";
 }
 
-// Comentários: um por linha na célula; cada linha "data | autor | texto" (data e autor opcionais).
+// Cabeçalho do formato nativo do sistema antigo: "[dd/mm/aaaa hh:mm] AUTOR: texto".
+// Vários comentários por célula, separados por esse cabeçalho (o texto pode ter quebras de linha).
+const NATIVE_COMMENT_HEADER = /\[(\d{1,2}\/\d{1,2}\/\d{2,4})\s+\d{1,2}:\d{2}(?::\d{2})?\]\s*([^:\n]+?):\s*/g;
+
+// Comentários: aceita o formato nativo "[data hora] autor: texto" (migração) OU,
+// como fallback, uma linha por comentário "data | autor | texto" (data e autor opcionais).
 function parseComments(cell: unknown): { at: string; author: string; text: string }[] {
-  const raw = String(cell ?? "").trim();
+  const raw = String(cell ?? "").replace(/\r\n/g, "\n").trim();
   if (!raw) return [];
-  return raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+
+  const heads = [...raw.matchAll(NATIVE_COMMENT_HEADER)];
+  if (heads.length > 0) {
+    const out: { at: string; author: string; text: string }[] = [];
+    for (let i = 0; i < heads.length; i++) {
+      const h = heads[i];
+      const start = (h.index ?? 0) + h[0].length;
+      const end = i + 1 < heads.length ? (heads[i + 1].index ?? raw.length) : raw.length;
+      const text = raw.slice(start, end).trim();
+      if (text) out.push({ at: toISODate(h[1]), author: h[2].trim(), text });
+    }
+    if (out.length > 0) return out;
+  }
+
+  return raw.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
     const parts = line.split("|").map((p) => p.trim());
     if (parts.length >= 3) return { at: toISODate(parts[0]), author: parts[1], text: parts.slice(2).join(" | ") };
     if (parts.length === 2) {
@@ -47,19 +66,20 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
   const [fileName, setFileName] = useState("");
   const [parseError, setParseError] = useState("");
   const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [summary, setSummary] = useState<ActionImportResult | null>(null);
   const router = useRouter();
 
-  function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
+  function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); setProgress(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
   function downloadTemplate() {
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "Pilar", "Seção", "Bloco", "Item", "Comentários"],
-      ["Renegociar contrato com fornecedor X", "João Silva; Maria Souza", "Luiz Nobre", "Luiz Nobre", "10/08/2026", "RLP - Reunião de Limpa Pauta", "30/09/2026", "20/09/2026", "Concluída", "Alta", "MATRIZ", "", "PDCA", "", "", "", "", "31/08/2026 | João Silva | Fornecedor pediu reunião\n05/09/2026 | Maria Souza | Aguardando proposta"],
-      ["Revisar layout do depósito", "Maria Souza", "Luiz Nobre", "Maria Souza", "05/09/2026", "", "2026-10-15", "", "Em andamento", "Média", "Todas as unidades", "", "", "", "", "", "", ""],
+      ["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "SDPO", "Programa", "Pilar", "Seção", "Bloco", "Item", "Comentários"],
+      ["Renegociar contrato com fornecedor X", "João Silva; Maria Souza", "Luiz Nobre", "Luiz Nobre", "10/08/2026", "RLP - Reunião de Limpa Pauta", "30/09/2026", "20/09/2026", "Concluída", "Alta", "MATRIZ", "", "PDCA", "Não", "", "", "", "", "", "31/08/2026 | João Silva | Fornecedor pediu reunião\n05/09/2026 | Maria Souza | Aguardando proposta"],
+      ["Revisar layout do depósito", "Maria Souza", "Luiz Nobre", "Maria Souza", "05/09/2026", "", "2026-10-15", "", "Em andamento", "Média", "Todas as unidades", "", "", "Sim", "SPO", "Segurança", "", "", "", ""],
     ]);
-    ws["!cols"] = [{ wch: 40 }, { wch: 26 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 28 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 40 }, { wch: 26 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 28 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 40 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Como preencher"],
       ["Ação", "Descrição da ação/demanda (obrigatório)"],
@@ -75,6 +95,8 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
       ["Unidade", "Nome da unidade cadastrada. Use \"Todas as unidades\" (ou deixe vazio) para valer para todas"],
       ["KPI", "Nome do KPI cadastrado — opcional"],
       ["Ferramenta", "Nome da ferramenta de gestão (ex.: PDCA, 5W2H) — opcional"],
+      ["SDPO", "Sim ou Não. Se vazio, marca Sim automaticamente quando Pilar, Seção e Item forem encontrados"],
+      ["Programa", "SPO ou DPO — opcional"],
       ["Pilar / Seção / Item", "Classificação SDPO (nomes cadastrados). Preencha Pilar, Seção e Item para marcar como SDPO"],
       ["Bloco", "Bloco dentro da seção (opcional, usado no DPO)"],
       ["Comentários", "Histórico de comentários (opcional). Um por linha na célula (Alt+Enter). Cada linha: \"data | autor | texto\". Data e autor são opcionais; sem autor cadastrado, entra como você."],
@@ -111,6 +133,8 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
         unidade: find("unidade"),
         kpi: find("kpi", "indicador"),
         ferramenta: find("ferramenta"),
+        sdpo: find("sdpo"),
+        programa: find("programa"),
         pilar: find("pilar"),
         secao: find("secao", "seção", "secção"),
         bloco: find("bloco"),
@@ -139,6 +163,8 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
           unidade: str(r, idx.unidade),
           kpi: str(r, idx.kpi),
           ferramenta: str(r, idx.ferramenta),
+          sdpo: str(r, idx.sdpo),
+          programa: str(r, idx.programa),
           pilar: str(r, idx.pilar),
           secao: str(r, idx.secao),
           bloco: str(r, idx.bloco),
@@ -155,9 +181,34 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
 
   async function doImport() {
     setImporting(true);
-    const res = await importActions(rows);
-    setImporting(false); setSummary(res);
-    if (!res.error) router.refresh();
+    setSummary(null);
+    setProgress({ done: 0, total: rows.length });
+
+    // Importa em lotes para não estourar o tempo de uma única requisição (migração grande).
+    const BATCH = 150;
+    const merged: ActionImportResult = { created: 0, skipped: 0, peopleNotFound: [], refsNotFound: [], failed: [] };
+    const people = new Set<string>(); const refs = new Set<string>();
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const chunk = rows.slice(i, i + BATCH);
+      let res: ActionImportResult;
+      try {
+        res = await importActions(chunk);
+      } catch (e) {
+        merged.error = `Falha de conexão no lote ${Math.floor(i / BATCH) + 1}: ${(e as Error).message}. ${merged.created} ação(ões) já foram importadas.`;
+        break;
+      }
+      if (res.error) { merged.error = res.error; break; } // erro fatal (ex.: sem permissão)
+      merged.created += res.created;
+      merged.skipped += res.skipped;
+      res.peopleNotFound.forEach((x) => people.add(x));
+      res.refsNotFound.forEach((x) => refs.add(x));
+      merged.failed.push(...res.failed);
+      setProgress({ done: Math.min(i + BATCH, rows.length), total: rows.length });
+    }
+    merged.peopleNotFound = [...people];
+    merged.refsNotFound = [...refs];
+    setImporting(false); setProgress(null); setSummary(merged);
+    router.refresh();
   }
 
   return (
@@ -183,40 +234,59 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
 
               {parseError && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
 
-              {fileName && !summary && (
+              {fileName && !summary && !importing && (
                 <div className="card card-pad" style={{ fontSize: "0.88rem" }}>
                   <strong>{fileName}</strong>
-                  <div className="muted" style={{ marginTop: 4 }}>{rows.length} ação(ões) para importar</div>
+                  <div className="muted" style={{ marginTop: 4 }}>{rows.length} ação(ões) para importar, em lotes de 150</div>
+                </div>
+              )}
+
+              {importing && progress && (
+                <div className="card card-pad" style={{ fontSize: "0.9rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <strong>Importando…</strong>
+                    <span className="muted">{progress.done} / {progress.total}</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, background: "var(--surface-2)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, background: "var(--mh-primary)", transition: "width 0.2s" }} />
+                  </div>
+                  <div className="muted" style={{ fontSize: "0.78rem", marginTop: 6 }}>Não feche esta janela até concluir.</div>
                 </div>
               )}
 
               {summary && (
-                <div className="card card-pad" style={{ fontSize: "0.9rem" }}>
-                  {summary.error ? (
-                    <span className="badge badge-red">{summary.error}</span>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                        <span className="badge badge-green">{summary.created} ação(ões) criada(s)</span>
-                        {summary.skipped > 0 && <span className="badge badge-amber">{summary.skipped} linha(s) ignorada(s)</span>}
-                      </div>
-                      {summary.peopleNotFound.length > 0 && (
-                        <div className="muted" style={{ fontSize: "0.82rem" }}>Pessoas não encontradas (ajuste depois): {summary.peopleNotFound.join(", ")}</div>
-                      )}
-                      {summary.refsNotFound.length > 0 && (
-                        <div className="muted" style={{ fontSize: "0.82rem" }}>Cadastros não encontrados: {summary.refsNotFound.join(", ")}</div>
-                      )}
-                    </div>
+                <div className="card card-pad" style={{ fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {summary.error && (
+                    <span className="badge badge-red" style={{ whiteSpace: "normal", textAlign: "left" }}>{summary.error}</span>
+                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                    <span className="badge badge-green">{summary.created} ação(ões) criada(s)</span>
+                    {summary.skipped > 0 && <span className="badge badge-amber">{summary.skipped} linha(s) ignorada(s)</span>}
+                    {summary.failed.length > 0 && <span className="badge badge-red">{summary.failed.length} falha(s)</span>}
+                  </div>
+                  {summary.peopleNotFound.length > 0 && (
+                    <div className="muted" style={{ fontSize: "0.82rem" }}>Pessoas não encontradas (ajuste depois): {summary.peopleNotFound.join(", ")}</div>
+                  )}
+                  {summary.refsNotFound.length > 0 && (
+                    <div className="muted" style={{ fontSize: "0.82rem" }}>Cadastros não encontrados: {summary.refsNotFound.join(", ")}</div>
+                  )}
+                  {summary.failed.length > 0 && (
+                    <details style={{ fontSize: "0.8rem" }}>
+                      <summary style={{ cursor: "pointer" }} className="muted">Ver linhas que falharam ({summary.failed.length})</summary>
+                      <div className="muted" style={{ marginTop: 4, maxHeight: 160, overflowY: "auto", whiteSpace: "pre-wrap" }}>{summary.failed.join("\n")}</div>
+                    </details>
                   )}
                 </div>
               )}
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-              <button type="button" className="btn btn-ghost" onClick={close}>{summary && !summary.error ? "Fechar" : "Cancelar"}</button>
-              <button type="button" className="btn btn-primary" disabled={!rows.length || importing || (!!summary && !summary.error)} onClick={doImport}>
-                {importing ? "Importando…" : "Importar"}
-              </button>
+              <button type="button" className="btn btn-ghost" disabled={importing} onClick={close}>{summary ? "Fechar" : "Cancelar"}</button>
+              {!summary && (
+                <button type="button" className="btn btn-primary" disabled={!rows.length || importing} onClick={doImport}>
+                  {importing ? "Importando…" : "Importar"}
+                </button>
+              )}
             </div>
           </div>
         </div>

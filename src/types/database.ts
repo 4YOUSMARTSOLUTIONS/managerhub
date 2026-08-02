@@ -587,13 +587,13 @@ export type Database = {
         Relationships: []
       }
       actions: {
-        Row: { id: string; code: number; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; secao_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; unit_id: string | null; requester_id: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"]; created_by: string | null; created_at: string; updated_at: string }
+        Row: { id: string; code: number; tenant_id: string; is_sdpo: boolean; pilar_id: string | null; secao_id: string | null; bloco_id: string | null; item_id: string | null; meeting_series_id: string | null; occurrence_id: string | null; kpi_id: string | null; tool_id: string | null; unit_id: string | null; requester_id: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"]; created_by: string | null; created_at: string; updated_at: string; legacy_pilar: string | null; legacy_secao: string | null; legacy_bloco: string | null; legacy_item: string | null; legacy_requester: string | null; legacy_created_by: string | null; legacy_meeting: string | null; legacy_unit: string | null; legacy_kpi: string | null; legacy_tool: string | null; programa_id: string | null; legacy_programa: string | null }
         Insert: { id?: string; code?: number; tenant_id: string; is_sdpo?: boolean; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; unit_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
         Update: { id?: string; code?: number; tenant_id?: string; is_sdpo?: boolean; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; meeting_series_id?: string | null; occurrence_id?: string | null; kpi_id?: string | null; tool_id?: string | null; unit_id?: string | null; requester_id?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"]; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       action_demandas: {
-        Row: { id: string; action_id: string; tenant_id: string; description: string; status: Database["public"]["Enums"]["action_status"]; due_date: string | null; completed_at: string | null; created_at: string }
+        Row: { id: string; action_id: string; tenant_id: string; description: string; status: Database["public"]["Enums"]["action_status"]; due_date: string | null; completed_at: string | null; created_at: string; legacy_assignees: string | null }
         Insert: { id?: string; action_id: string; tenant_id: string; description: string; status?: Database["public"]["Enums"]["action_status"]; due_date?: string | null; completed_at?: string | null; created_at?: string }
         Update: { id?: string; action_id?: string; tenant_id?: string; description?: string; status?: Database["public"]["Enums"]["action_status"]; due_date?: string | null; completed_at?: string | null; created_at?: string }
         Relationships: []
@@ -1226,6 +1226,8 @@ export type Database = {
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
       import_action: { Args: { p_data: Json }; Returns: Json }
+      search_action_ids: { Args: { p_filters?: Json; p_limit?: number; p_offset?: number }; Returns: Json }
+      action_filter_options: { Args: Record<string, never>; Returns: Json }
       demanda_comment: { Args: { p_demanda: string; p_body: string }; Returns: undefined }
       add_demanda_comment_import: { Args: { p_demanda: string; p_body: string; p_actor?: string | null; p_at?: string | null; p_author_label?: string | null }; Returns: undefined }
       demanda_set_status: { Args: { p_demanda: string; p_status: Database["public"]["Enums"]["action_status"] }; Returns: undefined }

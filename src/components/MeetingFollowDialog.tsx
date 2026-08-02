@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, AlertTriangle } from "lucide-react";
 import { getMeetingFollow, type FollowDemanda, type MeetingFollow } from "@/lib/actions/meeting-records";
-import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus } from "@/lib/constants";
+import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
+import { effStatus } from "@/lib/constants";
 import { formatDate, isOverdue } from "@/lib/format";
 import { DemandaPanel } from "./DemandaPanel";
 import type { Person } from "./PeoplePicker";
@@ -54,7 +54,7 @@ function PendingTable({ rows, onTreat }: { rows: FollowDemanda[]; onTreat: (f: F
               <tr key={f.demanda.id}>
                 <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{f.demanda.label}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>
+                  <EffStatusBadge eff={eff} overdue={f.overdue} />
                 </td>
                 <td style={{ minWidth: 200, maxWidth: 320 }}>{f.demanda.description}</td>
                 <td className="soft" style={{ fontSize: "0.82rem", minWidth: 110, whiteSpace: "nowrap" }} title={f.demanda.assigneeNames.join(", ")}>
