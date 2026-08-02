@@ -46,7 +46,13 @@ const MULTI_KEYS = ["priority", "status", "programa", "pilar", "requester", "ass
 type MultiKey = (typeof MULTI_KEYS)[number];
 
 /** Opções dos selects, extraídas da base inteira (não só da página). */
-export type FilterOptions = { programas: string[]; pilares: string[]; requesters: string[]; assignees: string[] };
+/** `pilares` vem com a marca de legado: nomes que ainda estão nas ações mas saíram do cadastro. */
+export type FilterOptions = {
+  programas: string[];
+  pilares: { nome: string; legacy: boolean }[];
+  requesters: string[];
+  assignees: string[];
+};
 
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
@@ -281,7 +287,9 @@ export function ActionsManager({
               />
               <MultiSelect
                 label="Pilar" searchable
-                options={pilarOpts.map((p) => ({ value: p, label: p }))}
+                options={pilarOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
+                legacyLabel="Legados"
+                legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
                 selected={filters.pilar}
                 onChange={(v) => applyFilters({ pilar: v })}
               />

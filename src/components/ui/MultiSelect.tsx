@@ -5,12 +5,16 @@ import { Check, ChevronDown, X } from "lucide-react";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-export type MultiOption = { value: string; label: string };
+/** `legacy` marca valores que ainda aparecem nos dados mas saíram do cadastro. */
+export type MultiOption = { value: string; label: string; legacy?: boolean };
 
 /**
  * Filtro de múltipla escolha. Mostra um resumo do que está selecionado e, ao abrir,
  * uma lista com caixas de seleção; com `searchable`, um campo para digitar e reduzir
  * a lista (útil quando são centenas de nomes, como Solicitante e Responsável).
+ *
+ * Opções marcadas como legadas vão para um grupo próprio no fim da lista, em cinza
+ * claro, para não se confundirem com o que está em uso hoje.
  */
 export function MultiSelect({
   label,
@@ -20,6 +24,8 @@ export function MultiSelect({
   searchable = false,
   allLabel = "Todos",
   placeholder = "Digite para buscar…",
+  legacyLabel = "Legados",
+  legacyHint,
 }: {
   label: string;
   options: MultiOption[];
@@ -28,6 +34,8 @@ export function MultiSelect({
   searchable?: boolean;
   allLabel?: string;
   placeholder?: string;
+  legacyLabel?: string;
+  legacyHint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -53,8 +61,29 @@ export function MultiSelect({
     return t ? options.filter((o) => norm(o.label).includes(t)) : options;
   }, [options, term]);
 
+  const ativos = useMemo(() => visible.filter((o) => !o.legacy), [visible]);
+  const legados = useMemo(() => visible.filter((o) => o.legacy), [visible]);
+
   const toggle = (value: string) => {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  };
+
+  const renderOption = (o: MultiOption) => {
+    const on = selected.includes(o.value);
+    return (
+      <button
+        key={o.value}
+        type="button"
+        onClick={() => toggle(o.value)}
+        title={o.legacy ? legacyHint : undefined}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.5rem", background: on ? "var(--surface-2)" : "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.85rem", color: o.legacy ? "var(--text-muted)" : "var(--text)" }}
+      >
+        <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "var(--mh-primary)" : "transparent" }}>
+          {on && <Check size={11} color="#fff" />}
+        </span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
+      </button>
+    );
   };
 
   const resumo = selected.length === 0
@@ -116,22 +145,24 @@ export function MultiSelect({
             {visible.length === 0 ? (
               <div className="soft" style={{ padding: "0.6rem", fontSize: "0.82rem" }}>Nada encontrado.</div>
             ) : (
-              visible.map((o) => {
-                const on = selected.includes(o.value);
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => toggle(o.value)}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.5rem", background: on ? "var(--surface-2)" : "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.85rem", color: "var(--text)" }}
-                  >
-                    <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "var(--mh-primary)" : "transparent" }}>
-                      {on && <Check size={11} color="#fff" />}
-                    </span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
-                  </button>
-                );
-              })
+              <>
+                {ativos.map(renderOption)}
+                {legados.length > 0 && (
+                  <>
+                    <div
+                      title={legacyHint}
+                      style={{
+                        margin: "0.35rem 0.25rem 0.15rem", paddingTop: "0.4rem",
+                        borderTop: "1px solid var(--mh-border)", color: "var(--text-muted)",
+                        fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.04em",
+                      }}
+                    >
+                      {legacyLabel}
+                    </div>
+                    {legados.map(renderOption)}
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
