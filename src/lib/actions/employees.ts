@@ -108,3 +108,26 @@ export async function updateEmployee(
     return { error: (e as Error).message };
   }
 }
+
+/** Contrato encerrado do colaborador (vínculo anterior, com outro código). */
+export type ContractHistoryItem = {
+  employee_code: string | null;
+  admission_date: string | null;
+  dismissed_at: string | null;
+  departamento: string | null;
+  subsetor: string | null;
+  funcao: string | null;
+  perfil: string | null;
+};
+
+/** Histórico de contratos anteriores, para a ficha do colaborador. */
+export async function getContractHistory(userId: string): Promise<ContractHistoryItem[]> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("employee_contract_history", { p_user: userId });
+    if (error) return [];
+    return (data ?? []) as unknown as ContractHistoryItem[];
+  } catch {
+    return [];
+  }
+}

@@ -14,6 +14,7 @@ import { USER_TYPE } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
 import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
+import { ContractHistoryDialog } from "./ContractHistoryDialog";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { ExportButton } from "@/components/ui/ExportButton";
 
@@ -36,6 +37,7 @@ const ICON = {
   power: "M12 2v10|M18.36 6.64a9 9 0 1 1-12.73 0",
   lock: "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z|M7 11V7a5 5 0 0 1 10 0v4",
   trash: "M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6|M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z|M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
 };
 
 function Ico({ d }: { d: string }) {
@@ -73,6 +75,7 @@ export function UsersManager({
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<EmployeeRow | undefined>(undefined);
+  const [history, setHistory] = useState<{ userId: string; name: string } | null>(null);
   const [query, setQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [posFilter, setPosFilter] = useState("");
@@ -234,6 +237,7 @@ export function UsersManager({
                   <td><Badge tone={e.active ? "green" : "red"}>{e.active ? "Ativo" : "Inativo"}</Badge></td>
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
+                      <button className="icon-btn" type="button" title="Contratos anteriores" onClick={() => setHistory({ userId: e.userId, name: e.fullName ?? "" })}><Ico d={ICON.eye} /></button>
                       <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
                       {canAct && (
                         <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
@@ -287,6 +291,10 @@ export function UsersManager({
       />
 
       <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />
+
+      {history && (
+        <ContractHistoryDialog userId={history.userId} name={history.name} onClose={() => setHistory(null)} />
+      )}
     </div>
   );
 }
