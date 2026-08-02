@@ -3,6 +3,9 @@
 -- entao ver "as acoes de tres pessoas" exigia tres consultas separadas.
 --
 -- Os campos viram arrays no jsonb; ausente ou vazio continua significando "sem filtro".
+--
+-- O jsonb_typeof e obrigatorio: o campo pode chegar como null (ex.: units, quando o
+-- usuario ve todas as unidades) e extrair elementos de um escalar aborta a funcao.
 
 create or replace function public.search_action_ids(
   p_filters jsonb default '{}'::jsonb,
@@ -23,13 +26,20 @@ f as (
     nullif(p_filters->>'sdpo', '') as sdpo,
     nullif(p_filters->>'from', '')::date as dfrom,
     nullif(p_filters->>'to', '')::date as dto,
-    (select array_agg(v) from jsonb_array_elements_text(p_filters->'priority') v)  as priority,
-    (select array_agg(v) from jsonb_array_elements_text(p_filters->'status') v)    as status,
-    (select array_agg(v) from jsonb_array_elements_text(p_filters->'programa') v)  as programa,
-    (select array_agg(v) from jsonb_array_elements_text(p_filters->'pilar') v)     as pilar,
-    (select array_agg(v) from jsonb_array_elements_text(p_filters->'requester') v) as requester,
-    (select array_agg(v) from jsonb_array_elements_text(p_filters->'assignee') v)  as assignee,
-    (select array_agg(v::uuid) from jsonb_array_elements_text(p_filters->'units') v) as units
+    case when jsonb_typeof(p_filters->'priority') = 'array'
+      then (select array_agg(v) from jsonb_array_elements_text(p_filters->'priority') v) end as priority,
+    case when jsonb_typeof(p_filters->'status') = 'array'
+      then (select array_agg(v) from jsonb_array_elements_text(p_filters->'status') v) end as status,
+    case when jsonb_typeof(p_filters->'programa') = 'array'
+      then (select array_agg(v) from jsonb_array_elements_text(p_filters->'programa') v) end as programa,
+    case when jsonb_typeof(p_filters->'pilar') = 'array'
+      then (select array_agg(v) from jsonb_array_elements_text(p_filters->'pilar') v) end as pilar,
+    case when jsonb_typeof(p_filters->'requester') = 'array'
+      then (select array_agg(v) from jsonb_array_elements_text(p_filters->'requester') v) end as requester,
+    case when jsonb_typeof(p_filters->'assignee') = 'array'
+      then (select array_agg(v) from jsonb_array_elements_text(p_filters->'assignee') v) end as assignee,
+    case when jsonb_typeof(p_filters->'units') = 'array'
+      then (select array_agg(v::uuid) from jsonb_array_elements_text(p_filters->'units') v) end as units
 ),
 base as (
   select a.id, a.created_at
