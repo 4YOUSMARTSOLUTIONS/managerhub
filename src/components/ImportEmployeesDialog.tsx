@@ -105,8 +105,10 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
         const r = aoa[i] as unknown[];
         const obj: Row = {};
         headers.forEach((f, idx) => { if (f) obj[f] = cellStr(r[idx]); });
+        // a data de demissão decide se a linha entra (filtro "apenas ativos") E precisa
+        // seguir para o servidor: é ela que marca o colaborador como inativo
         const isDismissed = !!obj["__demissao"];
-        if (isDismissed) dis++;
+        if (isDismissed) { dis++; obj["dismissed_at"] = obj["__demissao"]; }
         delete obj["__demissao"];
         if (!obj["cpf"] || !obj["full_name"]) { ign++; continue; }
         if (onlyActive && isDismissed) continue;
