@@ -220,10 +220,10 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
               {summary.skippedList.length > 0 && (
                 <details open style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
-                  <summary style={{ cursor: "pointer" }} className="muted">Já existiam, nada alterado ({summary.skippedList.length})</summary>
-                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 160, overflow: "auto" }}>
+                  <summary style={{ cursor: "pointer" }} className="muted">Não alterados ({summary.skippedList.length})</summary>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 200, overflow: "auto" }}>
                     {summary.skippedList.map((s, i) => (
-                      <li key={i}>{s.nome}{s.codigo ? ` — código ${s.codigo}` : ""}</li>
+                      <li key={i}>{s.nome}{s.motivo ? ` — ${s.motivo}` : s.codigo ? ` — código ${s.codigo}` : ""}</li>
                     ))}
                   </ul>
                 </details>

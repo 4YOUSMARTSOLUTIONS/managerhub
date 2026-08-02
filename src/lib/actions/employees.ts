@@ -54,8 +54,8 @@ export type ImportSummary = {
   /** recontratações: mesmo CPF com código de colaborador novo */
   updated: number;
   skipped: number;
-  /** quem já estava cadastrado com o mesmo código (nada a fazer) */
-  skippedList: { nome: string; cpf: string; codigo: string | null }[];
+  /** linhas que não alteraram nada: mesmo código, ou contrato anterior (histórico) */
+  skippedList: { nome: string; cpf: string; codigo: string | null; motivo?: string }[];
   updatedList: { nome: string; cpf: string; motivo: string }[];
   errors: { nome?: string; cpf?: string; erro: string }[];
 };
