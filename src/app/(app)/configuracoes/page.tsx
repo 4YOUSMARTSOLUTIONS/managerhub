@@ -150,6 +150,7 @@ export default async function SettingsPage() {
   const profById = new Map((profilesData ?? []).map((p) => [p.id, p]));
   const unitById = new Map((units ?? []).map((u) => [u.id, u]));
   const deptById = new Map((departments ?? []).map((d) => [d.id, d]));
+  const subById = new Map((subdepartments ?? []).map((s) => [s.id, s]));
   const posById = new Map((positions ?? []).map((p) => [p.id, p]));
   const levelById = new Map((levels ?? []).map((l) => [l.id, l]));
   const unitsByMem = new Map<string, string[]>();
@@ -180,6 +181,8 @@ export default async function SettingsPage() {
       managerId: m.manager_id,
       unitIds: uIds,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
+      subdepartmentName: m.subdepartment_id ? subById.get(m.subdepartment_id)?.name ?? null : null,
+      dismissedAt: m.dismissed_at ?? null,
       positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
       levelName: m.position_level_id ? levelById.get(m.position_level_id)?.name ?? null : null,
       managerName: m.manager_id ? profById.get(m.manager_id)?.full_name ?? null : null,

@@ -14,17 +14,19 @@ import { USER_TYPE } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
 import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
-import { ContractHistoryDialog } from "./ContractHistoryDialog";
+import { EmployeeViewDialog } from "./EmployeeViewDialog";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { ExportButton } from "@/components/ui/ExportButton";
 
 export type EmployeeRow = EmployeeData & {
   departmentName: string | null;
+  subdepartmentName: string | null;
   positionName: string | null;
   levelName: string | null;
   managerName: string | null;
   unitNames: string[];
   active: boolean;
+  dismissedAt: string | null;
 };
 
 function roleLabel(role: string): string {
@@ -75,7 +77,7 @@ export function UsersManager({
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<EmployeeRow | undefined>(undefined);
-  const [history, setHistory] = useState<{ userId: string; name: string } | null>(null);
+  const [viewing, setViewing] = useState<EmployeeRow | null>(null);
   const [query, setQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [posFilter, setPosFilter] = useState("");
@@ -173,8 +175,7 @@ export function UsersManager({
             headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail"]}
             rows={employees.map((e) => {
               const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
-              const sub = e.subdepartmentId ? subdepartments.find((s) => s.id === e.subdepartmentId)?.name ?? "" : "";
-              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", sub, brDate(e.birthDate), e.cpf ?? "", "", e.gender ?? "", e.phone ?? "", e.email ?? ""];
+              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? ""];
             })}
           />
           <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>
@@ -237,7 +238,7 @@ export function UsersManager({
                   <td><Badge tone={e.active ? "green" : "red"}>{e.active ? "Ativo" : "Inativo"}</Badge></td>
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
-                      <button className="icon-btn" type="button" title="Contratos anteriores" onClick={() => setHistory({ userId: e.userId, name: e.fullName ?? "" })}><Ico d={ICON.eye} /></button>
+                      <button className="icon-btn" type="button" title="Ver ficha completa" onClick={() => setViewing(e)}><Ico d={ICON.eye} /></button>
                       <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
                       {canAct && (
                         <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
@@ -292,8 +293,8 @@ export function UsersManager({
 
       <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
-      {history && (
-        <ContractHistoryDialog userId={history.userId} name={history.name} onClose={() => setHistory(null)} />
+      {viewing && (
+        <EmployeeViewDialog employee={viewing} onClose={() => setViewing(null)} />
       )}
     </div>
   );
