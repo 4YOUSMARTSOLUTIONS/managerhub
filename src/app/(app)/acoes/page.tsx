@@ -1,38 +1,53 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
-import { ActionsManager, type ActionRow } from "@/components/ActionsManager";
+import { ActionsManager, type ActionRow, type FilterOptions } from "@/components/ActionsManager";
 import { Pager } from "@/components/ui/Pager";
 import type { Person } from "@/components/PeoplePicker";
 import { moduleGate } from "@/lib/module-gate";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
+import type { Tables } from "@/types/database";
 
 const PAGE_SIZE = 50;
 
-export default async function ActionsPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
+type SP = { p?: string; q?: string; prio?: string; sdpo?: string; st?: string; prog?: string; pilar?: string; sol?: string; resp?: string; de?: string; ate?: string };
+
+export default async function ActionsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const gate = await moduleGate("acoes");
   if (gate) return gate;
 
   const { tenant, user, role, unitScope } = await requireContext();
   const supabase = await createClient();
   const isAdmin = role === "owner" || role === "admin";
-  const page = Math.max(1, Number((await searchParams).p) || 1);
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.p) || 1);
   const from = (page - 1) * PAGE_SIZE;
+
+  // filtros vivem na URL: a busca é feita no banco, sobre a base inteira
+  const filters = {
+    q: sp.q ?? "", priority: sp.prio ?? "", sdpo: sp.sdpo ?? "", status: sp.st ?? "",
+    programa: sp.prog ?? "", pilar: sp.pilar ?? "", requester: sp.sol ?? "", assignee: sp.resp ?? "",
+    from: sp.de ?? "", to: sp.ate ?? "",
+  };
 
   const unitIds = effectiveUnitFilter(unitScope);
   const unitById = new Map(unitScope.units.map((u) => [u.id, u.name]));
-  const actionsQuery = supabase
-    .from("actions")
-    .select("*", { count: "exact" })
-    .eq("tenant_id", tenant.id)
-    .order("created_at", { ascending: false })
-    .range(from, from + PAGE_SIZE - 1);
+
+  const { data: search } = await supabase.rpc("search_action_ids", {
+    p_filters: { ...filters, units: unitIds ?? null },
+    p_limit: PAGE_SIZE,
+    p_offset: from,
+  });
+  const { ids: pageIds, total: actionsTotal } = (search ?? { ids: [], total: 0 }) as { ids: string[]; total: number };
 
   const [
-    { data: actions, count: actionsTotal }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
+    { data: actionsRaw }, { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
     { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
-    { data: members }, { data: profilesData },
+    { data: members }, { data: profilesData }, { data: filterOpts },
   ] = await Promise.all([
-    unitIds ? actionsQuery.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : actionsQuery,
+    pageIds.length
+      ? supabase.from("actions").select("*").in("id", pageIds)
+      : Promise.resolve({ data: [] as Tables<"actions">[] }),
+    supabase.from("sdpo_programas").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenant.id).order("name"),
@@ -44,25 +59,29 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
     // nomes: todos os membros do tenant (inclui inativos, p/ resolver autores antigos)
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id),
+    // opções dos selects a partir da base inteira (não só da página)
+    supabase.rpc("action_filter_options"),
   ]);
 
-  const actionIds = (actions ?? []).map((a) => a.id);
+  // a busca devolve os ids já ordenados; o .in() não preserva ordem
+  const orderById = new Map(pageIds.map((id, i) => [id, i]));
+  const actions = [...(actionsRaw ?? [])].sort((a, b) => (orderById.get(a.id) ?? 0) - (orderById.get(b.id) ?? 0));
+
+  const actionIds = actions.map((a) => a.id);
   const [{ data: demandas }, { data: ccs }, { data: atts }] = await Promise.all([
-    actionIds.length ? supabase.from("action_demandas").select("id, action_id, description, status, due_date").in("action_id", actionIds) : Promise.resolve({ data: [] as { id: string; action_id: string; description: string; status: string; due_date: string | null }[] }),
+    actionIds.length ? supabase.from("action_demandas").select("id, action_id, description, status, due_date, legacy_assignees").in("action_id", actionIds) : Promise.resolve({ data: [] as { id: string; action_id: string; description: string; status: string; due_date: string | null; legacy_assignees: string | null }[] }),
     actionIds.length ? supabase.from("action_cc").select("action_id, user_id").in("action_id", actionIds) : Promise.resolve({ data: [] as { action_id: string; user_id: string }[] }),
     actionIds.length ? supabase.from("action_attachments").select("id, action_id, demanda_id, filename, path").in("action_id", actionIds) : Promise.resolve({ data: [] as { id: string; action_id: string; demanda_id: string | null; filename: string; path: string }[] }),
   ]);
 
   const demandaIds = (demandas ?? []).map((d) => d.id);
-  const [{ data: assigneeRows }, { data: pendingReqs }] = demandaIds.length
-    ? await Promise.all([
-        supabase.from("action_demanda_assignees").select("demanda_id, user_id, done_requested_at, completed_at").in("demanda_id", demandaIds),
-        supabase.from("demanda_requests").select("demanda_id").eq("status", "pending").in("demanda_id", demandaIds),
-      ])
-    : [{ data: [] as { demanda_id: string; user_id: string; done_requested_at: string | null; completed_at: string | null }[] }, { data: [] as { demanda_id: string }[] }];
+  const { data: assigneeRows } = demandaIds.length
+    ? await supabase.from("action_demanda_assignees").select("demanda_id, user_id, done_requested_at, completed_at").in("demanda_id", demandaIds)
+    : { data: [] as { demanda_id: string; user_id: string; done_requested_at: string | null; completed_at: string | null }[] };
 
   // mapas de nomes
   const nameById = new Map((profilesData ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
+  const programaName = new Map((programas ?? []).map((p) => [p.id, p.name]));
   const pilarName = new Map((pilares ?? []).map((p) => [p.id, p.name]));
   const secaoName = new Map((secoes ?? []).map((s) => [s.id, s.name]));
   const blocoName = new Map((blocos ?? []).map((b) => [b.id, b.name]));
@@ -86,8 +105,11 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     st.push({ id: r.user_id, name: nameById.get(r.user_id) ?? "—", doneRequestedAt: r.done_requested_at, completedAt: r.completed_at });
     assigneeStatesByDemanda.set(r.demanda_id, st);
   }
+  // "Aguardando aprovação": responsável que enviou a parte (done_requested_at) sem aprovação (completed_at).
   const pendingByDemanda = new Map<string, number>();
-  for (const r of pendingReqs ?? []) pendingByDemanda.set(r.demanda_id, (pendingByDemanda.get(r.demanda_id) ?? 0) + 1);
+  for (const r of assigneeRows ?? []) {
+    if (r.done_requested_at && !r.completed_at) pendingByDemanda.set(r.demanda_id, (pendingByDemanda.get(r.demanda_id) ?? 0) + 1);
+  }
   // anexos por demanda e gerais (demanda_id null)
   const attsByDemanda = new Map<string, { id: string; filename: string; path: string }[]>();
   for (const a of atts ?? []) {
@@ -99,9 +121,10 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const demandasByAction = new Map<string, ActionRow["demandas"]>();
   for (const d of demandas ?? []) {
     const arr = demandasByAction.get(d.action_id) ?? [];
+    const legacyResp = (d.legacy_assignees ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     arr.push({
       id: d.id, description: d.description, status: d.status, dueDate: d.due_date,
-      assigneeNames: assigneesByDemanda.get(d.id) ?? [],
+      assigneeNames: [...(assigneesByDemanda.get(d.id) ?? []), ...legacyResp],
       assigneeIds: assigneeIdsByDemanda.get(d.id) ?? [],
       assigneeStates: assigneeStatesByDemanda.get(d.id) ?? [],
       pendingCount: pendingByDemanda.get(d.id) ?? 0,
@@ -123,21 +146,22 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     attsByAction.set(a.action_id, arr);
   }
 
-  const rows: ActionRow[] = (actions ?? []).map((a) => ({
+  const rows: ActionRow[] = actions.map((a) => ({
     id: a.id,
     code: a.code,
     isSdpo: a.is_sdpo,
-    pilarName: a.pilar_id ? pilarName.get(a.pilar_id) ?? null : null,
-    secaoName: a.secao_id ? secaoName.get(a.secao_id) ?? null : null,
-    blocoName: a.bloco_id ? blocoName.get(a.bloco_id) ?? null : null,
-    itemName: a.item_id ? itemName.get(a.item_id) ?? null : null,
-    seriesName: a.meeting_series_id ? seriesName.get(a.meeting_series_id) ?? null : null,
+    programaName: (a.programa_id ? programaName.get(a.programa_id) ?? null : null) ?? a.legacy_programa ?? null,
+    pilarName: (a.pilar_id ? pilarName.get(a.pilar_id) ?? null : null) ?? a.legacy_pilar ?? null,
+    secaoName: (a.secao_id ? secaoName.get(a.secao_id) ?? null : null) ?? a.legacy_secao ?? null,
+    blocoName: (a.bloco_id ? blocoName.get(a.bloco_id) ?? null : null) ?? a.legacy_bloco ?? null,
+    itemName: (a.item_id ? itemName.get(a.item_id) ?? null : null) ?? a.legacy_item ?? null,
+    seriesName: (a.meeting_series_id ? seriesName.get(a.meeting_series_id) ?? null : null) ?? a.legacy_meeting ?? null,
     occurredOn: a.occurrence_id ? occDate.get(a.occurrence_id) ?? null : null,
-    kpiName: a.kpi_id ? kpiName.get(a.kpi_id) ?? null : null,
-    toolName: a.tool_id ? toolName.get(a.tool_id) ?? null : null,
-    unitName: a.unit_id ? unitById.get(a.unit_id) ?? null : null,
+    kpiName: (a.kpi_id ? kpiName.get(a.kpi_id) ?? null : null) ?? a.legacy_kpi ?? null,
+    toolName: (a.tool_id ? toolName.get(a.tool_id) ?? null : null) ?? a.legacy_tool ?? null,
+    unitName: (a.unit_id ? unitById.get(a.unit_id) ?? null : null) ?? a.legacy_unit ?? null,
     requesterId: a.requester_id,
-    requesterName: a.requester_id ? nameById.get(a.requester_id) ?? null : null,
+    requesterName: (a.requester_id ? nameById.get(a.requester_id) ?? null : null) ?? a.legacy_requester ?? null,
     createdAt: a.created_at,
     priority: a.priority,
     dueDate: a.due_date,
@@ -149,6 +173,12 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const people: Person[] = (members ?? [])
     .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+  // mantém os filtros ao trocar de página
+  const pagerExtra: Record<string, string> = {};
+  for (const [k, v] of Object.entries({ q: sp.q, prio: sp.prio, sdpo: sp.sdpo, st: sp.st, prog: sp.prog, pilar: sp.pilar, sol: sp.sol, resp: sp.resp, de: sp.de, ate: sp.ate })) {
+    if (v) pagerExtra[k] = v;
+  }
 
   return (
     <>
@@ -168,8 +198,11 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
         units={unitScope.units}
         aiEnabled={(await getPlatformIntegrationFlags()).hasOpenAI}
+        filters={filters}
+        filterOptions={(filterOpts ?? { programas: [], pilares: [], requesters: [], assignees: [] }) as FilterOptions}
+        total={actionsTotal}
       />
-      <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal ?? 0} />
+      <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerExtra} />
     </>
   );
 }

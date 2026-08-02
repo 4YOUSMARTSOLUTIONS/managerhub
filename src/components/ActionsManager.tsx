@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Filter } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, EFF_STATUS_TONE, effStatus, type EffStatus } from "@/lib/constants";
+import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, effStatus, type EffStatus } from "@/lib/constants";
+import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
 import { deleteAction } from "@/lib/actions/actions";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
@@ -29,10 +31,26 @@ export type DemandaCard = {
   attachments: { id: string; filename: string; path: string }[];
 };
 
+/** Filtros aplicados no banco (vêm da URL). */
+export type ActionFilters = {
+  q: string; priority: string; sdpo: string; status: string;
+  programa: string; pilar: string; requester: string; assignee: string; from: string; to: string;
+};
+
+/** Opções dos selects, extraídas da base inteira (não só da página). */
+export type FilterOptions = { programas: string[]; pilares: string[]; requesters: string[]; assignees: string[] };
+
+/** chave do filtro -> nome do parâmetro na URL */
+const PARAM: Record<keyof ActionFilters, string> = {
+  q: "q", priority: "prio", sdpo: "sdpo", status: "st",
+  programa: "prog", pilar: "pilar", requester: "sol", assignee: "resp", from: "de", to: "ate",
+};
+
 export type ActionRow = {
   id: string;
   code: number;
   isSdpo: boolean;
+  programaName: string | null;
   pilarName: string | null;
   secaoName: string | null;
   blocoName: string | null;
@@ -54,8 +72,12 @@ export type ActionRow = {
 
 export function ActionsManager({
   actions, currentUserId, isAdmin, isOwner, people, pilares, secoes, blocos, itens, kpis, tools, series, occurrences, units, aiEnabled,
+  filters, filterOptions, total,
 }: {
   actions: ActionRow[];
+  filters: ActionFilters;
+  filterOptions: FilterOptions;
+  total: number;
   currentUserId: string;
   isAdmin: boolean;
   isOwner: boolean;
@@ -102,43 +124,46 @@ export function ActionsManager({
       requesterId: a.requesterId,
     });
 
-  // ---------- Filtros ----------
+  // ---------- Filtros (aplicados no banco, sincronizados pela URL) ----------
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const [fPriority, setFPriority] = useState("");
-  const [fSdpo, setFSdpo] = useState("");
-  const [fStatus, setFStatus] = useState("");
-  const [fPilar, setFPilar] = useState("");
-  const [fRequester, setFRequester] = useState("");
-  const [fAssignee, setFAssignee] = useState("");
-  const [fFrom, setFFrom] = useState("");
-  const [fTo, setFTo] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const [filtersOpen, setFiltersOpen] = useState(() => Object.values(filters).some(Boolean));
+  const [qDraft, setQDraft] = useState(filters.q);
 
-  const activeCount = [q.trim(), fPriority, fSdpo, fStatus, fPilar, fRequester, fAssignee, fFrom, fTo].filter(Boolean).length;
+  const activeCount = Object.values(filters).filter(Boolean).length;
   const hasFilters = activeCount > 0;
+
+  const applyFilters = useCallback((patch: Partial<ActionFilters>) => {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(patch)) {
+      const param = PARAM[key as keyof ActionFilters];
+      if (value) next.set(param, value); else next.delete(param);
+    }
+    next.delete("p"); // qualquer mudança de filtro volta para a primeira página
+    const qs = next.toString();
+    startTransition(() => router.push(qs ? `/acoes?${qs}` : "/acoes", { scroll: false }));
+  }, [router, searchParams]);
+
   const clearFilters = () => {
-    setQ(""); setFPriority(""); setFSdpo(""); setFStatus(""); setFPilar(""); setFRequester(""); setFAssignee(""); setFFrom(""); setFTo("");
+    setQDraft("");
+    startTransition(() => router.push("/acoes", { scroll: false }));
   };
 
-  // opções derivadas das ações existentes (só o que está em uso)
-  const requesterOpts = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const a of actions) if (a.requesterId && a.requesterName) m.set(a.requesterId, a.requesterName);
-    return [...m].map(([id, name]) => ({ id, name })).sort((x, y) => x.name.localeCompare(y.name));
-  }, [actions]);
-  const assigneeOpts = useMemo(() => {
-    const s = new Set<string>();
-    for (const a of actions) for (const d of a.demandas) for (const n of d.assigneeNames) s.add(n);
-    return [...s].sort((x, y) => x.localeCompare(y));
-  }, [actions]);
-  const pilarOpts = useMemo(() => {
-    const s = new Set<string>();
-    for (const a of actions) if (a.pilarName) s.add(a.pilarName);
-    return [...s].sort((x, y) => x.localeCompare(y));
-  }, [actions]);
+  // busca livre: espera o usuário parar de digitar antes de consultar o banco
+  useEffect(() => {
+    if (qDraft === filters.q) return;
+    const t = setTimeout(() => applyFilters({ q: qDraft }), 400);
+    return () => clearTimeout(t);
+  }, [qDraft, filters.q, applyFilters]);
+  useEffect(() => { setQDraft(filters.q); }, [filters.q]);
 
-  const term = norm(q.trim());
+  const { programas: programaOpts, pilares: pilarOpts, requesters: requesterOpts, assignees: assigneeOpts } = filterOptions;
+
+  // O banco já devolveu só as ações que casam. Aqui resta recortar as DEMANDAS
+  // exibidas dentro de cada ação, para refletir os filtros de status/responsável/busca.
+  const term = norm(filters.q.trim());
   const filtered = useMemo(() => {
     return actions
       .map((a) => {
@@ -150,27 +175,14 @@ export function ActionsManager({
         });
         return { a, items };
       })
-      // filtros de nível AÇÃO (derrubam a ação inteira)
-      .filter(({ a }) => {
-        if (fPriority && a.priority !== fPriority) return false;
-        if (fSdpo === "sim" && !a.isSdpo) return false;
-        if (fSdpo === "nao" && a.isSdpo) return false;
-        if (fPilar && (a.pilarName ?? "") !== fPilar) return false;
-        if (fRequester && a.requesterId !== fRequester) return false;
-        const day = a.createdAt.slice(0, 10);
-        if (fFrom && day < fFrom) return false;
-        if (fTo && day > fTo) return false;
-        return true;
-      })
-      // filtros de nível DEMANDA (mantêm só as demandas que casam)
       .map(({ a, items }) => {
         let its = items;
-        if (fStatus) its = its.filter((x) => x.eff === fStatus);
-        if (fAssignee) its = its.filter((x) => x.d.assigneeNames.includes(fAssignee));
+        if (filters.status) its = its.filter((x) => x.eff === filters.status);
+        if (filters.assignee) its = its.filter((x) => x.d.assigneeNames.includes(filters.assignee));
         return { a, items: its };
       })
       .filter(({ items }) => items.length > 0)
-      // busca livre: ID, pilar/bloco/item, solicitante, KPI/ferramenta (nível ação) ou descrição/responsáveis (demanda)
+      // busca livre: se a ação casa, mantém todas as demandas; senão, só as que casam
       .map(({ a, items }) => {
         if (!term) return { a, items };
         const actionHay = norm(
@@ -182,7 +194,7 @@ export function ActionsManager({
         return { a, items: its };
       })
       .filter(({ items }) => items.length > 0);
-  }, [actions, term, fPriority, fSdpo, fStatus, fPilar, fRequester, fAssignee, fFrom, fTo]);
+  }, [actions, term, filters.status, filters.assignee]);
 
   return (
     <div>
@@ -196,11 +208,11 @@ export function ActionsManager({
               <ExportButton
                 filename="acoes.xlsx"
                 sheetName="Ações"
-                headers={["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "Pilar", "Seção", "Bloco", "Item", "Comentários"]}
+                headers={["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "SDPO", "Programa", "Pilar", "Seção", "Bloco", "Item", "Comentários"]}
                 rows={actions.flatMap((a) => a.demandas.map((d) => {
                   const br = (s: string | null) => (s && s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : (s ?? ""));
                   const st: Record<string, string> = { open: "Aberta", in_progress: "Em andamento", blocked: "Bloqueada", done: "Concluída", cancelled: "Cancelada" };
-                  return [d.description, d.assigneeNames.join("; "), a.requesterName ?? "", "", br(a.createdAt), a.seriesName ?? "", br(d.dueDate), "", st[d.status] ?? d.status, PRIORITY[a.priority], a.unitName ?? "", a.kpiName ?? "", a.toolName ?? "", a.pilarName ?? "", a.secaoName ?? "", a.blocoName ?? "", a.itemName ?? "", ""];
+                  return [d.description, d.assigneeNames.join("; "), a.requesterName ?? "", "", br(a.createdAt), a.seriesName ?? "", br(d.dueDate), "", st[d.status] ?? d.status, PRIORITY[a.priority], a.unitName ?? "", a.kpiName ?? "", a.toolName ?? "", a.isSdpo ? "Sim" : "Não", a.programaName ?? "", a.pilarName ?? "", a.secaoName ?? "", a.blocoName ?? "", a.itemName ?? "", ""];
                 }))}
               />
             )}
@@ -210,9 +222,9 @@ export function ActionsManager({
       />
 
       <Section
-        title={`${filtered.length} ${filtered.length === 1 ? "ação" : "ações"}${hasFilters ? ` de ${actions.length}` : ""}`}
+        title={`${total} ${total === 1 ? "ação" : "ações"}${hasFilters ? " no filtro" : ""}${isPending ? " · atualizando…" : ""}`}
         padded={false}
-        action={actions.length > 0 ? (
+        action={
           <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
             {hasFilters && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>Limpar filtros</button>
@@ -228,25 +240,25 @@ export function ActionsManager({
               {activeCount > 0 && <Badge tone="blue">{activeCount}</Badge>}
             </button>
           </div>
-        ) : undefined}
+        }
       >
-        {actions.length > 0 && filtersOpen && (
+        {filtersOpen && (
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)", background: "var(--mh-surface-2)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.85rem" }}>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Buscar</span>
-                <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="#ID, descrição, responsável…" style={{ width: "100%" }} />
+                <input className="input" value={qDraft} onChange={(e) => setQDraft(e.target.value)} placeholder="#ID, descrição, responsável…" style={{ width: "100%" }} />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Prioridade</span>
-                <select className="select" value={fPriority} onChange={(e) => setFPriority(e.target.value)}>
+                <select className="select" value={filters.priority} onChange={(e) => applyFilters({ priority: e.target.value })}>
                   <option value="">Todas</option>
                   {Object.entries(PRIORITY).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>SDPO</span>
-                <select className="select" value={fSdpo} onChange={(e) => setFSdpo(e.target.value)}>
+                <select className="select" value={filters.sdpo} onChange={(e) => applyFilters({ sdpo: e.target.value })}>
                   <option value="">Todos</option>
                   <option value="sim">Sim</option>
                   <option value="nao">Não</option>
@@ -254,47 +266,54 @@ export function ActionsManager({
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Status</span>
-                <select className="select" value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
+                <select className="select" value={filters.status} onChange={(e) => applyFilters({ status: e.target.value })}>
                   <option value="">Todos</option>
                   {(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => <option key={k} value={k}>{EFF_STATUS_LABEL[k]}</option>)}
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <span className="label" style={{ margin: 0 }}>Programa</span>
+                <select className="select" value={filters.programa} onChange={(e) => applyFilters({ programa: e.target.value })}>
+                  <option value="">Todos</option>
+                  {programaOpts.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Pilar</span>
-                <select className="select" value={fPilar} onChange={(e) => setFPilar(e.target.value)}>
+                <select className="select" value={filters.pilar} onChange={(e) => applyFilters({ pilar: e.target.value })}>
                   <option value="">Todos</option>
                   {pilarOpts.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Solicitante</span>
-                <select className="select" value={fRequester} onChange={(e) => setFRequester(e.target.value)}>
+                <select className="select" value={filters.requester} onChange={(e) => applyFilters({ requester: e.target.value })}>
                   <option value="">Todos</option>
-                  {requesterOpts.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  {requesterOpts.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Responsável</span>
-                <select className="select" value={fAssignee} onChange={(e) => setFAssignee(e.target.value)}>
+                <select className="select" value={filters.assignee} onChange={(e) => applyFilters({ assignee: e.target.value })}>
                   <option value="">Todos</option>
                   {assigneeOpts.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Aberta de</span>
-                <input type="date" className="input" value={fFrom} onChange={(e) => setFFrom(e.target.value)} />
+                <input type="date" className="input" value={filters.from} onChange={(e) => applyFilters({ from: e.target.value })} />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Aberta até</span>
-                <input type="date" className="input" value={fTo} onChange={(e) => setFTo(e.target.value)} />
+                <input type="date" className="input" value={filters.to} onChange={(e) => applyFilters({ to: e.target.value })} />
               </label>
             </div>
           </div>
         )}
-        {actions.length === 0 ? (
-          <EmptyState title="Nenhuma ação" description="Crie ações para acompanhar pendências e o Programa de Excelência." />
-        ) : filtered.length === 0 ? (
-          <EmptyState title="Nenhuma ação encontrada" description="Ajuste ou limpe os filtros para ver as ações." />
+        {filtered.length === 0 ? (
+          hasFilters
+            ? <EmptyState title="Nenhuma ação encontrada" description="Ajuste ou limpe os filtros para ver as ações." />
+            : <EmptyState title="Nenhuma ação" description="Crie ações para acompanhar pendências e o Programa de Excelência." />
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table className="table">
@@ -303,6 +322,7 @@ export function ActionsManager({
                   <th>Ação</th>
                   <th>Prioridade</th>
                   <th>SDPO</th>
+                  <th>Programa</th>
                   <th>Pilar</th>
                   <th>Seção</th>
                   <th>Descrição</th>
@@ -325,6 +345,7 @@ export function ActionsManager({
                         <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>#{a.code}{a.demandas.length > 1 ? `.${di + 1}` : ""}</td>
                         <td>{first && <Badge tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
                         <td>{first && (a.isSdpo ? <Badge tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{first && (a.programaName ? <Badge tone="blue">{a.programaName}</Badge> : <span className="soft">—</span>)}</td>
                         <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
                         <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.secaoName ?? ""}>{first ? (a.secaoName ?? "—") : ""}</td>
                         <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
@@ -347,7 +368,7 @@ export function ActionsManager({
                         </td>
                         <td className="muted" style={{ whiteSpace: "nowrap" }}>{first ? formatDate(a.createdAt) : ""}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          <Badge tone={EFF_STATUS_TONE[eff]}>{EFF_STATUS_LABEL[eff]}</Badge>
+                          <EffStatusBadge eff={eff} overdue={overdue} />
                         </td>
                         <td style={{ whiteSpace: "nowrap", color: overdue ? "var(--mh-danger)" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
