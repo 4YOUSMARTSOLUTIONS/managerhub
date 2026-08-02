@@ -49,7 +49,20 @@ export async function createEmployee(
   }
 }
 
-export type ImportSummary = { created: number; skipped: number; errors: { nome?: string; cpf?: string; erro: string }[] };
+export type ImportSummary = {
+  created: number;
+  /** recontratações: mesmo CPF com código de colaborador novo */
+  updated: number;
+  skipped: number;
+  /** quem já estava cadastrado com o mesmo código (nada a fazer) */
+  skippedList: { nome: string; cpf: string; codigo: string | null }[];
+  updatedList: { nome: string; cpf: string; motivo: string }[];
+  errors: { nome?: string; cpf?: string; erro: string }[];
+};
+
+const EMPTY_SUMMARY: ImportSummary = {
+  created: 0, updated: 0, skipped: 0, skippedList: [], updatedList: [], errors: [],
+};
 
 export async function importEmployees(
   rows: Record<string, string>[],
@@ -58,17 +71,17 @@ export async function importEmployees(
   try {
     const { supabase } = await actionContext();
     if (!password || password.length < 6) {
-      return { created: 0, skipped: 0, errors: [{ erro: "Senha padrão mínima de 6 caracteres." }] };
+      return { ...EMPTY_SUMMARY, errors: [{ erro: "Senha padrão mínima de 6 caracteres." }] };
     }
     const { data, error } = await supabase.rpc("admin_import_employees", {
       p_rows: rows as unknown as never,
       p_password: password,
     });
-    if (error) return { created: 0, skipped: 0, errors: [{ erro: error.message }] };
+    if (error) return { ...EMPTY_SUMMARY, errors: [{ erro: error.message }] };
     revalidatePath("/configuracoes");
-    return data as unknown as ImportSummary;
+    return { ...EMPTY_SUMMARY, ...(data as unknown as ImportSummary) };
   } catch (e) {
-    return { created: 0, skipped: 0, errors: [{ erro: (e as Error).message }] };
+    return { ...EMPTY_SUMMARY, errors: [{ erro: (e as Error).message }] };
   }
 }
 

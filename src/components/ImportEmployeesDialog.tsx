@@ -121,27 +121,33 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
   async function doImport() {
     setImporting(true); setSummary(null); setProgress("");
     const CHUNK = 150;
-    const agg: ImportSummary = { created: 0, skipped: 0, errors: [] };
+    const agg: ImportSummary = { created: 0, updated: 0, skipped: 0, skippedList: [], updatedList: [], errors: [] };
     for (let i = 0; i < rows.length; i += CHUNK) {
       const part = rows.slice(i, i + CHUNK);
       setProgress(`Importando ${Math.min(i + part.length, rows.length)} de ${rows.length}…`);
       const res = await importEmployees(part, password);
       agg.created += res.created;
+      agg.updated += res.updated;
       agg.skipped += res.skipped;
+      agg.skippedList.push(...(res.skippedList ?? []));
+      agg.updatedList.push(...(res.updatedList ?? []));
       agg.errors.push(...res.errors);
     }
     setImporting(false); setProgress("");
     router.refresh();
 
     const parts = [`${agg.created} criado(s)`];
+    if (agg.updated > 0) parts.push(`${agg.updated} recontratado(s)`);
     if (agg.skipped > 0) parts.push(`${agg.skipped} já existiam`);
-    // sucesso limpo (sem erros): avisa e fecha; com erros: mantém aberto para revisão
-    if (agg.errors.length === 0) {
+    // só fecha sozinho quando tudo foi criado; havendo ignorados, recontratados ou
+    // erros, mantém aberto para o usuário ver de quem se trata
+    if (agg.errors.length === 0 && agg.skipped === 0 && agg.updated === 0) {
       toast.success(`Importação concluída: ${parts.join(", ")}.`);
       onClose();
     } else {
       setSummary(agg);
-      toast.warning(`Importação concluída com ${agg.errors.length} erro(s). Revise a lista.`);
+      if (agg.errors.length > 0) toast.warning(`Importação concluída com ${agg.errors.length} erro(s). Revise a lista.`);
+      else toast.success(`Importação concluída: ${parts.join(", ")}.`);
     }
   }
 
@@ -194,9 +200,33 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
           {summary && (
             <div className="card card-pad" style={{ fontSize: "0.9rem" }}>
-              <div className="badge badge-green" style={{ marginBottom: 6 }}>{summary.created} criados</div>{" "}
-              {summary.skipped > 0 && <span className="badge badge-amber">{summary.skipped} já existiam</span>}{" "}
-              {summary.errors.length > 0 && <span className="badge badge-red">{summary.errors.length} erros</span>}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: 6 }}>
+                <span className="badge badge-green">{summary.created} criados</span>
+                {summary.updated > 0 && <span className="badge badge-blue">{summary.updated} recontratados</span>}
+                {summary.skipped > 0 && <span className="badge badge-amber">{summary.skipped} já existiam</span>}
+                {summary.errors.length > 0 && <span className="badge badge-red">{summary.errors.length} erros</span>}
+              </div>
+
+              {summary.updatedList.length > 0 && (
+                <details open style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
+                  <summary style={{ cursor: "pointer" }} className="muted">Recontratados ({summary.updatedList.length})</summary>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 160, overflow: "auto" }}>
+                    {summary.updatedList.map((u, i) => <li key={i}>{u.nome} — {u.motivo}</li>)}
+                  </ul>
+                </details>
+              )}
+
+              {summary.skippedList.length > 0 && (
+                <details open style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
+                  <summary style={{ cursor: "pointer" }} className="muted">Já existiam, nada alterado ({summary.skippedList.length})</summary>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 160, overflow: "auto" }}>
+                    {summary.skippedList.map((s, i) => (
+                      <li key={i}>{s.nome}{s.codigo ? ` — código ${s.codigo}` : ""}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
               {summary.errors.length > 0 && (
                 <ul className="muted" style={{ margin: "0.6rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 160, overflow: "auto" }}>
                   {summary.errors.slice(0, 30).map((e, i) => <li key={i}>{e.nome ?? e.cpf ?? "?"}: {e.erro}</li>)}
