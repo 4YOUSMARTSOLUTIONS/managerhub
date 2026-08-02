@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -44,17 +44,25 @@ function cellStr(v: unknown): string {
 }
 
 export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [rows, setRows] = useState<Row[]>([]);
+  // guarda TODAS as linhas lidas com o sinalizador de demissão: assim alternar
+  // "apenas ativos" só reaplica o filtro, sem precisar reler o arquivo
+  const [parsed, setParsed] = useState<{ data: Row; dismissed: boolean }[]>([]);
   const [ignored, setIgnored] = useState(0);
-  const [dismissed, setDismissed] = useState(0);
   const [onlyActive, setOnlyActive] = useState(true);
   const [password, setPassword] = useState("Mudar@123");
   const [fileName, setFileName] = useState("");
   const [parseError, setParseError] = useState("");
+  const [reading, setReading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState("");
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const router = useRouter();
+
+  const rows = useMemo(
+    () => parsed.filter((p) => !(onlyActive && p.dismissed)).map((p) => p.data),
+    [parsed, onlyActive],
+  );
+  const dismissed = useMemo(() => parsed.filter((p) => p.dismissed).length, [parsed]);
 
   if (!open) return null;
 
@@ -91,7 +99,10 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
   }
 
   async function onFile(file: File) {
-    setParseError(""); setSummary(null);
+    setParseError(""); setSummary(null); setParsed([]); setFileName("");
+    setReading(true);
+    // dá um respiro ao navegador para pintar o "Lendo a planilha…" antes de travar na leitura
+    await new Promise((r) => setTimeout(r, 0));
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
@@ -99,8 +110,8 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, blankrows: false });
       if (aoa.length < 2) { setParseError("Planilha vazia."); return; }
       const headers = (aoa[0] as unknown[]).map((h) => fieldOf(String(h ?? "")));
-      const parsed: Row[] = [];
-      let ign = 0, dis = 0;
+      const out: { data: Row; dismissed: boolean }[] = [];
+      let ign = 0;
       for (let i = 1; i < aoa.length; i++) {
         const r = aoa[i] as unknown[];
         const obj: Row = {};
@@ -108,15 +119,16 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
         // a data de demissão decide se a linha entra (filtro "apenas ativos") E precisa
         // seguir para o servidor: é ela que marca o colaborador como inativo
         const isDismissed = !!obj["__demissao"];
-        if (isDismissed) { dis++; obj["dismissed_at"] = obj["__demissao"]; }
+        if (isDismissed) obj["dismissed_at"] = obj["__demissao"];
         delete obj["__demissao"];
         if (!obj["cpf"] || !obj["full_name"]) { ign++; continue; }
-        if (onlyActive && isDismissed) continue;
-        parsed.push(obj);
+        out.push({ data: obj, dismissed: isDismissed });
       }
-      setRows(parsed); setIgnored(ign); setDismissed(dis); setFileName(file.name);
+      setParsed(out); setIgnored(ign); setFileName(file.name);
     } catch (e) {
       setParseError("Não consegui ler o arquivo: " + (e as Error).message);
+    } finally {
+      setReading(false);
     }
   }
 
@@ -173,11 +185,22 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
           <div>
             <label className="label">Planilha de colaboradores</label>
-            <input type="file" accept=".xlsx,.xls,.csv" className="input" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+            {/* limpa o value depois de ler: sem isso, reescolher o MESMO arquivo não dispara o onChange */}
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="input"
+              disabled={reading || importing}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) onFile(f);
+              }}
+            />
           </div>
 
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.88rem" }}>
-            <input type="checkbox" checked={onlyActive} onChange={(e) => { setOnlyActive(e.target.checked); setRows([]); setFileName(""); }} />
+            <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} disabled={reading || importing} />
             Importar apenas ativos (ignorar quem tem data de demissão)
           </label>
 
@@ -189,7 +212,11 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
           {parseError && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
 
-          {fileName && !summary && (
+          {reading && (
+            <div className="card card-pad soft" style={{ fontSize: "0.88rem" }}>Lendo a planilha…</div>
+          )}
+
+          {fileName && !reading && !summary && (
             <div className="card card-pad" style={{ fontSize: "0.88rem" }}>
               <strong>{fileName}</strong>
               <div className="muted" style={{ marginTop: 4 }}>
@@ -242,7 +269,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
           <span className="soft" style={{ fontSize: "0.82rem" }}>{progress}</span>
           <div style={{ display: "flex", gap: "0.6rem" }}>
             <button type="button" className="btn btn-ghost" onClick={onClose}>{summary ? "Fechar" : "Cancelar"}</button>
-            <button type="button" className="btn btn-primary" disabled={!rows.length || importing || !!summary} onClick={doImport}>
+            <button type="button" className="btn btn-primary" disabled={!rows.length || reading || importing || !!summary} onClick={doImport}>
               {importing ? "Importando…" : `Importar ${rows.length || ""}`}
             </button>
           </div>
