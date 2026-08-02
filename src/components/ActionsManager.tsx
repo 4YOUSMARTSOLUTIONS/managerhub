@@ -14,7 +14,7 @@ import { deleteAction } from "@/lib/actions/actions";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { ActionDialog, type Opt, type SecaoOpt, type BlocoOpt, type ItemOpt, type OccOpt } from "./ActionDialog";
 import { ImportActionsDialog } from "./ImportActionsDialog";
-import { ExportButton } from "@/components/ui/ExportButton";
+import { ExportActionsButton } from "./ExportActionsButton";
 import { DemandaPanel, type DemandaInfo, type AssigneeState } from "./DemandaPanel";
 import type { Person } from "./PeoplePicker";
 import type { Enums } from "@/types/database";
@@ -204,18 +204,7 @@ export function ActionsManager({
         action={
           <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
             {isOwner && <ImportActionsDialog />}
-            {isOwner && (
-              <ExportButton
-                filename="acoes.xlsx"
-                sheetName="Ações"
-                headers={["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "SDPO", "Programa", "Pilar", "Seção", "Bloco", "Item", "Comentários"]}
-                rows={actions.flatMap((a) => a.demandas.map((d) => {
-                  const br = (s: string | null) => (s && s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : (s ?? ""));
-                  const st: Record<string, string> = { open: "Aberta", in_progress: "Em andamento", blocked: "Bloqueada", done: "Concluída", cancelled: "Cancelada" };
-                  return [d.description, d.assigneeNames.join("; "), a.requesterName ?? "", "", br(a.createdAt), a.seriesName ?? "", br(d.dueDate), "", st[d.status] ?? d.status, PRIORITY[a.priority], a.unitName ?? "", a.kpiName ?? "", a.toolName ?? "", a.isSdpo ? "Sim" : "Não", a.programaName ?? "", a.pilarName ?? "", a.secaoName ?? "", a.blocoName ?? "", a.itemName ?? "", ""];
-                }))}
-              />
-            )}
+            {isOwner && <ExportActionsButton filters={filters} hasFilters={hasFilters} />}
             <button className="btn btn-primary" onClick={() => setOpen(true)}>+ Nova ação</button>
           </div>
         }

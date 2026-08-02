@@ -463,3 +463,161 @@ export async function getAttachmentUrl(path: string): Promise<string | null> {
   const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 10);
   return data?.signedUrl ?? null;
 }
+
+// ---------- Exportação (.xlsx) ----------
+/** Colunas iguais às do modelo de importação, para o arquivo poder ser reimportado. */
+const EXPORT_HEADERS = [
+  "Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo",
+  "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "SDPO", "Programa",
+  "Pilar", "Seção", "Bloco", "Item", "Comentários",
+];
+
+const STATUS_LABEL: Record<string, string> = {
+  open: "Aberta", in_progress: "Em andamento", blocked: "Bloqueada", done: "Concluída", cancelled: "Cancelada",
+};
+const PRIORITY_LABEL: Record<string, string> = { low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente" };
+
+const brDate = (s: string | null) => (s && s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "");
+
+/** Divide os ids em blocos, para o .in() não estourar o tamanho da requisição. */
+async function inChunks<T>(ids: string[], size: number, run: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(...(await run(ids.slice(i, i + size))));
+  return out;
+}
+
+export type ActionExportResult = { file?: string; filename?: string; count?: number; error?: string };
+
+/**
+ * Exporta TODAS as ações que casam com os filtros (não apenas a página exibida).
+ * O .xlsx é montado no servidor e devolvido em base64: o arquivo pronto pesa uma
+ * fração do que pesariam as mesmas linhas trafegando como JSON.
+ */
+export async function exportActions(
+  filters: Record<string, string>,
+  units: string[] | null,
+): Promise<ActionExportResult> {
+  try {
+    const { supabase, tenantId, role } = await actionContext();
+    if (role !== "owner") return { error: "Apenas o proprietário pode exportar ações." };
+
+    const { data: search, error: searchError } = await supabase.rpc("search_action_ids", {
+      p_filters: { ...filters, units },
+      p_limit: 100000,
+      p_offset: 0,
+    });
+    if (searchError) return { error: `Falha ao buscar as ações: ${searchError.message}` };
+    const ids = ((search ?? { ids: [] }) as { ids: string[] }).ids ?? [];
+    if (ids.length === 0) return { error: "Nenhuma ação encontrada com os filtros aplicados." };
+
+    const [
+      { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
+      { data: kpis }, { data: tools }, { data: unitsData }, { data: series }, { data: mems },
+    ] = await Promise.all([
+      supabase.from("sdpo_programas").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_secoes").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_blocos").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("sdpo_itens").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("action_kpis").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("action_tools").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
+    ]);
+    const nameMap = (list: { id: string; name: string }[] | null) => new Map((list ?? []).map((x) => [x.id, x.name]));
+    const mProg = nameMap(programas), mPilar = nameMap(pilares), mSecao = nameMap(secoes);
+    const mBloco = nameMap(blocos), mItem = nameMap(itens), mKpi = nameMap(kpis);
+    const mTool = nameMap(tools), mUnit = nameMap(unitsData), mSeries = nameMap(series);
+    const mUser = new Map<string, string>();
+    for (const m of mems ?? []) {
+      const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
+      if (nm) mUser.set(m.user_id as string, nm);
+    }
+
+    const actions = await inChunks(ids, 300, async (c) =>
+      (await supabase.from("actions").select("*").in("id", c)).data ?? []);
+    const demandas = await inChunks(ids, 300, async (c) =>
+      (await supabase.from("action_demandas")
+        .select("id, action_id, description, status, due_date, completed_at, legacy_assignees")
+        .in("action_id", c)).data ?? []);
+
+    const demandaIds = demandas.map((d) => d.id);
+    const assignees = await inChunks(demandaIds, 300, async (c) =>
+      (await supabase.from("action_demanda_assignees")
+        .select("demanda_id, user_id, done_requested_at, completed_at").in("demanda_id", c)).data ?? []);
+    const comments = await inChunks(demandaIds, 300, async (c) =>
+      (await supabase.from("demanda_events")
+        .select("demanda_id, actor_id, body, meta, created_at")
+        .eq("type", "comment").in("demanda_id", c).order("created_at")).data ?? []);
+
+    const respByDemanda = new Map<string, string[]>();
+    const awaitingByDemanda = new Set<string>();
+    for (const s of assignees) {
+      const nm = mUser.get(s.user_id);
+      if (nm) {
+        const arr = respByDemanda.get(s.demanda_id) ?? [];
+        arr.push(nm);
+        respByDemanda.set(s.demanda_id, arr);
+      }
+      if (s.done_requested_at && !s.completed_at) awaitingByDemanda.add(s.demanda_id);
+    }
+    // comentários no formato do modelo: "data | autor | texto", um por linha
+    const commentsByDemanda = new Map<string, string[]>();
+    for (const c of comments) {
+      const author = (c.meta as { author_label?: string } | null)?.author_label
+        ?? (c.actor_id ? mUser.get(c.actor_id) ?? "" : "");
+      const line = [brDate(c.created_at), author, (c.body ?? "").replace(/\r?\n/g, " ")].join(" | ");
+      const arr = commentsByDemanda.get(c.demanda_id) ?? [];
+      arr.push(line);
+      commentsByDemanda.set(c.demanda_id, arr);
+    }
+
+    const actionById = new Map(actions.map((a) => [a.id, a]));
+    const order = new Map(ids.map((id, i) => [id, i]));
+    demandas.sort((x, y) => (order.get(x.action_id) ?? 0) - (order.get(y.action_id) ?? 0));
+
+    const nm = (id: string | null, m: Map<string, string>, legacy: string | null) =>
+      (id ? m.get(id) ?? null : null) ?? legacy ?? "";
+
+    const rows = demandas.map((d) => {
+      const a = actionById.get(d.action_id);
+      if (!a) return null;
+      const legacyResp = (d.legacy_assignees ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      const resp = [...(respByDemanda.get(d.id) ?? []), ...legacyResp];
+      const status = awaitingByDemanda.has(d.id) ? "Aguardando aprovação" : (STATUS_LABEL[d.status] ?? d.status);
+      return [
+        d.description,
+        resp.join("; "),
+        nm(a.requester_id, mUser, a.legacy_requester),
+        nm(a.created_by, mUser, a.legacy_created_by),
+        brDate(a.created_at),
+        nm(a.meeting_series_id, mSeries, a.legacy_meeting),
+        brDate(d.due_date),
+        brDate(d.completed_at),
+        status,
+        PRIORITY_LABEL[a.priority] ?? a.priority,
+        nm(a.unit_id, mUnit, a.legacy_unit) || "Todas as unidades",
+        nm(a.kpi_id, mKpi, a.legacy_kpi),
+        nm(a.tool_id, mTool, a.legacy_tool),
+        a.is_sdpo ? "Sim" : "Não",
+        nm(a.programa_id, mProg, a.legacy_programa),
+        nm(a.pilar_id, mPilar, a.legacy_pilar),
+        nm(a.secao_id, mSecao, a.legacy_secao),
+        nm(a.bloco_id, mBloco, a.legacy_bloco),
+        nm(a.item_id, mItem, a.legacy_item),
+        (commentsByDemanda.get(d.id) ?? []).join("\n"),
+      ];
+    }).filter((r): r is string[] => r !== null);
+
+    const XLSX = await import("xlsx");
+    const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...rows]);
+    ws["!cols"] = [40, 26, 20, 20, 15, 28, 12, 16, 20, 12, 16, 16, 14, 8, 12, 16, 16, 16, 16, 40].map((wch) => ({ wch }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Ações");
+    const file = XLSX.write(wb, { type: "base64", bookType: "xlsx" }) as string;
+    return { file, filename: "acoes.xlsx", count: rows.length };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
