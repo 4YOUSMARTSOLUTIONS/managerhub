@@ -83,9 +83,16 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   ]);
 
   const demandaIds = (demandas ?? []).map((d) => d.id);
-  const { data: assigneeRows } = demandaIds.length
-    ? await supabase.from("action_demanda_assignees").select("demanda_id, user_id, done_requested_at, completed_at").in("demanda_id", demandaIds)
-    : { data: [] as { demanda_id: string; user_id: string; done_requested_at: string | null; completed_at: string | null }[] };
+  const [{ data: assigneeRows }, { data: commentRows }] = demandaIds.length
+    ? await Promise.all([
+        supabase.from("action_demanda_assignees").select("demanda_id, user_id, done_requested_at, completed_at").in("demanda_id", demandaIds),
+        // só o id: a contagem é feita aqui, sem trazer o corpo dos comentários
+        supabase.from("demanda_events").select("demanda_id").eq("type", "comment").in("demanda_id", demandaIds),
+      ])
+    : [
+        { data: [] as { demanda_id: string; user_id: string; done_requested_at: string | null; completed_at: string | null }[] },
+        { data: [] as { demanda_id: string }[] },
+      ];
 
   // mapas de nomes
   const nameById = new Map((profilesData ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
@@ -118,6 +125,11 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   for (const r of assigneeRows ?? []) {
     if (r.done_requested_at && !r.completed_at) pendingByDemanda.set(r.demanda_id, (pendingByDemanda.get(r.demanda_id) ?? 0) + 1);
   }
+  // quantidade de comentários por demanda: mostra na lista se a ação tem acompanhamento
+  const commentsByDemanda = new Map<string, number>();
+  for (const c of commentRows ?? []) {
+    commentsByDemanda.set(c.demanda_id, (commentsByDemanda.get(c.demanda_id) ?? 0) + 1);
+  }
   // anexos por demanda e gerais (demanda_id null)
   const attsByDemanda = new Map<string, { id: string; filename: string; path: string }[]>();
   for (const a of atts ?? []) {
@@ -136,6 +148,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
       assigneeIds: assigneeIdsByDemanda.get(d.id) ?? [],
       assigneeStates: assigneeStatesByDemanda.get(d.id) ?? [],
       pendingCount: pendingByDemanda.get(d.id) ?? 0,
+      commentCount: commentsByDemanda.get(d.id) ?? 0,
       attachments: attsByDemanda.get(d.id) ?? [],
     });
     demandasByAction.set(d.action_id, arr);

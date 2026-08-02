@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Filter } from "lucide-react";
+import { Filter, MessageSquare } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -29,6 +29,8 @@ export type DemandaCard = {
   assigneeIds: string[];
   assigneeStates: AssigneeState[];
   pendingCount: number;
+  /** comentários já lançados: indica se a ação está recebendo acompanhamento */
+  commentCount: number;
   attachments: { id: string; filename: string; path: string }[];
 };
 
@@ -326,6 +328,7 @@ export function ActionsManager({
                   <th>Solicitante</th>
                   <th>Aberta em</th>
                   <th>Status</th>
+                  <th title="Comentários lançados na ação" style={{ textAlign: "center" }}>Coment.</th>
                   <th>Prazo</th>
                   <th style={{ textAlign: "right" }}>Ações</th>
                 </tr>
@@ -365,6 +368,17 @@ export function ActionsManager({
                         <td className="muted" style={{ whiteSpace: "nowrap" }}>{first ? formatDate(a.createdAt) : ""}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           <EffStatusBadge eff={eff} overdue={overdue} />
+                        </td>
+                        {/* sem comentário fica apagado: destaca de longe quem não recebeu follow */}
+                        <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                          <span
+                            className={d.commentCount > 0 ? undefined : "soft"}
+                            title={d.commentCount > 0 ? `${d.commentCount} comentário(s)` : "Nenhum comentário"}
+                            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.82rem" }}
+                          >
+                            <MessageSquare size={13} />
+                            {d.commentCount}
+                          </span>
                         </td>
                         <td style={{ whiteSpace: "nowrap", color: overdue ? "var(--mh-danger)" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
