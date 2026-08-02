@@ -46,13 +46,16 @@ const MULTI_KEYS = ["priority", "status", "programa", "pilar", "requester", "ass
 type MultiKey = (typeof MULTI_KEYS)[number];
 
 /** Opções dos selects, extraídas da base inteira (não só da página). */
-/** `pilares` vem com a marca de legado: nomes que ainda estão nas ações mas saíram do cadastro. */
+/** `legacy` marca o que ainda está nas ações mas saiu do cadastro (pilar) ou do quadro (pessoa). */
+export type FilterOption = { nome: string; legacy: boolean };
 export type FilterOptions = {
   programas: string[];
-  pilares: { nome: string; legacy: boolean }[];
-  requesters: string[];
-  assignees: string[];
+  pilares: FilterOption[];
+  requesters: FilterOption[];
+  assignees: FilterOption[];
 };
+
+const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações antigas.";
 
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
@@ -295,13 +298,17 @@ export function ActionsManager({
               />
               <MultiSelect
                 label="Solicitante" searchable placeholder="Digite o nome…"
-                options={requesterOpts.map((n) => ({ value: n, label: n }))}
+                options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
+                legacyLabel="Legados"
+                legacyHint={PESSOA_LEGADA}
                 selected={filters.requester}
                 onChange={(v) => applyFilters({ requester: v })}
               />
               <MultiSelect
                 label="Responsável" searchable placeholder="Digite o nome…"
-                options={assigneeOpts.map((n) => ({ value: n, label: n }))}
+                options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
+                legacyLabel="Legados"
+                legacyHint={PESSOA_LEGADA}
                 selected={filters.assignee}
                 onChange={(v) => applyFilters({ assignee: v })}
               />
