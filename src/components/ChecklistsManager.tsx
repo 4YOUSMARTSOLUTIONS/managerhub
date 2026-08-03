@@ -109,6 +109,11 @@ export function ChecklistsManager(props: {
 
   const tabs: Tab[] = [
     {
+      // primeira aba, como em Chamados
+      id: "dashboard", label: "Dashboard",
+      content: <EmptyState title="Dashboard em construção" description="Aqui vão os indicadores dos checklists: execuções, conformidade e aderência aos agendamentos." />,
+    },
+    {
       id: "pendentes", label: `Pendentes${pending.length ? ` (${pending.length})` : ""}`,
       content: pending.length === 0 ? <EmptyState title="Nenhum checklist pendente" description="Quando houver checklists agendados para você, eles aparecem aqui." /> : (
         <div className="card" style={{ overflowX: "auto" }}>
@@ -144,12 +149,6 @@ export function ChecklistsManager(props: {
     {
       id: "historico", label: "Histórico",
       content: <HistoryView runs={runs} clById={clById} departments={departments} onOpen={(r) => setRunView(r)} />,
-    },
-    {
-      // por último enquanto está vazia: em primeiro, como em Chamados, todo mundo
-      // cairia numa tela em branco ao abrir Checklists
-      id: "dashboard", label: "Dashboard",
-      content: <EmptyState title="Dashboard em construção" description="Aqui vão os indicadores dos checklists: execuções, conformidade e aderência aos agendamentos." />,
     },
   ];
 
