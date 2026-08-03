@@ -282,9 +282,11 @@ function ModelsView({ checklists, runs, departments, subdepartments, canEdit, on
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
                     <button type="button" className="btn btn-primary btn-sm" disabled={!c.active} onClick={(e) => { e.stopPropagation(); onRun(c); }}>Executar</button>
+                    {/* agendar sai do meio dos ícones e fica ao lado de Executar: as duas
+                        são as ações do dia a dia, o resto é manutenção do cadastro */}
+                    {canEdit(c) && <button type="button" className="btn btn-warning btn-sm" title="Agendar checklist" onClick={(e) => { e.stopPropagation(); onSchedule(c); }}><CalendarClock size={14} /> Agendar</button>}
                     <button type="button" className="icon-btn" title="Ver checklist" aria-label="Ver checklist" onClick={(e) => { e.stopPropagation(); onOpen(c); }}><Eye size={15} /></button>
                     {canEdit(c) && <button type="button" className="icon-btn" title="Editar checklist" aria-label="Editar checklist" onClick={(e) => { e.stopPropagation(); onEdit(c); }}><Pencil size={15} /></button>}
-                    {canEdit(c) && <button type="button" className="icon-btn" title="Agendar checklist" aria-label="Agendar checklist" onClick={(e) => { e.stopPropagation(); onSchedule(c); }}><CalendarClock size={15} /></button>}
                     {canEdit(c) && <button type="button" className="icon-btn" disabled={toggling} title={c.active ? "Inativar checklist" : "Ativar checklist"} aria-label={c.active ? "Inativar checklist" : "Ativar checklist"} onClick={(e) => { e.stopPropagation(); toggleActive(c); }}><Power size={15} /></button>}
                     {canDelete(c) && <button type="button" className="icon-btn icon-btn-danger" disabled={toggling} title="Excluir checklist (nunca executado)" aria-label="Excluir checklist" onClick={(e) => { e.stopPropagation(); del(c); }}><Trash2 size={15} /></button>}
                   </div>
