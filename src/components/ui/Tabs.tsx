@@ -7,11 +7,16 @@ export type Tab = { id: string; label: string; content: React.ReactNode };
 export function Tabs({
   tabs,
   variant = "default",
+  initialId,
 }: {
   tabs: Tab[];
   variant?: "default" | "sub";
+  /** Aba aberta ao entrar na tela. Sem isso abre na primeira; id desconhecido cai na primeira. */
+  initialId?: string;
 }) {
-  const [active, setActive] = useState(tabs[0]?.id);
+  const [active, setActive] = useState(
+    initialId && tabs.some((t) => t.id === initialId) ? initialId : tabs[0]?.id,
+  );
   const current = tabs.find((t) => t.id === active) ?? tabs[0];
 
   return (

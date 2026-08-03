@@ -154,7 +154,10 @@ export function ChecklistsManager(props: {
 
   return (
     <div>
-      <Tabs tabs={tabs} />
+      {/* o Dashboard é a primeira aba, mas está vazio: por ora a tela abre em
+          Checklists para ninguém cair numa tela em branco. Remover quando ele
+          tiver conteúdo. */}
+      <Tabs tabs={tabs} initialId="modelos" />
       {builder && (
         <ChecklistBuilderDialog mode={builder.mode} row={builder.row}
           departments={departments} subdepartments={subdepartments} positions={positions} units={units} members={members}
