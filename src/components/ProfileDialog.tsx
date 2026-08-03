@@ -4,13 +4,14 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { useRouter } from "next/navigation";
 import { Camera, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { AvatarCropper } from "@/components/AvatarCropper";
 import { Badge } from "@/components/ui/Badge";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { confirmDialog } from "@/components/ui/confirm";
 import { changeOwnPassword, getOwnProfile, removeOwnAvatar, updateOwnAvatar, type OwnProfile } from "@/lib/actions/profile";
 import { initialActionState } from "@/lib/actions/types";
-import { AVATAR_MIMES, AVATAR_SIZE } from "@/lib/avatar";
+import { AVATAR_MIMES } from "@/lib/avatar";
 import { ROLE } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 import { formatDate } from "@/lib/format";
@@ -116,20 +117,31 @@ export function ProfileDialog({ onClose }: { onClose: () => void }) {
 
 /** Foto: envio, troca e remoção. A pré-visualização usa o caminho já salvo. */
 function PhotoBlock({ profile, onDone }: { profile: OwnProfile; onDone: () => void }) {
-  const [state, formAction] = useActionState(updateOwnAvatar, initialActionState);
-  const [removendo, startRemover] = useTransition();
-  const formRef = useRef<HTMLFormElement>(null);
+  const [escolhida, setEscolhida] = useState<File | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, start] = useTransition();
 
-  const feito = useRef(onDone);
-  useEffect(() => { feito.current = onDone; }, [onDone]);
-  // dispara pelo resultado da action, não pela identidade do callback
-  useEffect(() => { if (state.ok) feito.current(); }, [state]);
+  /**
+   * O confirmDialog roda FORA da transição: dentro dela o portal não renderiza, a
+   * promise nunca resolve e a tela trava. Mesma observação já registrada em
+   * ChecklistsManager.tsx:210.
+   */
+  const remover = async () => {
+    if (!(await confirmDialog({ tone: "danger", confirmLabel: "Remover", message: "Remover sua foto de perfil?" }))) return;
+    start(async () => {
+      const r = await removeOwnAvatar();
+      if (r.error) setErro(r.error); else { setErro(null); onDone(); }
+    });
+  };
 
-  const remover = () => {
-    startRemover(async () => {
-      if (!(await confirmDialog({ tone: "danger", confirmLabel: "Remover", message: "Remover sua foto de perfil?" }))) return;
-      await removeOwnAvatar();
-      onDone();
+  /** o recorte já sai em AVATAR_SIZE; o servidor normaliza de novo como garantia */
+  const enviarRecorte = (blob: Blob) => {
+    start(async () => {
+      const fd = new FormData();
+      fd.append("avatar", new File([blob], "avatar.webp", { type: "image/webp" }));
+      const r = await updateOwnAvatar(initialActionState, fd);
+      if (r.error) setErro(r.error);
+      else { setErro(null); setEscolhida(null); onDone(); }
     });
   };
 
@@ -138,31 +150,41 @@ function PhotoBlock({ profile, onDone }: { profile: OwnProfile; onDone: () => vo
       <Avatar name={profile.fullName} path={profile.avatarPath} size={72} />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem", minWidth: 0 }}>
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-          <form action={formAction} ref={formRef}>
-            <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer" }}>
-              <Camera size={14} /> {profile.avatarPath ? "Trocar foto" : "Enviar foto"}
-              <input
-                type="file"
-                name="avatar"
-                accept={AVATAR_MIMES.join(",")}
-                hidden
-                onChange={(e) => { if (e.target.files?.length) formRef.current?.requestSubmit(); }}
-              />
-            </label>
-          </form>
+          <label className="btn btn-ghost btn-sm" style={{ cursor: ocupado ? "default" : "pointer" }}>
+            <Camera size={14} /> {profile.avatarPath ? "Trocar foto" : "Enviar foto"}
+            <input
+              type="file"
+              accept={AVATAR_MIMES.join(",")}
+              hidden
+              disabled={ocupado}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = ""; // permite escolher o MESMO arquivo de novo
+                if (f) { setErro(null); setEscolhida(f); }
+              }}
+            />
+          </label>
           {profile.avatarPath && (
-            <button type="button" className="btn btn-ghost btn-sm" disabled={removendo} onClick={remover} style={{ color: "var(--mh-danger)" }}>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={ocupado} onClick={remover} style={{ color: "var(--mh-danger)" }}>
               <Trash2 size={14} /> Remover
             </button>
           )}
         </div>
-        {/* o número vem da constante usada no resize, para os dois não divergirem */}
         <span className="soft" style={{ fontSize: "0.76rem", lineHeight: 1.5 }}>
-          Ideal: foto quadrada de {AVATAR_SIZE} × {AVATAR_SIZE} pixels ou maior.<br />
-          JPG, PNG ou WebP, até 2 MB. Fotos maiores são reduzidas e as retangulares são recortadas, priorizando a área do rosto.
+          Qualquer foto serve: você escolhe o enquadramento na próxima etapa.<br />
+          JPG, PNG ou WebP, até 2 MB.
         </span>
-        {state.error && <span style={{ fontSize: "0.8rem", color: "var(--mh-danger)" }}>{state.error}</span>}
+        {erro && <span style={{ fontSize: "0.8rem", color: "var(--mh-danger)" }}>{erro}</span>}
       </div>
+
+      {escolhida && (
+        <AvatarCropper
+          file={escolhida}
+          saving={ocupado}
+          onCancel={() => setEscolhida(null)}
+          onConfirm={enviarRecorte}
+        />
+      )}
     </section>
   );
 }
