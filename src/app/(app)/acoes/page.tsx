@@ -13,7 +13,8 @@ const PAGE_SIZE = 50;
 type SP = {
   p?: string; q?: string; sdpo?: string; de?: string; ate?: string;
   prio?: string | string[]; st?: string | string[]; prog?: string | string[];
-  pilar?: string | string[]; sol?: string | string[]; resp?: string | string[];
+  pilar?: string | string[]; reuniao?: string | string[];
+  sol?: string | string[]; resp?: string | string[];
 };
 
 const asList = (v: string | string[] | undefined): string[] =>
@@ -34,7 +35,8 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const filters = {
     q: sp.q ?? "", sdpo: sp.sdpo ?? "", from: sp.de ?? "", to: sp.ate ?? "",
     priority: asList(sp.prio), status: asList(sp.st), programa: asList(sp.prog),
-    pilar: asList(sp.pilar), requester: asList(sp.sol), assignee: asList(sp.resp),
+    pilar: asList(sp.pilar), meeting: asList(sp.reuniao),
+    requester: asList(sp.sol), assignee: asList(sp.resp),
   };
 
   const unitIds = effectiveUnitFilter(unitScope);
@@ -200,7 +202,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   for (const [k, v] of Object.entries({ q: sp.q, sdpo: sp.sdpo, de: sp.de, ate: sp.ate })) {
     if (v) pagerQuery.set(k, v as string);
   }
-  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, sol: sp.sol, resp: sp.resp })) {
+  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp })) {
     asList(v).forEach((x) => pagerQuery.append(k, x));
   }
 
@@ -223,7 +225,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         units={unitScope.units}
         aiEnabled={(await getPlatformIntegrationFlags()).hasOpenAI}
         filters={filters}
-        filterOptions={(filterOpts ?? { programas: [], pilares: [], requesters: [], assignees: [] }) as FilterOptions}
+        filterOptions={(filterOpts ?? { programas: [], pilares: [], meetings: [], requesters: [], assignees: [] }) as FilterOptions}
         total={actionsTotal}
       />
       <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerQuery} />

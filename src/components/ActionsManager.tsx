@@ -39,18 +39,22 @@ export type DemandaCard = {
 export type ActionFilters = {
   q: string; sdpo: string; from: string; to: string;
   priority: string[]; status: string[]; programa: string[];
-  pilar: string[]; requester: string[]; assignee: string[];
+  pilar: string[]; meeting: string[]; requester: string[]; assignee: string[];
 };
 
-const MULTI_KEYS = ["priority", "status", "programa", "pilar", "requester", "assignee"] as const;
+const MULTI_KEYS = ["priority", "status", "programa", "pilar", "meeting", "requester", "assignee"] as const;
 type MultiKey = (typeof MULTI_KEYS)[number];
 
 /** Opções dos selects, extraídas da base inteira (não só da página). */
-/** `legacy` marca o que ainda está nas ações mas saiu do cadastro (pilar) ou do quadro (pessoa). */
+/**
+ * `legacy` marca o que ainda está nas ações mas saiu do cadastro (pilar), do quadro
+ * (pessoa) ou da agenda (reunião que não existe mais como série).
+ */
 export type FilterOption = { nome: string; legacy: boolean };
 export type FilterOptions = {
   programas: string[];
   pilares: FilterOption[];
+  meetings: FilterOption[];
   requesters: FilterOption[];
   assignees: FilterOption[];
 };
@@ -60,7 +64,8 @@ const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações an
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
   q: "q", priority: "prio", sdpo: "sdpo", status: "st",
-  programa: "prog", pilar: "pilar", requester: "sol", assignee: "resp", from: "de", to: "ate",
+  programa: "prog", pilar: "pilar", meeting: "reuniao",
+  requester: "sol", assignee: "resp", from: "de", to: "ate",
 };
 
 export type ActionRow = {
@@ -181,7 +186,7 @@ export function ActionsManager({
   }, [qDraft, filters.q, applyFilters]);
   useEffect(() => { setQDraft(filters.q); }, [filters.q]);
 
-  const { programas: programaOpts, pilares: pilarOpts, requesters: requesterOpts, assignees: assigneeOpts } = filterOptions;
+  const { programas: programaOpts, pilares: pilarOpts, meetings: meetingOpts, requesters: requesterOpts, assignees: assigneeOpts } = filterOptions;
 
   // O banco já devolveu só as ações que casam. Aqui resta recortar as DEMANDAS
   // exibidas dentro de cada ação, para refletir os filtros de status/responsável/busca.
@@ -295,6 +300,14 @@ export function ActionsManager({
                 legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
                 selected={filters.pilar}
                 onChange={(v) => applyFilters({ pilar: v })}
+              />
+              <MultiSelect
+                label="Reunião" searchable allLabel="Todas" placeholder="Digite o nome da reunião…"
+                options={meetingOpts.map((m) => ({ value: m.nome, label: m.nome, legacy: m.legacy }))}
+                legacyLabel="Legadas"
+                legacyHint="Reunião que não existe mais como série ativa na agenda. Continua nas ações antigas."
+                selected={filters.meeting}
+                onChange={(v) => applyFilters({ meeting: v })}
               />
               <MultiSelect
                 label="Solicitante" searchable placeholder="Digite o nome…"
