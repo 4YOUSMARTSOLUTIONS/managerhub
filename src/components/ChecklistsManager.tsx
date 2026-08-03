@@ -145,6 +145,12 @@ export function ChecklistsManager(props: {
       id: "historico", label: "Histórico",
       content: <HistoryView runs={runs} clById={clById} departments={departments} onOpen={(r) => setRunView(r)} />,
     },
+    {
+      // por último enquanto está vazia: em primeiro, como em Chamados, todo mundo
+      // cairia numa tela em branco ao abrir Checklists
+      id: "dashboard", label: "Dashboard",
+      content: <EmptyState title="Dashboard em construção" description="Aqui vão os indicadores dos checklists: execuções, conformidade e aderência aos agendamentos." />,
+    },
   ];
 
   return (
@@ -232,26 +238,8 @@ function ModelsView({ checklists, runs, departments, subdepartments, canEdit, on
   const filtered = checklists.filter((c) =>
     (!dept || c.deptId === dept) && (!sub || c.subId === sub));
 
-  const kpis = useMemo(() => {
-    let totExecs = 0, totConf = 0, totNconf = 0;
-    for (const a of statsById.values()) { totExecs += a.execs; totConf += a.conf; totNconf += a.nconf; }
-    return { totExecs, avgPct: totConf + totNconf > 0 ? Math.round((totConf / (totConf + totNconf)) * 100) : null, activeCount: checklists.filter((c) => c.active).length };
-  }, [statsById, checklists]);
-
-  const kpi = (label: string, value: React.ReactNode, color?: string) => (
-    <div className="card card-pad" style={{ flex: "1 1 160px", minWidth: 160 }}>
-      <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.02em" }}>{label}</div>
-      <div style={{ fontSize: "1.8rem", fontWeight: 800, marginTop: "0.2rem", color: color ?? "var(--text)" }}>{value}</div>
-    </div>
-  );
-
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.7rem", marginBottom: "1.1rem" }}>
-        {kpi("Checklists ativos", kpis.activeCount)}
-        {kpi("Execuções totais", kpis.totExecs)}
-        {kpi("Conformidade média", kpis.avgPct == null ? "—" : `${kpis.avgPct}%`, confColor(kpis.avgPct))}
-      </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.7rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
         <div><label className="label">Setor</label><select className="select" value={dept} onChange={(e) => { setDept(e.target.value); setSub(""); }}><option value="">Todos</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
         <div><label className="label">Subsetor</label><select className="select" value={sub} onChange={(e) => setSub(e.target.value)}><option value="">Todos</option>{subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
