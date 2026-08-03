@@ -255,27 +255,22 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
 
   const OPEN: Enums<"action_status">[] = ["open", "in_progress", "blocked"];
 
-  // Parte das demandas que o painel realmente mostra (abertas, ou concluídas depois do
-  // corte) e só então carrega as ações delas. O caminho inverso, carregar todas as ações
-  // da série e depois consultá-las por lista de ids, quebra em série grande: a RLP tem
-  // 985 ações e a URL com 985 uuids faz o PostgREST responder 400. Como o erro era
-  // ignorado, o follow aparecia vazio em vez de acusar a falha.
-  const relevanteSel = "action_id, actions!inner(meeting_series_id)";
-  const [{ data: abertas, error: errAbertas }, { data: concluidas, error: errConcluidas }] = await Promise.all([
-    supabase.from("action_demandas").select(relevanteSel).eq("actions.meeting_series_id", seriesId).in("status", OPEN),
-    supabase.from("action_demandas").select(relevanteSel).eq("actions.meeting_series_id", seriesId).eq("status", "done").gte("completed_at", cutoff),
-  ]);
-  if (errAbertas || errConcluidas) console.error("[getMeetingFollow] demandas da série", errAbertas ?? errConcluidas);
+  // Quais ações o painel de fato mostra: as que têm demanda aberta ou concluída depois
+  // do corte. Vai por RPC porque a RLS avalia can_view_action POR LINHA, e numa série
+  // grande (a RLP tem 985 ações) isso custava ~3000 execuções da função, 2,6 s. A RPC
+  // resolve a mesma visibilidade em conjunto, uma vez: ~200 ms.
+  const { data: relevantesRaw, error: errRelevantes } = await supabase
+    .rpc("meeting_follow_action_ids", { p_series: seriesId, p_occurrence: currentOccurrenceId, p_cutoff: cutoff });
+  if (errRelevantes) console.error("[getMeetingFollow] ids relevantes", errRelevantes);
 
-  const relevantes = [...new Set([...(abertas ?? []), ...(concluidas ?? [])].map((r) => r.action_id))];
+  const relevantes = relevantesRaw ?? [];
   if (!relevantes.length) return { ...empty, previousDate };
 
-  // ações da série, exceto as criadas nesta ocorrência (queremos as "anteriores")
+  // o recorte (série, ocorrência atual, demandas relevantes) já veio da RPC
   const { data: acts, error: errActs } = await supabase
     .from("actions")
     .select("id, code, is_sdpo, priority, due_date, requester_id, occurrence_id, pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id, meeting_series_id")
     .in("id", relevantes)
-    .or(`occurrence_id.is.null,occurrence_id.neq.${currentOccurrenceId}`)
     .order("code", { ascending: true });
   if (errActs) console.error("[getMeetingFollow] ações", errActs);
   const actions = acts ?? [];

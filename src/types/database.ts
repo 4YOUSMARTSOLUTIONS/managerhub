@@ -1227,6 +1227,7 @@ export type Database = {
       create_action: { Args: { p_data: Json }; Returns: Json }
       import_action: { Args: { p_data: Json }; Returns: Json }
       search_action_ids: { Args: { p_filters?: Json; p_limit?: number; p_offset?: number }; Returns: Json }
+      meeting_follow_action_ids: { Args: { p_series: string; p_occurrence: string; p_cutoff: string }; Returns: string[] }
       employee_contract_history: { Args: { p_user: string }; Returns: Json }
       action_filter_options: { Args: Record<string, never>; Returns: Json }
       demanda_comment: { Args: { p_demanda: string; p_body: string }; Returns: undefined }
