@@ -121,25 +121,47 @@ export async function updateOwnAvatar(_prev: ActionState, formData: FormData): P
       return { error: "Formato não aceito. Envie JPG, PNG ou WebP." };
     }
 
+    const entrada = Buffer.from(await file.arrayBuffer());
     let webp: Buffer;
     try {
-      webp = await sharp(Buffer.from(await file.arrayBuffer()))
+      webp = await sharp(entrada)
         .rotate() // respeita a orientação do EXIF antes de descartá-lo
         .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: "cover", position: "attention" })
         .webp({ quality: 82 })
         .toBuffer();
     } catch {
+      console.error("[avatar] sharp não leu a entrada", { declarado: file.size, recebido: entrada.length, tipo: file.type });
       return { error: "Não foi possível ler a imagem. Tente outro arquivo." };
     }
 
+    // Blob, e não o Buffer do sharp: dentro da Server Action o corpo binário chega
+    // ao storage decodificado como texto, cada byte invalido virando U+FFFD. O
+    // arquivo sobe com a assinatura RIFF certa e o conteudo destruido. Os outros
+    // uploads do projeto nunca esbarraram nisso porque repassam o File do FormData.
+    const corpo = new Blob([new Uint8Array(webp)], { type: "image/webp" });
+
     // o user_id como primeiro segmento é o que a policy do bucket exige
     const path = `${userId}/${Date.now()}_${crypto.randomUUID()}.webp`;
-    const up = await supabase.storage.from(AVATAR_BUCKET).upload(path, webp, {
+    const up = await supabase.storage.from(AVATAR_BUCKET).upload(path, corpo, {
       contentType: "image/webp",
       upsert: false,
       cacheControl: "31536000", // a URL muda a cada envio, então pode cachear para sempre
     });
     if (up.error) return { error: "Não foi possível enviar a imagem." };
+
+    // Relê o que foi gravado antes de apontar o perfil para lá. Já aconteceu de o
+    // arquivo chegar ao storage decodificado como texto (bytes virando U+FFFD): a
+    // assinatura RIFF continua certa, o objeto sobe sem erro e só o navegador
+    // descobre, mostrando a inicial de novo. Melhor falhar aqui, com mensagem.
+    const conferencia = await supabase.storage.from(AVATAR_BUCKET).download(path);
+    const gravado = conferencia.data ? Buffer.from(await conferencia.data.arrayBuffer()) : null;
+    let valido = false;
+    try { valido = !!gravado && (await sharp(gravado).metadata()).width === AVATAR_SIZE; } catch { valido = false; }
+    if (!valido) {
+      console.error("[avatar] arquivo gravado saiu inválido", { enviado: webp.length, gravado: gravado?.length ?? 0 });
+      await supabase.storage.from(AVATAR_BUCKET).remove([path]);
+      return { error: "A imagem chegou corrompida ao servidor. Tente novamente." };
+    }
 
     const { data: antes } = await supabase.from("profiles").select("avatar_url").eq("id", userId).maybeSingle();
     const anterior = antes?.avatar_url ?? null;
