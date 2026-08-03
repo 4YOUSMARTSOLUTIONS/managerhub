@@ -253,21 +253,42 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
   const previousDate = prevOcc?.occurred_on ?? null;
   const cutoff = previousDate ?? new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
 
+  const OPEN: Enums<"action_status">[] = ["open", "in_progress", "blocked"];
+
+  // Parte das demandas que o painel realmente mostra (abertas, ou concluídas depois do
+  // corte) e só então carrega as ações delas. O caminho inverso, carregar todas as ações
+  // da série e depois consultá-las por lista de ids, quebra em série grande: a RLP tem
+  // 985 ações e a URL com 985 uuids faz o PostgREST responder 400. Como o erro era
+  // ignorado, o follow aparecia vazio em vez de acusar a falha.
+  const relevanteSel = "action_id, actions!inner(meeting_series_id)";
+  const [{ data: abertas, error: errAbertas }, { data: concluidas, error: errConcluidas }] = await Promise.all([
+    supabase.from("action_demandas").select(relevanteSel).eq("actions.meeting_series_id", seriesId).in("status", OPEN),
+    supabase.from("action_demandas").select(relevanteSel).eq("actions.meeting_series_id", seriesId).eq("status", "done").gte("completed_at", cutoff),
+  ]);
+  if (errAbertas || errConcluidas) console.error("[getMeetingFollow] demandas da série", errAbertas ?? errConcluidas);
+
+  const relevantes = [...new Set([...(abertas ?? []), ...(concluidas ?? [])].map((r) => r.action_id))];
+  if (!relevantes.length) return { ...empty, previousDate };
+
   // ações da série, exceto as criadas nesta ocorrência (queremos as "anteriores")
-  const { data: acts } = await supabase
+  const { data: acts, error: errActs } = await supabase
     .from("actions")
     .select("id, code, is_sdpo, priority, due_date, requester_id, occurrence_id, pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id, meeting_series_id")
-    .eq("meeting_series_id", seriesId)
+    .in("id", relevantes)
     .or(`occurrence_id.is.null,occurrence_id.neq.${currentOccurrenceId}`)
     .order("code", { ascending: true });
+  if (errActs) console.error("[getMeetingFollow] ações", errActs);
   const actions = acts ?? [];
   const actionIds = actions.map((a) => a.id);
   if (!actionIds.length) return { ...empty, previousDate };
 
-  const { data: dems } = await supabase
+  // todas as demandas dessas ações, inclusive as antigas: o rótulo "#123.2" depende da
+  // posição da demanda entre as irmãs da mesma ação
+  const { data: dems, error: errDems } = await supabase
     .from("action_demandas")
     .select("id, action_id, description, status, due_date, completed_at")
     .in("action_id", actionIds);
+  if (errDems) console.error("[getMeetingFollow] demandas", errDems);
   const demandas = dems ?? [];
   const demandaIds = demandas.map((d) => d.id);
 
@@ -311,7 +332,6 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
   const demsByAction = new Map<string, typeof demandas>();
   for (const d of demandas) (demsByAction.get(d.action_id) ?? demsByAction.set(d.action_id, []).get(d.action_id)!).push(d);
 
-  const OPEN: Enums<"action_status">[] = ["open", "in_progress", "blocked"];
   const pending: FollowDemanda[] = [];
   const doneSince: FollowDoneRow[] = [];
 
