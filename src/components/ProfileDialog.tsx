@@ -10,7 +10,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { confirmDialog } from "@/components/ui/confirm";
 import { changeOwnPassword, getOwnProfile, removeOwnAvatar, updateOwnAvatar, type OwnProfile } from "@/lib/actions/profile";
 import { initialActionState } from "@/lib/actions/types";
-import { AVATAR_MIMES } from "@/lib/avatar";
+import { AVATAR_MIMES, AVATAR_SIZE } from "@/lib/avatar";
 import { ROLE } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 import { formatDate } from "@/lib/format";
@@ -156,7 +156,11 @@ function PhotoBlock({ profile, onDone }: { profile: OwnProfile; onDone: () => vo
             </button>
           )}
         </div>
-        <span className="soft" style={{ fontSize: "0.76rem" }}>JPG, PNG ou WebP, até 2 MB. A imagem é recortada em quadrado.</span>
+        {/* o número vem da constante usada no resize, para os dois não divergirem */}
+        <span className="soft" style={{ fontSize: "0.76rem", lineHeight: 1.5 }}>
+          Ideal: foto quadrada de {AVATAR_SIZE} × {AVATAR_SIZE} pixels ou maior.<br />
+          JPG, PNG ou WebP, até 2 MB. Fotos maiores são reduzidas e as retangulares são recortadas, priorizando a área do rosto.
+        </span>
         {state.error && <span style={{ fontSize: "0.8rem", color: "var(--mh-danger)" }}>{state.error}</span>}
       </div>
     </section>
