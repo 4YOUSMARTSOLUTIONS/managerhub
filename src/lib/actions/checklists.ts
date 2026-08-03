@@ -176,9 +176,11 @@ type RunPayload = { checklist_id: string; run_id?: string | null; schedule_id?: 
 const DRAFT_TTL_MS = 60 * 60 * 1000;
 
 async function persistRun(ctx: Ctx, formData: FormData, p: RunPayload, finalize: boolean): Promise<ActionState & { runId?: string }> {
+  // Sim/Não pontua igual à conformidade: "Não" é não conformidade, só muda o rótulo
+  // na tela. Por isso ambos gravam na mesma coluna (conforme/nao_conforme/na).
   let conform = 0, nonconform = 0, na = 0;
   for (const a of p.answers) {
-    if (a.type === "conformidade") {
+    if (a.type === "conformidade" || a.type === "sim_nao") {
       if (a.conformidade === "conforme") conform++;
       else if (a.conformidade === "nao_conforme") nonconform++;
       else if (a.conformidade === "na") na++;
@@ -245,7 +247,8 @@ async function persistRun(ctx: Ctx, formData: FormData, p: RunPayload, finalize:
 
     // "não conformidade" gera tarefa para o responsável (fixo do checklist, ou o criador),
     // desde que o checklist esteja configurado para abrir tarefas automaticamente
-    const nc = p.answers.filter((a) => a.type === "conformidade" && a.conformidade === "nao_conforme");
+    const nc = p.answers.filter((a) =>
+      (a.type === "conformidade" || a.type === "sim_nao") && a.conformidade === "nao_conforme");
     const { data: cl } = nc.length
       ? await ctx.supabase.from("checklists").select("default_assignee_id, created_by, auto_open_tasks").eq("id", p.checklist_id).maybeSingle()
       : { data: null };

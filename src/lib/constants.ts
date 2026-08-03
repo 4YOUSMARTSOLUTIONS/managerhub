@@ -267,6 +267,20 @@ export const CHECKLIST_CONFORMIDADE_LABEL: Record<"conforme" | "nao_conforme" | 
   nao_conforme: "Não conforme",
   na: "N.A.",
 };
+/**
+ * Sim/Não é o mesmo conceito da conformidade, só com outro rótulo: "Não" conta como
+ * não conformidade, gera tarefa e entra no percentual igual. Por isso a resposta é
+ * gravada na mesma coluna (conforme/nao_conforme/na) e só a exibição muda.
+ */
+export const CHECKLIST_SIM_NAO_LABEL: Record<"conforme" | "nao_conforme" | "na", string> = {
+  conforme: "Sim",
+  nao_conforme: "Não",
+  na: "N/A",
+};
+export const checklistAnswerLabel = (type: Enums<"checklist_item_type">) =>
+  type === "sim_nao" ? CHECKLIST_SIM_NAO_LABEL : CHECKLIST_CONFORMIDADE_LABEL;
+/** Tipos que pontuam e podem ser criados hoje; os demais voltam com o construtor de formulários. */
+export const CHECKLIST_SCORED_TYPES = ["conformidade", "sim_nao"] as const;
 export const CHECKLIST_CONFORMIDADE_TONE: Record<"conforme" | "nao_conforme" | "na", Tone> = {
   conforme: "green",
   nao_conforme: "red",

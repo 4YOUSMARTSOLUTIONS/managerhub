@@ -15,7 +15,7 @@ import {
 } from "@/lib/actions/checklists";
 import {
   CHECKLIST_ITEM_TYPE_LABEL, CHECKLIST_FREQUENCY_LABEL, CHECKLIST_VISIBILITY_LABEL,
-  CHECKLIST_CONFORMIDADE_LABEL, CHECKLIST_CONFORMIDADE_TONE, WEEKDAYS_PT,
+  CHECKLIST_CONFORMIDADE_TONE, CHECKLIST_SCORED_TYPES, checklistAnswerLabel, WEEKDAYS_PT,
   CHECKLIST_TASK_STATUS_LABEL, CHECKLIST_TASK_STATUS_TONE,
 } from "@/lib/constants";
 import { currentOccurrence, type Occurrence } from "@/lib/checklist-schedule";
@@ -53,7 +53,10 @@ export type RunAnswer = { itemId: string; conformidade: string | null; bool: boo
 export type RunPhoto = { id: string; itemId: string; path: string; filename: string };
 export type RunRow = { id: string; checklistId: string; executorId: string; executorName: string; unitId: string | null; unitName: string | null; periodKey: string | null; score: number | null; conformCount: number; nonconformCount: number; naCount: number; startedAt: string | null; completedAt: string | null; answers: RunAnswer[]; photos: RunPhoto[] };
 
-const ITEM_TYPE_OPTS = Object.entries(CHECKLIST_ITEM_TYPE_LABEL) as [Enums<"checklist_item_type">, string][];
+// só os tipos que pontuam: texto, número, seleção e nota voltam com o construtor de
+// formulários. O enum do banco segue completo, então nada quebra se algum item antigo
+// tiver um desses tipos.
+const ITEM_TYPE_OPTS = CHECKLIST_SCORED_TYPES.map((t) => [t, CHECKLIST_ITEM_TYPE_LABEL[t]] as const);
 const FREQ_OPTS = Object.entries(CHECKLIST_FREQUENCY_LABEL) as [Enums<"checklist_frequency">, string][];
 
 export function ChecklistsManager(props: {
@@ -489,8 +492,8 @@ function ChecklistBuilderDialog({ mode, row, departments, subdepartments, positi
                 <label style={{ display: "flex", gap: "0.3rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={it.required} onChange={(e) => upItem(it.key, { required: e.target.checked })} /> Obrigatório</label>
                 {/* desligar "permitir foto" também derruba a exigência de foto (não dá p/ exigir o que não é permitido) */}
                 <label style={{ display: "flex", gap: "0.3rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={it.allowPhoto} onChange={(e) => upItem(it.key, e.target.checked ? { allowPhoto: true } : { allowPhoto: false, requirePhotoOnNc: false })} /> Permitir foto</label>
-                {it.type === "conformidade" && (
-                  <label style={{ display: "flex", gap: "0.3rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={it.allowNa} onChange={(e) => upItem(it.key, { allowNa: e.target.checked })} /> Permitir N.A.</label>
+                {(it.type === "conformidade" || it.type === "sim_nao") && (
+                  <label style={{ display: "flex", gap: "0.3rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={it.allowNa} onChange={(e) => upItem(it.key, { allowNa: e.target.checked })} /> Permitir {it.type === "conformidade" ? "N.A." : "N/A"}</label>
                 )}
                 {(it.type === "conformidade" || it.type === "sim_nao") && (
                   <label style={{ display: "flex", gap: "0.3rem", alignItems: "center", cursor: "pointer" }}><input type="checkbox" checked={it.requireNoteOnNc} onChange={(e) => upItem(it.key, { requireNoteOnNc: e.target.checked })} /> Exigir observação se {it.type === "conformidade" ? "não conforme" : "“Não”"}</label>
@@ -575,7 +578,7 @@ function ChecklistDetailDialog({ c, canEdit, members, positions, departments, on
               <span className="soft" style={{ fontSize: "0.78rem" }}>{n}.</span>
               <span style={{ fontWeight: 600 }}>{i.label}</span>
               <span className="soft" style={{ fontSize: "0.75rem" }}>
-                · {CHECKLIST_ITEM_TYPE_LABEL[i.type]}{i.type === "conformidade" && !i.allowNa ? " · sem N.A." : ""}{i.allowPhoto ? " · foto" : ""}{i.requireNoteOnNc ? " · obs. obrigatória na NC" : ""}{i.requirePhotoOnNc ? " · foto obrigatória na NC" : ""}{i.required ? "" : " · opcional"}
+                · {CHECKLIST_ITEM_TYPE_LABEL[i.type]}{(i.type === "conformidade" || i.type === "sim_nao") && !i.allowNa ? (i.type === "conformidade" ? " · sem N.A." : " · sem N/A") : ""}{i.allowPhoto ? " · foto" : ""}{i.requireNoteOnNc ? " · obs. obrigatória na NC" : ""}{i.requirePhotoOnNc ? " · foto obrigatória na NC" : ""}{i.required ? "" : " · opcional"}
               </span>
             </div>
           </Fragment>
@@ -728,7 +731,7 @@ function ChecklistRunDialog({ checklist, scheduleId, periodKey, unitId, draft, o
     return { ...s, [itemId]: open };
   });
 
-  const conformDone = checklist.items.filter((i) => i.type === "conformidade");
+  const conformDone = checklist.items.filter((i) => i.type === "conformidade" || i.type === "sim_nao");
   const conf = conformDone.filter((i) => ans[i.id]?.conformidade === "conforme").length;
   const nconf = conformDone.filter((i) => ans[i.id]?.conformidade === "nao_conforme").length;
   const parcial = conf + nconf > 0 ? Math.round((conf / (conf + nconf)) * 100) : null;
@@ -789,12 +792,12 @@ function ChecklistRunDialog({ checklist, scheduleId, periodKey, unitId, draft, o
     for (const it of checklist.items) {
       const a = ans[it.id];
       if (it.required) {
-        const filled = it.type === "conformidade" ? !!a?.conformidade : it.type === "sim_nao" ? a?.bool != null
+        const filled = (it.type === "conformidade" || it.type === "sim_nao") ? !!a?.conformidade
           : it.type === "texto" ? !!a?.text?.trim() : it.type === "numero" ? !!a?.number?.trim() : !!a?.option;
         if (!filled) { setError(`Responda o item obrigatório: “${it.label}”.`); return; }
       }
       // exigências da não conformidade (definidas no cadastro do item)
-      const isNc = (it.type === "conformidade" && a?.conformidade === "nao_conforme") || (it.type === "sim_nao" && a?.bool === false);
+      const isNc = a?.conformidade === "nao_conforme";
       if (!isNc) continue;
       if (it.requireNoteOnNc && !(a?.note ?? "").trim()) { setError(`Informe a observação da não conformidade em: “${it.label}”.`); return; }
       if (it.requirePhotoOnNc && (a?.files?.length ?? 0) === 0) { setError(`Anexe uma foto da não conformidade em: “${it.label}”.`); return; }
@@ -829,23 +832,21 @@ function ChecklistRunDialog({ checklist, scheduleId, periodKey, unitId, draft, o
         const a = ans[it.id];
         const inline = it.type === "conformidade" || it.type === "sim_nao" || it.type === "selecao" || it.type === "nota";
         // marcado como "Não conforme" / "Não": chama atenção (pulso) p/ observação e foto
-        const isNc = (it.type === "conformidade" && a?.conformidade === "nao_conforme") || (it.type === "sim_nao" && a?.bool === false);
+        const isNc = a?.conformidade === "nao_conforme";
         const noteVisible = !!noteOpen[it.id] || (isNc && it.requireNoteOnNc);
         const noteMissing = isNc && !(a?.note ?? "").trim();
         const photoMissing = isNc && (a?.files?.length ?? 0) === 0;
         const btnStyle = { cursor: "pointer", border: "none", padding: "0.2rem 0.55rem", fontSize: "0.78rem" } as const;
         const control = (
           <>
-            {it.type === "conformidade" && (it.allowNa ? (["conforme", "nao_conforme", "na"] as const) : (["conforme", "nao_conforme"] as const)).map((v) => (
+            {/* Sim/Não usa o mesmo controle de três estados da conformidade, só com outro
+                rótulo: é o que faz "Não" contar como não conformidade */}
+            {(it.type === "conformidade" || it.type === "sim_nao") && (it.allowNa ? (["conforme", "nao_conforme", "na"] as const) : (["conforme", "nao_conforme"] as const)).map((v) => (
               <button key={v} type="button" onClick={() => set(it.id, { conformidade: v })}
                 className={a?.conformidade === v ? `badge badge-${CHECKLIST_CONFORMIDADE_TONE[v]}` : "badge badge-gray"} style={btnStyle}>
-                {a?.conformidade === v ? "✓ " : ""}{CHECKLIST_CONFORMIDADE_LABEL[v]}
+                {a?.conformidade === v ? "✓ " : ""}{checklistAnswerLabel(it.type)[v]}
               </button>
             ))}
-            {it.type === "sim_nao" && (<>
-              <button type="button" onClick={() => set(it.id, { bool: true })} className={a?.bool === true ? "badge badge-green" : "badge badge-gray"} style={btnStyle}>Sim</button>
-              <button type="button" onClick={() => set(it.id, { bool: false })} className={a?.bool === false ? "badge badge-red" : "badge badge-gray"} style={btnStyle}>Não</button>
-            </>)}
             {(it.type === "selecao" || it.type === "nota") && (
               <select className="select" value={a?.option ?? ""} onChange={(e) => set(it.id, { option: e.target.value })} style={{ padding: "0.25rem 0.5rem", height: "auto", fontSize: "0.82rem" }}>
                 <option value="">Selecione…</option>{(it.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
@@ -932,8 +933,9 @@ function RunViewDialog({ run, checklist, canDelete, onClose }: { run: RunRow; ch
           <div key={it.id} style={{ borderTop: "1px solid var(--border)", paddingTop: "0.5rem" }}>
             <div style={{ fontWeight: 600 }}>{idx + 1}. {it.label}</div>
             <div style={{ marginTop: 2 }}>
-              {it.type === "conformidade" && a?.conformidade ? <Badge tone={CHECKLIST_CONFORMIDADE_TONE[a.conformidade as "conforme" | "nao_conforme" | "na"]}>{CHECKLIST_CONFORMIDADE_LABEL[a.conformidade as "conforme" | "nao_conforme" | "na"]}</Badge>
-                : it.type === "sim_nao" ? <Badge tone={a?.bool ? "green" : "red"}>{a?.bool ? "Sim" : "Não"}</Badge>
+              {(it.type === "conformidade" || it.type === "sim_nao") && a?.conformidade
+                ? (() => { const v = a.conformidade as "conforme" | "nao_conforme" | "na";
+                    return <Badge tone={CHECKLIST_CONFORMIDADE_TONE[v]}>{checklistAnswerLabel(it.type)[v]}</Badge>; })()
                 : it.type === "numero" ? <span>{a?.number ?? "—"}</span>
                 : (it.type === "selecao" || it.type === "nota") ? <span>{a?.option ?? "—"}</span>
                 : <span style={{ whiteSpace: "pre-wrap" }}>{a?.text ?? "—"}</span>}
