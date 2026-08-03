@@ -936,6 +936,13 @@ a {
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
+/* quando a bolinha é uma foto: mesma classe, para herdar o tamanho daqui e também
+   o override .table .avatar (26px). O gradiente sai de baixo da imagem. */
+img.avatar {
+  object-fit: cover;
+  background: none;
+  display: block;
+}
 .progress-track {
   height: 8px;
   width: 100%;

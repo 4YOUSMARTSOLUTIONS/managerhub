@@ -143,7 +143,7 @@ export function TicketsManager({
                     <td>
                       {t.requesterName ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }} title={t.requesterName}>
-                          <Avatar name={t.requesterName} />
+                          <Avatar name={t.requesterName} userId={t.requesterId} />
                           <span className="muted" style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>{shortName(t.requesterName)}</span>
                         </span>
                       ) : <span className="soft">—</span>}
@@ -151,7 +151,7 @@ export function TicketsManager({
                     <td>
                       {t.assigneeName ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }} title={t.assigneeName}>
-                          <Avatar name={t.assigneeName} />
+                          <Avatar name={t.assigneeName} userId={t.assigneeId} />
                           <span className="muted" style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>{shortName(t.assigneeName)}</span>
                         </span>
                       ) : <span className="soft">—</span>}

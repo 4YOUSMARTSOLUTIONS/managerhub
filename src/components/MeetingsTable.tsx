@@ -100,7 +100,7 @@ export function MeetingsTable({
                   <td>
                     {m.creatorName ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-                        <Avatar name={m.creatorName} />
+                        <Avatar name={m.creatorName} userId={m.created_by} />
                         <span className="muted" style={{ fontSize: "0.85rem" }}>{m.creatorName}</span>
                       </span>
                     ) : <span className="soft">—</span>}

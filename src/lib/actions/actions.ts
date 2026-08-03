@@ -425,7 +425,7 @@ export async function demandaAssigneeReopen(demandaId: string, userId: string, n
   } catch (e) { return { error: (e as Error).message }; }
 }
 
-export type TimelineEvent = { id: string; type: string; actorName: string | null; body: string | null; meta: Record<string, unknown>; createdAt: string };
+export type TimelineEvent = { id: string; type: string; actorId: string | null; actorName: string | null; body: string | null; meta: Record<string, unknown>; createdAt: string };
 export type PendingReq = { id: string; type: string; newDueDate: string | null; note: string | null; requestedByName: string | null; createdAt: string };
 
 export async function getDemandaTimeline(demandaId: string): Promise<{ events: TimelineEvent[]; requests: PendingReq[]; status: Enums<"action_status">; dueDate: string | null }> {
@@ -444,7 +444,7 @@ export async function getDemandaTimeline(demandaId: string): Promise<{ events: T
       const meta = (e.meta as Record<string, unknown>) ?? {};
       const label = typeof meta.author_label === "string" ? meta.author_label : null;
       return {
-        id: e.id, type: e.type,
+        id: e.id, type: e.type, actorId: e.actor_id,
         actorName: (e.actor_id ? nameById.get(e.actor_id) ?? null : null) ?? label,
         body: e.body, meta, createdAt: e.created_at,
       };

@@ -307,7 +307,7 @@ export function RegisterDialog({
                   return (
                     <label key={id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.6rem", borderBottom: "1px solid var(--border)", cursor: "pointer", fontSize: "0.85rem" }}>
                       <input type="checkbox" checked={!!present[id]} onChange={(e) => setPresent((prev) => ({ ...prev, [id]: e.target.checked }))} />
-                      <Avatar name={p?.name ?? "?"} />
+                      <Avatar name={p?.name ?? "?"} userId={id} />
                       <span style={{ flex: 1 }}>{p?.name ?? "—"}</span>
                       <span className="soft" style={{ fontSize: "0.75rem" }}>{present[id] ? "Presente" : "Ausente"}</span>
                     </label>

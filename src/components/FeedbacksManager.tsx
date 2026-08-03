@@ -256,7 +256,7 @@ function FeedbackDashboard({ roster, feedbacks, sessions, compName, cadenceRules
               else { const atrasado = d == null || d > rule; cad = <Badge tone={atrasado ? "red" : "green"}>{atrasado ? "Atrasado" : "Em dia"}</Badge>; }
               return (
                 <tr key={r.id}>
-                  <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}><span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}><Avatar name={r.name} /> {shortName(r.name)}</span></td>
+                  <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}><span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}><Avatar name={r.name} userId={r.id} /> {shortName(r.name)}</span></td>
                   <td style={{ textAlign: "right" }}>{countMonth.get(r.id) ?? 0}</td>
                   <td style={{ textAlign: "right" }}>{countYear.get(r.id) ?? 0}</td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{last ? `${formatDateTime(last)} · há ${d}d` : <span className="soft">nunca</span>}</td>
@@ -457,7 +457,7 @@ function FeedbackCard({ f, compName, showSubject, canEdit, onEdit, showAck, onCr
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
-        {showSubject && <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={f.subjectName} /> {f.subjectName}</span>}
+        {showSubject && <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={f.subjectName} userId={f.subjectId} /> {f.subjectName}</span>}
         <span className="soft">{showSubject ? "· por " : "de "}{shortName(f.authorName)}</span>
       </div>
       {f.title && <div style={{ fontWeight: 700 }}>{f.title}</div>}
@@ -521,7 +521,7 @@ function SessionCard({ s, feedbacks, showSubject, canEdit, onEdit, showAck }: {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
-        {showSubject && <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={s.subjectName} /> {s.subjectName}</span>}
+        {showSubject && <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={s.subjectName} userId={s.subjectId} /> {s.subjectName}</span>}
         <span className="soft">{showSubject ? "· por " : "de "}{shortName(s.authorName)}</span>
       </div>
       {s.title && <div style={{ fontWeight: 700 }}>{s.title}</div>}
@@ -605,7 +605,7 @@ function PdiActionCard({ a, currentUserId, canManageThis, isSubject, sourceFeedb
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
         <Badge tone={PDI_STATUS_TONE[a.status]}>{PDI_STATUS_LABEL[a.status]}</Badge>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={a.subjectName} /> {a.subjectName}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={a.subjectName} userId={a.subjectId} /> {a.subjectName}</span>
         {a.dueDate && <span className="soft" style={{ fontSize: "0.78rem" }}>Prazo: {formatDate(a.dueDate)}</span>}
         <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
           {canManageThis && !terminal && (

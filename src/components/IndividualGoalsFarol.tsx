@@ -371,7 +371,7 @@ export function IndividualGoalsFarol({
                   {showOwner && (
                     <td className="muted" style={{ whiteSpace: "nowrap" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                        <Avatar name={g.ownerName} /> {g.ownerName}
+                        <Avatar name={g.ownerName} userId={g.ownerId} /> {g.ownerName}
                       </span>
                     </td>
                   )}

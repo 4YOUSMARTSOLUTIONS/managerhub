@@ -346,18 +346,19 @@ export async function rateTicket(input: { ticket_id: string; score: number; comm
 }
 
 // ---------- Comentários do chamado ----------
-export type TicketComment = { id: string; body: string; authorName: string | null; createdAt: string };
+export type TicketComment = { id: string; body: string; authorId: string | null; authorName: string | null; createdAt: string };
 
 export async function getTicketComments(ticketId: string): Promise<TicketComment[]> {
   const { supabase } = await actionContext();
   const { data } = await supabase
     .from("ticket_comments")
-    .select("id, body, created_at, author:profiles!author_id(full_name)")
+    .select("id, body, created_at, author_id, author:profiles!author_id(full_name)")
     .eq("ticket_id", ticketId)
     .order("created_at", { ascending: true });
   return (data ?? []).map((c) => ({
     id: c.id,
     body: c.body,
+    authorId: c.author_id,
     authorName: (c.author as unknown as { full_name: string | null } | null)?.full_name ?? null,
     createdAt: c.created_at,
   }));

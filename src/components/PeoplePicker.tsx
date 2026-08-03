@@ -43,7 +43,7 @@ export function PeoplePicker({
             const p = byId.get(id);
             return (
               <span key={id} className="reg-chip" style={{ paddingLeft: "0.35rem" }}>
-                <Avatar name={p?.name ?? "?"} />
+                <Avatar name={p?.name ?? "?"} userId={id} />
                 <span style={{ fontSize: "0.8rem" }}>{p?.name ?? "—"}</span>
                 <button type="button" onClick={() => remove(id)} aria-label="Remover">×</button>
               </span>
@@ -68,7 +68,7 @@ export function PeoplePicker({
                   onClick={() => add(p.id)}
                   style={{ display: "flex", alignItems: "center", gap: "0.5rem", width: "100%", textAlign: "left", padding: "0.45rem 0.6rem", background: "none", border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer", fontSize: "0.85rem" }}
                 >
-                  <Avatar name={p.name} />
+                  <Avatar name={p.name} userId={p.id} />
                   {p.name}
                 </button>
               ))}

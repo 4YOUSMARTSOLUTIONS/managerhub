@@ -278,7 +278,7 @@ export function TicketPanel({
                 <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem comentários.</p>
               ) : comments.map((c) => (
                 <div key={c.id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-                  <Avatar name={c.authorName ?? "?"} />
+                  <Avatar name={c.authorName ?? "?"} userId={c.authorId} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: "0.83rem" }}>
                       <strong>{c.authorName ?? "—"}</strong>

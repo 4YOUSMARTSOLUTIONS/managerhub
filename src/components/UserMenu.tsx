@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, Moon, Sun } from "lucide-react";
+import { ChevronDown, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { useAvatars } from "@/components/AvatarProvider";
+import { ProfileDialog } from "@/components/ProfileDialog";
 import { setTheme } from "@/lib/actions/theme";
 import { signOut } from "@/lib/actions/auth";
 import { ROLE } from "@/lib/constants";
@@ -25,10 +27,12 @@ export function UserMenu({
 }) {
   const isSidebar = variant === "sidebar";
   const [open, setOpen] = useState(false);
+  const [perfil, setPerfil] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
   const next: Theme = theme === "dark" ? "light" : "dark";
+  const { currentUserId } = useAvatars();
 
   useEffect(() => {
     if (!open) return;
@@ -77,7 +81,7 @@ export function UserMenu({
           padding: "0.2rem 0.3rem", borderRadius: "var(--mh-radius-md)", color: "inherit",
         }}
       >
-        <Avatar name={userName} />
+        <Avatar name={userName} userId={currentUserId} />
         {isSidebar && (
           <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
             <span style={{ display: "block", fontSize: "0.83rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{userName ?? "Usuário"}</span>
@@ -118,6 +122,18 @@ export function UserMenu({
             type="button"
             role="menuitem"
             style={itemStyle}
+            onClick={() => { setPerfil(true); setOpen(false); }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+          >
+            <UserRound size={16} />
+            Meu perfil
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            style={itemStyle}
             disabled={pending}
             onClick={() => start(async () => { await setTheme(next); router.refresh(); setOpen(false); })}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
@@ -141,6 +157,8 @@ export function UserMenu({
           </form>
         </div>
       )}
+
+      {perfil && <ProfileDialog onClose={() => setPerfil(false)} />}
     </div>
   );
 }

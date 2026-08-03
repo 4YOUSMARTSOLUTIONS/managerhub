@@ -566,7 +566,7 @@ function DetailModal({ ev, onClose, onEdit, onDelete }: { ev: Ev; onClose: () =>
           <Row label="Agendado por">
             {ev.creatorName ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
-                <Avatar name={ev.creatorName} />
+                <Avatar name={ev.creatorName} userId={ev.created_by} />
                 {ev.creatorName}
               </span>
             ) : <span className="soft">—</span>}

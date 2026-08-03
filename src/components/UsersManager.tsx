@@ -225,7 +225,7 @@ export function UsersManager({
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{e.cpf ? formatCpf(e.cpf) : "—"}</td>
                   <td>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", fontWeight: 600 }}>
-                      <Avatar name={e.fullName} />
+                      <Avatar name={e.fullName} userId={e.userId} />
                       {e.fullName ?? "—"}
                       {isSelf && <span className="soft" style={{ fontSize: "0.72rem" }}>(você)</span>}
                     </span>

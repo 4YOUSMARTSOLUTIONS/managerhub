@@ -4,6 +4,7 @@ import { requireContext } from "@/lib/tenant";
 import { checkSuperAdmin } from "@/lib/platform";
 import { getTheme } from "@/lib/theme";
 import { getModuleAccess } from "@/lib/module-access";
+import { getAvatarMap } from "@/lib/avatars";
 import { AppShell } from "@/components/AppShell";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
@@ -39,6 +40,7 @@ export default async function AppLayout({
           moduleState={CORE_ONLY_STATE}
           construction={[]}
           platformOnly
+          currentUserId={user.id}
         >
           {children}
         </AppShell>
@@ -49,7 +51,12 @@ export default async function AppLayout({
   // Fluxo normal: usuário de empresa OU super admin operando a empresa selecionada.
   const ctx = await requireContext();
   const { state: moduleState, construction } = await getModuleAccess();
-  const userName = user.email?.split("@")[0] ?? "Usuário";
+  const avatars = await getAvatarMap(ctx.tenant.id);
+
+  // o nome real vem do cadastro; o prefixo do e-mail é só a reserva de quem ainda
+  // não tem full_name (e rende uma inicial só: "luiz.nobre" vira "l")
+  const { data: perfil } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+  const userName = perfil?.full_name?.trim() || user.email?.split("@")[0] || "Usuário";
 
   return (
     <AppShell
@@ -62,6 +69,8 @@ export default async function AppLayout({
       moduleState={moduleState}
       construction={[...construction]}
       companyScope={ctx.companyScope}
+      avatars={avatars}
+      currentUserId={user.id}
     >
       {children}
     </AppShell>

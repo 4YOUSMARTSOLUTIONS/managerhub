@@ -316,7 +316,7 @@ export function DemandaPanel({
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: 280, overflowY: "auto" }}>
               {timelineEvents.length === 0 ? <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem eventos.</p> : timelineEvents.slice().reverse().map((e) => (
                 <div key={e.id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-                  <Avatar name={e.actorName ?? "?"} />
+                  <Avatar name={e.actorName ?? "?"} userId={e.actorId} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: "0.83rem" }}>
                       <strong>{e.actorName ?? "—"}</strong>{" "}

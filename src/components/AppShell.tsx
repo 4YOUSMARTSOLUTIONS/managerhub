@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { EscToClose } from "@/components/EscToClose";
+import { AvatarProvider } from "@/components/AvatarProvider";
 import type { Enums } from "@/types/database";
 import type { UnitScope, CompanyScope } from "@/lib/tenant";
 import type { Theme } from "@/lib/theme";
@@ -20,6 +21,8 @@ export function AppShell({
   construction,
   platformOnly = false,
   companyScope = null,
+  avatars = {},
+  currentUserId = null,
   children,
 }: {
   role: Enums<"member_role">;
@@ -35,11 +38,15 @@ export function AppShell({
   platformOnly?: boolean;
   /** super admin: seletor de empresa no topo */
   companyScope?: CompanyScope | null;
+  /** user_id -> caminho da foto, carregado uma vez por request no layout */
+  avatars?: Record<string, string>;
+  currentUserId?: string | null;
   children: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
+    <AvatarProvider byUser={avatars} currentUserId={currentUserId}>
     <div className="app-root">
       <EscToClose />
       <Sidebar
@@ -65,5 +72,6 @@ export function AppShell({
         <main className="app-content">{children}</main>
       </div>
     </div>
+    </AvatarProvider>
   );
 }
