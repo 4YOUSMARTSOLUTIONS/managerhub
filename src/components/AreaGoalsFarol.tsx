@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { MonthInput } from "@/components/ui/MonthInput";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportAreaGoalsDialog } from "@/components/ImportAreaGoalsDialog";
@@ -41,8 +42,17 @@ export type Opt = { id: string; name: string };
 export type SubOpt = { id: string; name: string; departmentId: string };
 export type Member = { id: string; name: string };
 
-function nowMonth() {
+/**
+ * Mes de abertura do farol: o ANTERIOR, nao o corrente.
+ *
+ * Meta mensal se apura depois que o mes fecha. Abrir em agosto significava cair
+ * num mes ainda em curso, sempre vazio, e obrigar o usuario a voltar um mes toda
+ * vez que entra na tela.
+ */
+function mesAnterior() {
   const d = new Date();
+  d.setDate(1); // evita o salto de 31/03 para 03/03 ao voltar um mes
+  d.setMonth(d.getMonth() - 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 function nowYear() {
@@ -125,7 +135,7 @@ export function AreaGoalsFarol({
   const [subId, setSubId] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [mode, setMode] = useState<"mes" | "ano">("mes");
-  const [month, setMonth] = useState(nowMonth());
+  const [month, setMonth] = useState(mesAnterior());
   const [year, setYear] = useState(nowYear());
   // a unidade é escolhida no filtro global do cabeçalho da página; "Todas" = Grupo consolidado
   const unitSel = scopedUnitId ?? GROUP;
@@ -236,7 +246,7 @@ export function AreaGoalsFarol({
               <option value="ano">Ano</option>
             </select>
             {mode === "mes" ? (
-              <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
+              <MonthInput value={month} onChange={(v) => setMonth(v || mesAnterior())} />
             ) : (
               <input type="number" className="input" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value || nowYear())} style={{ width: 110 }} />
             )}
@@ -666,7 +676,7 @@ function EntryDialog({ goal, units, month, unitSel, onClose }: { goal: AreaGoalR
         </div>
         <div>
           <label className="label">Competência</label>
-          <input type="month" className="input" value={m} onChange={(e) => setM(e.target.value)} />
+          <MonthInput value={m} onChange={setM} />
         </div>
       </div>
       {isRatio ? (
