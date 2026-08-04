@@ -109,9 +109,16 @@
   --mh-dur-slow: 250ms;
   --mh-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  /* escala tipográfica global — 16px é o padrão do browser.
-     Reduzir aqui encolhe TODA a fonte em rem proporcionalmente. */
-  --mh-root-font: 12px;
+  /* Escala tipográfica global. 16px é o padrão do browser, e TODO o texto do
+     sistema está em rem, então este número sozinho escala a interface inteira.
+
+     Estava em 12px, ou seja, 75%: no zoom padrão o corpo ficava em 12px, o
+     parágrafo em 10,5px e o rótulo de campo em 8,6px, pequeno demais para uso
+     diário. 15px mantém a densidade que um sistema de gestão com muitas tabelas
+     precisa, sem a letra miúda.
+
+     Para ajustar o sistema todo, mude só esta linha. */
+  --mh-root-font: 15px;
 }
 
 /* ── ALIASES LEGADOS: tudo que já existe continua funcionando ── */
@@ -594,7 +601,9 @@ a {
 /* ---------- Inputs ---------- */
 .label {
   display: block;
-  font-size: 0.72rem;
+  /* era 0.72rem: mesmo com a raiz maior, o rótulo continuava o texto mais fraco
+     da tela, e é ele que diz ao usuário o que preencher */
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
