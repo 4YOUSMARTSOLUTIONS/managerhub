@@ -886,16 +886,20 @@ export type Database = {
         Relationships: []
       }
       profiles: {
+        // cpf, phone, birth_date e gender NÃO estão no Row de propósito: a chave
+        // pública não tem mais privilégio de SELECT nessas colunas. Quem pode ler
+        // usa as RPCs meu_perfil_pessoal() e tenant_dados_pessoais().
+        // Este arquivo é mantido à mão, então ele descreve o PRIVILÉGIO, não só o
+        // schema: assim um .select("cpf") futuro quebra na compilação, em vez de
+        // virar erro 42501 em produção. Não recoloque as colunas aqui.
+        // Insert/Update seguem completos: descrevem o que a tabela aceita, e a
+        // escrita só acontece pelas RPCs admin_*, que rodam como dono.
         Row: {
           avatar_url: string | null
-          birth_date: string | null
-          cpf: string | null
           created_at: string
           email: string | null
           full_name: string | null
-          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
-          phone: string | null
           updated_at: string
         }
         Insert: {
@@ -1230,6 +1234,28 @@ export type Database = {
       meeting_follow_action_ids: { Args: { p_series: string; p_occurrence: string; p_cutoff: string }; Returns: string[] }
       employee_contract_history: { Args: { p_user: string }; Returns: Json }
       action_filter_options: { Args: Record<string, never>; Returns: Json }
+      auth_throttle_check: { Args: { p_chaves: Json }; Returns: Json }
+      auth_throttle_falha: { Args: { p_chaves: Json }; Returns: Json }
+      auth_throttle_sucesso: { Args: { p_chaves: Json }; Returns: undefined }
+      meu_perfil_pessoal: {
+        Args: Record<string, never>
+        Returns: {
+          cpf: string | null
+          phone: string | null
+          birth_date: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
+        }[]
+      }
+      tenant_dados_pessoais: {
+        Args: { p_tenant?: string }
+        Returns: {
+          id: string
+          cpf: string | null
+          phone: string | null
+          birth_date: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
+        }[]
+      }
       catalog_usage: {
         Args: { p_tenant: string }
         Returns: {

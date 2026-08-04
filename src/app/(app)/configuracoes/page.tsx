@@ -69,7 +69,7 @@ export default async function SettingsPage() {
     { data: subdepartments }, { data: positions }, { data: levels }, { data: rooms }, { data: holidays },
     { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
     { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
-    { data: usoData }, { data: profilesData }, { data: muData },
+    { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -94,7 +94,12 @@ export default async function SettingsPage() {
     supabase.from("feedback_cadence_rules").select("id, department_id, position_id, cadence_days").eq("tenant_id", tenant.id),
     supabase.rpc("catalog_usage", { p_tenant: tenant.id }),
     // RLS já limita ao tenant — evita .in() com centenas de ids (estoura a URL do PostgREST)
-    supabase.from("profiles").select("id, full_name, email, cpf, phone, birth_date, gender").limit(5000),
+    supabase.from("profiles").select("id, full_name, email").limit(5000),
+    // CPF, telefone, nascimento e sexo saíram do alcance da chave pública: a RLS
+    // libera a LINHA do colega e não tem granularidade de coluna, então qualquer
+    // funcionário lia a base inteira pelo PostgREST. Vêm por RPC, que exige
+    // owner/admin da empresa ativa.
+    supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
     supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
   ]);
 
@@ -121,7 +126,14 @@ export default async function SettingsPage() {
   const mems = memberships ?? [];
 
   // mapas de apoio
+  //
+  // São DOIS mapas de propósito, e trocar um pelo outro seria regressão silenciosa:
+  // `profById` é o que a RLS deixa ver (para super admin, o universo de perfis) e
+  // alimenta o seletor de gestor, o nome do gestor e a lista de RV. `pessoaisById`
+  // vem da RPC, que devolve só quem tem vínculo com a empresa ativa. Um gestor fora
+  // desse recorte viraria "—" na tela sem nenhum erro aparecer.
   const profById = new Map((profilesData ?? []).map((p) => [p.id, p]));
+  const pessoaisById = new Map((pessoaisData ?? []).map((d) => [d.id, d]));
   const unitById = new Map((units ?? []).map((u) => [u.id, u]));
   const deptById = new Map((departments ?? []).map((d) => [d.id, d]));
   const subById = new Map((subdepartments ?? []).map((s) => [s.id, s]));
@@ -136,15 +148,16 @@ export default async function SettingsPage() {
 
   const employees: EmployeeRow[] = mems.map((m) => {
     const p = profById.get(m.user_id);
+    const d = pessoaisById.get(m.user_id);
     const uIds = unitsByMem.get(m.id) ?? [];
     return {
       userId: m.user_id,
       fullName: p?.full_name ?? null,
       email: p?.email ?? null,
-      cpf: p?.cpf ?? null,
-      phone: p?.phone ?? null,
-      birthDate: p?.birth_date ?? null,
-      gender: p?.gender ?? null,
+      cpf: d?.cpf ?? null,
+      phone: d?.phone ?? null,
+      birthDate: d?.birth_date ?? null,
+      gender: d?.gender ?? null,
       role: m.role,
       employeeCode: m.employee_code,
       admissionDate: m.admission_date,

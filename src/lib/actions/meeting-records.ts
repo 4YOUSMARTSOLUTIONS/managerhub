@@ -5,7 +5,7 @@ import { actionContext } from "./context";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { parseTor, type ParsedTor, type TextItem } from "@/lib/tor-parser";
 import { parseTorRows } from "@/lib/tor-excel";
-import { dispatchSeriesInvite } from "./meetings";
+import { dispatchSeriesInvite } from "@/lib/invites";
 import type { ActionState } from "./types";
 import type { OccurrenceRow } from "@/components/MeetingRecords";
 import { OCC_PAGE_SIZE } from "@/lib/constants";

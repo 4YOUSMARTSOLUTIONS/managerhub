@@ -32,8 +32,13 @@ export type OwnProfile = {
 export async function getOwnProfile(): Promise<OwnProfile | null> {
   const { supabase, userId, tenantId, role } = await actionContext();
 
-  const [{ data: p }, { data: m }, { data: t }] = await Promise.all([
-    supabase.from("profiles").select("full_name, email, cpf, phone, birth_date, gender, avatar_url").eq("id", userId).maybeSingle(),
+  const [{ data: p }, { data: pessoais }, { data: m }, { data: t }] = await Promise.all([
+    supabase.from("profiles").select("full_name, email, avatar_url").eq("id", userId).maybeSingle(),
+    // CPF, telefone, nascimento e sexo não são mais legíveis pela chave pública:
+    // a RLS libera a LINHA do colega e não tem granularidade de coluna, então
+    // qualquer funcionário lia a base inteira pelo PostgREST. Vêm por RPC, que
+    // filtra por auth.uid() e não aceita parâmetro.
+    supabase.rpc("meu_perfil_pessoal").maybeSingle(),
     supabase
       .from("memberships")
       .select("employee_code, admission_date, manager_id, departments(name), subdepartments(name), positions(name)")
@@ -51,8 +56,10 @@ export async function getOwnProfile(): Promise<OwnProfile | null> {
 
   const nome = (x: unknown) => (x as { name: string } | null)?.name ?? null;
   return {
-    fullName: p.full_name, email: p.email, cpf: p.cpf, phone: p.phone,
-    birthDate: p.birth_date, gender: p.gender, avatarPath: p.avatar_url,
+    fullName: p.full_name, email: p.email,
+    cpf: pessoais?.cpf ?? null, phone: pessoais?.phone ?? null,
+    birthDate: pessoais?.birth_date ?? null, gender: pessoais?.gender ?? null,
+    avatarPath: p.avatar_url,
     role, company: t?.name ?? null,
     employeeCode: m?.employee_code ?? null,
     admissionDate: m?.admission_date ?? null,

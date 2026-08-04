@@ -3,6 +3,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import {
+  ipDoCliente, chaveIdentificador, checarThrottle, registrarFalha, registrarSucesso,
+  mensagemBloqueio, type ChaveThrottle,
+} from "@/lib/auth-throttle";
 import type { ActionState } from "./types";
 
 export async function signIn(
@@ -15,6 +19,17 @@ export async function signIn(
   if (!identifier || !password) {
     return { error: "Informe e-mail/CPF e senha." };
   }
+
+  // Dois baldes: o do IP e o do identificador. O do identificador é o que barra
+  // tentativa e erro de verdade, inclusive vinda de uma botnet — a chave é quem se
+  // está tentando acessar, não de onde vem. O do IP é a segunda linha.
+  const chaves: ChaveThrottle[] = [
+    { bucket: "login_ip", chave: await ipDoCliente() },
+    { bucket: "login_id", chave: chaveIdentificador(identifier) },
+  ];
+
+  const portao = await checarThrottle(chaves);
+  if (portao.bloqueado) return { error: mensagemBloqueio(portao.esperaSegundos) };
 
   const supabase = await createClient();
 
@@ -33,15 +48,23 @@ export async function signIn(
     } catch {
       return { error: "Login por CPF indisponível no momento. Use o e-mail." };
     }
-    if (!found) return { error: "E-mail/CPF ou senha inválidos." };
+    // CPF inexistente conta falha igual a senha errada: sem isso, o tempo de
+    // resposta (aqui não há ida ao serviço de autenticação) denunciaria quais CPFs
+    // existem na base, mesmo com a mensagem sendo idêntica.
+    if (!found) {
+      const v = await registrarFalha(chaves);
+      return { error: v.bloqueado ? mensagemBloqueio(v.esperaSegundos) : "E-mail/CPF ou senha inválidos." };
+    }
     email = found;
   }
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    return { error: "E-mail/CPF ou senha inválidos." };
+    const v = await registrarFalha(chaves);
+    return { error: v.bloqueado ? mensagemBloqueio(v.esperaSegundos) : "E-mail/CPF ou senha inválidos." };
   }
 
+  await registrarSucesso(chaves);
   redirect("/dashboard");
 }
 
