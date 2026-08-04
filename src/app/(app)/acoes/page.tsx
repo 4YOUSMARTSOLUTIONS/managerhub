@@ -2,7 +2,6 @@ import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { ActionsManager, type ActionRow, type FilterOptions } from "@/components/ActionsManager";
 import { Pager } from "@/components/ui/Pager";
-import type { Person } from "@/components/PeoplePicker";
 import { moduleGate } from "@/lib/module-gate";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import type { Tables } from "@/types/database";
@@ -209,12 +208,6 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     attachments: attsByAction.get(a.id) ?? [],
   }));
 
-  // o seletor de pessoas mostra só quem está ativo; o mapa de nomes acima cobre todos
-  const people: Person[] = (profilesData ?? [])
-    .filter((m) => m.is_active)
-    .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-
   // mantém os filtros ao trocar de página (multivalor vira parâmetro repetido)
   const pagerQuery = new URLSearchParams();
   for (const [k, v] of Object.entries({ q: sp.q, sdpo: sp.sdpo, de: sp.de, ate: sp.ate })) {
@@ -231,15 +224,6 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         currentUserId={user.id}
         isAdmin={isAdmin}
         isOwner={role === "owner"}
-        people={people}
-        pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }))}
-        secoes={(secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }))}
-        blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id, secaoId: b.secao_id, active: b.active }))}
-        itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, pilarId: i.pilar_id, secaoId: i.secao_id, blocoId: i.bloco_id, active: i.active }))}
-        kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active }))}
-        tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active }))}
-        series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
-        occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
         units={unitScope.units}
         aiEnabled={flags.hasOpenAI}
         filters={filters}

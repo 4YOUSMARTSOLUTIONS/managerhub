@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Filter, MessageSquare } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -12,13 +12,12 @@ import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, effStatus, type EffStatus } 
 import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
-import { deleteAction } from "@/lib/actions/actions";
+import { deleteAction, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
-import { ActionDialog, type Opt, type SecaoOpt, type BlocoOpt, type ItemOpt, type OccOpt } from "./ActionDialog";
+import { ActionDialog, type Opt } from "./ActionDialog";
 import { ImportActionsDialog } from "./ImportActionsDialog";
 import { ExportActionsButton } from "./ExportActionsButton";
 import { DemandaPanel, type DemandaInfo, type AssigneeState } from "./DemandaPanel";
-import type { Person } from "./PeoplePicker";
 import type { Enums } from "@/types/database";
 
 export type DemandaCard = {
@@ -100,7 +99,7 @@ export type ActionRow = {
 };
 
 export function ActionsManager({
-  actions, currentUserId, isAdmin, isOwner, people, pilares, secoes, blocos, itens, kpis, tools, series, occurrences, units, aiEnabled,
+  actions, currentUserId, isAdmin, isOwner, units, aiEnabled,
   filters, filterOptions, total,
 }: {
   actions: ActionRow[];
@@ -110,22 +109,48 @@ export function ActionsManager({
   currentUserId: string;
   isAdmin: boolean;
   isOwner: boolean;
-  people: Person[];
-  pilares: Opt[];
-  secoes: SecaoOpt[];
-  blocos: BlocoOpt[];
-  itens: ItemOpt[];
-  kpis: Opt[];
-  tools: Opt[];
-  series: Opt[];
-  occurrences: OccOpt[];
   units?: Opt[];
   aiEnabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null } | null>(null);
 
-  const openPanel = (d: DemandaCard, a: ActionRow, di: number) =>
+  /**
+   * Catálogos do formulário: pessoas, pilares, seções, blocos, itens, KPIs,
+   * ferramentas, reuniões e ocorrências.
+   *
+   * Antes vinham junto com a página, em toda carga e a cada clique de filtro:
+   * ~83 KB de JSON para uma janela que na maioria das vezes nem é aberta. Agora
+   * são buscados uma única vez, assim que a tela fica ociosa — então quando o
+   * usuário clica em "Nova ação" quase sempre já chegaram.
+   */
+  const [opcoes, setOpcoes] = useState<ActionFormOptions | null>(null);
+  const buscando = useRef(false);
+  const garantirOpcoes = useCallback(async () => {
+    if (buscando.current) return;
+    buscando.current = true;
+    try {
+      setOpcoes(await getActionFormOptions());
+    } catch {
+      buscando.current = false; // deixa tentar de novo no próximo clique
+    }
+  }, []);
+
+  useEffect(() => {
+    // requestIdleCallback não existe no Safari; o timer é a rede de segurança
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => void garantirOpcoes());
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(() => void garantirOpcoes(), 1500);
+    return () => clearTimeout(t);
+  }, [garantirOpcoes]);
+
+  const abrirNovaAcao = () => { setOpen(true); void garantirOpcoes(); };
+
+  const openPanel = (d: DemandaCard, a: ActionRow, di: number) => {
+    void garantirOpcoes();
     setSelected({
       demanda: {
         id: d.id,
@@ -152,6 +177,7 @@ export function ActionsManager({
       },
       requesterId: a.requesterId,
     });
+  };
 
   // ---------- Filtros (aplicados no banco, sincronizados pela URL) ----------
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -262,7 +288,7 @@ export function ActionsManager({
           <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
             {isOwner && <ImportActionsDialog />}
             {isOwner && <ExportActionsButton filters={filters} hasFilters={hasFilters} />}
-            <button className="btn btn-primary" onClick={() => setOpen(true)}>+ Nova ação</button>
+            <button className="btn btn-primary" onClick={abrirNovaAcao}>+ Nova ação</button>
           </div>
         }
       />
@@ -474,31 +500,69 @@ export function ActionsManager({
         )}
       </Section>
 
-      <ActionDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        people={people}
-        pilares={pilares}
-        secoes={secoes}
-        blocos={blocos}
-        itens={itens}
-        kpis={kpis}
-        tools={tools}
-        series={series}
-        occurrences={occurrences}
-        units={units}
-        aiEnabled={aiEnabled}
-      />
+      {/* Os catálogos chegam sob demanda. Na prática a busca antecipada já terminou
+          quando o usuário clica; o aviso abaixo é para a primeira interação muito
+          rápida, ou uma conexão ruim, e some sozinho. */}
+      {opcoes ? (
+        <ActionDialog
+          open={open}
+          onClose={() => setOpen(false)}
+          people={opcoes.people}
+          pilares={opcoes.pilares}
+          secoes={opcoes.secoes}
+          blocos={opcoes.blocos}
+          itens={opcoes.itens}
+          kpis={opcoes.kpis}
+          tools={opcoes.tools}
+          series={opcoes.series}
+          occurrences={opcoes.occurrences}
+          units={units}
+          aiEnabled={aiEnabled}
+        />
+      ) : (
+        open && <CarregandoFormulario onClose={() => setOpen(false)} />
+      )}
 
       <DemandaPanel
-        open={!!selected}
+        open={!!selected && !!opcoes}
         onClose={() => setSelected(null)}
         demanda={selected?.demanda ?? null}
         requesterId={selected?.requesterId ?? null}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
-        people={people}
+        people={opcoes?.people ?? []}
       />
+      {selected && !opcoes && <CarregandoFormulario onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+/**
+ * Janela de espera, só para o caso raro de o usuário clicar antes de os catálogos
+ * do formulário chegarem. Fecha por X ou clique fora não: mesmo padrão dos
+ * formulários do sistema, que só fecham por ação explícita.
+ */
+function CarregandoFormulario({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
+        backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60,
+      }}
+    >
+      <div className="card" style={{ padding: "1.5rem 1.75rem", display: "flex", alignItems: "center", gap: "0.85rem" }}>
+        <span
+          aria-hidden
+          style={{
+            width: 18, height: 18, borderRadius: "50%",
+            border: "2px solid var(--mh-border)", borderTopColor: "var(--mh-accent-500)",
+            animation: "mh-spin 0.7s linear infinite", display: "inline-block",
+          }}
+        />
+        <span className="muted" style={{ fontSize: "0.9rem" }}>Carregando o formulário...</span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Cancelar</button>
+      </div>
     </div>
   );
 }

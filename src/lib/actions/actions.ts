@@ -637,3 +637,58 @@ export async function exportActions(
     return { error: (e as Error).message };
   }
 }
+
+/**
+ * Catálogos que só o formulário de "Nova ação" (e o painel da demanda) usam.
+ *
+ * Estavam sendo carregados no servidor e enviados ao navegador em TODA carga da
+ * tela de Ações e a cada clique de filtro: ~83 KB de JSON (307 pessoas, 199 itens
+ * do Programa, 39 blocos) para uma janela que na maioria das vezes nem é aberta.
+ *
+ * Agora saem daqui, sob demanda. A tela busca isto assim que fica ociosa, então
+ * quando o usuário clica em "Nova ação" quase sempre já chegou.
+ */
+export type ActionFormOptions = {
+  people: { id: string; name: string }[];
+  pilares: { id: string; name: string; active: boolean }[];
+  secoes: { id: string; name: string; active: boolean }[];
+  blocos: { id: string; name: string; pilarId: string; secaoId: string; active: boolean }[];
+  itens: { id: string; name: string; pilarId: string; secaoId: string; blocoId: string | null; active: boolean }[];
+  kpis: { id: string; name: string; active: boolean }[];
+  tools: { id: string; name: string; active: boolean }[];
+  series: { id: string; name: string }[];
+  occurrences: { id: string; seriesId: string; occurredOn: string }[];
+};
+
+export async function getActionFormOptions(): Promise<ActionFormOptions> {
+  const { supabase, tenantId } = await actionContext();
+
+  const [
+    { data: members }, { data: pilares }, { data: secoes }, { data: blocos },
+    { data: itens }, { data: kpis }, { data: tools }, { data: series }, { data: occ },
+  ] = await Promise.all([
+    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).eq("is_active", true),
+    supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenantId).order("name"),
+    supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenantId).order("name"),
+    supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenantId).order("name"),
+    supabase.from("sdpo_itens").select("id, name, pilar_id, secao_id, bloco_id, active").eq("tenant_id", tenantId).order("name"),
+    supabase.from("action_kpis").select("id, name, active").eq("tenant_id", tenantId).order("name"),
+    supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenantId).order("name"),
+    supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId).is("deleted_at", null).order("name"),
+    supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenantId).is("deleted_at", null).order("occurred_on", { ascending: false }).limit(500),
+  ]);
+
+  return {
+    people: (members ?? [])
+      .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    pilares: (pilares ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active })),
+    secoes: (secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active })),
+    blocos: (blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id, secaoId: b.secao_id, active: b.active })),
+    itens: (itens ?? []).map((i) => ({ id: i.id, name: i.name, pilarId: i.pilar_id, secaoId: i.secao_id, blocoId: i.bloco_id, active: i.active })),
+    kpis: (kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active })),
+    tools: (tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active })),
+    series: (series ?? []).map((s) => ({ id: s.id, name: s.name })),
+    occurrences: (occ ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on })),
+  };
+}
