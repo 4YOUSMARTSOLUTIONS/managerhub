@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NavPending } from "./NavPending";
 
 /** Paginação simples por URL (server component). Mantém outros params via `extra`. */
 export function Pager({
@@ -28,7 +29,7 @@ export function Pager({
   const cell = (p: number, label: string, disabled: boolean) =>
     disabled
       ? <span className="btn btn-ghost btn-sm" style={{ opacity: 0.45, pointerEvents: "none" }}>{label}</span>
-      : <Link href={href(p)} className="btn btn-ghost btn-sm">{label}</Link>;
+      : <Link href={href(p)} className="btn btn-ghost btn-sm">{label}<NavPending stripe={false} /></Link>;
 
   return (
     <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", justifyContent: "center", margin: "1.25rem 0 0.5rem" }}>

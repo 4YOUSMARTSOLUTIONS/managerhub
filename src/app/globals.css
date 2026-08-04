@@ -340,6 +340,7 @@ a {
 .brand-block {
   display: flex;
   align-items: center;
+  position: relative; /* âncora da listra de .nav-pending */
   gap: 0.6rem;
   padding: 0.2rem 0.5rem var(--mh-space-5);
 }
@@ -418,6 +419,7 @@ a {
 .nav-child {
   display: flex;
   align-items: center;
+  position: relative; /* âncora da listra de .nav-pending */
   gap: 0.6rem;
   padding: 0.42rem 0.65rem 0.42rem 1.55rem;
   border-radius: var(--mh-radius-sm);
@@ -446,6 +448,27 @@ a {
 }
 .nav-child-active .nav-dot {
   opacity: 1;
+}
+
+/* Item de menu clicado, enquanto a próxima tela não chega.
+   Fica diferente do item ATIVO de propósito: sem a barrinha lateral e sem o
+   fundo da cor da marca, para não parecer que a navegação já aconteceu. É "indo
+   para lá", não "você está aqui". */
+.nav-item:has(.nav-pending),
+.nav-child:has(.nav-pending) {
+  background: var(--mh-surface-2);
+  color: var(--mh-text-1);
+}
+.nav-pending {
+  position: absolute;
+  left: 0.4rem;
+  right: 0.4rem;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 999px;
+  transform-origin: 0 50%;
+  background: var(--mh-brand-gradient);
+  animation: mh-topbar 2.2s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
 }
 
 /* módulo não contratado (vitrine): visível, porém apagado */
@@ -820,6 +843,39 @@ a {
     transparent
   );
   animation: mh-shimmer 1.4s infinite;
+}
+
+/* Entrada suave do placeholder.
+   Os 80 ms de atraso são de propósito e são o teto do que passa despercebido:
+   navegação que resolve nesse tempo não chega a mostrar cinza nenhum, e nas
+   demais o esqueleto surge cedo o bastante para ninguém achar que travou.
+   Atraso maior deixaria a área de conteúdo em branco, o que é pior que o cinza:
+   o `loading.tsx` substitui a tela antiga na hora, não tem como segurá-la. */
+@keyframes mh-appear {
+  to {
+    opacity: 1;
+  }
+}
+.mh-deferred {
+  opacity: 0;
+  animation: mh-appear 160ms var(--mh-ease) 80ms forwards;
+}
+
+.mh-skeleton-panel {
+  border: 1px solid var(--mh-border);
+  border-radius: var(--mh-radius-lg);
+  background: var(--mh-surface-1);
+  overflow: hidden;
+}
+.mh-skeleton-line {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--mh-border);
+}
+.mh-skeleton-line:last-child {
+  border-bottom: none;
 }
 
 /* ---------- Tabelas ---------- */

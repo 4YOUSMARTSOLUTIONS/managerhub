@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { BrandLogo, BrandWordmark, BRAND_OWNER, SHOW_BRAND_OWNER } from "./BrandLogo";
 import { UserMenu } from "./UserMenu";
+import { NavPending } from "./ui/NavPending";
 import {
   MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup,
   type GroupKey, type ModuleDef, type ModuleKey, type ModuleState,
@@ -97,6 +98,7 @@ export function Sidebar({
           <BrandWordmark />
           {SHOW_BRAND_OWNER && <span className="brand-sub">{BRAND_OWNER}</span>}
         </span>
+        <NavPending />
       </Link>
 
       <nav className="nav-list">
@@ -120,6 +122,7 @@ export function Sidebar({
                 {MODULE_ICONS[m.key]}
                 <span style={{ flex: 1 }}>{m.label}</span>
                 {locked && <Lock size={12} aria-label="Não contratado" />}
+                <NavPending />
               </Link>
             );
           }
@@ -159,6 +162,7 @@ export function Sidebar({
                         <span className="nav-dot" />
                         <span style={{ flex: 1 }}>{child.label}</span>
                         {locked && <Lock size={11} aria-label="Não contratado" />}
+                        <NavPending />
                       </Link>
                     );
                   })}

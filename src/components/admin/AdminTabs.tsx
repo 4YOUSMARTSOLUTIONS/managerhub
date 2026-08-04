@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NavPending } from "@/components/ui/NavPending";
 
 /**
  * Abas do Painel ADM como sub-rotas: cada aba só executa a própria consulta
@@ -25,6 +26,7 @@ export function AdminTabs() {
         return (
           <Link key={t.href} href={t.href} className={`tab${active ? " tab-active" : ""}`} aria-current={active ? "page" : undefined}>
             {t.label}
+            <NavPending stripe={false} />
           </Link>
         );
       })}

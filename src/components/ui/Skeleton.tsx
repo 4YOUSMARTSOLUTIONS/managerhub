@@ -29,20 +29,52 @@ export function SkeletonRows({ rows = 5, height = 44 }: { rows?: number; height?
   );
 }
 
-/** Placeholder de uma tela inteira (usar em loading.tsx). */
+/**
+ * Placeholder de uma tela inteira (usar em loading.tsx).
+ *
+ * Duas decisões de propósito, as duas contra o efeito "piscada cinza":
+ *
+ * 1. A forma é o ESQUELETO COMUM das telas, não um layout qualquer. Antes havia
+ *    quatro cartões de indicador aqui, e a maioria das telas não tem cartão
+ *    nenhum: o placeholder prometia uma coisa e chegava outra, e o salto era o
+ *    que incomodava. Título, barra de filtros e um painel com linhas é o que
+ *    praticamente toda tela do portal tem de fato. Linhas finas dentro de um
+ *    painel com borda também pesam muito menos na tela do que blocos chapados.
+ *
+ * 2. `mh-deferred` atrasa a entrada em 80 ms, abaixo do que o olho registra.
+ *    Navegação que resolve nesse tempo não mostra cinza nenhum.
+ */
 export function SkeletonPage() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} aria-busy="true">
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <Skeleton width={220} height={28} />
-        <Skeleton width={340} height={14} />
+    <div
+      className="mh-deferred"
+      style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
+      aria-busy="true"
+    >
+      {/* cabeçalho da página */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        <Skeleton width={210} height={24} radius="var(--mh-radius-sm)" />
+        <Skeleton width={330} height={13} radius="var(--mh-radius-sm)" />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "0.9rem" }}>
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} height={104} radius="var(--mh-radius-lg)" />
+
+      {/* barra de filtros/ações */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {[150, 118, 118, 96].map((w, i) => (
+          <Skeleton key={i} width={w} height={34} radius="var(--mh-radius-sm)" />
+        ))}
+        <Skeleton width={112} height={34} radius="var(--mh-radius-sm)" style={{ marginLeft: "auto" }} />
+      </div>
+
+      {/* painel de conteúdo, com linhas em vez de um bloco chapado */}
+      <div className="mh-skeleton-panel">
+        {Array.from({ length: 7 }, (_, i) => (
+          <div key={i} className="mh-skeleton-line">
+            <Skeleton width={26} height={26} radius="999px" />
+            <Skeleton width={`${44 - i * 3}%`} height={12} />
+            <Skeleton width={78} height={20} radius="999px" style={{ marginLeft: "auto" }} />
+          </div>
         ))}
       </div>
-      <Skeleton height={320} radius="var(--mh-radius-lg)" />
     </div>
   );
 }
