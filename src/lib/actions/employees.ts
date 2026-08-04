@@ -64,12 +64,15 @@ export type ImportSummary = {
   skippedList: { nome: string; cpf: string; codigo: string | null; motivo?: string }[];
   updatedList: { nome: string; cpf: string; motivo: string }[];
   managersList: { nome: string; cpf: string; motivo: string }[];
+  /** colaboradores em que a planilha mudou SÓ o perfil de acesso */
+  roles: number;
+  rolesList: { nome: string; cpf: string; motivo: string }[];
   errors: { nome?: string; cpf?: string; erro: string }[];
 };
 
 const EMPTY_SUMMARY: ImportSummary = {
-  created: 0, updated: 0, skipped: 0, managers: 0,
-  skippedList: [], updatedList: [], managersList: [], errors: [],
+  created: 0, updated: 0, skipped: 0, managers: 0, roles: 0,
+  skippedList: [], updatedList: [], managersList: [], rolesList: [], errors: [],
 };
 
 export async function importEmployees(

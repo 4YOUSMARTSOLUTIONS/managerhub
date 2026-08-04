@@ -7,6 +7,7 @@ import type { Enums, Json } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { recusaDeUpload, TAMANHO_FOTO, MIMES_FOTO } from "@/lib/uploads";
+import { souGestorDe } from "@/lib/team";
 
 const BUCKET = "checklist-photos";
 function isAdminRole(role: Enums<"member_role">) { return role === "owner" || role === "admin"; }
@@ -17,9 +18,7 @@ async function canEditChecklist(ctx: Ctx, checklistId: string): Promise<boolean>
   const { data: c } = await ctx.supabase.from("checklists").select("created_by").eq("id", checklistId).maybeSingle();
   if (!c) return false;
   if (isAdminRole(ctx.role) || c.created_by === ctx.userId) return true;
-  const { data } = await ctx.supabase.from("memberships").select("user_id")
-    .eq("tenant_id", ctx.tenantId).eq("user_id", c.created_by).eq("manager_id", ctx.userId).maybeSingle();
-  return !!data;
+  return souGestorDe(ctx.supabase, c.created_by, ctx.tenantId);
 }
 
 const clean = (v: string | null | undefined) => (v ?? "").trim() || null;

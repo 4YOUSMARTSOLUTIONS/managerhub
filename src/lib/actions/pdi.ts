@@ -6,6 +6,7 @@ import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { souGestorDe } from "@/lib/team";
 
 function isAdminRole(role: Enums<"member_role">) {
   return role === "owner" || role === "admin";
@@ -17,10 +18,7 @@ type Ctx = { supabase: SupabaseClient<Database>; tenantId: string; userId: strin
 async function canManageOwner(ctx: Ctx, ownerId: string): Promise<boolean> {
   if (isAdminRole(ctx.role)) return true;
   if (!ownerId || ownerId === ctx.userId) return false;
-  const { data } = await ctx.supabase
-    .from("memberships").select("user_id")
-    .eq("tenant_id", ctx.tenantId).eq("user_id", ownerId).eq("manager_id", ctx.userId).maybeSingle();
-  return !!data;
+  return souGestorDe(ctx.supabase, ownerId, ctx.tenantId);
 }
 
 export async function createPdiAction(input: {

@@ -68,13 +68,21 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const underWork = new Set(construction);
+  // `team_lead` (Gestor) fica FORA desta lista de propósito. Gestor tem alçada da
+  // própria equipe, não da empresa: nada de Logs do sistema nem de triagem de
+  // chamados. Para efeito de menu ele se comporta como Funcionário; o que ele
+  // enxerga a mais vem da RLS, pelo vínculo de chefia, não do papel na tela.
   const canManage = role === "owner" || role === "admin" || role === "manager";
   const canAdmin = role === "owner" || role === "admin";
+  // "Gestor ou acima": quem tem alçada sobre uma equipe. Some do menu de quem
+  // não lidera ninguém, para "Minha equipe" não virar item morto para ~880 pessoas.
+  const canLeadTeam = canManage || role === "team_lead";
 
   /** papel primeiro (como antes), depois o entitlement da unidade. */
   const visible = (m: ModuleDef) => {
     // owner de plataforma sem empresa: só o Painel ADM
     if (platformOnly) return m.key === "admin";
+    if (m.minRole === "team_lead" && !canLeadTeam) return false;
     if (m.minRole === "manager" && !canManage) return false;
     if (m.minRole === "admin" && !canAdmin) return false;
     if (m.minRole === "super" && !isSuperAdmin) return false;

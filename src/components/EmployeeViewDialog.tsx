@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { USER_TYPE } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 import { formatDate } from "@/lib/format";
-import type { EmployeeRow } from "./UsersManager";
+import { roleTone, type EmployeeRow } from "./UsersManager";
 
 const GENDER: Record<string, string> = {
   masculino: "Masculino", feminino: "Feminino", outro: "Outro", nao_informado: "Não informado",
@@ -57,7 +57,7 @@ export function EmployeeViewDialog({
             <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>{employee.fullName ?? "—"}</h2>
             <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.4rem" }}>
               <Badge tone={employee.active ? "green" : "red"}>{employee.active ? "Ativo" : "Inativo"}</Badge>
-              <Badge tone={employee.role === "owner" ? "purple" : employee.role === "admin" ? "blue" : employee.role === "manager" ? "amber" : "gray"}>
+              <Badge tone={roleTone(employee.role)}>
                 {employee.role === "owner" ? "Proprietário" : USER_TYPE[employee.role as keyof typeof USER_TYPE] ?? employee.role}
               </Badge>
             </div>

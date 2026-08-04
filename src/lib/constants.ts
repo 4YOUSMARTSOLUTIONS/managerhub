@@ -414,10 +414,19 @@ export const TENANT_STATUS_TONE: Record<Enums<"tenant_status">, Tone> = {
 };
 
 // ---------- Papéis ----------
+/**
+ * Nomes usados onde o papel aparece isolado (menu do usuário, ficha de perfil).
+ *
+ * `manager` era rotulado "Gestor" aqui e "Gerencial" no USER_TYPE, então a mesma
+ * pessoa lia um nome no próprio menu e outro na lista de colaboradores. Com um
+ * perfil Gestor de verdade existindo, isso deixaria de ser inconsistência e
+ * viraria informação errada: os dois mapas agora concordam.
+ */
 export const ROLE: Record<Enums<"member_role">, string> = {
   owner: "Proprietário",
   admin: "Administrador",
-  manager: "Gestor",
+  manager: "Gerencial",
+  team_lead: "Gestor",
   member: "Membro",
 };
 
@@ -436,9 +445,21 @@ export const UNIT_KIND: Record<Enums<"unit_kind">, string> = {
 };
 
 // ---------- Tipo de usuário (subconjunto de papéis para cadastro) ----------
+/**
+ * Rótulos dos perfis, em ordem de hierarquia. O seletor de perfil, os selos da
+ * lista de colaboradores e a ficha leem daqui, então a ordem desta lista é a
+ * ordem que aparece na tela.
+ *
+ * "Gerencial" e "Gestor" são coisas diferentes e a confusão entre as duas é fácil:
+ * - `manager` (Gerencial): empresa inteira. Vê todos os chamados, faz triagem e
+ *   abre os Logs do sistema.
+ * - `team_lead` (Gestor): só a própria equipe, mas a cadeia inteira abaixo dele.
+ *   Não é atalho para nada de empresa: sem chamados de terceiros, sem logs.
+ */
 export const USER_TYPE: Partial<Record<Enums<"member_role">, string>> = {
   admin: "Administrador",
   manager: "Gerencial",
+  team_lead: "Gestor",
   member: "Funcionário",
 };
 

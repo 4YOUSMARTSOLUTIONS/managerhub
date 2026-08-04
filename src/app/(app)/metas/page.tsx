@@ -26,7 +26,7 @@ export default async function GoalsPage() {
   // e uma leitura so, usada pelas duas.
   const reportsP = isAdmin
     ? Promise.resolve({ data: null as { user_id: string }[] | null })
-    : supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id).eq("manager_id", user.id);
+    : supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id);
 
   const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, todosMembros] = await Promise.all([
     reportsP,

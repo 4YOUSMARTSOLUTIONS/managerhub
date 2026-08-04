@@ -18,7 +18,7 @@ export default async function TemposMovimentosPage() {
     getMembers(tenant.id),
     supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id).eq("active", true),
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
-    supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id).eq("manager_id", user.id),
+    supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id),
   ]);
 
   const people = members

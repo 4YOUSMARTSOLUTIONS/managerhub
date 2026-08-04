@@ -9,6 +9,7 @@ import type { Enums } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
+import { souGestorDe } from "@/lib/team";
 
 const BUCKET = "feedback-attachments";
 
@@ -22,14 +23,7 @@ type Ctx = { supabase: SupabaseClient<Database>; tenantId: string; userId: strin
 async function canManageOwner(ctx: Ctx, ownerId: string): Promise<boolean> {
   if (isAdminRole(ctx.role)) return true;
   if (!ownerId || ownerId === ctx.userId) return false;
-  const { data } = await ctx.supabase
-    .from("memberships")
-    .select("user_id")
-    .eq("tenant_id", ctx.tenantId)
-    .eq("user_id", ownerId)
-    .eq("manager_id", ctx.userId)
-    .maybeSingle();
-  return !!data;
+  return souGestorDe(ctx.supabase, ownerId, ctx.tenantId);
 }
 
 type FeedbackPayload = {

@@ -15,10 +15,8 @@ export default async function FeedbacksPage() {
 
   // subordinados diretos (gestor = quem tem colaboradores abaixo) — computado p/ todos, inclusive admin
   const { data: reports } = await supabase
-    .from("memberships")
-    .select("user_id")
-    .eq("tenant_id", tenant.id)
-    .eq("manager_id", user.id);
+    .rpc("my_managed_memberships")
+    .eq("tenant_id", tenant.id);
   const reportIds = (reports ?? []).map((r) => r.user_id);
   const canManage = isAdmin || reportIds.length > 0;
   const reportSet = new Set(reportIds);

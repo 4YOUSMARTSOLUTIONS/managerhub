@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { setUserPassword, removeUser, setMemberActive } from "@/lib/actions/users";
-import { USER_TYPE } from "@/lib/constants";
+import { USER_TYPE, type Tone } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
 import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
@@ -34,6 +34,17 @@ export type EmployeeRow = EmployeeData & {
 function roleLabel(role: string): string {
   if (role === "owner") return "Proprietário";
   return USER_TYPE[role as keyof typeof USER_TYPE] ?? role;
+}
+
+/** Cor do selo por perfil. Exportada porque a ficha do colaborador usa a mesma. */
+export function roleTone(role: string): Tone {
+  if (role === "owner") return "purple";
+  if (role === "admin") return "blue";
+  if (role === "manager") return "amber";
+  // Gestor puxa para o verde: é alçada de equipe, não de empresa, e o contraste
+  // com o âmbar do Gerencial evita a troca de um pelo outro na leitura rápida.
+  if (role === "team_lead") return "green";
+  return "gray";
 }
 
 const ICON = {
@@ -176,10 +187,10 @@ export function UsersManager({
             sheetName="Colaboradores"
             // Gestor sai em DUAS colunas de propósito: o nome é o que a pessoa lê e
             // preenche, o código é o que a reimportação resolve sem risco de homônimo.
-            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Gestor", "Código Gestor"]}
+            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Gestor", "Código Gestor", "Perfil"]}
             rows={employees.map((e) => {
               const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
-              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerName ?? "", e.managerCode ?? ""];
+              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerName ?? "", e.managerCode ?? "", roleLabel(e.role)];
             })}
           />
           <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>
@@ -238,7 +249,7 @@ export function UsersManager({
                     {e.departmentName ?? "—"}
                     {e.positionName && <div className="soft" style={{ fontSize: "0.75rem" }}>{e.positionName}{e.levelName ? ` · ${e.levelName}` : ""}</div>}
                   </td>
-                  <td><Badge tone={e.role === "owner" ? "purple" : e.role === "admin" ? "blue" : e.role === "manager" ? "amber" : "gray"}>{roleLabel(e.role)}</Badge></td>
+                  <td><Badge tone={roleTone(e.role)}>{roleLabel(e.role)}</Badge></td>
                   <td><Badge tone={e.active ? "green" : "red"}>{e.active ? "Ativo" : "Inativo"}</Badge></td>
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>

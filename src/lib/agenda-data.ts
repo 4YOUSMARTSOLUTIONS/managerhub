@@ -37,7 +37,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
     supabase.from("checklist_runs").select("checklist_id, executor_id, period_key").not("completed_at", "is", null).gte("created_at", fromIso),
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
     supabase.from("memberships").select("user_id, position_id, department_id").eq("tenant_id", tenant.id).eq("is_active", true),
-    supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id).eq("manager_id", user.id),
+    supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id),
   ]);
 
   const people = members

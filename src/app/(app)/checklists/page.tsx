@@ -56,7 +56,7 @@ export default async function ChecklistsPage() {
     // (a purga corre em paralelo; o await dela vem no fim, sem segurar nada)
     unitOr ? clsQuery.or(unitOr) : clsQuery,
     supabase.from("memberships").select("position_id, department_id, subdepartment_id").eq("tenant_id", tenant.id).eq("user_id", user.id).maybeSingle(),
-    supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id).eq("manager_id", user.id),
+    supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id),
     getMembers(tenant.id),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),

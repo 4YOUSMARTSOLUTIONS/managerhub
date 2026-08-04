@@ -12,7 +12,7 @@
 
 export type ModuleKey =
   // base: sempre liberados, fora da venda
-  | "dashboard" | "auditoria" | "configuracoes" | "admin"
+  | "dashboard" | "auditoria" | "configuracoes" | "admin" | "minha_equipe"
   // vendáveis
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos"
@@ -35,7 +35,7 @@ export type ModuleDef = {
   href: string;
   group: GroupKey | null; // null = item de topo
   core?: true; // sempre "on", não aparece na lista de venda
-  minRole?: "manager" | "admin" | "super"; // restrição por papel (independente da venda)
+  minRole?: "team_lead" | "manager" | "admin" | "super"; // restrição por papel (independente da venda)
 };
 
 export const MODULE_GROUPS: { key: GroupKey; label: string }[] = [
@@ -62,6 +62,9 @@ export const MODULES: ModuleDef[] = [
 
   { key: "chamados", label: "Chamados", href: "/chamados", group: null },
 
+  // Não é módulo vendável: é a tela que dá sentido ao perfil Gestor, então nasce
+  // `core` (sempre ligada) e some do menu de quem não lidera equipe, por minRole.
+  { key: "minha_equipe", label: "Minha equipe", href: "/minha-equipe", group: "g_pessoas", core: true, minRole: "team_lead" },
   { key: "metas", label: "Metas", href: "/metas", group: "g_pessoas" },
   { key: "feedbacks", label: "Feedbacks", href: "/feedbacks", group: "g_pessoas" },
   { key: "treinamentos", label: "Treinamentos", href: "/treinamentos", group: "g_pessoas" },

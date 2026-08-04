@@ -1201,6 +1201,20 @@ export type Database = {
         Returns: undefined
       }
       my_active_tenant: { Args: Record<PropertyKey, never>; Returns: string }
+      /**
+       * Minha equipe: a cadeia INTEIRA abaixo de mim, e vazia se eu não tiver
+       * papel de Gestor (`team_lead`) ou acima. É a mesma função que as policies
+       * de metas, feedbacks, PDI e checklists consultam, por isso o app deve
+       * chamá-la em vez de refazer a consulta (ver `src/lib/team.ts`).
+       */
+      my_managed_memberships: {
+        Args: Record<PropertyKey, never>
+        Returns: { user_id: string; tenant_id: string }[]
+      }
+      manages_user: {
+        Args: { p_owner: string; p_tenant: string }
+        Returns: boolean
+      }
       create_tenant_with_owner: {
         Args: { p_name: string; p_slug: string }
         Returns: {
@@ -1408,7 +1422,10 @@ export type Database = {
       area_consolidation: "soma" | "media" | "manual" | "razao"
       meeting_status: "scheduled" | "in_progress" | "done" | "cancelled"
       meeting_occurrence_status: "in_progress" | "finished" | "cancelled"
-      member_role: "owner" | "admin" | "manager" | "member"
+      // `team_lead` é o perfil "Gestor": vê os dados da própria equipe (cadeia
+      // inteira abaixo dele), sem os poderes de empresa inteira do "Gerencial"
+      // (`manager`). A ordem aqui espelha a hierarquia do enum no banco.
+      member_role: "owner" | "admin" | "manager" | "team_lead" | "member"
       participant_response: "invited" | "accepted" | "declined" | "tentative"
       priority_level: "low" | "medium" | "high" | "urgent"
       ticket_category:
