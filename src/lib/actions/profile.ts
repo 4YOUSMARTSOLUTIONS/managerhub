@@ -176,7 +176,10 @@ export async function updateOwnAvatar(_prev: ActionState, formData: FormData): P
     // usuário ficaria sem foto nenhuma
     if (anterior) await supabase.storage.from(AVATAR_BUCKET).remove([anterior]);
 
-    revalidatePath("/", "layout");
+    // sem "layout": revalidar a raiz inteira derruba o cache de rotas do navegador,
+    // e a navegação seguinte volta a pagar o carregamento do zero em toda tela.
+    // O avatar chega pelo mapa do layout, que o router.refresh do diálogo já renova.
+    revalidatePath("/dashboard");
     return { ok: true, message: "Foto atualizada." };
   } catch (e) { return { error: (e as Error).message }; }
 }
@@ -192,7 +195,10 @@ export async function removeOwnAvatar(): Promise<ActionState> {
     if (error) return { error: "Não foi possível remover a foto." };
     if (anterior) await supabase.storage.from(AVATAR_BUCKET).remove([anterior]);
 
-    revalidatePath("/", "layout");
+    // sem "layout": revalidar a raiz inteira derruba o cache de rotas do navegador,
+    // e a navegação seguinte volta a pagar o carregamento do zero em toda tela.
+    // O avatar chega pelo mapa do layout, que o router.refresh do diálogo já renova.
+    revalidatePath("/dashboard");
     return { ok: true, message: "Foto removida." };
   } catch (e) { return { error: (e as Error).message }; }
 }

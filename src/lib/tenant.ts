@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getIsSuperAdmin } from "@/lib/auth-cache";
 import type { Enums, Tables } from "@/types/database";
 
 export type UnitOpt = { id: string; name: string };
@@ -48,14 +49,11 @@ export function effectiveUnitFilter(scope: UnitScope): string[] | null {
  */
 export const requireContext = cache(async function requireContext(): Promise<ActiveContext> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // identidade e papel vêm da camada compartilhada: o layout já resolveu ambos neste
+  // mesmo request, então aqui não custa nova ida à rede
+  const [user, isSuperAdmin] = await Promise.all([getAuthUser(), getIsSuperAdmin()]);
 
   if (!user) redirect("/login");
-
-  const { data: isSuper } = await supabase.rpc("is_super_admin");
-  const isSuperAdmin = Boolean(isSuper);
 
   let tenant: Tables<"tenants">;
   let role: Enums<"member_role">;
@@ -125,7 +123,8 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   };
 });
 
-export async function getMembers(tenantId: string) {
+/** `cache()`: /metas chamava isto duas vezes no mesmo request, e outras 7 telas uma vez. */
+export const getMembers = cache(async function getMembers(tenantId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("memberships")
@@ -136,4 +135,4 @@ export async function getMembers(tenantId: string) {
     role: m.role,
     profile: m.profiles as Tables<"profiles"> | null,
   }));
-}
+});

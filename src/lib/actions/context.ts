@@ -1,4 +1,6 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getIsSuperAdmin } from "@/lib/auth-cache";
 import type { Enums } from "@/types/database";
 
 /**
@@ -8,15 +10,16 @@ import type { Enums } from "@/types/database";
  * Owner de plataforma (super admin): opera na EMPRESA SELECIONADA no topo
  * (`my_active_tenant`), como papel "owner" — mesmo sem membership. Assim as
  * actions gravam/leem na empresa certa, igual ao `requireContext`.
+ *
+ * `cache()`: várias actions chamam isto mais de uma vez no mesmo request, e cada
+ * chamada custava de 3 a 4 idas ao banco ANTES de qualquer trabalho útil. É o custo
+ * que o usuário sente ao clicar em salvar.
  */
-export async function actionContext() {
+export const actionContext = cache(async function actionContext() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [user, isSuper] = await Promise.all([getAuthUser(), getIsSuperAdmin()]);
   if (!user) throw new Error("Sessão expirada. Faça login novamente.");
 
-  const { data: isSuper } = await supabase.rpc("is_super_admin");
   if (isSuper) {
     const { data: activeId } = await supabase.rpc("my_active_tenant");
     if (activeId) {
@@ -40,4 +43,4 @@ export async function actionContext() {
     tenantId: membership.tenant_id,
     role: membership.role,
   };
-}
+});

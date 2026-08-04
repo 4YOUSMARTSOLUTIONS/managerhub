@@ -5,6 +5,7 @@ import { checkSuperAdmin } from "@/lib/platform";
 import { getTheme } from "@/lib/theme";
 import { getModuleAccess } from "@/lib/module-access";
 import { getAvatarMap } from "@/lib/avatars";
+import { getAuthUser, getOwnIdentity } from "@/lib/auth-cache";
 import { AppShell } from "@/components/AppShell";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
@@ -18,15 +19,20 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // 1º estágio: identidade, tema e papel de plataforma, tudo junto. Antes eram três
+  // esperas em fila, e o getUser/is_super_admin ainda se repetiam dentro do
+  // requireContext logo abaixo (agora compartilhados por auth-cache).
+  const [user, theme, isSuperAdmin] = await Promise.all([
+    getAuthUser(),
+    getTheme(),
+    checkSuperAdmin(),
+  ]);
   if (!user) redirect("/login");
-
-  const theme = await getTheme();
-  const isSuperAdmin = await checkSuperAdmin();
 
   // Super admin sem NENHUMA empresa no sistema: shell reduzido, só o Painel ADM.
   if (isSuperAdmin) {
+    // createClient só lê cookies, não vai à rede; fica no ramo que precisa dele
+    const supabase = await createClient();
     const { data: activeId } = await supabase.rpc("my_active_tenant");
     if (!activeId) {
       return (
@@ -48,14 +54,18 @@ export default async function AppLayout({
     }
   }
 
-  // Fluxo normal: usuário de empresa OU super admin operando a empresa selecionada.
+  // 2º estágio: o contexto da empresa, do qual o resto depende.
   const ctx = await requireContext();
-  const { state: moduleState, construction } = await getModuleAccess();
-  const avatars = await getAvatarMap(ctx.tenant.id);
+
+  // 3º estágio: o que depende só do tenant/usuário, tudo junto.
+  const [{ state: moduleState, construction }, avatars, perfil] = await Promise.all([
+    getModuleAccess(),
+    getAvatarMap(ctx.tenant.id),
+    getOwnIdentity(user.id),
+  ]);
 
   // o nome real vem do cadastro; o prefixo do e-mail é só a reserva de quem ainda
   // não tem full_name (e rende uma inicial só: "luiz.nobre" vira "l")
-  const { data: perfil } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
   const userName = perfil?.full_name?.trim() || user.email?.split("@")[0] || "Usuário";
 
   return (
