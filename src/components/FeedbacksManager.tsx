@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
+import { MonthInput } from "@/components/ui/MonthInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
@@ -888,7 +889,7 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
           {mode === "edit" ? <input className="input" value={row?.subjectName ?? ""} disabled /> : <SearchSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Buscar…" emptyHint="Nenhum colaborador" />}
         </div>
         <div><label className="label">Data</label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-        <div><label className="label">Mês de referência</label><input type="month" className="input" value={refMonth} onChange={(e) => setRefMonth(e.target.value || thisMonth())} /></div>
+        <div><label className="label">Mês de referência</label><MonthInput value={refMonth} onChange={(v) => setRefMonth(v || thisMonth())} /></div>
       </div>
 
       <div className="card card-pad" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.6rem", background: "var(--bg-subtle, rgba(0,0,0,0.02))" }}>

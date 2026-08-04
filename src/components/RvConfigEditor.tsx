@@ -6,6 +6,7 @@ import { upsertRvConfig, deleteRvConfig } from "@/lib/actions/rv-config";
 import { ImportRvDialog } from "@/components/ImportRvDialog";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { confirmDialog } from "@/components/ui/confirm";
+import { MonthInput } from "@/components/ui/MonthInput";
 
 const fmtBRL = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const monthLabel = (iso: string) => `${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -190,7 +191,7 @@ function RvScopeTable({ scope, refs, rows, period }: {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "flex-end", padding: "0.2rem 0" }}>
                         <div>
                           <label className="label">A partir de</label>
-                          <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value)} />
+                          <MonthInput value={month} onChange={setMonth} />
                         </div>
                         <div>
                           <label className="label">Valor (R$)</label>

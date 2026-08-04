@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { MonthInput } from "@/components/ui/MonthInput";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { SearchSelect } from "@/components/SearchSelect";
@@ -308,7 +309,7 @@ function HistoryView({ runs, clById, departments, onOpen }: {
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.7rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
         <div><label className="label">Setor</label><select className="select" value={dept} onChange={(e) => setDept(e.target.value)}><option value="">Todos</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-        <div><label className="label">Mês</label><input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value)} /></div>
+        <div><label className="label">Mês</label><MonthInput value={month} onChange={setMonth} /></div>
       </div>
       {filtered.length === 0 ? <EmptyState title="Sem execuções" description="Checklists concluídos aparecem aqui." /> : (
         <div className="card" style={{ overflowX: "auto" }}>

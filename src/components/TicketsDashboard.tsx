@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { CircleAlert, CircleCheck, Clock, Layers, Star, Ticket, TrendingUp, UserX } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Badge } from "@/components/ui/Badge";
+import { MonthInput } from "@/components/ui/MonthInput";
 import { TICKET_STATUS, TICKET_STATUS_TONE } from "@/lib/constants";
 import { formatDuration } from "@/lib/format";
 import { computeNps } from "@/lib/nps";
@@ -105,7 +106,7 @@ export function TicketsDashboard({ tickets, sectors }: { tickets: TicketRow[]; s
         {period === "month" ? (
           <div>
             <label className="label">Competência</label>
-            <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
+            <MonthInput value={month} onChange={(v) => setMonth(v || nowMonth())} />
           </div>
         ) : (
           <div>

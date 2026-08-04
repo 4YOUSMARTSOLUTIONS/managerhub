@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { MonthInput } from "@/components/ui/MonthInput";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportPnrDialog } from "@/components/ImportPnrDialog";
@@ -57,8 +58,19 @@ function pnrExportRows(categories: PnrCategory[], kpis: PnrKpiRow[]): (string | 
   return rows;
 }
 
-function nowMonth() {
+/**
+ * Mes de abertura do farol: o ANTERIOR, nao o corrente.
+ *
+ * Farol mensal se apura depois que o mes fecha. Abrir no mes corrente caia num
+ * periodo ainda em curso, sempre vazio, obrigando a voltar um mes toda vez.
+ *
+ * O setDate(1) vem ANTES de recuar: sem ele, 31 de marco menos um mes daria 3 de
+ * marco, porque fevereiro nao tem dia 31 e o JavaScript transborda.
+ */
+function mesAnterior() {
   const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 const nowYear = () => String(new Date().getFullYear());
@@ -127,7 +139,7 @@ export function PnrFarol({ categories, kpis, members, isAdmin, currentUserId }: 
   currentUserId: string;
 }) {
   const [mode, setMode] = useState<"mes" | "ano">("mes");
-  const [month, setMonth] = useState(nowMonth());
+  const [month, setMonth] = useState(mesAnterior());
   const [year, setYear] = useState(nowYear());
   const [ownerId, setOwnerId] = useState("");
   const [entryKpi, setEntryKpi] = useState<PnrKpiRow | null>(null);
@@ -195,7 +207,7 @@ export function PnrFarol({ categories, kpis, members, isAdmin, currentUserId }: 
               <option value="ano">Ano (acumulado)</option>
             </select>
             {mode === "mes" ? (
-              <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
+              <MonthInput value={month} onChange={(v) => setMonth(v || mesAnterior())} />
             ) : (
               <input type="number" className="input" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value || nowYear())} style={{ width: 110 }} />
             )}

@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { MonthInput } from "@/components/ui/MonthInput";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportSustainabilityDialog } from "@/components/ImportSustainabilityDialog";
@@ -27,7 +28,6 @@ export type Member = { id: string; name: string };
 const BAR_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", parcial: "var(--mh-warning)", nao_atingida: "var(--mh-danger)", pendente: "transparent" };
 const VAL_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", parcial: "var(--mh-warning)", nao_atingida: "var(--mh-danger)", pendente: "var(--text-muted)" };
 
-function nowMonth() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
 const nowYear = () => String(new Date().getFullYear());
 const periodOf = (month: string) => `${month}-01`;
 const monthLabel = (month: string) => { const [y, m] = month.split("-"); return `${m}/${y}`; };
@@ -46,6 +46,21 @@ function accumulateYear(kpi: SustKpiRow, entries: SustEntryLite[]): { actual: nu
     return { actual: months ? acts.reduce((s, v) => s + v, 0) / months : null, target: kpi.target };
   }
   return { actual: months ? acts.reduce((s, v) => s + v, 0) : null, target: kpi.target != null && months ? kpi.target * months : kpi.target };
+}
+/**
+ * Mes de abertura do farol: o ANTERIOR, nao o corrente.
+ *
+ * Farol mensal se apura depois que o mes fecha. Abrir no mes corrente caia num
+ * periodo ainda em curso, sempre vazio, obrigando a voltar um mes toda vez.
+ *
+ * O setDate(1) vem ANTES de recuar: sem ele, 31 de marco menos um mes daria 3 de
+ * marco, porque fevereiro nao tem dia 31 e o JavaScript transborda.
+ */
+function mesAnterior() {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function fmtVal(v: number | null, unit: string): string {
@@ -68,7 +83,7 @@ export function SustainabilityFarol({ kpis, members, isAdmin, currentUserId }: {
   kpis: SustKpiRow[]; members: Member[]; isAdmin: boolean; currentUserId: string;
 }) {
   const [mode, setMode] = useState<"mes" | "ano">("mes");
-  const [month, setMonth] = useState(nowMonth());
+  const [month, setMonth] = useState(mesAnterior());
   const [year, setYear] = useState(nowYear());
   const [ownerId, setOwnerId] = useState("");
   const [entryKpi, setEntryKpi] = useState<SustKpiRow | null>(null);
@@ -112,7 +127,7 @@ export function SustainabilityFarol({ kpis, members, isAdmin, currentUserId }: {
               <option value="ano">Ano (acumulado)</option>
             </select>
             {mode === "mes" ? (
-              <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value || nowMonth())} />
+              <MonthInput value={month} onChange={(v) => setMonth(v || mesAnterior())} />
             ) : (
               <input type="number" className="input" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value || nowYear())} style={{ width: 110 }} />
             )}
