@@ -2,9 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
-import {
-  dispatchInvite, dispatchSeriesInvite, dispatchOccurrenceOverride, type InviteResult,
-} from "@/lib/invites";
+import { dispatchInvite, dispatchOccurrenceOverride, type InviteResult } from "@/lib/invites";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
