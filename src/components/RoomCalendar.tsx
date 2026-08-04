@@ -321,7 +321,8 @@ function MonthView({
   const gridStart = mondayOf(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const month = cursor.getMonth();
-  const byDay = bucketByDay(events);
+  // varre a lista inteira para preencher 42 celulas: sem memo, refazia a cada render
+  const byDay = useMemo(() => bucketByDay(events), [events]);
 
   return (
     <div className="cal-month">
@@ -398,7 +399,8 @@ function TimeGrid({
 }) {
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
   const cols = `56px repeat(${days.length}, minmax(0, 1fr))`;
-  const byDay = bucketByDay(events);
+  // varre a lista inteira para preencher 42 celulas: sem memo, refazia a cada render
+  const byDay = useMemo(() => bucketByDay(events), [events]);
 
   const handleColClick = (e: React.MouseEvent<HTMLDivElement>, day: Date) => {
     const rect = e.currentTarget.getBoundingClientRect();

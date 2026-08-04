@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -58,13 +59,21 @@ export function MeetingsTable({
   const isAdmin = role === "owner" || role === "admin";
   const [start, end, periodLabel] = periodRange(view, cursor);
 
-  const rows = meetings
-    .filter((m) => roomFilter === "all" || m.room?.id === roomFilter)
-    .filter((m) => {
-      const t = new Date(m.starts_at);
-      return t >= start && t < end;
-    })
-    .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
+  // memoizado porque a conta e cara e o gatilho e barato: dois filtros e uma
+  // ordenacao sobre ate 5000 reunioes, com um objeto Date criado por linha.
+  // Sem isto refazia tudo a cada mudanca de estado da tela, inclusive abrir e
+  // fechar um dialogo, que nao tem nada a ver com a lista.
+  const rows = useMemo(
+    () =>
+      meetings
+        .filter((m) => roomFilter === "all" || m.room?.id === roomFilter)
+        .filter((m) => {
+          const t = new Date(m.starts_at);
+          return t >= start && t < end;
+        })
+        .sort((a, b) => b.starts_at.localeCompare(a.starts_at)),
+    [meetings, roomFilter, start, end],
+  );
 
   return (
     <Section title={`${plural(rows.length)} · ${periodLabel}`} padded={false}>
