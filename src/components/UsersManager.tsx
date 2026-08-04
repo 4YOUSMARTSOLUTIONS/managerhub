@@ -185,13 +185,15 @@ export function UsersManager({
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
-            // O nome do gestor sai só para CONFERÊNCIA, e o cabeçalho diz isso: a
-            // importação resolve pela matrícula e ignora esta coluna. Sem o aviso,
-            // editar o nome aqui e reimportar não faria nada, em silêncio.
-            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Gestor (não editável)", "Código Gestor", "Perfil"]}
+            // A exportação tem as MESMAS colunas do modelo de importação, e só
+            // elas: o arquivo exportado é o que volta pela importação, então toda
+            // coluna daqui ou é lida na volta, ou é ruído que convida a ser
+            // preenchida à toa. Por isso o gestor sai só como matrícula, sem o
+            // nome. Para conferir o organograma com nomes, a tela é "Minha equipe".
+            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil"]}
             rows={employees.map((e) => {
               const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
-              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerName ?? "", e.managerCode ?? "", roleLabel(e.role)];
+              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerCode ?? "", roleLabel(e.role)];
             })}
           />
           <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>
