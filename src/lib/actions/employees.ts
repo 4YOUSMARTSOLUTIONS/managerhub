@@ -54,14 +54,22 @@ export type ImportSummary = {
   /** recontratações: mesmo CPF com código de colaborador novo */
   updated: number;
   skipped: number;
+  /**
+   * colaboradores já cadastrados em que a planilha mexeu SÓ no gestor.
+   * Conta separado de `updated` porque não é recontratação: nenhum outro campo
+   * do cadastro foi tocado.
+   */
+  managers: number;
   /** linhas que não alteraram nada: mesmo código, ou contrato anterior (histórico) */
   skippedList: { nome: string; cpf: string; codigo: string | null; motivo?: string }[];
   updatedList: { nome: string; cpf: string; motivo: string }[];
+  managersList: { nome: string; cpf: string; motivo: string }[];
   errors: { nome?: string; cpf?: string; erro: string }[];
 };
 
 const EMPTY_SUMMARY: ImportSummary = {
-  created: 0, updated: 0, skipped: 0, skippedList: [], updatedList: [], errors: [],
+  created: 0, updated: 0, skipped: 0, managers: 0,
+  skippedList: [], updatedList: [], managersList: [], errors: [],
 };
 
 export async function importEmployees(
@@ -71,7 +79,7 @@ export async function importEmployees(
   try {
     const { supabase } = await actionContext();
     if (!password || password.length < 8) {
-      return { ...EMPTY_SUMMARY, errors: [{ erro: "Senha padrão mínima de 6 caracteres." }] };
+      return { ...EMPTY_SUMMARY, errors: [{ erro: "Senha padrão mínima de 8 caracteres." }] };
     }
     const { data, error } = await supabase.rpc("admin_import_employees", {
       p_rows: rows as unknown as never,

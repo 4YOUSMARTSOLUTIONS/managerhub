@@ -24,6 +24,8 @@ export type EmployeeRow = EmployeeData & {
   positionName: string | null;
   levelName: string | null;
   managerName: string | null;
+  /** matrícula do gestor: é ela que a reimportação usa como chave */
+  managerCode: string | null;
   unitNames: string[];
   active: boolean;
   dismissedAt: string | null;
@@ -172,10 +174,12 @@ export function UsersManager({
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
-            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail"]}
+            // Gestor sai em DUAS colunas de propósito: o nome é o que a pessoa lê e
+            // preenche, o código é o que a reimportação resolve sem risco de homônimo.
+            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Gestor", "Código Gestor"]}
             rows={employees.map((e) => {
               const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
-              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? ""];
+              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerName ?? "", e.managerCode ?? ""];
             })}
           />
           <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>

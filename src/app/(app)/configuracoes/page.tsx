@@ -139,6 +139,9 @@ export default async function SettingsPage() {
   const subById = new Map((subdepartments ?? []).map((s) => [s.id, s]));
   const posById = new Map((positions ?? []).map((p) => [p.id, p]));
   const levelById = new Map((levels ?? []).map((l) => [l.id, l]));
+  // matrícula por usuário: a exportação leva o CÓDIGO do gestor além do nome,
+  // porque é ele a chave estável na reimportação (nome pode ganhar homônimo)
+  const codeByUser = new Map(mems.map((m) => [m.user_id, m.employee_code]));
   const unitsByMem = new Map<string, string[]>();
   for (const mu of muData ?? []) {
     const arr = unitsByMem.get(mu.membership_id) ?? [];
@@ -173,6 +176,7 @@ export default async function SettingsPage() {
       positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
       levelName: m.position_level_id ? levelById.get(m.position_level_id)?.name ?? null : null,
       managerName: m.manager_id ? profById.get(m.manager_id)?.full_name ?? null : null,
+      managerCode: m.manager_id ? codeByUser.get(m.manager_id) ?? null : null,
       unitNames: uIds.map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
       active: m.is_active,
     };
