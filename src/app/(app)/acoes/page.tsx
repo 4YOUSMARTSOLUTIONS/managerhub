@@ -42,21 +42,17 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const unitIds = effectiveUnitFilter(unitScope);
   const unitById = new Map(unitScope.units.map((u) => [u.id, u.name]));
 
-  const { data: search } = await supabase.rpc("search_action_ids", {
+  // Só a leitura das AÇÕES depende da busca: ela precisa dos ids. Todo o resto
+  // (catálogos, nomes, opções de filtro, flag de IA) não depende de nada e por isso
+  // sai na mesma hora, em vez de esperar a busca terminar para só então começar.
+  // Antes eram 6 idas ao banco em fila; agora a página espera a mais lenta, não a soma.
+  const searchP = supabase.rpc("search_action_ids", {
     p_filters: { ...filters, units: unitIds ?? null },
     p_limit: PAGE_SIZE,
     p_offset: from,
   });
-  const { ids: pageIds, total: actionsTotal } = (search ?? { ids: [], total: 0 }) as { ids: string[]; total: number };
-
-  const [
-    { data: actionsRaw }, { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
-    { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
-    { data: members }, { data: profilesData }, { data: filterOpts },
-  ] = await Promise.all([
-    pageIds.length
-      ? supabase.from("actions").select("*").in("id", pageIds)
-      : Promise.resolve({ data: [] as Tables<"actions">[] }),
+  const flagsP = getPlatformIntegrationFlags();
+  const catalogosP = Promise.all([
     supabase.from("sdpo_programas").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
@@ -66,11 +62,31 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).is("deleted_at", null).order("name"),
     supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenant.id).is("deleted_at", null).order("occurred_on", { ascending: false }).limit(500),
-    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
-    // nomes: todos os membros do tenant (inclui inativos, p/ resolver autores antigos)
-    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id),
+    // UMA consulta só, com is_active junto: os ativos alimentam o seletor de
+    // pessoas e a lista inteira resolve o nome de autores já desligados. Antes
+    // eram duas consultas quase idênticas, e a segunda repetia ~84 KB de nomes.
+    supabase.from("memberships").select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id),
     // opções dos selects a partir da base inteira (não só da página)
     supabase.rpc("action_filter_options"),
+  ]);
+
+  const { data: search } = await searchP;
+  const { ids: pageIds, total: actionsTotal } = (search ?? { ids: [], total: 0 }) as { ids: string[]; total: number };
+
+  const [
+    { data: actionsRaw },
+    [
+      { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
+      { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
+      { data: profilesData }, { data: filterOpts },
+    ],
+    flags,
+  ] = await Promise.all([
+    pageIds.length
+      ? supabase.from("actions").select("*").in("id", pageIds)
+      : Promise.resolve({ data: [] as Tables<"actions">[] }),
+    catalogosP,
+    flagsP,
   ]);
 
   // a busca devolve os ids já ordenados; o .in() não preserva ordem
@@ -193,7 +209,9 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     attachments: attsByAction.get(a.id) ?? [],
   }));
 
-  const people: Person[] = (members ?? [])
+  // o seletor de pessoas mostra só quem está ativo; o mapa de nomes acima cobre todos
+  const people: Person[] = (profilesData ?? [])
+    .filter((m) => m.is_active)
     .map((m) => ({ id: m.user_id, name: (m.profiles as { full_name: string | null } | null)?.full_name ?? "—" }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
@@ -223,7 +241,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         series={(seriesData ?? []).map((s) => ({ id: s.id, name: s.name }))}
         occurrences={(occData ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on }))}
         units={unitScope.units}
-        aiEnabled={(await getPlatformIntegrationFlags()).hasOpenAI}
+        aiEnabled={flags.hasOpenAI}
         filters={filters}
         filterOptions={(filterOpts ?? { programas: [], pilares: [], meetings: [], requesters: [], assignees: [] }) as FilterOptions}
         total={actionsTotal}

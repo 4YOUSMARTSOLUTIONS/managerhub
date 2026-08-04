@@ -1464,3 +1464,20 @@ a.tab {
   border-radius: 3px;
   display: inline-block;
 }
+
+/* Barra de progresso do topo (TopProgress).
+   Avança depressa e desacelera perto do fim: não é progresso real, é a convenção
+   visual que diz "estou trabalhando" sem prometer quanto falta. */
+@keyframes mh-topbar {
+  0%   { transform: scaleX(0); }
+  40%  { transform: scaleX(0.55); }
+  70%  { transform: scaleX(0.78); }
+  100% { transform: scaleX(0.94); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* sem corrida da barra: fica estática, ainda comunicando que algo está em curso */
+  @keyframes mh-topbar {
+    0%, 100% { transform: scaleX(0.5); }
+  }
+}

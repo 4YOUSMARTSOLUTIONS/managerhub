@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Filter, MessageSquare } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { TopProgress } from "@/components/ui/TopProgress";
 import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, effStatus, type EffStatus } from "@/lib/constants";
 import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -40,6 +41,12 @@ export type ActionFilters = {
   q: string; sdpo: string; from: string; to: string;
   priority: string[]; status: string[]; programa: string[];
   pilar: string[]; meeting: string[]; requester: string[]; assignee: string[];
+};
+
+/** Estado "sem filtro nenhum", usado ao limpar. */
+const VAZIO: ActionFilters = {
+  q: "", sdpo: "", from: "", to: "",
+  priority: [], status: [], programa: [], pilar: [], meeting: [], requester: [], assignee: [],
 };
 
 const MULTI_KEYS = ["priority", "status", "programa", "pilar", "meeting", "requester", "assignee"] as const;
@@ -151,8 +158,20 @@ export function ActionsManager({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  /**
+   * O que o usuário VÊ marcado, que não é o mesmo que o servidor já respondeu.
+   *
+   * Sem isto o filtro parecia travado: a caixinha reflete a URL, e o
+   * `startTransition` mantém a tela antiga de propósito enquanto a nova carrega.
+   * Ou seja, a marcação só aparecia DEPOIS da ida ao banco. Aqui ela é imediata,
+   * e a barra de progresso no topo conta que o resultado está vindo.
+   */
+  const [filtrosVistos, marcarOtimista] = useOptimistic(filters);
+
   const countOf = (v: string | string[]) => (Array.isArray(v) ? (v.length > 0 ? 1 : 0) : v ? 1 : 0);
-  const activeCount = Object.values(filters).reduce((n, v) => n + countOf(v), 0);
+  // contagem e botão "Limpar" seguem o que o usuário ACABOU de marcar, não o que o
+  // servidor já confirmou: é o que faz o clique responder na hora
+  const activeCount = Object.values(filtrosVistos).reduce((n, v) => n + countOf(v), 0);
   const hasFilters = activeCount > 0;
 
   const [filtersOpen, setFiltersOpen] = useState(hasFilters);
@@ -170,12 +189,20 @@ export function ActionsManager({
     }
     next.delete("p"); // qualquer mudança de filtro volta para a primeira página
     const qs = next.toString();
-    startTransition(() => router.push(qs ? `/acoes?${qs}` : "/acoes", { scroll: false }));
-  }, [router, searchParams]);
+    startTransition(() => {
+      // precisa ser DENTRO da transição: é o que o React exige para casar o
+      // estado otimista com a navegação e desfazê-lo sozinho quando ela termina
+      marcarOtimista((atual) => ({ ...atual, ...patch }));
+      router.push(qs ? `/acoes?${qs}` : "/acoes", { scroll: false });
+    });
+  }, [router, searchParams, marcarOtimista]);
 
   const clearFilters = () => {
     setQDraft("");
-    startTransition(() => router.push("/acoes", { scroll: false }));
+    startTransition(() => {
+      marcarOtimista(() => VAZIO);
+      router.push("/acoes", { scroll: false });
+    });
   };
 
   // busca livre: espera o usuário parar de digitar antes de consultar o banco
@@ -227,6 +254,7 @@ export function ActionsManager({
 
   return (
     <div>
+      <TopProgress active={isPending} />
       <PageHeader
         title="Ações"
         subtitle="Abertura e acompanhamento de ações."
@@ -242,6 +270,9 @@ export function ActionsManager({
       <Section
         title={`${total} ${total === 1 ? "ação" : "ações"}${hasFilters ? " no filtro" : ""}${isPending ? " · atualizando…" : ""}`}
         padded={false}
+        /* a lista esmaece enquanto o novo resultado vem, mas segue legível e
+           clicável: o usuário pode marcar o próximo filtro sem esperar este */
+        bodyStyle={isPending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}
         action={
           <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
             {hasFilters && (
@@ -270,12 +301,12 @@ export function ActionsManager({
               <MultiSelect
                 label="Prioridade" allLabel="Todas"
                 options={Object.entries(PRIORITY).map(([v, l]) => ({ value: v, label: l }))}
-                selected={filters.priority}
+                selected={filtrosVistos.priority}
                 onChange={(v) => applyFilters({ priority: v })}
               />
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>SDPO</span>
-                <select className="select" value={filters.sdpo} onChange={(e) => applyFilters({ sdpo: e.target.value })}>
+                <select className="select" value={filtrosVistos.sdpo} onChange={(e) => applyFilters({ sdpo: e.target.value })}>
                   <option value="">Todos</option>
                   <option value="sim">Sim</option>
                   <option value="nao">Não</option>
@@ -284,13 +315,13 @@ export function ActionsManager({
               <MultiSelect
                 label="Status"
                 options={(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => ({ value: k, label: EFF_STATUS_LABEL[k] }))}
-                selected={filters.status}
+                selected={filtrosVistos.status}
                 onChange={(v) => applyFilters({ status: v })}
               />
               <MultiSelect
                 label="Programa"
                 options={programaOpts.map((p) => ({ value: p, label: p }))}
-                selected={filters.programa}
+                selected={filtrosVistos.programa}
                 onChange={(v) => applyFilters({ programa: v })}
               />
               <MultiSelect
@@ -298,7 +329,7 @@ export function ActionsManager({
                 options={pilarOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
                 legacyLabel="Legados"
                 legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
-                selected={filters.pilar}
+                selected={filtrosVistos.pilar}
                 onChange={(v) => applyFilters({ pilar: v })}
               />
               <MultiSelect
@@ -306,7 +337,7 @@ export function ActionsManager({
                 options={meetingOpts.map((m) => ({ value: m.nome, label: m.nome, legacy: m.legacy }))}
                 legacyLabel="Legadas"
                 legacyHint="Reunião que não existe mais como série ativa na agenda. Continua nas ações antigas."
-                selected={filters.meeting}
+                selected={filtrosVistos.meeting}
                 onChange={(v) => applyFilters({ meeting: v })}
               />
               <MultiSelect
@@ -314,7 +345,7 @@ export function ActionsManager({
                 options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
                 legacyLabel="Legados"
                 legacyHint={PESSOA_LEGADA}
-                selected={filters.requester}
+                selected={filtrosVistos.requester}
                 onChange={(v) => applyFilters({ requester: v })}
               />
               <MultiSelect
@@ -322,16 +353,16 @@ export function ActionsManager({
                 options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
                 legacyLabel="Legados"
                 legacyHint={PESSOA_LEGADA}
-                selected={filters.assignee}
+                selected={filtrosVistos.assignee}
                 onChange={(v) => applyFilters({ assignee: v })}
               />
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Aberta de</span>
-                <input type="date" className="input" value={filters.from} onChange={(e) => applyFilters({ from: e.target.value })} />
+                <input type="date" className="input" value={filtrosVistos.from} onChange={(e) => applyFilters({ from: e.target.value })} />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Aberta até</span>
-                <input type="date" className="input" value={filters.to} onChange={(e) => applyFilters({ to: e.target.value })} />
+                <input type="date" className="input" value={filtrosVistos.to} onChange={(e) => applyFilters({ to: e.target.value })} />
               </label>
             </div>
           </div>
