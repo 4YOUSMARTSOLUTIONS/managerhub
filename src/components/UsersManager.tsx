@@ -23,6 +23,7 @@ export type EmployeeRow = EmployeeData & {
   subdepartmentName: string | null;
   positionName: string | null;
   levelName: string | null;
+  hierarchyName: string | null;
   managerName: string | null;
   /** matrícula do gestor: é ela que a reimportação usa como chave */
   managerCode: string | null;
@@ -72,6 +73,7 @@ export function UsersManager({
   subdepartments,
   positions,
   levels,
+  hierarchies,
   people,
   currentUserId,
   isSuperAdmin = false,
@@ -82,6 +84,7 @@ export function UsersManager({
   subdepartments: SubdeptOption[];
   positions: Option[];
   levels: Option[];
+  hierarchies: Option[];
   people: Option[];
   currentUserId: string;
   /** dono do SaaS: pode gerir o papel Proprietário e agir sobre owners */
@@ -94,6 +97,7 @@ export function UsersManager({
   const [query, setQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [posFilter, setPosFilter] = useState("");
+  const [hierFilter, setHierFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [page, setPage] = useState(1);
 
@@ -154,20 +158,21 @@ export function UsersManager({
       )) return false;
       if (deptFilter && e.departmentId !== deptFilter) return false;
       if (posFilter && e.positionId !== posFilter) return false;
+      if (hierFilter && e.hierarchyLevelId !== hierFilter) return false;
       if (statusFilter === "active" && !e.active) return false;
       if (statusFilter === "inactive" && e.active) return false;
       return true;
     });
-  }, [employees, query, deptFilter, posFilter, statusFilter]);
+  }, [employees, query, deptFilter, posFilter, hierFilter, statusFilter]);
 
   // sempre que os filtros mudam, volta para a primeira página
-  useEffect(() => { setPage(1); }, [query, deptFilter, posFilter, statusFilter]);
+  useEffect(() => { setPage(1); }, [query, deptFilter, posFilter, hierFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageClamped = Math.min(page, totalPages);
   const start = (pageClamped - 1) * PAGE_SIZE;
   const visible = filtered.slice(start, start + PAGE_SIZE);
-  const hasFilters = !!(query || deptFilter || posFilter || statusFilter !== "all");
+  const hasFilters = !!(query || deptFilter || posFilter || hierFilter || statusFilter !== "all");
 
   return (
     <div className="card">
@@ -190,10 +195,10 @@ export function UsersManager({
             // coluna daqui ou é lida na volta, ou é ruído que convida a ser
             // preenchida à toa. Por isso o gestor sai só como matrícula, sem o
             // nome. Para conferir o organograma com nomes, a tela é "Minha equipe".
-            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil"]}
+            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil", "Hierarquia"]}
             rows={employees.map((e) => {
               const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
-              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerCode ?? "", roleLabel(e.role)];
+              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerCode ?? "", roleLabel(e.role), e.hierarchyName ?? ""];
             })}
           />
           <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>
@@ -209,13 +214,17 @@ export function UsersManager({
           <option value="">Todas as funções</option>
           {positions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        <select className="select" value={hierFilter} onChange={(e) => setHierFilter(e.target.value)} style={{ width: 180, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
+          <option value="">Toda a hierarquia</option>
+          {hierarchies.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+        </select>
         <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")} style={{ width: 160, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
           <option value="all">Todos os status</option>
           <option value="active">Ativos</option>
           <option value="inactive">Inativos</option>
         </select>
         {hasFilters && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setQuery(""); setDeptFilter(""); setPosFilter(""); setStatusFilter("all"); }}>Limpar filtros</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setQuery(""); setDeptFilter(""); setPosFilter(""); setHierFilter(""); setStatusFilter("all"); }}>Limpar filtros</button>
         )}
       </div>
 
@@ -251,6 +260,7 @@ export function UsersManager({
                   <td className="muted">
                     {e.departmentName ?? "—"}
                     {e.positionName && <div className="soft" style={{ fontSize: "0.75rem" }}>{e.positionName}{e.levelName ? ` · ${e.levelName}` : ""}</div>}
+                    {e.hierarchyName && <div className="soft" style={{ fontSize: "0.72rem" }}>{e.hierarchyName}</div>}
                   </td>
                   <td><Badge tone={roleTone(e.role)}>{roleLabel(e.role)}</Badge></td>
                   <td><Badge tone={e.active ? "green" : "red"}>{e.active ? "Ativo" : "Inativo"}</Badge></td>
@@ -305,6 +315,7 @@ export function UsersManager({
         subdepartments={subdepartments}
         positions={positions}
         levels={levels}
+        hierarchies={hierarchies}
         people={people}
         canSetOwner={isSuperAdmin}
       />

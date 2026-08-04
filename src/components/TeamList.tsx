@@ -21,6 +21,7 @@ export type TeamMember = {
   subdepartmentName: string | null;
   positionName: string | null;
   levelName: string | null;
+  hierarchyName: string | null;
   /** chefe DIRETO: com a cadeia inteira à vista, é o que diz o nível de cada um */
   managerName: string | null;
 };
@@ -36,7 +37,7 @@ export function TeamList({ members }: { members: TeamMember[] }) {
     return members.filter((m) => {
       if (somenteAtivos && !m.active) return false;
       if (!q) return true;
-      return [m.fullName, m.employeeCode, m.departmentName, m.positionName, m.managerName]
+      return [m.fullName, m.employeeCode, m.departmentName, m.positionName, m.hierarchyName, m.managerName]
         .some((v) => v && normal(v).includes(q));
     });
   }, [members, busca, somenteAtivos]);
@@ -71,6 +72,7 @@ export function TeamList({ members }: { members: TeamMember[] }) {
               <th>Matrícula</th>
               <th>Colaborador</th>
               <th>Setor / Função</th>
+              <th>Hierarquia</th>
               <th>Responde a</th>
               <th>Admissão</th>
               <th>Perfil</th>
@@ -99,6 +101,7 @@ export function TeamList({ members }: { members: TeamMember[] }) {
                     </div>
                   )}
                 </td>
+                <td className="muted">{m.hierarchyName ?? "—"}</td>
                 <td className="muted">{m.managerName ?? "—"}</td>
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{m.admissionDate ? formatDate(m.admissionDate) : "—"}</td>
                 <td><Badge tone={roleTone(m.role)}>{m.role === "owner" ? "Proprietário" : USER_TYPE[m.role as keyof typeof USER_TYPE] ?? m.role}</Badge></td>

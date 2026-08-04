@@ -33,6 +33,7 @@ import {
   createSubdepartment, deleteSubdepartment, setSubdepartmentActive,
   createPosition, deletePosition, setPositionActive,
   createPositionLevel, deletePositionLevel, setPositionLevelActive,
+  createHierarchyLevel, deleteHierarchyLevel, setHierarchyLevelActive, moveHierarchyLevel,
 } from "@/lib/actions/registry";
 import {
   createProgram, deleteProgram, setProgramActive,
@@ -66,7 +67,7 @@ export default async function SettingsPage() {
   // banco em São Paulo, cada onda custava um ida e volta que não precisava existir.
   const [
     { data: memberships }, { data: units }, { data: departments },
-    { data: subdepartments }, { data: positions }, { data: levels }, { data: rooms }, { data: holidays },
+    { data: subdepartments }, { data: positions }, { data: levels }, { data: hierarchies }, { data: rooms }, { data: holidays },
     { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
     { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
     { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData },
@@ -77,6 +78,9 @@ export default async function SettingsPage() {
     supabase.from("subdepartments").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name"),
+    // ordena por `rank`, nao por nome: hierarquia tem ordem propria, e
+    // alfabetica poria "Analista" acima de "Diretoria"
+    supabase.from("hierarchy_levels").select("*").eq("tenant_id", tenant.id).order("rank").order("name"),
     supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("holidays").select("*").eq("tenant_id", tenant.id).order("day"),
     supabase.from("sdpo_programas").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -139,6 +143,7 @@ export default async function SettingsPage() {
   const subById = new Map((subdepartments ?? []).map((s) => [s.id, s]));
   const posById = new Map((positions ?? []).map((p) => [p.id, p]));
   const levelById = new Map((levels ?? []).map((l) => [l.id, l]));
+  const hierById = new Map((hierarchies ?? []).map((h) => [h.id, h]));
   // matrícula por usuário: a exportação leva o CÓDIGO do gestor além do nome,
   // porque é ele a chave estável na reimportação (nome pode ganhar homônimo)
   const codeByUser = new Map(mems.map((m) => [m.user_id, m.employee_code]));
@@ -168,6 +173,7 @@ export default async function SettingsPage() {
       subdepartmentId: m.subdepartment_id,
       positionId: m.position_id,
       positionLevelId: m.position_level_id,
+      hierarchyLevelId: m.hierarchy_level_id,
       managerId: m.manager_id,
       unitIds: uIds,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
@@ -175,6 +181,7 @@ export default async function SettingsPage() {
       dismissedAt: m.dismissed_at ?? null,
       positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
       levelName: m.position_level_id ? levelById.get(m.position_level_id)?.name ?? null : null,
+      hierarchyName: m.hierarchy_level_id ? hierById.get(m.hierarchy_level_id)?.name ?? null : null,
       managerName: m.manager_id ? profById.get(m.manager_id)?.full_name ?? null : null,
       managerCode: m.manager_id ? codeByUser.get(m.manager_id) ?? null : null,
       unitNames: uIds.map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
@@ -188,6 +195,9 @@ export default async function SettingsPage() {
   const subOpts = (subdepartments ?? []).map((s) => ({ id: s.id, name: s.name, department_id: s.department_id, active: s.active }));
   const posOpts = (positions ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }));
   const levelOpts = (levels ?? []).map((l) => ({ id: l.id, name: l.name, active: l.active }));
+  const hierarchyOpts = (hierarchies ?? []).map((h) => ({ id: h.id, name: h.name, active: h.active }));
+  // "em uso" sai dos vinculos que a pagina JA carregou, sem ida extra ao banco
+  const usedHierarchy = new Set(mems.map((m) => m.hierarchy_level_id).filter((x): x is string => !!x));
 
   // remuneração variável (metas individuais)
   const rvConfigs = (rvConfigsData ?? []).map((c) => ({
@@ -229,6 +239,7 @@ export default async function SettingsPage() {
       subdepartments={subOpts}
       positions={posOpts}
       levels={levelOpts}
+      hierarchies={hierarchyOpts}
       people={people}
       currentUserId={user.id}
       isSuperAdmin={isSuperAdmin}
@@ -271,6 +282,35 @@ export default async function SettingsPage() {
           id: "funcoes",
           label: "Funções",
           content: <RegistryList title="Funções" items={posOpts.map((p) => ({ ...p, canDelete: !usedPosition.has(p.id) }))} createAction={createPosition} deleteAction={deletePosition} toggleAction={setPositionActive} placeholder="Nome da função" headerAction={<><ImportStructureDialog /><ExportButton filename="funcoes.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={posOpts.map((p) => ["", "", p.name])} /></>} />,
+        },
+        {
+          id: "hierarquia",
+          label: "Hierarquia",
+          content: (
+            <RegistryList
+              title="Hierarquia"
+              description="Nível na estrutura da empresa, do topo para a base. Não confundir com Perfis de função (Júnior, Pleno), que é a senioridade dentro do cargo."
+              items={hierarchyOpts.map((h) => ({ ...h, canDelete: !usedHierarchy.has(h.id) }))}
+              createAction={createHierarchyLevel}
+              deleteAction={deleteHierarchyLevel}
+              toggleAction={setHierarchyLevelActive}
+              placeholder="Ex.: Coordenação"
+              rowActions={(it) => (
+                <>
+                  <form action={moveHierarchyLevel} style={{ display: "inline-flex" }}>
+                    <input type="hidden" name="id" value={it.id} />
+                    <input type="hidden" name="dir" value="up" />
+                    <button className="icon-btn" type="submit" title="Subir" aria-label="Subir">↑</button>
+                  </form>
+                  <form action={moveHierarchyLevel} style={{ display: "inline-flex" }}>
+                    <input type="hidden" name="id" value={it.id} />
+                    <input type="hidden" name="dir" value="down" />
+                    <button className="icon-btn" type="submit" title="Descer" aria-label="Descer">↓</button>
+                  </form>
+                </>
+              )}
+            />
+          ),
         },
         {
           id: "perfis",

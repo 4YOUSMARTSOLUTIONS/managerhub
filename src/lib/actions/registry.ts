@@ -163,6 +163,72 @@ export async function deletePositionLevel(formData: FormData): Promise<void> {
   revalidatePath(RP);
 }
 
+// ---------- Hierarquia ----------
+//
+// Segue o mesmo molde dos demais catálogos, com um acréscimo: `rank`. Hierarquia
+// tem ordem (Diretoria acima de Gerência), então a lista é ordenada por ele e não
+// pelo nome. O passo de 10 deixa espaço para encaixar nível novo no meio sem
+// renumerar a tabela toda.
+const PASSO_HIERARQUIA = 10;
+
+export async function createHierarchyLevel(formData: FormData): Promise<void> {
+  const { supabase, tenantId } = await actionContext();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return;
+  // nasce no fim da ordem; reordenar é uma ação à parte
+  const { data: ultimo } = await supabase
+    .from("hierarchy_levels").select("rank").eq("tenant_id", tenantId)
+    .order("rank", { ascending: false }).limit(1).maybeSingle();
+  await supabase.from("hierarchy_levels").insert({
+    tenant_id: tenantId, name, rank: (ultimo?.rank ?? 0) + PASSO_HIERARQUIA,
+  });
+  revalidatePath(RP);
+}
+
+export async function setHierarchyLevelActive(formData: FormData): Promise<void> {
+  const { supabase } = await actionContext();
+  await supabase.from("hierarchy_levels").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
+  revalidatePath(RP);
+}
+
+export async function deleteHierarchyLevel(formData: FormData): Promise<void> {
+  const { supabase } = await actionContext();
+  const id = String(formData.get("id"));
+  const used = await isCatalogInUse(supabase, id, [{ table: "memberships", col: "hierarchy_level_id" }]);
+  if (used) { await setHierarchyLevelActive(formData); return; }
+  await supabase.from("hierarchy_levels").delete().eq("id", id);
+  revalidatePath(RP);
+}
+
+/**
+ * Sobe ou desce um nível na ordem.
+ *
+ * Troca o `rank` com o vizinho em vez de recalcular a lista inteira: é uma
+ * escrita em duas linhas, e nenhum outro nível se mexe. Se não houver vizinho na
+ * direção pedida, o nível já está na ponta e nada acontece.
+ */
+export async function moveHierarchyLevel(formData: FormData): Promise<void> {
+  const { supabase, tenantId } = await actionContext();
+  const id = String(formData.get("id"));
+  const paraCima = String(formData.get("dir")) === "up";
+
+  const { data: atual } = await supabase
+    .from("hierarchy_levels").select("id, rank").eq("id", id).maybeSingle();
+  if (!atual) return;
+
+  const { data: vizinho } = await supabase
+    .from("hierarchy_levels").select("id, rank")
+    .eq("tenant_id", tenantId)
+    [paraCima ? "lt" : "gt"]("rank", atual.rank)
+    .order("rank", { ascending: !paraCima })
+    .limit(1).maybeSingle();
+  if (!vizinho) return;
+
+  await supabase.from("hierarchy_levels").update({ rank: vizinho.rank }).eq("id", atual.id);
+  await supabase.from("hierarchy_levels").update({ rank: atual.rank }).eq("id", vizinho.id);
+  revalidatePath(RP);
+}
+
 // ---------- Importação em lote (Setor > Subsetor e Funções) ----------
 const normName = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 

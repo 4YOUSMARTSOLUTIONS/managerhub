@@ -11,7 +11,7 @@ type Row = Record<string, string>;
 const TEMPLATE_HEADERS = [
   "Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função",
   "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF",
-  "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil",
+  "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil", "Hierarquia",
 ];
 
 const norm = (s: string) =>
@@ -33,6 +33,7 @@ function fieldOf(header: string): string | null {
   // "Perfil" sozinho é o perfil de ACESSO. Vem antes do teste de "perfil função",
   // que é o nível do cargo (Júnior/Pleno/Sênior) e nada tem a ver com permissão.
   if (h === "perfil" || h.includes("perfil de acesso") || h.includes("tipo de usuario")) return "role";
+  if (h.includes("hierarquia") || h === "nivel hierarquico") return "hierarchy";
   if (h.includes("sub setor") || h.includes("subsetor")) return "subdepartment";
   if (h.startsWith("perfil")) return "level";
   if (h === "empresa" || h === "unidade") return "unit";
@@ -82,8 +83,8 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
-    const ex1 = ["MATRIZ; FILIAL", "1001", "João da Silva", "01/02/2024", "Analista", "Pleno", "Comercial", "Vendas", "10/05/1990", "390.533.447-05", "", "Masculino", "(11) 99999-0000", "joao@empresa.com", "1002", "Funcionário"];
-    const ex2 = ["FILIAL", "1002", "Maria Souza", "15/08/2023", "Assistente", "Júnior", "Administrativo", "Financeiro", "02/11/1995", "111.444.777-35", "", "Feminino", "", "", "", "Gestor"];
+    const ex1 = ["MATRIZ; FILIAL", "1001", "João da Silva", "01/02/2024", "Analista", "Pleno", "Comercial", "Vendas", "10/05/1990", "390.533.447-05", "", "Masculino", "(11) 99999-0000", "joao@empresa.com", "1002", "Funcionário", "Analista"];
+    const ex2 = ["FILIAL", "1002", "Maria Souza", "15/08/2023", "Assistente", "Júnior", "Administrativo", "Financeiro", "02/11/1995", "111.444.777-35", "", "Feminino", "", "", "", "Gestor", "Coordenação"];
     const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ex1, ex2]);
     ws["!cols"] = TEMPLATE_HEADERS.map(() => ({ wch: 22 }));
 
@@ -105,6 +106,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       ["E-mail", "Não", "Se vazio, o login do colaborador será por CPF"],
       ["Código Gestor", "Não", "MATRÍCULA do gestor (a mesma que está em Código Funcionário na linha dele). Vazio = não mexe no gestor atual. Para tirar o gestor, escreva -"],
       ["Perfil", "Não", "Gestor, Gerencial ou Funcionário. Vazio = não muda o perfil. Administrador e Proprietário só pela tela"],
+      ["Hierarquia", "Não", "Diretoria, Gerência, Coordenação, Supervisão, Analista... Nível que ainda não existir é criado. Vazio = não muda"],
     ];
     const wsI = XLSX.utils.aoa_to_sheet(instr);
     wsI["!cols"] = [{ wch: 22 }, { wch: 12 }, { wch: 64 }];
@@ -153,7 +155,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
   async function doImport() {
     setImporting(true); setSummary(null); setProgress("");
     const CHUNK = 150;
-    const agg: ImportSummary = { created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, skippedList: [], updatedList: [], managersList: [], rolesList: [], errors: [] };
+    const agg: ImportSummary = { created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0, skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], errors: [] };
     for (let i = 0; i < rows.length; i += CHUNK) {
       const part = rows.slice(i, i + CHUNK);
       setProgress(`Importando ${Math.min(i + part.length, rows.length)} de ${rows.length}…`);
@@ -163,10 +165,12 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       agg.skipped += res.skipped;
       agg.managers += res.managers ?? 0;
       agg.roles += res.roles ?? 0;
+      agg.hierarchies += res.hierarchies ?? 0;
       agg.skippedList.push(...(res.skippedList ?? []));
       agg.updatedList.push(...(res.updatedList ?? []));
       agg.managersList.push(...(res.managersList ?? []));
       agg.rolesList.push(...(res.rolesList ?? []));
+      agg.hierarchiesList.push(...(res.hierarchiesList ?? []));
       agg.errors.push(...res.errors);
     }
     setImporting(false); setProgress("");
@@ -176,10 +180,11 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
     if (agg.updated > 0) parts.push(`${agg.updated} recontratado(s)`);
     if (agg.managers > 0) parts.push(`${agg.managers} gestor(es) definido(s)`);
     if (agg.roles > 0) parts.push(`${agg.roles} perfil(is) alterado(s)`);
+    if (agg.hierarchies > 0) parts.push(`${agg.hierarchies} hierarquia(s) definida(s)`);
     if (agg.skipped > 0) parts.push(`${agg.skipped} já existiam`);
     // só fecha sozinho quando tudo foi criado; havendo ignorados, recontratados ou
     // erros, mantém aberto para o usuário ver de quem se trata
-    if (agg.errors.length === 0 && agg.skipped === 0 && agg.updated === 0 && agg.managers === 0 && agg.roles === 0) {
+    if (agg.errors.length === 0 && agg.skipped === 0 && agg.updated === 0 && agg.managers === 0 && agg.roles === 0 && agg.hierarchies === 0) {
       toast.success(`Importação concluída: ${parts.join(", ")}.`);
       onClose();
     } else {
@@ -261,6 +266,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
                 {summary.updated > 0 && <span className="badge badge-blue">{summary.updated} recontratados</span>}
                 {summary.managers > 0 && <span className="badge badge-blue">{summary.managers} gestores definidos</span>}
                 {summary.roles > 0 && <span className="badge badge-blue">{summary.roles} perfis alterados</span>}
+                {summary.hierarchies > 0 && <span className="badge badge-blue">{summary.hierarchies} hierarquias definidas</span>}
                 {summary.skipped > 0 && <span className="badge badge-amber">{summary.skipped} já existiam</span>}
                 {summary.errors.length > 0 && <span className="badge badge-red">{summary.errors.length} erros</span>}
               </div>
@@ -270,6 +276,15 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
                   <summary style={{ cursor: "pointer" }} className="muted">Recontratados ({summary.updatedList.length})</summary>
                   <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 160, overflow: "auto" }}>
                     {summary.updatedList.map((u, i) => <li key={i}>{u.nome} — {u.motivo}</li>)}
+                  </ul>
+                </details>
+              )}
+
+              {summary.hierarchiesList.length > 0 && (
+                <details open style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
+                  <summary style={{ cursor: "pointer" }} className="muted">Hierarquias definidas ({summary.hierarchiesList.length})</summary>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 200, overflow: "auto" }}>
+                    {summary.hierarchiesList.map((g, i) => <li key={i}>{g.nome} — {g.motivo}</li>)}
                   </ul>
                 </details>
               )}

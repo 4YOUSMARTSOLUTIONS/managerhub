@@ -398,6 +398,7 @@ export type Database = {
           manager_id: string | null
           position_id: string | null
           position_level_id: string | null
+          hierarchy_level_id: string | null
           role: Database["public"]["Enums"]["member_role"]
           subdepartment_id: string | null
           tenant_id: string
@@ -415,6 +416,7 @@ export type Database = {
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
+          hierarchy_level_id?: string | null
           role?: Database["public"]["Enums"]["member_role"]
           subdepartment_id?: string | null
           tenant_id: string
@@ -432,6 +434,7 @@ export type Database = {
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
+          hierarchy_level_id?: string | null
           role?: Database["public"]["Enums"]["member_role"]
           subdepartment_id?: string | null
           tenant_id?: string
@@ -506,6 +509,15 @@ export type Database = {
         Row: { id: string; tenant_id: string; name: string; active: boolean; created_at: string }
         Insert: { id?: string; tenant_id: string; name: string; active?: boolean; created_at?: string }
         Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; created_at?: string }
+        Relationships: []
+      }
+      // Hierarquia (Diretoria, Gerência, ...). O `rank` é o que a diferencia dos
+      // demais catálogos: hierarquia tem ordem, e sem ele a lista sairia
+      // alfabética, com "Analista" acima de "Diretoria".
+      hierarchy_levels: {
+        Row: { id: string; tenant_id: string; name: string; rank: number; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; rank?: number; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; rank?: number; active?: boolean; created_at?: string }
         Relationships: []
       }
       membership_units: {

@@ -59,16 +59,17 @@ export default async function MinhaEquipePage() {
   // Catálogos vêm como mapas por id, e não como embed, porque `memberships` não
   // declara essas relações no PostgREST. É o mesmo caminho que a tela de
   // Colaboradores já usa, então não invento um segundo jeito de fazer o mesmo.
-  const [{ data: vinculos }, { data: deps }, { data: subs }, { data: cargos }, { data: niveis }, { data: perfis }] =
+  const [{ data: vinculos }, { data: deps }, { data: subs }, { data: cargos }, { data: niveis }, { data: hierarquias }, { data: perfis }] =
     await Promise.all([
       supabase
         .from("memberships")
-        .select("user_id, employee_code, admission_date, is_active, manager_id, role, department_id, subdepartment_id, position_id, position_level_id")
+        .select("user_id, employee_code, admission_date, is_active, manager_id, role, department_id, subdepartment_id, position_id, position_level_id, hierarchy_level_id")
         .eq("tenant_id", tenant.id),
       supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("position_levels").select("id, name").eq("tenant_id", tenant.id),
+      supabase.from("hierarchy_levels").select("id, name").eq("tenant_id", tenant.id),
       // só as colunas que `authenticated` tem privilégio de ler (ver AGENTS.md)
       supabase.from("profiles").select("id, full_name, email, avatar_url"),
     ]);
@@ -77,6 +78,7 @@ export default async function MinhaEquipePage() {
   const nomeSub = new Map((subs ?? []).map((s) => [s.id, s.name]));
   const nomeCargo = new Map((cargos ?? []).map((p) => [p.id, p.name]));
   const nomeNivel = new Map((niveis ?? []).map((l) => [l.id, l.name]));
+  const nomeHier = new Map((hierarquias ?? []).map((h) => [h.id, h.name]));
   const perfilPorId = new Map((perfis ?? []).map((p) => [p.id, p]));
 
   const membros: TeamMember[] = (vinculos ?? [])
@@ -94,6 +96,7 @@ export default async function MinhaEquipePage() {
       subdepartmentName: v.subdepartment_id ? nomeSub.get(v.subdepartment_id) ?? null : null,
       positionName: v.position_id ? nomeCargo.get(v.position_id) ?? null : null,
       levelName: v.position_level_id ? nomeNivel.get(v.position_level_id) ?? null : null,
+      hierarchyName: v.hierarchy_level_id ? nomeHier.get(v.hierarchy_level_id) ?? null : null,
       // quem é o chefe direto: com a cadeia inteira à vista, sem isso não dá
       // para saber se a pessoa responde ao Gestor ou a alguém no meio
       managerName: v.manager_id ? perfilPorId.get(v.manager_id)?.full_name ?? null : null,

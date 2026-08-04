@@ -19,6 +19,7 @@ function buildData(formData: FormData, cpf: string) {
     subdepartment_id: String(formData.get("subdepartment_id") ?? ""),
     position_id: String(formData.get("position_id") ?? ""),
     position_level_id: String(formData.get("position_level_id") ?? ""),
+    hierarchy_level_id: String(formData.get("hierarchy_level_id") ?? ""),
     manager_id: String(formData.get("manager_id") ?? ""),
     role: String(formData.get("role") ?? "member"),
     unit_ids: formData.getAll("unit_ids").map(String).filter(Boolean),
@@ -67,12 +68,15 @@ export type ImportSummary = {
   /** colaboradores em que a planilha mudou SÓ o perfil de acesso */
   roles: number;
   rolesList: { nome: string; cpf: string; motivo: string }[];
+  /** colaboradores em que a planilha mudou SÓ a hierarquia */
+  hierarchies: number;
+  hierarchiesList: { nome: string; cpf: string; motivo: string }[];
   errors: { nome?: string; cpf?: string; erro: string }[];
 };
 
 const EMPTY_SUMMARY: ImportSummary = {
-  created: 0, updated: 0, skipped: 0, managers: 0, roles: 0,
-  skippedList: [], updatedList: [], managersList: [], rolesList: [], errors: [],
+  created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0,
+  skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], errors: [],
 };
 
 export async function importEmployees(

@@ -27,6 +27,7 @@ export type EmployeeData = {
   subdepartmentId: string | null;
   positionId: string | null;
   positionLevelId: string | null;
+  hierarchyLevelId: string | null;
   managerId: string | null;
   unitIds: string[];
 };
@@ -59,6 +60,7 @@ export function EmployeeDialog({
   subdepartments,
   positions,
   levels,
+  hierarchies,
   people,
   canSetOwner = false,
 }: {
@@ -70,6 +72,8 @@ export function EmployeeDialog({
   subdepartments: SubdeptOption[];
   positions: Option[];
   levels: Option[];
+  /** níveis de hierarquia, JÁ na ordem da empresa (não alfabética) */
+  hierarchies: Option[];
   people: Option[];
   /** super admin: pode definir/alterar o papel Proprietário (owner) */
   canSetOwner?: boolean;
@@ -101,6 +105,7 @@ export function EmployeeDialog({
   const deptList = act(departments, employee?.departmentId);
   const positionList = act(positions, employee?.positionId);
   const levelList = act(levels, employee?.positionLevelId);
+  const hierarchyList = act(hierarchies, employee?.hierarchyLevelId);
   const subs = act(subdepartments.filter((s) => s.department_id === deptId), employee?.subdepartmentId);
 
   return (
@@ -202,6 +207,18 @@ export function EmployeeDialog({
                 <select name="position_level_id" className="select" defaultValue={employee?.positionLevelId ?? ""}>
                   <option value="">—</option>
                   {levelList.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div style={grid2}>
+              {/* Hierarquia é o nível na ESTRUTURA da empresa (Diretoria, Gerência).
+                  Não confundir com "Perfil da função" acima, que é a senioridade
+                  dentro do cargo (Júnior, Pleno), nem com "Tipo de usuário", que é
+                  permissão. A lista vem ordenada do topo para a base. */}
+              <Field label="Hierarquia">
+                <select name="hierarchy_level_id" className="select" defaultValue={employee?.hierarchyLevelId ?? ""}>
+                  <option value="">—</option>
+                  {hierarchyList.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
               </Field>
             </div>

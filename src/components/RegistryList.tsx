@@ -16,6 +16,7 @@ export function RegistryList({
   toggleAction,
   extraFields,
   headerAction,
+  rowActions,
   placeholder = "Nome",
   emptyText = "Nenhum item cadastrado.",
   metaLabel = "Detalhe",
@@ -30,6 +31,12 @@ export function RegistryList({
   extraFields?: React.ReactNode;
   /** ação no canto direito do cabeçalho (ex.: importar em lote) */
   headerAction?: React.ReactNode;
+  /**
+   * Botões extras em cada linha, antes de desativar/excluir. Existe para a
+   * Hierarquia, que precisa de subir/descer: é o único catálogo com ordem.
+   * Opcional, então os outros dez catálogos seguem sem mudar nada.
+   */
+  rowActions?: (item: Item) => React.ReactNode;
   placeholder?: string;
   emptyText?: string;
   metaLabel?: string;
@@ -81,6 +88,7 @@ export function RegistryList({
                     )}
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
+                        {rowActions?.(it)}
                         {hasStatus && toggleAction && (
                           <form action={toggleAction} style={{ display: "inline-flex" }}>
                             <input type="hidden" name="id" value={it.id} />
