@@ -12,10 +12,18 @@ import { createClient } from "@/lib/supabase/server";
  * O proxy continua com a chamada dele: é ela que renova o cookie da sessão, roda em
  * outro contexto e não pode ser dispensada.
  */
-export const getAuthUser = cache(async () => {
+export const getAuthUser = cache(async (): Promise<{ id: string; email: string | null } | null> => {
   const supabase = await createClient();
+  // getClaims valida a assinatura localmente (o projeto assina com ES256 e publica o
+  // JWKS); o getUser faria uma ida à rede ao servidor de autenticação a cada request
+  const { data } = await supabase.auth.getClaims();
+  const sub = data?.claims?.sub;
+  if (sub) return { id: sub, email: (data.claims.email as string | undefined) ?? null };
+
+  // mesma rede de segurança do middleware: se a validação local não reconheceu,
+  // confirma no servidor antes de tratar como deslogado
   const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  return user ? { id: user.id, email: user.email ?? null } : null;
 });
 
 /** Mesma ideia para o super admin, que era verificado duas vezes por navegação. */

@@ -23,7 +23,7 @@ export type CompanyOpt = { id: string; name: string };
 export type CompanyScope = { companies: CompanyOpt[]; activeTenantId: string; viewAll: boolean };
 
 export type ActiveContext = {
-  user: { id: string; email: string | undefined };
+  user: { id: string; email: string | null | undefined };
   tenant: Tables<"tenants">;
   role: Enums<"member_role">;
   unitScope: UnitScope;
