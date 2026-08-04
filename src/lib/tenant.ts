@@ -92,13 +92,24 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   }
 
   // ----- escopo de unidade (dentro da empresa ativa) -----
-  const { data: unitRows } = await supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name");
+  //
+  // As duas perguntas saem JUNTAS: "quais unidades a empresa tem" precisa do id da
+  // empresa, e "a quais eu tenho acesso" precisa do id do vínculo. As duas coisas
+  // chegaram juntas no bloco acima, então a segunda não tem por que esperar a
+  // primeira. Antes esperava, só por estar escrita depois — uma ida e volta ao
+  // banco a mais em 100% das navegações de todas as telas.
+  const [{ data: unitRows }, { data: mu }] = await Promise.all([
+    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    // admin enxerga todas as unidades: nem chega a perguntar (igual a antes)
+    !isAdmin && membershipId
+      ? supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId)
+      : Promise.resolve({ data: null as { unit_id: string }[] | null }),
+  ]);
   const allUnits: UnitOpt[] = unitRows ?? [];
 
   let allowed: UnitOpt[] = allUnits;
-  if (!isAdmin && membershipId) {
-    const { data: mu } = await supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId);
-    const muIds = new Set((mu ?? []).map((x) => x.unit_id));
+  if (mu) {
+    const muIds = new Set(mu.map((x) => x.unit_id));
     if (muIds.size > 0) allowed = allUnits.filter((u) => muIds.has(u.id)); // restrito; vazio = não restrito
   }
   const allowedUnitIds = allowed.map((u) => u.id);

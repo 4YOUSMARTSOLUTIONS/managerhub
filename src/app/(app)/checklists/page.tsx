@@ -24,7 +24,10 @@ export default async function ChecklistsPage() {
   const { tenant, user, role, unitScope } = await requireContext();
   const isAdmin = role === "owner" || role === "admin";
   const supabase = await createClient();
-  await purgeStaleChecklistDrafts(); // rascunhos com +1h são removidos antes de carregar
+  // A limpeza de rascunhos velhos e best-effort e o resultado nao e usado: nao ha
+  // motivo para a tela inteira esperar um DELETE terminar antes de começar a ler.
+  // Sai junto com as leituras; se falhar, o proximo carregamento tenta de novo.
+  const purgaP = purgeStaleChecklistDrafts();
   const unitIds = effectiveUnitFilter(unitScope);
   const unitOr = unitIds ? `unit_id.in.(${unitIds.join(",")}),unit_id.is.null` : null;
 
@@ -50,6 +53,7 @@ export default async function ChecklistsPage() {
   ).eq("tenant_id", tenant.id).order("completed_at", { ascending: false }).order("created_at", { ascending: false }).limit(TETO_HISTORICO);
 
   const [{ data: cls }, { data: myMem }, { data: reports }, membersAll, { data: deps }, { data: subs }, { data: pos }, { data: runsData }, { data: tasksData }] = await Promise.all([
+    // (a purga corre em paralelo; o await dela vem no fim, sem segurar nada)
     unitOr ? clsQuery.or(unitOr) : clsQuery,
     supabase.from("memberships").select("position_id, department_id, subdepartment_id").eq("tenant_id", tenant.id).eq("user_id", user.id).maybeSingle(),
     supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id).eq("manager_id", user.id),
@@ -60,6 +64,7 @@ export default async function ChecklistsPage() {
     unitOr ? runsQuery.or(unitOr) : runsQuery,
     unitOr ? tasksQuery.or(unitOr) : tasksQuery,
   ]);
+  await purgaP;
 
   const name1 = (o: unknown) => (o as { name: string | null } | null)?.name ?? null;
   const fname = (o: unknown) => (o as { full_name: string | null } | null)?.full_name ?? null;

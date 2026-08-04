@@ -15,36 +15,86 @@ export default async function GoalsPage() {
   const isAdmin = role === "owner" || role === "admin";
   const supabase = await createClient();
 
-  // subordinados diretos (gestor = quem tem colaboradores abaixo). admin enxerga todos.
-  let reportIds: string[] = [];
-  if (!isAdmin) {
-    const { data: reports } = await supabase
-      .from("memberships")
-      .select("user_id")
+  // ---------- ONDA 1: tudo o que nao depende de nada ----------
+  //
+  // Antes esta tela fazia 7 idas ao banco EM FILA, e so 3 eram dependencias de
+  // verdade. As metas da area, os setores, os subsetores e a lista de pessoas nao
+  // precisavam de nada e mesmo assim esperavam a vez.
+  //
+  // `departments` e `subdepartments` eram consultados DUAS vezes cada, com a query
+  // identica: uma para o filtro das metas individuais, outra para as da area. Agora
+  // e uma leitura so, usada pelas duas.
+  const reportsP = isAdmin
+    ? Promise.resolve({ data: null as { user_id: string }[] | null })
+    : supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id).eq("manager_id", user.id);
+
+  const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, todosMembros] = await Promise.all([
+    reportsP,
+    supabase
+      .from("area_goals")
+      .select("id, name, description, unit, kind, direction, consolidation, department_id, subdepartment_id, unit_id, parent_id, owner_id, dept:departments(name), sub:subdepartments(name), orgUnit:units(name), owner:profiles!area_goals_owner_id_fkey(full_name)")
       .eq("tenant_id", tenant.id)
-      .eq("manager_id", user.id);
-    reportIds = (reports ?? []).map((r) => r.user_id);
-  }
-  // só gestores (com subordinados) ou admin cadastram metas
+      .order("sort")
+      .order("name"),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
+    getMembers(tenant.id),
+  ]);
+
+  // subordinados diretos (gestor = quem tem colaboradores abaixo). admin enxerga todos.
+  const reportIds: string[] = (reports ?? []).map((r) => r.user_id);
+  // so gestores (com subordinados) ou admin cadastram metas
   const canCreateGoals = isAdmin || reportIds.length > 0;
-  const canSeeMultiple = canCreateGoals; // vê metas de mais de um colaborador
-  // colaboradores visíveis: admin/owner = todos (null); demais = ele + subordinados
+  const canSeeMultiple = canCreateGoals; // ve metas de mais de um colaborador
+  // colaboradores visiveis: admin/owner = todos (null); demais = ele + subordinados
   const allowedOwnerIds: string[] | null = isAdmin ? null : [user.id, ...reportIds];
 
+  // ---------- ONDA 2: o que depende da onda 1 ----------
   let goalsQuery = supabase
     .from("individual_goals")
     .select("id, name, description, unit, direction, partial_pct, owner_id, owner:profiles!owner_id(full_name)")
     .eq("tenant_id", tenant.id);
   if (allowedOwnerIds) goalsQuery = goalsQuery.in("owner_id", allowedOwnerIds);
-  const { data: goals } = await goalsQuery.order("name");
 
+  let memQuery = supabase.from("memberships").select("user_id, department_id, subdepartment_id").eq("tenant_id", tenant.id);
+  if (allowedOwnerIds) memQuery = memQuery.in("user_id", allowedOwnerIds); // gestor: so o time
+
+  const areaIds = (areaGoals ?? []).map((g) => g.id);
+
+  const [{ data: goals }, { data: mems }, { data: areaEntries }] = await Promise.all([
+    goalsQuery.order("name"),
+    canSeeMultiple
+      ? memQuery
+      : Promise.resolve({ data: null as { user_id: string; department_id: string | null; subdepartment_id: string | null }[] | null }),
+    areaIds.length
+      ? supabase
+          .from("area_goal_entries")
+          .select("area_goal_id, unit_id, period, target_value, actual_value, numerator_value, denominator_value")
+          .in("area_goal_id", areaIds)
+      : Promise.resolve({ data: [] as { area_goal_id: string; unit_id: string | null; period: string; target_value: number | null; actual_value: number | null; numerator_value: number | null; denominator_value: number | null }[] }),
+  ]);
+
+  // ---------- ONDA 3: o que depende da onda 2 ----------
   const goalIds = (goals ?? []).map((g) => g.id);
-  const { data: entries } = goalIds.length
-    ? await supabase
-        .from("individual_goal_entries")
-        .select("goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
-        .in("goal_id", goalIds)
-    : { data: [] as { goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: "aberta" | "aprovada" | "reprovada"; approved_at: string | null; reproval_note: string | null }[] };
+  const ownerIds = [...new Set((goals ?? []).map((g) => g.owner_id))];
+  const admin = ownerIds.length ? createServiceClient() : null;
+
+  const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }] = await Promise.all([
+    goalIds.length
+      ? supabase
+          .from("individual_goal_entries")
+          .select("goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
+          .in("goal_id", goalIds)
+      : Promise.resolve({ data: [] as { goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: "aberta" | "aprovada" | "reprovada"; approved_at: string | null; reproval_note: string | null }[] }),
+    // RV configurada em Configuracoes (vigencias por funcao/colaborador). Leitura via
+    // service client (a RLS da config e owner/admin) - escopo restrito aos owners visiveis.
+    admin
+      ? admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id)
+      : Promise.resolve({ data: [] as { scope: string; position_id: string | null; user_id: string | null; effective_from: string; value: number }[] }),
+    admin
+      ? admin.from("memberships").select("user_id, position_id").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { user_id: string; position_id: string | null }[] }),
+  ]);
 
   const entriesByGoal = new Map<string, GoalEntryLite[]>();
   for (const e of entries ?? []) {
@@ -53,16 +103,8 @@ export default async function GoalsPage() {
     entriesByGoal.set(e.goal_id, arr);
   }
 
-  // RV configurada em Configurações (vigências por função/colaborador). Leitura via
-  // service client (RLS da config é owner/admin) — escopo restrito aos owners visíveis.
-  const ownerIds = [...new Set((goals ?? []).map((g) => g.owner_id))];
   const rvTimelines: { ownerId: string; from: string; value: number }[] = [];
-  if (ownerIds.length) {
-    const admin = createServiceClient();
-    const [{ data: rvCfgs }, { data: ownerMems }] = await Promise.all([
-      admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id),
-      admin.from("memberships").select("user_id, position_id").eq("tenant_id", tenant.id).in("user_id", ownerIds),
-    ]);
+  {
     const posByOwner = new Map((ownerMems ?? []).map((m) => [m.user_id, m.position_id]));
     const cfgs = rvCfgs ?? [];
     for (const ownerId of ownerIds) {
@@ -71,7 +113,7 @@ export default async function GoalsPage() {
       const posCfgs = posId ? cfgs.filter((c) => c.scope === "position" && c.position_id === posId) : [];
       if (userCfgs.length === 0 && posCfgs.length === 0) continue;
       // resolve a linha do tempo: em cada breakpoint vale o override do colaborador
-      // (última vigência <= ponto); sem override, vale o da função
+      // (ultima vigencia <= ponto); sem override, vale o da funcao
       const latest = (list: typeof cfgs, at: string) => {
         let best: (typeof cfgs)[number] | null = null;
         for (const c of list) if (c.effective_from <= at && (!best || c.effective_from > best.effective_from)) best = c;
@@ -80,34 +122,31 @@ export default async function GoalsPage() {
       const breakpoints = [...new Set([...userCfgs, ...posCfgs].map((c) => c.effective_from))].sort();
       for (const bp of breakpoints) {
         const u = latest(userCfgs, bp);
-        const p = latest(posCfgs, bp);
-        const value = u ? u.value : p ? p.value : 0;
+        const pcfg = latest(posCfgs, bp);
+        const value = u ? u.value : pcfg ? pcfg.value : 0;
         rvTimelines.push({ ownerId, from: bp, value });
       }
     }
   }
 
-  // mapa dono → setor/subsetor + opções de filtro (só p/ quem vê múltiplos colaboradores)
+  // mapa dono -> setor/subsetor + opcoes de filtro (so p/ quem ve multiplos colaboradores)
   const deptByUser = new Map<string, { dept: string | null; sub: string | null }>();
+  for (const m of mems ?? []) deptByUser.set(m.user_id, { dept: m.department_id, sub: m.subdepartment_id });
+
+  // a lista completa de pessoas e montada UMA vez e reaproveitada pelas duas abas;
+  // antes ia duas vezes no envio ao navegador, identica, para quem e admin
+  const todos = todosMembros
+    .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "-" }))
+    .filter((m) => m.id)
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
   let departments: { id: string; name: string }[] = [];
   let subdepartments: { id: string; name: string; departmentId: string }[] = [];
   let members: { id: string; name: string }[] = [];
   if (canSeeMultiple) {
-    let memQuery = supabase.from("memberships").select("user_id, department_id, subdepartment_id").eq("tenant_id", tenant.id);
-    if (allowedOwnerIds) memQuery = memQuery.in("user_id", allowedOwnerIds); // gestor: só o time
-    const [{ data: mems }, { data: deps }, { data: subs }, mem2] = await Promise.all([
-      memQuery,
-      supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
-      supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
-      getMembers(tenant.id),
-    ]);
-    for (const m of mems ?? []) deptByUser.set(m.user_id, { dept: m.department_id, sub: m.subdepartment_id });
-
     let depList = deps ?? [];
     let subList = subs ?? [];
-    let memberList = mem2
-      .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "—" }))
-      .filter((m) => m.id);
+    let memberList = todos;
     // gestor: restringe setores/subsetores/colaboradores ao seu time
     if (!isAdmin && allowedOwnerIds) {
       const allow = new Set(allowedOwnerIds);
@@ -119,7 +158,7 @@ export default async function GoalsPage() {
     }
     departments = depList.map((d) => ({ id: d.id, name: d.name }));
     subdepartments = subList.map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
-    members = memberList.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    members = memberList;
   }
 
   const goalRows: GoalRow[] = (goals ?? []).map((g) => {
@@ -138,28 +177,6 @@ export default async function GoalsPage() {
       entries: entriesByGoal.get(g.id) ?? [],
     };
   });
-
-  // ----- Metas da área (visível ao tenant) -----
-  const [{ data: areaGoals }, { data: deptsAll }, { data: subsAll }, { data: unitsAll }, membersAll] = await Promise.all([
-    supabase
-      .from("area_goals")
-      .select("id, name, description, unit, kind, direction, consolidation, department_id, subdepartment_id, unit_id, parent_id, owner_id, dept:departments(name), sub:subdepartments(name), orgUnit:units(name), owner:profiles!area_goals_owner_id_fkey(full_name)")
-      .eq("tenant_id", tenant.id)
-      .order("sort")
-      .order("name"),
-    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    getMembers(tenant.id),
-  ]);
-
-  const areaIds = (areaGoals ?? []).map((g) => g.id);
-  const { data: areaEntries } = areaIds.length
-    ? await supabase
-        .from("area_goal_entries")
-        .select("area_goal_id, unit_id, period, target_value, actual_value, numerator_value, denominator_value")
-        .in("area_goal_id", areaIds)
-    : { data: [] as { area_goal_id: string; unit_id: string | null; period: string; target_value: number | null; actual_value: number | null; numerator_value: number | null; denominator_value: number | null }[] };
 
   const areaEntriesByGoal = new Map<string, AreaEntryLite[]>();
   for (const e of areaEntries ?? []) {
@@ -188,13 +205,12 @@ export default async function GoalsPage() {
     entries: areaEntriesByGoal.get(g.id) ?? [],
   }));
 
-  const areaDepartments = (deptsAll ?? []).map((d) => ({ id: d.id, name: d.name }));
-  const areaSubdepartments = (subsAll ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
-  const areaUnits = (unitsAll ?? []).map((u) => ({ id: u.id, name: u.name }));
-  const areaMembers = membersAll
-    .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "—" }))
-    .filter((m) => m.id)
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  // As metas da área usam os mesmos setores/subsetores lidos na onda 1, sem repetir
+  // a consulta. A antiga leitura de `units` daqui era descartada: quem alimenta o
+  // seletor de unidade é o `unitScope` do requireContext, logo abaixo.
+  const areaDepartments = (deps ?? []).map((d) => ({ id: d.id, name: d.name }));
+  const areaSubdepartments = (subs ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
+  const areaMembers = todos;
 
   const tabs: Tab[] = [
     {
