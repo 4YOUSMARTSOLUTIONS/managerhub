@@ -185,9 +185,10 @@ export function UsersManager({
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
-            // Gestor sai em DUAS colunas de propósito: o nome é o que a pessoa lê e
-            // preenche, o código é o que a reimportação resolve sem risco de homônimo.
-            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Gestor", "Código Gestor", "Perfil"]}
+            // O nome do gestor sai só para CONFERÊNCIA, e o cabeçalho diz isso: a
+            // importação resolve pela matrícula e ignora esta coluna. Sem o aviso,
+            // editar o nome aqui e reimportar não faria nada, em silêncio.
+            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Gestor (não editável)", "Código Gestor", "Perfil"]}
             rows={employees.map((e) => {
               const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
               return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerName ?? "", e.managerCode ?? "", roleLabel(e.role)];

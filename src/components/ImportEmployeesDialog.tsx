@@ -11,7 +11,7 @@ type Row = Record<string, string>;
 const TEMPLATE_HEADERS = [
   "Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função",
   "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF",
-  "Demissão", "Sexo", "Telefone", "E-mail", "Gestor", "Código Gestor", "Perfil",
+  "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil",
 ];
 
 const norm = (s: string) =>
@@ -19,10 +19,16 @@ const norm = (s: string) =>
 
 function fieldOf(header: string): string | null {
   const h = norm(header);
-  // gestor vem PRIMEIRO: "Código Gestor" contém "codigo" e cairia em
-  // employee_code lá embaixo, atribuindo a matrícula do chefe ao subordinado
+  // Gestor vem PRIMEIRO: "Código Gestor" contém "codigo" e cairia em
+  // employee_code lá embaixo, atribuindo a matrícula do chefe ao subordinado.
+  //
+  // Só a MATRÍCULA entra. Uma coluna de nome de gestor é ignorada de propósito:
+  // nome tem homônimo, e numa planilha de ~1000 linhas cada acerto por
+  // aproximação é uma chance de vincular a pessoa errada em silêncio. A
+  // exportação continua trazendo o nome, marcado como não editável, para
+  // conferência.
   if (h.includes("gestor") || h.includes("lider") || h.includes("superior")) {
-    return h.includes("codigo") || h.includes("matricula") ? "manager_code" : "manager";
+    return h.includes("codigo") || h.includes("matricula") ? "manager_code" : null;
   }
   // "Perfil" sozinho é o perfil de ACESSO. Vem antes do teste de "perfil função",
   // que é o nível do cargo (Júnior/Pleno/Sênior) e nada tem a ver com permissão.
@@ -76,8 +82,8 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
-    const ex1 = ["MATRIZ; FILIAL", "1001", "João da Silva", "01/02/2024", "Analista", "Pleno", "Comercial", "Vendas", "10/05/1990", "390.533.447-05", "", "Masculino", "(11) 99999-0000", "joao@empresa.com", "Maria Souza", "1002", "Funcionário"];
-    const ex2 = ["FILIAL", "1002", "Maria Souza", "15/08/2023", "Assistente", "Júnior", "Administrativo", "Financeiro", "02/11/1995", "111.444.777-35", "", "Feminino", "", "", "", "", "Gestor"];
+    const ex1 = ["MATRIZ; FILIAL", "1001", "João da Silva", "01/02/2024", "Analista", "Pleno", "Comercial", "Vendas", "10/05/1990", "390.533.447-05", "", "Masculino", "(11) 99999-0000", "joao@empresa.com", "1002", "Funcionário"];
+    const ex2 = ["FILIAL", "1002", "Maria Souza", "15/08/2023", "Assistente", "Júnior", "Administrativo", "Financeiro", "02/11/1995", "111.444.777-35", "", "Feminino", "", "", "", "Gestor"];
     const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ex1, ex2]);
     ws["!cols"] = TEMPLATE_HEADERS.map(() => ({ wch: 22 }));
 
@@ -97,8 +103,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       ["Sexo", "Sim", "Masculino / Feminino / Outro"],
       ["Telefone", "Não", "Opcional"],
       ["E-mail", "Não", "Se vazio, o login do colaborador será por CPF"],
-      ["Gestor", "Não", "Nome completo, matrícula ou CPF do gestor. Vazio = não mexe no gestor atual. Para tirar o gestor, escreva -"],
-      ["Código Gestor", "Não", "Matrícula do gestor. Tem prioridade sobre a coluna Gestor e é a forma segura quando há nomes iguais"],
+      ["Código Gestor", "Não", "MATRÍCULA do gestor (a mesma que está em Código Funcionário na linha dele). Vazio = não mexe no gestor atual. Para tirar o gestor, escreva -"],
       ["Perfil", "Não", "Gestor, Gerencial ou Funcionário. Vazio = não muda o perfil. Administrador e Proprietário só pela tela"],
     ];
     const wsI = XLSX.utils.aoa_to_sheet(instr);
@@ -198,9 +203,9 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
               Suba uma planilha (.xlsx) com os colaboradores. Use o modelo abaixo (tem uma aba “Instruções”).
               <br />• <strong>Várias unidades</strong>: separe por <code>;</code> na coluna Empresa (ex.: MATRIZ; FILIAL)
               <br />• <strong>Datas</strong> no formato <strong>dd/mm/aaaa</strong>
-              <br />• <strong>Gestor em lote</strong>: exporte a planilha de colaboradores, preencha a coluna
-              <strong> Gestor</strong> (ou <strong>Código Gestor</strong>) e importe de volta. Em quem já está
-              cadastrado, só o gestor é alterado; célula vazia não mexe em nada.
+              <br />• <strong>Gestor em lote</strong>: exporte a planilha, preencha a coluna
+              <strong> Código Gestor</strong> com a <strong>matrícula</strong> do gestor e importe de volta.
+              Em quem já está cadastrado, só o gestor e o perfil mudam; célula vazia não mexe em nada.
             </p>
             <button type="button" className="btn btn-ghost btn-sm" onClick={downloadTemplate}>↓ Baixar modelo</button>
           </div>
