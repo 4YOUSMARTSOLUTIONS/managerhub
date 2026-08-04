@@ -40,3 +40,46 @@ where n.nspname = 'public' and p.prosecdef
 Exceção conhecida: nenhuma. `email_by_cpf` era a única RPC usada antes do login e
 passou a ser resolvida com service role dentro do servidor
 (`src/lib/actions/auth.ts`).
+
+# Dado pessoal: RLS não tem granularidade de coluna
+
+A RLS decide **linhas**, nunca colunas. A policy `profiles_self_select` libera a
+linha do colega para todo mundo da mesma empresa, e com a linha vinha `cpf`,
+`phone` e `birth_date`. Como a `NEXT_PUBLIC_SUPABASE_ANON_KEY` está no bundle do
+navegador, qualquer funcionário lia a base inteira chamando o PostgREST direto.
+Esconder na tela não esconde nada.
+
+Coluna sensível se protege com **privilégio de coluna**, e aí vem a armadilha:
+
+> `revoke select (cpf) on profiles from authenticated` **não faz efeito** enquanto
+> existir o grant de `SELECT` em nível de **tabela**. E ele existe por padrão: o
+> ACL padrão do Supabase concede tudo a `anon` e `authenticated` em toda tabela
+> nova de `public`.
+
+O jeito certo é derrubar e devolver:
+
+```sql
+revoke select on table public.profiles from anon, authenticated;
+grant select (id, full_name, email, avatar_url, created_at, updated_at)
+  on table public.profiles to authenticated;
+```
+
+Quem pode ler o resto lê por RPC `SECURITY DEFINER` com guarda no corpo
+(`meu_perfil_pessoal`, `tenant_dados_pessoais`). Funções `SECURITY DEFINER` de
+`postgres` não são afetadas pelo revoke: dentro delas o usuário efetivo é o dono.
+Isso vale inclusive para `WHERE cpf = ...` e para o `RETURNING`, que exigem
+`SELECT` na coluna.
+
+Duas consequências que vêm junto:
+
+- O mesmo raciocínio vale para **escrita**. `authenticated` tinha `UPDATE` de
+  tabela, então dava para reescrever o próprio CPF pelo PostgREST, contornando o
+  `admin_update_employee`. Hoje o grant é só `update (full_name, avatar_url)`.
+- `src/types/database.ts` é mantido à mão e **descreve o privilégio, não só o
+  schema**: `cpf`, `phone`, `birth_date` e `gender` estão fora do `Row` de
+  `profiles` de propósito, para um `.select("cpf")` futuro quebrar na compilação
+  em vez de virar `42501` em produção. Não recoloque.
+
+Tabela nova em `public` que não deva ser alcançada pela chave pública precisa de
+`revoke all ... from public, anon, authenticated` explícito, além da RLS. Ligar
+RLS sem policy não basta se o grant de tabela estiver lá.
