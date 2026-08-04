@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -12,6 +12,7 @@ import { PERIODICITY } from "@/lib/constants";
 import { formatDate, formatTime, formatDateTime, formatDuration } from "@/lib/format";
 import { toggleSeries, deleteSeries, deleteOccurrence, startOccurrence, anticipateOccurrence, cancelOccurrence, loadMoreOccurrences, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { OCC_PAGE_SIZE } from "@/lib/constants";
+import { getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { SeriesDialog, type SeriesData, type Room, type Unit } from "./SeriesDialog";
 import { RegisterDialog } from "./RegisterDialog";
@@ -22,7 +23,6 @@ import { SeriesViewDialog } from "./SeriesViewDialog";
 import { StartMeetingDialog } from "./StartMeetingDialog";
 import { SearchSelect } from "./SearchSelect";
 import { ElapsedTimer } from "./ElapsedTimer";
-import type { Opt, SecaoOpt, BlocoOpt, ItemOpt } from "./ActionDialog";
 import type { Person } from "./PeoplePicker";
 import type { Enums } from "@/types/database";
 import { Filter, Globe } from "lucide-react";
@@ -78,12 +78,6 @@ export function MeetingRecords({
   people,
   rooms,
   units,
-  pilares,
-  secoes,
-  blocos,
-  itens,
-  kpis,
-  tools,
   aiEnabled,
   currentUserId,
   role,
@@ -93,12 +87,6 @@ export function MeetingRecords({
   people: Person[];
   rooms: Room[];
   units: Unit[];
-  pilares: Opt[];
-  secoes: SecaoOpt[];
-  blocos: BlocoOpt[];
-  itens: ItemOpt[];
-  kpis: Opt[];
-  tools: Opt[];
   aiEnabled: boolean;
   currentUserId: string;
   role: Enums<"member_role">;
@@ -112,6 +100,35 @@ export function MeetingRecords({
     || (s.isPrivate ? s.participantIds.includes(currentUserId) : role === "admin");
   const router = useRouter();
   const [pending, start] = useTransition();
+  /**
+   * Taxonomia do Programa (pilares, secoes, blocos, itens, KPIs, ferramentas).
+   *
+   * Sao 6 consultas e dezenas de KB que SO o dialogo de finalizar reuniao usa, e
+   * vinham junto com a pagina em todo carregamento. Agora chegam sob demanda,
+   * buscadas quando a tela fica ociosa - na pratica, ja estao la quando alguem
+   * clica em finalizar.
+   */
+  const [taxonomia, setTaxonomia] = useState<ActionFormOptions | null>(null);
+  const buscandoTax = useRef(false);
+  const garantirTaxonomia = useCallback(async () => {
+    if (buscandoTax.current) return;
+    buscandoTax.current = true;
+    try {
+      setTaxonomia(await getActionFormOptions());
+    } catch {
+      buscandoTax.current = false; // deixa tentar de novo
+    }
+  }, []);
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => void garantirTaxonomia());
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(() => void garantirTaxonomia(), 1500);
+    return () => clearTimeout(t);
+  }, [garantirTaxonomia]);
+
   const [seriesOpen, setSeriesOpen] = useState(false);
   const [editing, setEditing] = useState<SeriesData | undefined>(undefined);
   const [finishOpen, setFinishOpen] = useState(false);
@@ -596,7 +613,7 @@ export function MeetingRecords({
 
       <SeriesDialog open={seriesOpen} onClose={() => setSeriesOpen(false)} people={people} rooms={rooms} units={units} series={editing} />
       <RegisterDialog
-        open={finishOpen}
+        open={finishOpen && !!taxonomia}
         onClose={() => setFinishOpen(false)}
         people={people}
         series={finishOcc ? seriesById.get(finishOcc.seriesId) : undefined}
@@ -604,12 +621,12 @@ export function MeetingRecords({
         startedAt={finishOcc?.startedAt ?? null}
         draft={finishOcc ? (drafts[finishOcc.id] ?? finishOcc.draft) : null}
         onDraftChange={(d) => { if (finishOcc) setDrafts((p) => ({ ...p, [finishOcc.id]: d })); }}
-        pilares={pilares}
-        secoes={secoes}
-        blocos={blocos}
-        itens={itens}
-        kpis={kpis}
-        tools={tools}
+        pilares={taxonomia?.pilares ?? []}
+        secoes={taxonomia?.secoes ?? []}
+        blocos={taxonomia?.blocos ?? []}
+        itens={taxonomia?.itens ?? []}
+        kpis={taxonomia?.kpis ?? []}
+        tools={taxonomia?.tools ?? []}
         aiEnabled={aiEnabled}
       />
       {detailOcc && (

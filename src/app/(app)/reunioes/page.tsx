@@ -14,9 +14,8 @@ export default async function MeetingRecordsPage() {
   const supabase = await createClient();
 
   const [
-    { data: series }, { data: parts }, { data: unitLinks }, { data: unitsData },
-    { data: members }, { data: roomsData }, { data: occ },
-    { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
+    { data: series }, { data: parts }, { data: unitLinks },
+    { data: members }, { data: roomsData }, { data: occ }, flags,
   ] = await Promise.all([
     supabase
       .from("meeting_series")
@@ -28,7 +27,6 @@ export default async function MeetingRecordsPage() {
       .order("name"),
     supabase.from("meeting_series_participants").select("series_id, user_id"),
     supabase.from("meeting_series_units").select("series_id, unit_id"),
-    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase
       .from("memberships")
       .select("user_id, profiles!memberships_user_id_fkey(full_name)")
@@ -43,18 +41,16 @@ export default async function MeetingRecordsPage() {
       .order("started_at", { ascending: false, nullsFirst: false })
       .order("occurred_on", { ascending: false })
       .limit(300),
-    supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_itens").select("id, name, pilar_id, secao_id, bloco_id, active").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_kpis").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
+    // antes isto era um await ESCONDIDO no meio do JSX, virando uma onda extra
+    // depois de tudo, so para um booleano que o dialogo de finalizar usa
+    getPlatformIntegrationFlags(),
   ]);
 
   const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
   const roomById = new Map(rooms.map((r) => [r.id, r.name]));
 
-  const units = (unitsData ?? []).map((u) => ({ id: u.id, name: u.name }));
+  // as unidades ja vieram do requireContext; a consulta daqui repetia a de la
+  const units = unitScope.units;
   const unitById = new Map(units.map((u) => [u.id, u.name]));
   const unitsBySeries = new Map<string, string[]>();
   for (const ul of unitLinks ?? []) {
@@ -177,13 +173,7 @@ export default async function MeetingRecordsPage() {
       people={people}
       rooms={rooms}
       units={units}
-      pilares={(pilares ?? []).map((p) => ({ id: p.id, name: p.name, active: p.active }))}
-      secoes={(secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }))}
-      blocos={(blocos ?? []).map((b) => ({ id: b.id, name: b.name, pilarId: b.pilar_id, secaoId: b.secao_id, active: b.active }))}
-      itens={(itens ?? []).map((i) => ({ id: i.id, name: i.name, pilarId: i.pilar_id, secaoId: i.secao_id, blocoId: i.bloco_id, active: i.active }))}
-      kpis={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active }))}
-      tools={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active }))}
-      aiEnabled={(await getPlatformIntegrationFlags()).hasOpenAI}
+      aiEnabled={flags.hasOpenAI}
       currentUserId={user.id}
       role={role}
     />
