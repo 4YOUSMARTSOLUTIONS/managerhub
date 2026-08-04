@@ -9,7 +9,7 @@ import { SearchSelect } from "@/components/SearchSelect";
 import { MessageSquarePlus, Paperclip, X, Eye, Pencil, CalendarClock, Power, Trash2 } from "lucide-react";
 import {
   createChecklist, updateChecklist, deleteChecklist, toggleChecklistActive,
-  saveSchedule, deleteSchedule, submitRun, saveDraftRun, deleteRun, getChecklistPhotoUrl,
+  saveSchedule, deleteSchedule, submitRun, saveDraftRun, deleteRun, getChecklistPhotoUrls,
   addChecklistTaskComment, updateChecklistTaskStatus,
   type ChecklistItemInput, type AudienceInput,
 } from "@/lib/actions/checklists";
@@ -909,6 +909,17 @@ function RunViewDialog({ run, checklist, canDelete, onClose }: { run: RunRow; ch
   const ansByItem = new Map(run.answers.map((a) => [a.itemId, a]));
   const photosByItem = new Map<string, RunPhoto[]>();
   for (const p of run.photos) { const arr = photosByItem.get(p.itemId) ?? []; arr.push(p); photosByItem.set(p.itemId, arr); }
+
+  // um pedido só para todas as fotos da execução: antes cada miniatura abria o
+  // próprio caminho até o servidor, e uma execução com 20 fotos custava 20 idas
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let vivo = true;
+    const caminhos = run.photos.map((p) => p.path);
+    if (caminhos.length === 0) return;
+    void getChecklistPhotoUrls(caminhos).then((m) => { if (vivo) setUrls(m); });
+    return () => { vivo = false; };
+  }, [run.photos]);
   const del = async () => { if (!(await confirmDialog({ tone: "danger", confirmLabel: "Excluir", message: "Excluir esta execução?" }))) return; start(async () => { await deleteRun(run.id); onClose(); router.refresh(); }); };
 
   return (
@@ -941,7 +952,7 @@ function RunViewDialog({ run, checklist, canDelete, onClose }: { run: RunRow; ch
                 : <span style={{ whiteSpace: "pre-wrap" }}>{a?.text ?? "—"}</span>}
             </div>
             {a?.note && <div className="soft" style={{ fontSize: "0.82rem", marginTop: 2 }}>Obs.: {a.note}</div>}
-            {ph.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.4rem" }}>{ph.map((p) => <PhotoThumb key={p.id} photo={p} />)}</div>}
+            {ph.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.4rem" }}>{ph.map((p) => <PhotoThumb key={p.id} photo={p} url={urls[p.path] ?? null} />)}</div>}
           </div>
         );
       })}
@@ -949,9 +960,7 @@ function RunViewDialog({ run, checklist, canDelete, onClose }: { run: RunRow; ch
   );
 }
 
-function PhotoThumb({ photo }: { photo: RunPhoto }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => { let ok = true; getChecklistPhotoUrl(photo.path).then((u) => { if (ok) setUrl(u); }); return () => { ok = false; }; }, [photo.path]);
+function PhotoThumb({ photo, url }: { photo: RunPhoto; url: string | null }) {
   if (!url) return <span className="badge badge-gray">📎 {photo.filename}</span>;
   return <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={photo.filename} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} /></a>;
 }

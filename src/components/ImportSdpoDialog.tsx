@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importSdpo, type SdpoImportRow, type SdpoImportResult } from "@/lib/actions/sdpo";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -23,7 +23,8 @@ export function ImportSdpoDialog({ open: openProp, onClose, hideTrigger }: { ope
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       ["Programa", "Pilar", "Seção", "Código Bloco", "Bloco", "Código Item", "Item"],
       ["SPO", "Comercial", "Gestão de Processos", "", "", "1.0", "Visitação GV na Base Foco"],
@@ -51,6 +52,7 @@ export function ImportSdpoDialog({ open: openProp, onClose, hideTrigger }: { ope
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

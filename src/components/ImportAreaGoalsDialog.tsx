@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importAreaGoals, type AreaGoalImportRow } from "@/lib/actions/area-goals";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -79,7 +79,8 @@ export function ImportAreaGoalsDialog({
     incompletas: analysis.filter((a) => a.incomplete).length,
   }), [analysis]);
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const unitExample = units[0]?.name ?? "MATRIZ";
     const ws = XLSX.utils.aoa_to_sheet([
       ["Indicador", "Unidade", "Setor", "Subsetor", "Un. medida", "Conceito", "Tipo", "IC pai", "Direção", "Cálculo", "Responsável"],
@@ -110,6 +111,7 @@ export function ImportAreaGoalsDialog({
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

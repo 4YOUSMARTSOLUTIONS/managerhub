@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importActions, type ActionImportRow, type ActionImportResult } from "@/lib/actions/actions";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -89,7 +89,8 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); setProgress(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       ["Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo", "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "SDPO", "Programa", "Pilar", "Seção", "Bloco", "Item", "Comentários"],
       ["Renegociar contrato com fornecedor X", "João Silva; Maria Souza", "Luiz Nobre", "Luiz Nobre", "10/08/2026", "RLP - Reunião de Limpa Pauta", "30/09/2026", "20/09/2026", "Concluída", "Alta", "MATRIZ", "", "PDCA", "Não", "", "", "", "", "", "31/08/2026 | João Silva | Fornecedor pediu reunião\n05/09/2026 | Maria Souza | Aguardando proposta"],
@@ -125,6 +126,7 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

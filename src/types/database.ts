@@ -1230,6 +1230,24 @@ export type Database = {
       meeting_follow_action_ids: { Args: { p_series: string; p_occurrence: string; p_cutoff: string }; Returns: string[] }
       employee_contract_history: { Args: { p_user: string }; Returns: Json }
       action_filter_options: { Args: Record<string, never>; Returns: Json }
+      catalog_usage: {
+        Args: { p_tenant: string }
+        Returns: {
+          pilar_ids: string[] | null
+          secao_ids: string[] | null
+          bloco_ids: string[] | null
+          item_ids: string[] | null
+          kpi_ids: string[] | null
+          tool_ids: string[] | null
+          department_ids: string[] | null
+          subdepartment_ids: string[] | null
+          position_ids: string[] | null
+          level_ids: string[] | null
+          sector_ids: string[] | null
+          category_ids: string[] | null
+          competency_ids: string[] | null
+        }[]
+      }
       demanda_comment: { Args: { p_demanda: string; p_body: string }; Returns: undefined }
       add_demanda_comment_import: { Args: { p_demanda: string; p_body: string; p_actor?: string | null; p_at?: string | null; p_author_label?: string | null }; Returns: undefined }
       demanda_set_status: { Args: { p_demanda: string; p_status: Database["public"]["Enums"]["action_status"] }; Returns: undefined }

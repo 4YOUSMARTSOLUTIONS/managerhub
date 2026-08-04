@@ -329,6 +329,23 @@ export async function getChecklistPhotoUrl(path: string): Promise<string | null>
   } catch { return null; }
 }
 
+/**
+ * Assina várias fotos de uma vez.
+ *
+ * Cada miniatura pedia a própria URL: uma execução com 20 fotos abria 20 idas ao
+ * servidor, todas iguais. Aqui é uma só, e as miniaturas já nascem com o endereço.
+ */
+export async function getChecklistPhotoUrls(paths: string[]): Promise<Record<string, string>> {
+  try {
+    if (paths.length === 0) return {};
+    const { supabase } = await actionContext();
+    const { data } = await supabase.storage.from(BUCKET).createSignedUrls(paths, 60 * 10);
+    const mapa: Record<string, string> = {};
+    for (const d of data ?? []) if (d.path && d.signedUrl) mapa[d.path] = d.signedUrl;
+    return mapa;
+  } catch { return {}; }
+}
+
 // ---------- tarefas geradas por não conformidade ----------
 export async function addChecklistTaskComment(input: { task_id: string; body: string }): Promise<ActionState> {
   try {

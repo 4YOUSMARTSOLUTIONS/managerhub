@@ -5,6 +5,18 @@ import { purgeStaleChecklistDrafts } from "@/lib/actions/checklists";
 import { ChecklistsManager, type ChecklistTemplate, type RunRow, type TaskRow, type Opt } from "@/components/ChecklistsManager";
 import { moduleGate } from "@/lib/module-gate";
 
+/**
+ * Teto do histórico carregado de uma vez.
+ *
+ * A consulta de execuções não tinha limite nenhum, e traz junto TODAS as respostas
+ * e TODAS as fotos de cada execução. Uma empresa com 30 unidades executando
+ * checklists diários chega a milhares de execuções em um ano, e a tela travaria.
+ *
+ * Hoje isso não corta nada (ainda não há execuções). Quando o módulo entrar em uso
+ * de verdade, o certo é trocar o teto por um filtro de período com paginação.
+ */
+const TETO_HISTORICO = 400;
+
 export default async function ChecklistsPage() {
   const gate = await moduleGate("checklists");
   if (gate) return gate;
@@ -28,14 +40,14 @@ export default async function ChecklistsPage() {
     "id, checklist_id, run_id, item_id, unit_id, title, description, assignee_id, status, resolution, created_by, created_at, resolved_at, " +
     "checklist:checklists(name), unit:units(name), assignee:profiles!checklist_tasks_assignee_id_fkey(full_name), creator:profiles!checklist_tasks_created_by_fkey(full_name), " +
     "comments:checklist_task_comments(id, author_id, body, created_at, author:profiles!checklist_task_comments_author_id_fkey(full_name))",
-  ).eq("tenant_id", tenant.id).order("created_at", { ascending: false });
+  ).eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(TETO_HISTORICO);
 
   const runsQuery = supabase.from("checklist_runs").select(
     "id, checklist_id, executor_id, unit_id, period_key, status, score, conform_count, nonconform_count, na_count, started_at, completed_at, " +
     "executor:profiles!checklist_runs_executor_id_fkey(full_name), unit:units(name), " +
     "answers:checklist_run_answers(item_id, value_conformidade, value_bool, value_text, value_number, value_option, note), " +
     "photos:checklist_answer_photos(id, item_id, path, filename)",
-  ).eq("tenant_id", tenant.id).order("completed_at", { ascending: false }).order("created_at", { ascending: false });
+  ).eq("tenant_id", tenant.id).order("completed_at", { ascending: false }).order("created_at", { ascending: false }).limit(TETO_HISTORICO);
 
   const [{ data: cls }, { data: myMem }, { data: reports }, membersAll, { data: deps }, { data: subs }, { data: pos }, { data: runsData }, { data: tasksData }] = await Promise.all([
     unitOr ? clsQuery.or(unitOr) : clsQuery,

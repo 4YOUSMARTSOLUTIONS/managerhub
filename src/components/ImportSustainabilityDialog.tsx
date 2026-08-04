@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importSust, type SustImportRow, type SustImportResult } from "@/lib/actions/sustainability";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -23,7 +23,8 @@ export function ImportSustainabilityDialog({ open: openProp, onClose, hideTrigge
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       ["Ordem KPI", "KPI", "Un. Medida", "DONO", "META", "Direção", "Cálculo acumulado"],
       [1, "LTI", "N°", "João Silva", 0, "menor é melhor", "soma"],
@@ -48,6 +49,7 @@ export function ImportSustainabilityDialog({ open: openProp, onClose, hideTrigge
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

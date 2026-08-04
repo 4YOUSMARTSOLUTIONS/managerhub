@@ -61,9 +61,15 @@ export default async function SettingsPage() {
   }
 
   const supabase = await createClient();
+  // Tudo o que a tela precisa numa rodada só. Antes eram 6 ondas em sequência, e
+  // como nenhuma dependia da anterior, a espera era pura soma de latência: com o
+  // banco em São Paulo, cada onda custava um ida e volta que não precisava existir.
   const [
     { data: memberships }, { data: units }, { data: departments },
     { data: subdepartments }, { data: positions }, { data: levels }, { data: rooms }, { data: holidays },
+    { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
+    { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
+    { data: usoData }, { data: profilesData }, { data: muData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -73,9 +79,6 @@ export default async function SettingsPage() {
     supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("holidays").select("*").eq("tenant_id", tenant.id).order("day"),
-  ]);
-
-  const [{ data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools }] = await Promise.all([
     supabase.from("sdpo_programas").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_pilares").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_secoes").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -83,68 +86,39 @@ export default async function SettingsPage() {
     supabase.from("sdpo_itens").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_kpis").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_tools").select("*").eq("tenant_id", tenant.id).order("name"),
-  ]);
-
-  const [{ data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules }] = await Promise.all([
     supabase.from("ticket_sectors").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("ticket_categories").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("ticket_slas").select("*").eq("tenant_id", tenant.id),
     supabase.from("individual_rv_config").select("id, scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id).order("effective_from", { ascending: false }),
     supabase.from("feedback_competencies").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("feedback_cadence_rules").select("id, department_id, position_id, cadence_days").eq("tenant_id", tenant.id),
-  ]);
-
-  // ids já usados em ações — excluir só é permitido quando nunca usado (senão: desativar)
-  const { data: sdpoUsage } = await supabase.from("actions").select("pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id").eq("tenant_id", tenant.id);
-  const usedPilar = new Set<string>();
-  const usedSecao = new Set<string>();
-  const usedBloco = new Set<string>();
-  const usedItem = new Set<string>();
-  const usedKpi = new Set<string>();
-  const usedTool = new Set<string>();
-  for (const a of sdpoUsage ?? []) {
-    if (a.pilar_id) usedPilar.add(a.pilar_id);
-    if (a.secao_id) usedSecao.add(a.secao_id);
-    if (a.bloco_id) usedBloco.add(a.bloco_id);
-    if (a.item_id) usedItem.add(a.item_id);
-    if (a.kpi_id) usedKpi.add(a.kpi_id);
-    if (a.tool_id) usedTool.add(a.tool_id);
-  }
-
-  // uso dos demais catálogos (estrutura, chamados, competências)
-  const [{ data: agUse }, { data: clUse }, { data: tkUse }, { data: fcLinks }] = await Promise.all([
-    supabase.from("area_goals").select("department_id, subdepartment_id").eq("tenant_id", tenant.id),
-    supabase.from("checklists").select("department_id, subdepartment_id").eq("tenant_id", tenant.id),
-    supabase.from("tickets").select("sector_id, category_id").eq("tenant_id", tenant.id),
-    supabase.from("feedback_competency_links").select("competency_id").eq("tenant_id", tenant.id),
-  ]);
-  const usedDept = new Set<string>();
-  const usedSubdept = new Set<string>();
-  const usedPosition = new Set<string>();
-  const usedLevel = new Set<string>();
-  const usedSector = new Set<string>();
-  const usedCategory = new Set<string>();
-  const usedCompetency = new Set<string>();
-  for (const m of memberships ?? []) {
-    if (m.department_id) usedDept.add(m.department_id);
-    if (m.subdepartment_id) usedSubdept.add(m.subdepartment_id);
-    if (m.position_id) usedPosition.add(m.position_id);
-    if (m.position_level_id) usedLevel.add(m.position_level_id);
-  }
-  for (const g of agUse ?? []) { if (g.department_id) usedDept.add(g.department_id); if (g.subdepartment_id) usedSubdept.add(g.subdepartment_id); }
-  for (const c of clUse ?? []) { if (c.department_id) usedDept.add(c.department_id); if (c.subdepartment_id) usedSubdept.add(c.subdepartment_id); }
-  for (const r of fbCadenceRules ?? []) { if (r.department_id) usedDept.add(r.department_id); if (r.position_id) usedPosition.add(r.position_id); }
-  for (const r of rvConfigsData ?? []) { if (r.position_id) usedPosition.add(r.position_id); }
-  for (const t of tkUse ?? []) { if (t.sector_id) usedSector.add(t.sector_id); if (t.category_id) usedCategory.add(t.category_id); }
-  for (const l of fcLinks ?? []) { if (l.competency_id) usedCompetency.add(l.competency_id); }
-
-  const mems = memberships ?? [];
-
-  // RLS já limita ao tenant — evita .in() com centenas de ids (estoura a URL do PostgREST)
-  const [{ data: profilesData }, { data: muData }] = await Promise.all([
+    supabase.rpc("catalog_usage", { p_tenant: tenant.id }),
+    // RLS já limita ao tenant — evita .in() com centenas de ids (estoura a URL do PostgREST)
     supabase.from("profiles").select("id, full_name, email, cpf, phone, birth_date, gender").limit(5000),
     supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
   ]);
+
+  // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
+  // Antes esta tela baixava a tabela de AÇÕES INTEIRA (7.522 linhas) e todos os
+  // chamados só para montar estes conjuntos. Agora a conta é feita no banco e volta
+  // apenas a lista de ids em uso.
+  const uso = usoData?.[0];
+  const conjunto = (ids: string[] | null | undefined) => new Set<string>(ids ?? []);
+  const usedPilar = conjunto(uso?.pilar_ids);
+  const usedSecao = conjunto(uso?.secao_ids);
+  const usedBloco = conjunto(uso?.bloco_ids);
+  const usedItem = conjunto(uso?.item_ids);
+  const usedKpi = conjunto(uso?.kpi_ids);
+  const usedTool = conjunto(uso?.tool_ids);
+  const usedDept = conjunto(uso?.department_ids);
+  const usedSubdept = conjunto(uso?.subdepartment_ids);
+  const usedPosition = conjunto(uso?.position_ids);
+  const usedLevel = conjunto(uso?.level_ids);
+  const usedSector = conjunto(uso?.sector_ids);
+  const usedCategory = conjunto(uso?.category_ids);
+  const usedCompetency = conjunto(uso?.competency_ids);
+
+  const mems = memberships ?? [];
 
   // mapas de apoio
   const profById = new Map((profilesData ?? []).map((p) => [p.id, p]));

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -695,11 +696,29 @@ function PdiActionDialog({ mode, row, subjectOptions, presetSubjectId, presetFee
   );
 }
 
+/**
+ * O endereço assinado só é pedido no clique.
+ *
+ * Antes cada anexo assinava sozinho ao aparecer na tela: uma lista com 50 feedbacks
+ * de dois anexos abria 100 idas ao servidor só para montar links que quase ninguém
+ * clica. E a assinatura vale 10 minutos, então nem dava para reaproveitar.
+ */
 function AttachmentLink({ att }: { att: FeedbackAttachment }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => { let alive = true; getFeedbackAttachmentUrl(att.path).then((u) => { if (alive) setUrl(u); }); return () => { alive = false; }; }, [att.path]);
+  const [abrindo, setAbrindo] = useState(false);
+  async function abrir() {
+    setAbrindo(true);
+    try {
+      const url = await getFeedbackAttachmentUrl(att.path);
+      if (url) window.open(url, "_blank", "noopener");
+      else toast.error("Não foi possível abrir o anexo.");
+    } finally {
+      setAbrindo(false);
+    }
+  }
   return (
-    <a href={url ?? undefined} target="_blank" rel="noreferrer" className="badge badge-gray" style={{ textDecoration: "none", cursor: url ? "pointer" : "default" }} title={att.filename}>📎 {att.filename}</a>
+    <button type="button" onClick={abrir} disabled={abrindo} className="badge badge-gray" style={{ border: "none", cursor: abrindo ? "default" : "pointer", font: "inherit" }} title={att.filename}>
+      📎 {att.filename}
+    </button>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importRvConfig, type RvConfigImportRow } from "@/lib/actions/rv-config";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -55,7 +55,8 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
     invalid: analysis.filter((a) => a.invalid && !a.notFound).length,
   }), [analysis]);
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const example = refs[0]?.name ?? (scope === "position" ? "Analista" : "Fulano de Tal");
     const ws = XLSX.utils.aoa_to_sheet([
       [label, "Competência", "Valor"],
@@ -77,6 +78,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

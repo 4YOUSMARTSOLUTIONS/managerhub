@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importEmployees, type ImportSummary } from "@/lib/actions/employees";
 
 type Row = Record<string, string>;
@@ -66,7 +66,8 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
   if (!open) return null;
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ex1 = ["MATRIZ; FILIAL", "1001", "João da Silva", "01/02/2024", "Analista", "Pleno", "Comercial", "Vendas", "10/05/1990", "390.533.447-05", "", "Masculino", "(11) 99999-0000", "joao@empresa.com"];
     const ex2 = ["FILIAL", "1002", "Maria Souza", "15/08/2023", "Assistente", "Júnior", "Administrativo", "Financeiro", "02/11/1995", "111.444.777-35", "", "Feminino", "", ""];
     const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ex1, ex2]);
@@ -99,6 +100,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null); setParsed([]); setFileName("");
     setReading(true);
     // dá um respiro ao navegador para pintar o "Lendo a planilha…" antes de travar na leitura

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importTicketStructure, type TicketStructureRow, type TicketStructureResult } from "@/lib/actions/tickets";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -23,7 +23,8 @@ export function ImportTicketStructureDialog({ open: openProp, onClose, hideTrigg
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       ["Setor", "Categoria"],
       ["TI", "Acesso"],
@@ -46,6 +47,7 @@ export function ImportTicketStructureDialog({ open: openProp, onClose, hideTrigg
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

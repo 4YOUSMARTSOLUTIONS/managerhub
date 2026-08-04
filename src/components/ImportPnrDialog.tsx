@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importPnr, type PnrImportRow, type PnrImportResult } from "@/lib/actions/pnr";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -23,7 +23,8 @@ export function ImportPnrDialog({ open: openProp, onClose, hideTrigger }: { open
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       ["Ordem KPI", "KPI", "Conceito", "Pontuação total", "DONOS", "Un. Medida", "Meta", "Direção", "Meta Parcial Alta", "Meta Parcial Baixa", "Pontos Parcial Alta", "Pontos Parcial Baixa"],
       ["-", "I. ATENDIMENTO AO MERCADO", "", 150, "-", "-", "-", "", "-", "-", "-", "-"],
@@ -52,6 +53,7 @@ export function ImportPnrDialog({ open: openProp, onClose, hideTrigger }: { open
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

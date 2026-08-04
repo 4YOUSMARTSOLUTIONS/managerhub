@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { IconExport } from "@/components/ui/ImpExpIcons";
 import { downloadSheet } from "@/lib/export-xlsx";
 
@@ -20,15 +21,26 @@ export function ExportButton({
   small?: boolean;
 }) {
   const empty = rows.length === 0;
+  // a geração da planilha virou assíncrona (a lib só é buscada no clique), então
+  // o botão trava enquanto isso para não disparar dois downloads
+  const [gerando, setGerando] = useState(false);
+  async function exportar() {
+    setGerando(true);
+    try {
+      await downloadSheet(filename, sheetName, headers, rows);
+    } finally {
+      setGerando(false);
+    }
+  }
   return (
     <button
       type="button"
       className={`btn btn-ghost ${small ? "btn-sm" : ""}`}
-      disabled={empty}
+      disabled={empty || gerando}
       title={empty ? "Nada cadastrado para exportar" : ""}
-      onClick={() => downloadSheet(filename, sheetName, headers, rows)}
+      onClick={exportar}
     >
-      <IconExport /> {label}
+      <IconExport /> {gerando ? "Gerando..." : label}
     </button>
   );
 }

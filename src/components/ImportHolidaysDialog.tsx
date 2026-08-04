@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importHolidays, type HolidayImportRow } from "@/lib/actions/holidays";
 import { formatDate } from "@/lib/format";
 import { IconImport } from "@/components/ui/ImpExpIcons";
@@ -41,7 +41,8 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
   }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       ["Data", "Nome"],
       ["25/12/2026", "Natal (exemplo — já é nacional)"],
@@ -63,6 +64,7 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();

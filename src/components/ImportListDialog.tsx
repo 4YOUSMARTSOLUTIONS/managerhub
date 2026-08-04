@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import { loadXlsx } from "@/lib/xlsx-lazy";
 import type { SimpleImportResult } from "@/lib/actions/sdpo";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 
@@ -49,7 +49,8 @@ export function ImportListDialog({
   function reset() { setNames([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
-  function downloadTemplate() {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([[column], ...examples.map((e) => [e])]);
     ws["!cols"] = [{ wch: 40 }];
     const wb = XLSX.utils.book_new();
@@ -58,6 +59,7 @@ export function ImportListDialog({
   }
 
   async function onFile(file: File) {
+    const XLSX = await loadXlsx();
     setParseError(""); setSummary(null);
     try {
       const buf = await file.arrayBuffer();
