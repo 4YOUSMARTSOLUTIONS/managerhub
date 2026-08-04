@@ -34,7 +34,7 @@ export async function createEmployee(
     const cpf = onlyDigits(String(formData.get("cpf") ?? ""));
     if (!isValidCpf(cpf)) return { error: "CPF inválido. Confira os números." };
     const password = String(formData.get("password") ?? "");
-    if (password.length < 6) return { error: "A senha deve ter ao menos 6 caracteres." };
+    if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
     const { error } = await supabase.rpc("admin_create_employee", {
       p_data: buildData(formData, cpf),
@@ -70,7 +70,7 @@ export async function importEmployees(
 ): Promise<ImportSummary> {
   try {
     const { supabase } = await actionContext();
-    if (!password || password.length < 6) {
+    if (!password || password.length < 8) {
       return { ...EMPTY_SUMMARY, errors: [{ erro: "Senha padrão mínima de 6 caracteres." }] };
     }
     const { data, error } = await supabase.rpc("admin_import_employees", {

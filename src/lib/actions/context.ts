@@ -29,13 +29,25 @@ export const actionContext = cache(async function actionContext() {
 
   const { data } = await supabase
     .from("memberships")
-    .select("tenant_id, role")
+    .select("tenant_id, role, is_active, tenants(status)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1);
 
   const membership = data?.[0];
   if (!membership) throw new Error("Nenhuma empresa associada.");
+
+  // O requireContext das PÁGINAS já recusava usuário desativado e empresa
+  // suspensa, mas as server actions não: um funcionário desligado continuava
+  // gravando até o token dele expirar, porque o proxy valida a assinatura do JWT
+  // localmente e não sabe do desligamento.
+  if (membership.is_active === false) {
+    throw new Error("Seu acesso foi desativado. Procure a administração.");
+  }
+  const status = (membership.tenants as unknown as { status: string } | null)?.status;
+  if (status && status !== "active") {
+    throw new Error("O acesso da empresa está suspenso.");
+  }
 
   return {
     supabase,

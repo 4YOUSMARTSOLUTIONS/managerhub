@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { recusaDeUpload, TAMANHO_AUDIO, MIMES_AUDIO } from "@/lib/uploads";
 
 const BUCKET = "meeting-audio";
 const RP = "/reunioes";
@@ -32,6 +33,8 @@ export async function uploadRecording(formData: FormData): Promise<ActionState &
     const file = formData.get("file");
     if (!occurrenceId) return { error: "Reunião inválida." };
     if (!(file instanceof File) || file.size === 0) return { error: "Nenhum áudio para enviar." };
+    const recusa = recusaDeUpload(file, TAMANHO_AUDIO, MIMES_AUDIO);
+    if (recusa) return { error: recusa };
 
     const safe = file.name.replace(/[^\w.\-]+/g, "_") || "audio.webm";
     const path = `${ctx.tenantId}/${occurrenceId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;

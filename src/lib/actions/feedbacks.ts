@@ -8,6 +8,7 @@ import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
 const BUCKET = "feedback-attachments";
 
@@ -52,6 +53,7 @@ const clean = (v: string | null | undefined) => (v ?? "").trim() || null;
 async function uploadFiles(ctx: Ctx, feedbackId: string, files: File[]) {
   for (const file of files) {
     if (!(file instanceof File) || file.size === 0) continue;
+    if (recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO)) continue;
     const safe = file.name.replace(/[^\w.\-]+/g, "_");
     const path = `${ctx.tenantId}/${feedbackId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
     const up = await ctx.supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });

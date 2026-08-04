@@ -221,7 +221,7 @@ export function EmployeeDialog({
               <>
                 <p style={sectionTitle}>Acesso</p>
                 <Field label="Senha inicial" req>
-                  <PasswordInput autoComplete="new-password" minLength={6} placeholder="Mínimo 6 caracteres" />
+                  <PasswordInput autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
                 </Field>
               </>
             )}

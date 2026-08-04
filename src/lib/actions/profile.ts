@@ -8,7 +8,7 @@ import type { ActionState } from "./types";
 import { AVATAR_BUCKET, AVATAR_MAX_BYTES, AVATAR_MIMES, AVATAR_SIZE } from "@/lib/avatar";
 
 /** Mesmo mínimo do setUserPassword (caminho administrativo): uma regra só no sistema. */
-const MIN_SENHA = 6;
+const MIN_SENHA = 8;
 
 export type OwnProfile = {
   fullName: string | null;

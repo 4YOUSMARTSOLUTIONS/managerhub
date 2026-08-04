@@ -247,7 +247,7 @@ export function UsersManager({
                         <input type="hidden" name="user_id" value={e.userId} />
                         <div>
                           <label className="label">Nova senha</label>
-                          <PasswordInput autoComplete="new-password" minLength={6} placeholder="Mínimo 6 caracteres" />
+                          <PasswordInput autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
                         </div>
                       </FormModal>
                       {canAct && (

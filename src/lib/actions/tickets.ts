@@ -8,6 +8,7 @@ import { isCatalogInUse, wantsActive } from "@/lib/catalogGuard";
 import { PRIORITY } from "@/lib/constants";
 import type { ActionState } from "./types";
 import type { Database, Enums } from "@/types/database";
+import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
 type TicketUpdate = Database["public"]["Tables"]["tickets"]["Update"];
 type Ctx = Awaited<ReturnType<typeof actionContext>>;
@@ -32,6 +33,19 @@ async function managedSectorIds(ctx: Ctx): Promise<string[]> {
     .eq("tenant_id", ctx.tenantId)
     .eq("user_id", ctx.userId);
   return (data ?? []).map((r) => r.sector_id);
+}
+
+/**
+ * Quem pode mexer no chamado: owner/admin, o solicitante, ou o gestor do setor.
+ * Mesma regra da RLS (policy tickets_update) — aqui só para a recusa ter mensagem.
+ */
+async function podeTratarChamado(ctx: Ctx, ticketId: string): Promise<boolean> {
+  if (ctx.role === "owner" || ctx.role === "admin") return true;
+  const { data: t } = await ctx.supabase
+    .from("tickets").select("requester_id, sector_id").eq("id", ticketId).maybeSingle();
+  if (!t) return false;
+  if (t.requester_id === ctx.userId) return true;
+  return Boolean(t.sector_id && (await managedSectorIds(ctx)).includes(t.sector_id));
 }
 
 const BUCKET = "ticket-attachments";
@@ -127,6 +141,7 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
     const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
     for (const file of files) {
       if (!file.type.startsWith("image/")) continue;
+      if (recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO)) continue;
       const safe = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `${tenantId}/${ticketId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
       const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
@@ -439,10 +454,17 @@ export async function setTicketManagerSectors(input: { user_id: string; sector_i
 }
 
 export async function setTicketStatus(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const ctx = await actionContext();
+  const { supabase } = ctx;
   const id = String(formData.get("id"));
   const status = String(formData.get("status")) as Enums<"ticket_status">;
   const done = status === "resolved" || status === "closed";
+
+  // A RLS já recusa quem não é solicitante, gestor do setor ou owner/admin. A
+  // checagem aqui existe para o usuário ver o motivo em português, em vez de a
+  // atualização sumir sem dizer nada (update recusado pela RLS afeta 0 linhas).
+  if (!(await podeTratarChamado(ctx, id))) return;
+
   await supabase
     .from("tickets")
     .update({ status, resolved_at: done ? new Date().toISOString() : null })
@@ -452,8 +474,11 @@ export async function setTicketStatus(formData: FormData): Promise<void> {
 }
 
 export async function deleteTicket(formData: FormData): Promise<ActionState> {
-  const { supabase } = await actionContext();
-  const { error } = await supabase.from("tickets").delete().eq("id", String(formData.get("id")));
+  const ctx = await actionContext();
+  if (ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "Apenas owner ou admin podem excluir um chamado." };
+  }
+  const { error } = await ctx.supabase.from("tickets").delete().eq("id", String(formData.get("id")));
   if (error) return { error: error.message };
   revalidatePath("/chamados");
   revalidatePath("/dashboard");

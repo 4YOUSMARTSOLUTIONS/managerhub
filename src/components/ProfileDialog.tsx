@@ -207,11 +207,11 @@ function PasswordBlock() {
         <div style={grid}>
           <div>
             <label className="label" htmlFor="new_password">Nova senha</label>
-            <PasswordInput id="new_password" name="new_password" autoComplete="new-password" minLength={6} />
+            <PasswordInput id="new_password" name="new_password" autoComplete="new-password" minLength={8} />
           </div>
           <div>
             <label className="label" htmlFor="confirm_password">Repita a nova senha</label>
-            <PasswordInput id="confirm_password" name="confirm_password" autoComplete="new-password" minLength={6} />
+            <PasswordInput id="confirm_password" name="confirm_password" autoComplete="new-password" minLength={8} />
           </div>
         </div>
         {state.error && (

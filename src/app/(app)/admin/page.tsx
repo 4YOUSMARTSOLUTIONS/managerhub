@@ -120,7 +120,7 @@ export default async function AdminPage() {
                 </div>
                 <div>
                   <label className="label">Senha inicial</label>
-                  <PasswordInput name="owner_password" autoComplete="new-password" minLength={6} placeholder="Mínimo 6 caracteres" />
+                  <PasswordInput name="owner_password" autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
                 </div>
               </div>
             </div>

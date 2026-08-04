@@ -6,6 +6,7 @@ import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
 const BUCKET = "agenda-attachments";
 type Ctx = { supabase: SupabaseClient<Database>; tenantId: string; userId: string; role: Enums<"member_role"> };
@@ -207,6 +208,7 @@ export async function uploadLogAttachments(formData: FormData): Promise<ActionSt
     const logId = String(formData.get("log_id") ?? "");
     if (!logId) return { error: "Registro inválido." };
     const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    for (const f of files) { const r = recusaDeUpload(f, TAMANHO_ANEXO, MIMES_ANEXO); if (r) return { error: r }; }
     for (const file of files) {
       const safe = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `${ctx.tenantId}/${logId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;

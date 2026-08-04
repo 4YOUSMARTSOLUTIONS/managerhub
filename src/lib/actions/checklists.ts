@@ -6,6 +6,7 @@ import type { ActionState } from "./types";
 import type { Enums, Json } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { recusaDeUpload, TAMANHO_FOTO, MIMES_FOTO } from "@/lib/uploads";
 
 const BUCKET = "checklist-photos";
 function isAdminRole(role: Enums<"member_role">) { return role === "owner" || role === "admin"; }
@@ -235,6 +236,7 @@ async function persistRun(ctx: Ctx, formData: FormData, p: RunPayload, finalize:
       const files = formData.getAll(`photo:${a.item_id}`) as File[];
       for (const file of files) {
         if (!(file instanceof File) || file.size === 0) continue;
+        if (recusaDeUpload(file, TAMANHO_FOTO, MIMES_FOTO)) continue;
         const safe = file.name.replace(/[^\w.\-]+/g, "_");
         const path = `${ctx.tenantId}/${runId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
         const up = await ctx.supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
 const BUCKET = "action-attachments";
 
@@ -45,6 +46,7 @@ export async function createAction(formData: FormData): Promise<ActionState> {
     const demandaIds = res.demanda_ids ?? [];
 
     const uploadOne = async (file: File, demandaId: string | null) => {
+    if (recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO)) return;
       const safe = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `${tenantId}/${actionId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
       const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });

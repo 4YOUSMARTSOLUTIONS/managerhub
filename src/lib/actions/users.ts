@@ -18,7 +18,7 @@ export async function createUser(
     const role = (String(formData.get("role") ?? "member") as Enums<"member_role">);
 
     if (!email || !full_name) return { error: "Informe nome e e-mail." };
-    if (password.length < 6) return { error: "A senha deve ter ao menos 6 caracteres." };
+    if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
     const { error } = await supabase.rpc("admin_create_user", {
       p_email: email,
@@ -42,7 +42,7 @@ export async function setUserPassword(
   try {
     const { supabase } = await actionContext();
     const password = String(formData.get("password") ?? "");
-    if (password.length < 6) return { error: "A senha deve ter ao menos 6 caracteres." };
+    if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
     const { error } = await supabase.rpc("admin_set_password", {
       p_user: String(formData.get("user_id")),

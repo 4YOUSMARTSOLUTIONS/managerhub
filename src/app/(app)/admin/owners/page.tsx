@@ -33,7 +33,7 @@ export default async function AdminOwnersPage() {
               </div>
               <div>
                 <label className="label">Senha inicial</label>
-                <PasswordInput name="owner_password" autoComplete="new-password" minLength={6} placeholder="Mínimo 6 caracteres" />
+                <PasswordInput name="owner_password" autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
               </div>
               <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
                 O owner entra direto no Painel ADM, sem empresa vinculada, e pode gerenciar todas as empresas.

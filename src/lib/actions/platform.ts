@@ -28,7 +28,7 @@ export async function createCompany(
 
     if (!company) return { error: "Informe o nome da empresa." };
     if (!ownerName || !ownerEmail) return { error: "Informe nome e e-mail do owner." };
-    if (ownerPassword.length < 6) return { error: "A senha do owner deve ter ao menos 6 caracteres." };
+    if (ownerPassword.length < 8) return { error: "A senha do owner deve ter ao menos 8 caracteres." };
 
     const { data: tenantId, error } = await supabase.rpc("platform_create_company", {
       p_company: company,
@@ -79,7 +79,7 @@ export async function createPlatformOwner(_prev: ActionState, formData: FormData
     const email = String(formData.get("owner_email") ?? "").trim();
     const password = String(formData.get("owner_password") ?? "");
     if (!name || !email) return { error: "Informe nome e e-mail do owner." };
-    if (password.length < 6) return { error: "A senha deve ter ao menos 6 caracteres." };
+    if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
     const { error } = await supabase.rpc("platform_create_owner", { p_email: email, p_password: password, p_name: name });
     if (error) return { error: error.message };
