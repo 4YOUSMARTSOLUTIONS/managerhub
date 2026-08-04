@@ -1,10 +1,15 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SearchSelect } from "@/components/SearchSelect";
 import { formatDateTime } from "@/lib/format";
 import type { Tone } from "@/lib/constants";
+
+/** Filtros vivem na URL, então a página é compartilhável e o voltar do navegador funciona. */
+export type AuditFilters = { q: string; acao: string; tipo: string; autor: string };
 
 export type AuditRow = {
   id: number;
@@ -101,51 +106,95 @@ function Diff({ action, changes }: { action: string; changes: Record<string, unk
   );
 }
 
-export function AuditLogViewer({ rows }: { rows: AuditRow[] }) {
-  const [q, setQ] = useState("");
-  const [action, setAction] = useState("all");
-  const [entity, setEntity] = useState("all");
+export function AuditLogViewer({
+  rows, filters, autores, total,
+}: {
+  rows: AuditRow[];
+  filters: AuditFilters;
+  autores: { id: string; name: string }[];
+  total: number;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [pendente, iniciarTransicao] = useTransition();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [qRascunho, setQRascunho] = useState(filters.q);
 
-  const entityOpts = useMemo(() => {
-    const set = new Map<string, string>();
-    for (const r of rows) set.set(r.entityType, ENTITY_LABEL[r.entityType] ?? r.entityType);
-    return [...set.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
-  }, [rows]);
+  // A lista de tipos vem do catálogo do próprio código, não do banco: buscar os
+  // tipos distintos em 60 mil linhas custava 1,5 s por carga de página, e o
+  // conjunto é justamente o que o sistema audita.
+  const tipoOpts = useMemo(
+    () => Object.entries(ENTITY_LABEL).sort((a, b) => a[1].localeCompare(b[1], "pt-BR")),
+    [],
+  );
 
-  const nrm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const filtered = useMemo(() => {
-    const query = nrm(q.trim());
-    return rows.filter((r) => {
-      if (action !== "all" && r.action !== action) return false;
-      if (entity !== "all" && r.entityType !== entity) return false;
-      if (!query) return true;
-      const hay = nrm([r.actorName ?? "", r.entityLabel ?? "", ENTITY_LABEL[r.entityType] ?? r.entityType].join(" "));
-      return hay.includes(query);
-    });
-  }, [rows, q, action, entity]);
+  const aplicar = useCallback((mudancas: Partial<AuditFilters>) => {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [chave, valor] of Object.entries(mudancas)) {
+      if (valor) next.set(chave, valor);
+      else next.delete(chave);
+    }
+    next.delete("p"); // qualquer mudança de filtro volta para a primeira página
+    const qs = next.toString();
+    iniciarTransicao(() => router.push(qs ? `/auditoria?${qs}` : "/auditoria", { scroll: false }));
+  }, [router, searchParams]);
+
+  // busca livre: espera parar de digitar antes de consultar o banco
+  useEffect(() => {
+    if (qRascunho === filters.q) return;
+    const t = setTimeout(() => aplicar({ q: qRascunho }), 400);
+    return () => clearTimeout(t);
+  }, [qRascunho, filters.q, aplicar]);
+
+  const temFiltro = Boolean(filters.q || filters.acao || filters.tipo || filters.autor);
+  const limpar = () => {
+    setQRascunho("");
+    iniciarTransicao(() => router.push("/auditoria", { scroll: false }));
+  };
 
   const toggle = (id: number) => setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
-    <div className="card" style={{ overflow: "hidden" }}>
+    <div className="card" style={{ overflow: "hidden", opacity: pendente ? 0.6 : 1, transition: "opacity 120ms" }}>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.85rem 1.1rem", borderBottom: "1px solid var(--border)" }}>
-        <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por usuário ou registro…" style={{ width: 280, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }} />
-        <select className="select" value={action} onChange={(e) => setAction(e.target.value)} style={{ width: "auto", padding: "0.4rem 0.6rem", fontSize: "0.83rem" }}>
-          <option value="all">Todas as ações</option>
+        <input
+          className="input"
+          value={qRascunho}
+          onChange={(e) => setQRascunho(e.target.value)}
+          placeholder="Buscar pelo registro…"
+          style={{ width: 240, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}
+        />
+        <div style={{ width: 220 }}>
+          <SearchSelect
+            options={autores}
+            value={filters.autor}
+            onChange={(id) => aplicar({ autor: id })}
+            placeholder="Todos os usuários"
+          />
+        </div>
+        <select className="select" value={filters.acao} onChange={(e) => aplicar({ acao: e.target.value })} style={{ width: "auto", padding: "0.4rem 0.6rem", fontSize: "0.83rem" }}>
+          <option value="">Todas as ações</option>
           <option value="INSERT">Criação</option>
           <option value="UPDATE">Alteração</option>
           <option value="DELETE">Remoção</option>
         </select>
-        <select className="select" value={entity} onChange={(e) => setEntity(e.target.value)} style={{ width: "auto", padding: "0.4rem 0.6rem", fontSize: "0.83rem" }}>
-          <option value="all">Todos os tipos</option>
-          {entityOpts.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        <select className="select" value={filters.tipo} onChange={(e) => aplicar({ tipo: e.target.value })} style={{ width: "auto", padding: "0.4rem 0.6rem", fontSize: "0.83rem" }}>
+          <option value="">Todos os tipos</option>
+          {tipoOpts.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <span className="soft" style={{ marginLeft: "auto", fontSize: "0.82rem" }}>{filtered.length} evento(s)</span>
+        {temFiltro && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={limpar}>Limpar</button>
+        )}
+        <span className="soft" style={{ marginLeft: "auto", fontSize: "0.82rem" }}>
+          {total.toLocaleString("pt-BR")} evento{total === 1 ? "" : "s"}
+        </span>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState title="Nenhum evento" description="Nenhum log corresponde aos filtros." />
+      {rows.length === 0 ? (
+        <EmptyState
+          title="Nenhum evento"
+          description={temFiltro ? "Nenhum log corresponde aos filtros." : "Ainda não há registros."}
+        />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table className="table">
@@ -160,7 +209,7 @@ export function AuditLogViewer({ rows }: { rows: AuditRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => {
+              {rows.map((r) => {
                 const act = ACTION_LABEL[r.action] ?? { label: r.action, tone: "gray" as Tone };
                 const isOpen = expanded.has(r.id);
                 const count = Object.keys(r.changes ?? {}).length;

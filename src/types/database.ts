@@ -1237,6 +1237,7 @@ export type Database = {
       auth_throttle_check: { Args: { p_chaves: Json }; Returns: Json }
       auth_throttle_falha: { Args: { p_chaves: Json }; Returns: Json }
       auth_throttle_sucesso: { Args: { p_chaves: Json }; Returns: undefined }
+      modulos_em_construcao: { Args: Record<string, never>; Returns: string[] }
       meu_perfil_pessoal: {
         Args: Record<string, never>
         Returns: {

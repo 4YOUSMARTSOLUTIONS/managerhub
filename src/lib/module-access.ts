@@ -38,7 +38,11 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
     unitIds.length
       ? supabase.from("unit_modules").select("module_key, state").eq("tenant_id", tenant.id).in("unit_id", unitIds)
       : Promise.resolve({ data: [] as { module_key: string; state: ModuleState }[] }),
-    supabase.from("platform_module_flags").select("module_key").eq("under_construction", true),
+    // O catálogo de módulos da plataforma é informação comercial nossa, não do
+    // cliente: a tabela só é legível pelo owner de plataforma. Esta RPC devolve
+    // apenas a lista de chaves em obra, que é o que a interface já mostra ao
+    // usuário no selo "Em construção".
+    supabase.rpc("modulos_em_construcao"),
   ]);
 
   const best: Partial<Record<ModuleKey, ModuleState>> = {};
@@ -53,7 +57,7 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
   for (const m of MODULES) state[m.key] = m.core ? "on" : (best[m.key] ?? "hidden");
 
   const construction = new Set(
-    (flags ?? []).map((f) => f.module_key as ModuleKey).filter((k) => k in MODULE_BY_KEY),
+    (flags ?? []).map((k) => k as ModuleKey).filter((k) => k in MODULE_BY_KEY),
   );
 
   return { state, construction };
