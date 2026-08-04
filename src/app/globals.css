@@ -845,22 +845,6 @@ a {
   animation: mh-shimmer 1.4s infinite;
 }
 
-/* Entrada suave do placeholder.
-   Os 80 ms de atraso são de propósito e são o teto do que passa despercebido:
-   navegação que resolve nesse tempo não chega a mostrar cinza nenhum, e nas
-   demais o esqueleto surge cedo o bastante para ninguém achar que travou.
-   Atraso maior deixaria a área de conteúdo em branco, o que é pior que o cinza:
-   o `loading.tsx` substitui a tela antiga na hora, não tem como segurá-la. */
-@keyframes mh-appear {
-  to {
-    opacity: 1;
-  }
-}
-.mh-deferred {
-  opacity: 0;
-  animation: mh-appear 160ms var(--mh-ease) 80ms forwards;
-}
-
 .mh-skeleton-panel {
   border: 1px solid var(--mh-border);
   border-radius: var(--mh-radius-lg);

@@ -30,24 +30,21 @@ export function SkeletonRows({ rows = 5, height = 44 }: { rows?: number; height?
 }
 
 /**
- * Placeholder de uma tela inteira (usar em loading.tsx).
+ * Placeholder de uma tela inteira, usado SÓ na carga fria (F5, link direto,
+ * primeiro acesso depois do login). Trocar de tela dentro do portal não passa
+ * mais por aqui: a tela anterior fica de pé até a nova estar pronta. O porquê
+ * está no `<Suspense>` do AppShell.
  *
- * Duas decisões de propósito, as duas contra o efeito "piscada cinza":
- *
- * 1. A forma é o ESQUELETO COMUM das telas, não um layout qualquer. Antes havia
- *    quatro cartões de indicador aqui, e a maioria das telas não tem cartão
- *    nenhum: o placeholder prometia uma coisa e chegava outra, e o salto era o
- *    que incomodava. Título, barra de filtros e um painel com linhas é o que
- *    praticamente toda tela do portal tem de fato. Linhas finas dentro de um
- *    painel com borda também pesam muito menos na tela do que blocos chapados.
- *
- * 2. `mh-deferred` atrasa a entrada em 80 ms, abaixo do que o olho registra.
- *    Navegação que resolve nesse tempo não mostra cinza nenhum.
+ * A forma é o esqueleto COMUM das telas, não um layout qualquer. Antes havia
+ * quatro cartões de indicador aqui, e a maioria das telas não tem cartão nenhum:
+ * o placeholder prometia uma coisa e chegava outra, e o salto era o que
+ * incomodava. Título, barra de filtros e um painel com linhas é o que
+ * praticamente toda tela do portal tem de fato, e linhas finas dentro de um
+ * painel com borda pesam muito menos que blocos chapados.
  */
 export function SkeletonPage() {
   return (
     <div
-      className="mh-deferred"
       style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
       aria-busy="true"
     >
