@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Network, List as ListIcon } from "lucide-rea
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { normalizar, shortName } from "@/lib/format";
+import { montarFaixas, type NoOrg } from "@/lib/organograma";
 import type { TeamMember } from "./TeamList";
 
 /**
@@ -23,6 +24,13 @@ import type { TeamMember } from "./TeamList";
  * só quer a tabela.
  */
 
+/** Medidas do modo clássico, em um lugar só: o CSS, o SVG e o cálculo das
+ *  posições têm de concordar. Se a altura do cartão divergisse aqui, a linha
+ *  encostaria ao lado da pessoa em vez de nela. */
+const MEDIDAS = { cardW: 208, cardH: 52, colW: 224, rowH: 104, gutter: 116 };
+const ROW_H = MEDIDAS.rowH;
+const GUTTER = MEDIDAS.gutter;
+
 type No = {
   m: TeamMember;
   filhos: No[];
@@ -32,6 +40,9 @@ type No = {
   totalAtivos: number;
   temAtivoAbaixo: boolean;
 };
+
+/** a árvore já podada pelo que está visível (inativos ocultos, nós recolhidos) */
+type Vis = { no: No; filhos: Vis[] };
 
 type Motivo = "sem-gestor" | "gestor-de-fora" | "ciclo" | "auto";
 const MOTIVO_TEXTO: Record<Motivo, string> = {
@@ -210,45 +221,99 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
 
   const inativos = members.filter((m) => !m.active).length;
 
-  const desenhar = (no: No): React.ReactNode => {
-    if (!visivel(no)) return null;
+  /** a árvore como ela aparece: sem inativo escondido, sem filho de nó recolhido */
+  const arvoreVisivel = useMemo(() => {
+    const montar = (no: No): Vis | null => {
+      if (!visivel(no)) return null;
+      const filhos = estaRecolhido(no.m.userId)
+        ? []
+        : no.filhos.map(montar).filter((v): v is Vis => v !== null);
+      return { no, filhos };
+    };
+    return montar(raizNo);
+    // `recolhidos` e `revelados` entram por dentro de estaRecolhido
+  }, [raizNo, visivel, recolhidos, revelados]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Posição de cada pessoa no modo clássico: FAIXA por hierarquia.
+   *
+   * A linha vem do nível hierárquico, não da profundidade na árvore, então todo
+   * Auxiliar fica na mesma altura mesmo respondendo a gestores diferentes. É o
+   * que um organograma de empresa quer dizer.
+   *
+   * DUAS REGRAS QUE O DADO EXIGE:
+   *
+   * - Filho NUNCA fica na mesma faixa do gestor nem acima dele. Se o cadastro
+   *   disser que um Coordenador responde a um Auxiliar, a linha desceria de baixo
+   *   para cima e leria como se o subordinado mandasse. Nesse caso o filho é
+   *   empurrado para a faixa seguinte. Hoje não há nenhum caso assim; com os 987
+   *   vínculos a atribuir, vai haver.
+   * - Quem está SEM hierarquia entra na faixa logo abaixo do próprio gestor.
+   *
+   * A coluna sai do algoritmo clássico de árvore: cada folha ocupa a próxima
+   * vaga, cada gestor fica no meio dos seus. Como a sub-árvore inteira mora
+   * dentro da faixa de vagas dela, dois ramos diferentes nunca se sobrepõem.
+   */
+  const bandas = useMemo(() => {
+    if (!arvoreVisivel) return null;
+    const paraOrg = (v: Vis): NoOrg => ({
+      id: v.no.m.userId,
+      rank: v.no.m.hierarchyRank,
+      hierarquia: v.no.m.hierarchyName,
+      filhos: v.filhos.map(paraOrg),
+    });
+    const geometria = montarFaixas(paraOrg(arvoreVisivel), MEDIDAS);
+    const porId = new Map<string, No>();
+    const indexar = (v: Vis) => { porId.set(v.no.m.userId, v.no); v.filhos.forEach(indexar); };
+    indexar(arvoreVisivel);
+    return { ...geometria, porId };
+  }, [arvoreVisivel]);
+
+  const cartao = (no: No) => {
     const filhosVisiveis = no.filhos.filter(visivel);
     const recolhido = estaRecolhido(no.m.userId);
     const temFilhos = filhosVisiveis.length > 0;
     const quantos = ocultarInativos ? no.totalAtivos : no.total;
-    const acerto = acertos.includes(no.m.userId);
     const eu = no.m.userId === raiz.userId;
+    return (
+      <div
+        ref={registrar(no.m.userId)}
+        className={`org-card${eu ? " org-card-me" : ""}${no.m.active ? "" : " org-card-off"}${acertos.includes(no.m.userId) ? " org-card-hit" : ""}`}
+        title={`${no.m.fullName ?? "—"}${no.m.positionName ? ` · ${no.m.positionName}` : ""}`}
+      >
+        {temFilhos ? (
+          <button
+            type="button"
+            className="org-toggle"
+            aria-expanded={!recolhido}
+            title={recolhido ? `Mostrar ${quantos} abaixo` : "Recolher"}
+            onClick={() => alternar(no.m.userId)}
+          >
+            {recolhido ? `▸ ${quantos}` : "▾"}
+          </button>
+        ) : (
+          <span className="org-toggle-void" aria-hidden />
+        )}
+        <Avatar name={no.m.fullName} userId={no.m.userId} size={30} />
+        <div className="org-body">
+          <div className="org-name">{shortName(no.m.fullName)}</div>
+          <div className="org-sub">{no.m.positionName ?? no.m.hierarchyName ?? "Sem cargo definido"}</div>
+        </div>
+        {!no.m.active && <Badge tone="red">Inativo</Badge>}
+      </div>
+    );
+  };
 
+  /** modo vertical: continua sendo `<ul>` aninhado com conector em CSS */
+  const desenharLista = (no: No): React.ReactNode => {
+    if (!visivel(no)) return null;
+    const filhosVisiveis = no.filhos.filter(visivel);
     return (
       <li key={no.m.userId}>
-        <div
-          ref={registrar(no.m.userId)}
-          className={`org-card${eu ? " org-card-me" : ""}${no.m.active ? "" : " org-card-off"}${acerto ? " org-card-hit" : ""}`}
-          title={`${no.m.fullName ?? "—"}${no.m.positionName ? ` · ${no.m.positionName}` : ""}`}
-        >
-          {temFilhos ? (
-            <button
-              type="button"
-              className="org-toggle"
-              aria-expanded={!recolhido}
-              title={recolhido ? `Mostrar ${quantos} abaixo` : "Recolher"}
-              onClick={() => alternar(no.m.userId)}
-            >
-              {recolhido ? `▸ ${quantos}` : "▾"}
-            </button>
-          ) : (
-            <span className="org-toggle-void" aria-hidden />
-          )}
-          <Avatar name={no.m.fullName} userId={no.m.userId} size={30} />
-          <div className="org-body">
-            <div className="org-name">{shortName(no.m.fullName)}</div>
-            <div className="org-sub">
-              {no.m.positionName ?? no.m.hierarchyName ?? "Sem cargo definido"}
-            </div>
-          </div>
-          {!no.m.active && <Badge tone="red">Inativo</Badge>}
-        </div>
-        {temFilhos && !recolhido && <ul>{filhosVisiveis.map(desenhar)}</ul>}
+        {cartao(no)}
+        {filhosVisiveis.length > 0 && !estaRecolhido(no.m.userId) && (
+          <ul>{filhosVisiveis.map(desenharLista)}</ul>
+        )}
       </li>
     );
   };
@@ -311,7 +376,36 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
       </div>
 
       <div className="org-wrap" ref={quadro}>
-        <ul className={`org-tree org-tree--${modo}`}>{desenhar(raizNo)}</ul>
+        {modo === "v" || !bandas ? (
+          <ul className="org-tree org-tree--v">{desenharLista(raizNo)}</ul>
+        ) : (
+          <div className="org-canvas" style={{ width: bandas.largura, height: bandas.altura }}>
+            {bandas.faixas.map((f) => (
+              <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }}>
+                {/* sticky: o nome da faixa acompanha a rolagem lateral, senão
+                    some assim que a pessoa anda para o lado do gráfico */}
+                <span className="org-banda-nome" style={{ width: GUTTER - 16 }}>{f.nome}</span>
+              </div>
+            ))}
+            <svg className="org-linhas" width={bandas.largura} height={bandas.altura} aria-hidden>
+              {bandas.linhas.map((l) => (
+                <path
+                  key={`${l.de}->${l.para}`}
+                  d={`M ${l.x1} ${l.y1} V ${l.y2 - 18} H ${l.x2} V ${l.y2}`}
+                  fill="none"
+                  stroke="var(--border-strong)"
+                  strokeWidth={1}
+                />
+              ))}
+            </svg>
+            {bandas.nos.map(({ id, x, y }) => {
+              const no = bandas.porId.get(id);
+              return no ? (
+                <div key={id} className="org-pos" style={{ left: x, top: y }}>{cartao(no)}</div>
+              ) : null;
+            })}
+          </div>
+        )}
       </div>
 
       {ocultarInativos && inativos > 0 && (

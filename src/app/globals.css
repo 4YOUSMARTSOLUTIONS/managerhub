@@ -1575,66 +1575,42 @@ a.tab {
   flex: 0 0 auto; /* cartão nunca é espremido pelo irmão */
 }
 
-/* ----- pele clássica (top-down) ----- */
-.org-tree--h,
-.org-tree--h ul {
+/* ----- modo clássico: FAIXAS por hierarquia -----
+
+   Aqui o `<ul>` aninhado não serve. Numa faixa, o gestor pode estar três linhas
+   acima do liderado, com gente de outros ramos no meio, e o conector de borda só
+   liga pai e filho adjacentes. Então a posição vem calculada e a linha é um
+   `<path>` de SVG por cima. O cartão continua sendo o mesmo `.org-card`.
+
+   As medidas (cartão, coluna, faixa, calha) moram no TSX, e não aqui, porque o
+   SVG precisa das mesmas: duas fontes de verdade fariam a linha encostar ao lado
+   do cartão em vez de nele. */
+.org-canvas { position: relative; }
+.org-banda {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
-  justify-content: center;
-}
-/* max-content deixa rolar na horizontal; min-width centraliza enquanto cabe */
-.org-tree--h {
-  width: max-content;
-  min-width: 100%;
-}
-.org-tree--h ul {
-  position: relative;
-  padding-top: var(--org-gap);
-}
-.org-tree--h li {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: var(--org-gap) 8px 0;
+  border-top: 1px dashed var(--border);
 }
-/* metades esquerda e direita do barramento que passa sobre cada filho */
-.org-tree--h li::before,
-.org-tree--h li::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  width: 50%;
-  height: var(--org-gap);
-  border-top: 1px solid var(--border-strong);
+.org-banda:nth-child(even) { background: color-mix(in srgb, var(--mh-text-3) 4%, transparent); }
+.org-banda-nome {
+  position: sticky;
+  left: 0;
+  padding-left: 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.org-tree--h li::before { right: 50%; }
-.org-tree--h li::after { left: 50%; border-left: 1px solid var(--border-strong); }
-/* filho único: só a haste do pai, sem barramento nenhum */
-.org-tree--h li:only-child::before,
-.org-tree--h li:only-child::after { display: none; }
-.org-tree--h li:only-child { padding-top: 0; }
-/* pontas: a metade externa do barramento não existe */
-.org-tree--h li:first-child::before,
-.org-tree--h li:last-child::after { border: 0 none; }
-.org-tree--h li:last-child::before {
-  border-right: 1px solid var(--border-strong);
-  border-radius: 0 6px 0 0;
-}
-.org-tree--h li:first-child::after { border-radius: 6px 0 0 0; }
-/* haste que SAI do pai. Casa só com os <ul> aninhados, porque o próprio
-   .org-tree--h é o <ul> da raiz */
-.org-tree--h ul::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 0;
-  height: var(--org-gap);
-  border-left: 1px solid var(--border-strong);
-}
-/* a raiz não tem pai acima dela */
-.org-tree--h > li { padding-top: 0; }
-.org-tree--h > li::before,
-.org-tree--h > li::after { display: none; }
+/* as linhas ficam ATRÁS dos cartões, que são opacos e escondem o encontro */
+.org-linhas { position: absolute; inset: 0; pointer-events: none; }
+.org-pos { position: absolute; }
 
 /* ----- pele indentada (vertical) ----- */
 .org-tree--v,
@@ -1732,15 +1708,18 @@ a.tab {
   z-index: 1; /* acima do conector, senão a linha atravessa o simbolo */
 }
 .org-toggle:hover { color: var(--primary); border-color: var(--primary); }
-/* no clássico o botão fica pendurado na haste que desce do cartão */
-.org-tree--h .org-toggle {
+/* no modo faixas o botão fica pendurado na base do cartão, onde a linha sai */
+.org-canvas .org-toggle {
   position: absolute;
   bottom: -11px;
   left: 50%;
   transform: translateX(-50%);
 }
+/* altura travada: o SVG desenha a linha a partir dela, e um cartão que crescesse
+   com o texto faria a linha encostar no meio da pessoa de baixo */
+.org-canvas .org-card { height: 52px; box-sizing: border-box; }
 /* no indentado ele é o primeiro item da linha */
 .org-tree--v .org-toggle { position: static; flex-shrink: 0; }
 /* espaçador para folha alinhar com quem tem botão */
 .org-tree--v .org-toggle-void { width: 22px; flex-shrink: 0; }
-.org-tree--h .org-toggle-void { display: none; }
+.org-canvas .org-toggle-void { display: none; }
