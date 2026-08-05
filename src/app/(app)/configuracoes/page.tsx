@@ -187,7 +187,25 @@ export default async function SettingsPage() {
       unitNames: uIds.map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
       active: m.is_active,
     };
-  });
+  })
+    // Ordenado pela MATRÍCULA, e como NÚMERO.
+    //
+    // A coluna é `text` no banco, então uma ordenação comum sairia
+    // 1, 10, 100, 1000, 101, 11, 2..., que parece defeito. Comparar como número
+    // resolve, mas só vale para quem tem matrícula puramente numérica: hoje são
+    // 987 de 987, e isso é estado dos dados, não garantia do schema. Quem fugir
+    // disso (ou não tiver matrícula) vai para o fim, em ordem de nome, em vez de
+    // virar `NaN` e embaralhar a lista inteira.
+    //
+    // Vale também para a exportação, que sai desta mesma lista.
+    .sort((a, b) => {
+      const numerica = (v: string | null) => v != null && /^\d+$/.test(v);
+      const na = numerica(a.employeeCode);
+      const nb = numerica(b.employeeCode);
+      if (na && nb) return Number(a.employeeCode) - Number(b.employeeCode);
+      if (na !== nb) return na ? -1 : 1;
+      return (a.fullName ?? "").localeCompare(b.fullName ?? "", "pt-BR");
+    });
 
   const people = (profilesData ?? []).map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
   const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind }));
