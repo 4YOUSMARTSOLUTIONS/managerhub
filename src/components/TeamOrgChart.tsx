@@ -359,7 +359,7 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
               <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }}>
                 {/* sticky: o nome da faixa acompanha a rolagem lateral, senão
                     some assim que a pessoa anda para o lado do gráfico */}
-                <span className="org-banda-nome" style={{ width: GUTTER - 16 }}>{f.nome}</span>
+                <span className="org-banda-nome" style={{ width: GUTTER }}>{f.nome}</span>
               </div>
             ))}
             <svg className="org-linhas" width={bandas.largura} height={bandas.altura} aria-hidden>

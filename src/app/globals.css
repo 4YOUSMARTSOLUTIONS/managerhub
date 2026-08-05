@@ -1556,7 +1556,11 @@ a.tab {
   --org-elbow: 26px;  /* meia altura do cartão: onde o cotovelo do --v encosta */
   overflow: auto;
   max-height: 72vh;
-  padding: var(--mh-space-6) var(--mh-space-5);
+  /* sem respiro LATERAL: `sticky left: 0` gruda no inicio do conteudo, e um
+     padding aqui abriria uma fresta antes da calha por onde o cartao aparece.
+     O respiro da esquerda quem da e a propria calha; o da direita, a folga que o
+     canvas ja soma na largura. */
+  padding: var(--mh-space-6) 0;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--mh-radius-lg);
@@ -1593,9 +1597,14 @@ a.tab {
   position: sticky;
   left: 0;
   z-index: 3;
+  /* cobre a FAIXA INTEIRA, nao so a largura do texto: o cartao que desliza para
+     ca tem de passar POR TRAS da calha, e nao por cima do nome do nivel */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
   background: var(--surface-2);
   border-right: 1px solid var(--border);
-  padding: 0.3rem 0.55rem 0.3rem 2px;
+  padding: 0 0.7rem 0 0.75rem;
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.04em;
