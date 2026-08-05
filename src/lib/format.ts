@@ -64,6 +64,17 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${s}s`;
 }
 
+/**
+ * Texto pronto para comparar numa busca: minúsculas e sem acento.
+ *
+ * `NFD` separa a letra do acento e o intervalo removido é o dos sinais
+ * combinantes (U+0300 a U+036F). Assim "João" acha "joao" e "MANUTENÇÃO" acha
+ * "manutencao", que é o mínimo para uma busca em português não parecer quebrada.
+ */
+export function normalizar(value: string): string {
+  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);

@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { minhaEquipe } from "@/lib/team";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { TeamList, type TeamMember } from "@/components/TeamList";
+import { TeamOrgChart } from "@/components/TeamOrgChart";
 
 /**
  * "Minha equipe": a ficha de quem está abaixo do Gestor no organograma.
@@ -20,7 +22,7 @@ import { TeamList, type TeamMember } from "@/components/TeamList";
  * um `.select("cpf")` aqui quebraria na compilação, que é o efeito pretendido.
  */
 export default async function MinhaEquipePage() {
-  const { tenant, role } = await requireContext();
+  const { tenant, role, user } = await requireContext();
   const podeVer = role === "owner" || role === "admin" || role === "manager" || role === "team_lead";
 
   if (!podeVer) {
@@ -69,7 +71,9 @@ export default async function MinhaEquipePage() {
       supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("position_levels").select("id, name").eq("tenant_id", tenant.id),
-      supabase.from("hierarchy_levels").select("id, name").eq("tenant_id", tenant.id),
+      // o `rank` entra por causa do organograma: é ele que ordena os irmãos por
+      // senioridade (menor = mais alto), em vez de alfabeticamente
+      supabase.from("hierarchy_levels").select("id, name, rank").eq("tenant_id", tenant.id),
       // só as colunas que `authenticated` tem privilégio de ler (ver AGENTS.md)
       supabase.from("profiles").select("id, full_name, email, avatar_url"),
     ]);
@@ -79,34 +83,79 @@ export default async function MinhaEquipePage() {
   const nomeCargo = new Map((cargos ?? []).map((p) => [p.id, p.name]));
   const nomeNivel = new Map((niveis ?? []).map((l) => [l.id, l.name]));
   const nomeHier = new Map((hierarquias ?? []).map((h) => [h.id, h.name]));
+  const rankHier = new Map((hierarquias ?? []).map((h) => [h.id, h.rank]));
   const perfilPorId = new Map((perfis ?? []).map((p) => [p.id, p]));
+
+  type Vinculo = NonNullable<typeof vinculos>[number];
+  const paraMembro = (v: Vinculo): TeamMember => ({
+    userId: v.user_id,
+    fullName: perfilPorId.get(v.user_id)?.full_name ?? null,
+    email: perfilPorId.get(v.user_id)?.email ?? null,
+    avatarUrl: perfilPorId.get(v.user_id)?.avatar_url ?? null,
+    employeeCode: v.employee_code,
+    admissionDate: v.admission_date,
+    active: v.is_active,
+    role: v.role,
+    departmentName: v.department_id ? nome.get(v.department_id) ?? null : null,
+    subdepartmentName: v.subdepartment_id ? nomeSub.get(v.subdepartment_id) ?? null : null,
+    positionName: v.position_id ? nomeCargo.get(v.position_id) ?? null : null,
+    levelName: v.position_level_id ? nomeNivel.get(v.position_level_id) ?? null : null,
+    hierarchyName: v.hierarchy_level_id ? nomeHier.get(v.hierarchy_level_id) ?? null : null,
+    hierarchyRank: v.hierarchy_level_id ? rankHier.get(v.hierarchy_level_id) ?? null : null,
+    // quem é o chefe direto: com a cadeia inteira à vista, sem isso não dá
+    // para saber se a pessoa responde ao Gestor ou a alguém no meio
+    managerName: v.manager_id ? perfilPorId.get(v.manager_id)?.full_name ?? null : null,
+    managerId: v.manager_id,
+  });
 
   const membros: TeamMember[] = (vinculos ?? [])
     .filter((v) => setor.has(v.user_id))
-    .map((v) => ({
-      userId: v.user_id,
-      fullName: perfilPorId.get(v.user_id)?.full_name ?? null,
-      email: perfilPorId.get(v.user_id)?.email ?? null,
-      avatarUrl: perfilPorId.get(v.user_id)?.avatar_url ?? null,
-      employeeCode: v.employee_code,
-      admissionDate: v.admission_date,
-      active: v.is_active,
-      role: v.role,
-      departmentName: v.department_id ? nome.get(v.department_id) ?? null : null,
-      subdepartmentName: v.subdepartment_id ? nomeSub.get(v.subdepartment_id) ?? null : null,
-      positionName: v.position_id ? nomeCargo.get(v.position_id) ?? null : null,
-      levelName: v.position_level_id ? nomeNivel.get(v.position_level_id) ?? null : null,
-      hierarchyName: v.hierarchy_level_id ? nomeHier.get(v.hierarchy_level_id) ?? null : null,
-      // quem é o chefe direto: com a cadeia inteira à vista, sem isso não dá
-      // para saber se a pessoa responde ao Gestor ou a alguém no meio
-      managerName: v.manager_id ? perfilPorId.get(v.manager_id)?.full_name ?? null : null,
-    }))
+    .map(paraMembro)
     .sort((a, b) => (a.fullName ?? "").localeCompare(b.fullName ?? "", "pt-BR"));
+
+  // A RAIZ do organograma é quem está olhando.
+  //
+  // `minhaEquipe()` devolve só quem está ABAIXO, então o próprio usuário fica de
+  // fora de `membros` — e tem de continuar fora, senão a tabela passaria a listar
+  // a si mesmo e o contador do cabeçalho mudaria. Vem do mesmo array já em
+  // memória, sem consulta nova.
+  //
+  // O ramo de fallback cobre o super admin operando numa empresa onde ele não
+  // tem vínculo: sem ele a árvore ficaria sem raiz e a aba abriria vazia.
+  const meuVinculo = (vinculos ?? []).find((v) => v.user_id === user.id);
+  const raiz: TeamMember = meuVinculo
+    ? paraMembro(meuVinculo)
+    : {
+        userId: user.id,
+        fullName: perfilPorId.get(user.id)?.full_name ?? user.email ?? null,
+        email: user.email ?? null,
+        avatarUrl: perfilPorId.get(user.id)?.avatar_url ?? null,
+        employeeCode: null,
+        admissionDate: null,
+        active: true,
+        role,
+        departmentName: null,
+        subdepartmentName: null,
+        positionName: null,
+        levelName: null,
+        hierarchyName: null,
+        hierarchyRank: null,
+        managerName: null,
+        managerId: null,
+      };
+
+  // Lista em primeiro: é o que a tela é hoje, e `Tabs` sem `initialId` abre a
+  // primeira. Quem só quer a tabela nem chega a montar o organograma, porque
+  // `Tabs` renderiza apenas a aba ativa.
+  const abas: Tab[] = [
+    { id: "lista", label: "Lista", content: <TeamList members={membros} /> },
+    { id: "organograma", label: "Organograma", content: <TeamOrgChart members={membros} raiz={raiz} /> },
+  ];
 
   return (
     <div>
       <PageHeader title="Minha equipe" subtitle={`${membros.length} pessoa(s) sob sua gestão, incluindo níveis indiretos`} />
-      <TeamList members={membros} />
+      <Tabs tabs={abas} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatDate } from "@/lib/format";
+import { formatDate, normalizar } from "@/lib/format";
 import { USER_TYPE } from "@/lib/constants";
 import { roleTone } from "./UsersManager";
 
@@ -24,21 +24,23 @@ export type TeamMember = {
   hierarchyName: string | null;
   /** chefe DIRETO: com a cadeia inteira à vista, é o que diz o nível de cada um */
   managerName: string | null;
+  /** o mesmo chefe, por id: é o que liga pai e filho no organograma */
+  managerId: string | null;
+  /** ordem da hierarquia (menor = mais alto). Ordena irmãos no organograma */
+  hierarchyRank: number | null;
 };
-
-const normal = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 export function TeamList({ members }: { members: TeamMember[] }) {
   const [busca, setBusca] = useState("");
   const [somenteAtivos, setSomenteAtivos] = useState(true);
 
   const visiveis = useMemo(() => {
-    const q = normal(busca.trim());
+    const q = normalizar(busca.trim());
     return members.filter((m) => {
       if (somenteAtivos && !m.active) return false;
       if (!q) return true;
       return [m.fullName, m.employeeCode, m.departmentName, m.positionName, m.hierarchyName, m.managerName]
-        .some((v) => v && normal(v).includes(q));
+        .some((v) => v && normalizar(v).includes(q));
     });
   }, [members, busca, somenteAtivos]);
 

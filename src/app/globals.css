@@ -1530,3 +1530,217 @@ a.tab {
     0%, 100% { transform: scaleX(0.5); }
   }
 }
+
+/* ---------- Organograma (Minha equipe) ----------
+
+   Árvore desenhada sem biblioteca e sem SVG: a LINHA é a borda de um
+   pseudo-elemento. `ul` reserva um corredor para a haste que desce do pai, `li`
+   reserva outro para o barramento horizontal entre irmãos, e `:only-child`,
+   `:first-child` e `:last-child` recortam as pontas. Nada é medido em
+   JavaScript, então recolher e expandir não custa cálculo de layout.
+
+   DUAS PELES sobre o MESMO markup, escolhidas por classe irmã (nunca uma
+   sobrescrevendo a outra, para a ordem no arquivo não importar):
+
+   - `--h` organograma clássico, de cima para baixo, irmãos lado a lado;
+   - `--v` árvore indentada, irmãos empilhados.
+
+   A `--v` existe por aritmética: no modo clássico a largura cresce com o número
+   de FOLHAS (~220px cada), e uma empresa de 900 pessoas totalmente aberta
+   passaria de 200.000px de largura. No indentado a largura cresce com a
+   PROFUNDIDADE, que é um punhado de níveis, e só a altura acompanha o tamanho
+   do time. */
+.org-wrap {
+  --org-gap: 22px;    /* corredor de cada metade do conector */
+  --org-card-w: 208px;
+  --org-elbow: 26px;  /* meia altura do cartão: onde o cotovelo do --v encosta */
+  overflow: auto;
+  max-height: 72vh;
+  padding: var(--mh-space-6) var(--mh-space-5);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--mh-radius-lg);
+  /* a rolagem é DAQUI: a página nunca deve ganhar barra horizontal por causa
+     de um organograma largo */
+  overscroll-behavior: contain;
+}
+.org-tree,
+.org-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.org-tree li {
+  position: relative;
+  flex: 0 0 auto; /* cartão nunca é espremido pelo irmão */
+}
+
+/* ----- pele clássica (top-down) ----- */
+.org-tree--h,
+.org-tree--h ul {
+  display: flex;
+  justify-content: center;
+}
+/* max-content deixa rolar na horizontal; min-width centraliza enquanto cabe */
+.org-tree--h {
+  width: max-content;
+  min-width: 100%;
+}
+.org-tree--h ul {
+  position: relative;
+  padding-top: var(--org-gap);
+}
+.org-tree--h li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--org-gap) 8px 0;
+}
+/* metades esquerda e direita do barramento que passa sobre cada filho */
+.org-tree--h li::before,
+.org-tree--h li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: var(--org-gap);
+  border-top: 1px solid var(--border-strong);
+}
+.org-tree--h li::before { right: 50%; }
+.org-tree--h li::after { left: 50%; border-left: 1px solid var(--border-strong); }
+/* filho único: só a haste do pai, sem barramento nenhum */
+.org-tree--h li:only-child::before,
+.org-tree--h li:only-child::after { display: none; }
+.org-tree--h li:only-child { padding-top: 0; }
+/* pontas: a metade externa do barramento não existe */
+.org-tree--h li:first-child::before,
+.org-tree--h li:last-child::after { border: 0 none; }
+.org-tree--h li:last-child::before {
+  border-right: 1px solid var(--border-strong);
+  border-radius: 0 6px 0 0;
+}
+.org-tree--h li:first-child::after { border-radius: 6px 0 0 0; }
+/* haste que SAI do pai. Casa só com os <ul> aninhados, porque o próprio
+   .org-tree--h é o <ul> da raiz */
+.org-tree--h ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: var(--org-gap);
+  border-left: 1px solid var(--border-strong);
+}
+/* a raiz não tem pai acima dela */
+.org-tree--h > li { padding-top: 0; }
+.org-tree--h > li::before,
+.org-tree--h > li::after { display: none; }
+
+/* ----- pele indentada (vertical) ----- */
+.org-tree--v,
+.org-tree--v ul { display: block; }
+.org-tree--v li { padding: 4px 0 0 26px; }
+.org-tree--v > li { padding-left: 0; }
+/* cotovelo: desce do trilho e vira para o cartão */
+.org-tree--v li::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 0;
+  width: 13px;
+  height: var(--org-elbow);
+  border-left: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  border-bottom-left-radius: 7px;
+}
+/* trilho que segue até o próximo irmão; some no último */
+.org-tree--v li::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: var(--org-elbow);
+  bottom: 0;
+  border-left: 1px solid var(--border-strong);
+}
+.org-tree--v li:last-child::after { display: none; }
+.org-tree--v > li::before,
+.org-tree--v > li::after { display: none; }
+
+/* ----- o cartão da pessoa ----- */
+.org-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: var(--org-card-w);
+  padding: 0.45rem 0.55rem;
+  /* opaco de propósito: tapa a linha do conector que passa por baixo */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--mh-radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--mh-dur-fast) var(--mh-ease),
+              box-shadow var(--mh-dur-fast) var(--mh-ease);
+}
+.org-card:hover { border-color: var(--border-strong); }
+.org-card-me {
+  border-color: color-mix(in srgb, var(--mh-primary-500) 55%, transparent);
+  background: color-mix(in srgb, var(--mh-primary-500) 8%, var(--surface));
+}
+/* inativo que continua na árvore só para não apagar quem responde a ele */
+.org-card-off { border-style: dashed; opacity: 0.62; }
+.org-card-hit {
+  border-color: var(--mh-warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mh-warning) 26%, transparent);
+}
+/* sem min-width:0 o text-overflow nao corta dentro de um flex item */
+.org-body { min-width: 0; }
+.org-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.org-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.org-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--mh-radius-full);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1; /* acima do conector, senão a linha atravessa o simbolo */
+}
+.org-toggle:hover { color: var(--primary); border-color: var(--primary); }
+/* no clássico o botão fica pendurado na haste que desce do cartão */
+.org-tree--h .org-toggle {
+  position: absolute;
+  bottom: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+/* no indentado ele é o primeiro item da linha */
+.org-tree--v .org-toggle { position: static; flex-shrink: 0; }
+/* espaçador para folha alinhar com quem tem botão */
+.org-tree--v .org-toggle-void { width: 22px; flex-shrink: 0; }
+.org-tree--h .org-toggle-void { display: none; }
