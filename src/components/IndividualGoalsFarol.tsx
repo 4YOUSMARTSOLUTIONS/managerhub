@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { MonthInput } from "@/components/ui/MonthInput";
 import { YearSelect } from "@/components/ui/YearSelect";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
-import { Filter } from "lucide-react";
+import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
 import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -110,6 +110,7 @@ export function IndividualGoalsFarol({
   const [reopenTarget, setReopenTarget] = useState<{ goalId: string; name: string } | null>(null);
   const [closeMonthOpen, setCloseMonthOpen] = useState(false);
   const [copyPrevOpen, setCopyPrevOpen] = useState(false);
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   const subOpts = useMemo(
     () => (deptId ? subdepartments.filter((s) => s.departmentId === deptId) : subdepartments),
@@ -302,7 +303,11 @@ export function IndividualGoalsFarol({
 
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
+      {/* UMA barra só, tudo alinhado à esquerda. Antes os filtros ficavam de um
+          lado e os botões do outro, e o olho tinha de atravessar a tela para ir
+          de um ao outro. Período primeiro (é o contexto de tudo), depois o que
+          recorta, depois o que faz. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
         <div>
           <label className="label">Período</label>
           <div style={{ display: "flex", gap: "0.4rem" }}>
@@ -317,50 +322,15 @@ export function IndividualGoalsFarol({
             )}
           </div>
         </div>
-        {/* Os filtros saem da barra e entram atrás do funil, com um selo dizendo
-            quantos estão ativos. O PERÍODO fica de fora e continua à vista: ele
-            não é filtro, é o contexto de tudo na tela, e esconder que mês está
-            sendo olhado seria trocar limpeza por confusão. */}
         {canManageOthers && (
-          <div style={{ alignSelf: "flex-end" }}>
-            <Dropdown rotulo="Filtros" icone={<Filter size={15} />} contador={filtrosAtivos} largura={280}>
-              <>
-                <div>
-                  <label className="label">Setor</label>
-                  <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
-                    <option value="">Todos</option>
-                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Subsetor</label>
-                  <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
-                    <option value="">Todos</option>
-                    {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Colaborador</label>
-                  <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-                    <option value="">Todos</option>
-                    {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </select>
-                </div>
-                {filtrosAtivos > 0 && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
-                    Limpar filtros
-                  </button>
-                )}
-              </>
-            </Dropdown>
-          </div>
+          <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
         )}
         {mode === "mes" && canCreateGoals && (
-          <div style={{ marginLeft: "auto", alignSelf: "flex-end", display: "flex", gap: "0.5rem" }}>
+          <>
             {/* As secundárias vão para o menu; a primária continua um botão só,
                 à vista. Enterrar "Adicionar meta" num dropdown deixaria a tela
                 mais limpa e o trabalho mais lento, que é uma troca ruim. */}
-            <Dropdown rotulo="Ações" alinharDireita largura={260}>
+            <Dropdown rotulo="Ações" largura={260}>
               {(fechar) => (
                 <>
                   <ItemDeMenu
@@ -388,9 +358,35 @@ export function IndividualGoalsFarol({
               )}
             </Dropdown>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Adicionar meta</button>
-          </div>
+          </>
         )}
       </div>
+
+      {canManageOthers && filtrosAbertos && (
+        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
+          <div>
+            <label className="label">Setor</label>
+            <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
+              <option value="">Todos</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Subsetor</label>
+            <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
+              <option value="">Todos</option>
+              {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Colaborador</label>
+            <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+              <option value="">Todos</option>
+              {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </div>
+        </PainelDeFiltros>
+      )}
 
       {view.rows.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.2rem" }}>

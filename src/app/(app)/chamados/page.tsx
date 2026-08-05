@@ -40,7 +40,10 @@ export default async function TicketsPage() {
 
   const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }] =
     await Promise.all([
-      unitIds ? ticketsQuery.in("unit_id", unitIds) : ticketsQuery,
+      // chamado SEM unidade também entra: `.in()` sozinho descarta `null`, e um
+      // chamado aberto sem unidade sumiria de todo recorte menos "Todas". Mesma
+      // regra de /acoes e /checklists.
+      unitIds ? ticketsQuery.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : ticketsQuery,
       getMembers(tenant.id),
       supabase.from("ticket_sectors").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
       supabase.from("ticket_categories").select("id, name, sector_id, active").eq("tenant_id", tenant.id).order("name"),

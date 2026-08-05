@@ -1,4 +1,4 @@
-import { requireContext } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -49,7 +49,7 @@ import {
 } from "@/lib/actions/tickets";
 
 export default async function SettingsPage() {
-  const { tenant, role, user, isSuperAdmin } = await requireContext();
+  const { tenant, role, user, isSuperAdmin, unitScope } = await requireContext();
   const canAdmin = role === "owner" || role === "admin";
 
   if (!canAdmin) {
@@ -154,7 +154,7 @@ export default async function SettingsPage() {
     unitsByMem.set(mu.membership_id, arr);
   }
 
-  const employees: EmployeeRow[] = mems.map((m) => {
+  const employeesTodos: EmployeeRow[] = mems.map((m) => {
     const p = profById.get(m.user_id);
     const d = pessoaisById.get(m.user_id);
     const uIds = unitsByMem.get(m.id) ?? [];
@@ -206,6 +206,25 @@ export default async function SettingsPage() {
       if (na !== nb) return na ? -1 : 1;
       return (a.fullName ?? "").localeCompare(b.fullName ?? "", "pt-BR");
     });
+
+  // O seletor de unidade do topo vale AQUI TAMBÉM.
+  //
+  // Esta lista saía com a empresa inteira mesmo com uma unidade escolhida lá em
+  // cima, e como a exportação nasce dela, o xlsx vinha com todo mundo junto.
+  //
+  // Quem não tem NENHUMA unidade aparece em qualquer recorte, de propósito: é a
+  // mesma regra que /acoes e /checklists já aplicam a registro sem unidade. Sem
+  // isso, um cadastro novo sem unidade sumiria de todas as telas menos "Todas",
+  // e sumir sem erro é pior que aparecer demais.
+  //
+  // Só a LISTA é recortada. `mems`, `codeByUser` e `usedHierarchy` continuam com
+  // a empresa inteira: o nome do gestor de outra unidade tem de continuar
+  // resolvendo, e "catálogo em uso" que só olhasse a unidade ativa deixaria
+  // excluir uma hierarquia ainda usada na outra.
+  const unidadesDoEscopo = effectiveUnitFilter(unitScope);
+  const employees = unidadesDoEscopo
+    ? employeesTodos.filter((e) => e.unitIds.length === 0 || e.unitIds.some((id) => unidadesDoEscopo.includes(id)))
+    : employeesTodos;
 
   const people = (profilesData ?? []).map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
   const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind }));

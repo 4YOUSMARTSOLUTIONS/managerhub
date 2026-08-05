@@ -1,4 +1,4 @@
-import { requireContext, getMembers } from "@/lib/tenant";
+import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -28,7 +28,21 @@ export default async function GoalsPage() {
     ? Promise.resolve({ data: null as { user_id: string }[] | null })
     : supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id);
 
-  const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, todosMembros] = await Promise.all([
+  // Meta individual não tem unidade própria: quem tem é o DONO dela. Para o
+  // seletor do topo valer aqui, o recorte é pela unidade do dono. Só custa uma
+  // consulta quando há unidade escolhida; em "Todas" nem sai.
+  const unidadesDoEscopo = effectiveUnitFilter(unitScope);
+  // duas leituras em vez de um embed: `membership_units` não tem relação
+  // declarada em `src/types/database.ts` (mantido à mão), então o embed não
+  // compila. Juntar na memória custa o mesmo e não depende do gerador de tipos.
+  const donosP = unidadesDoEscopo
+    ? Promise.all([
+        supabase.from("memberships").select("id, user_id").eq("tenant_id", tenant.id),
+        supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+      ])
+    : Promise.resolve(null);
+
+  const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, todosMembros, donos] = await Promise.all([
     reportsP,
     supabase
       .from("area_goals")
@@ -39,7 +53,27 @@ export default async function GoalsPage() {
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
     getMembers(tenant.id),
+    donosP,
   ]);
+
+  // Dono sem NENHUMA unidade continua aparecendo em qualquer recorte, igual ao
+  // que /acoes e /checklists fazem com registro sem unidade: sumir sem erro é
+  // pior que aparecer demais.
+  let donosVisiveis: Set<string> | null = null;
+  if (donos && unidadesDoEscopo) {
+    const [{ data: vinculos }, { data: vinculoUnidades }] = donos;
+    const unidadesPorVinculo = new Map<string, string[]>();
+    for (const vu of vinculoUnidades ?? []) {
+      const arr = unidadesPorVinculo.get(vu.membership_id) ?? [];
+      arr.push(vu.unit_id);
+      unidadesPorVinculo.set(vu.membership_id, arr);
+    }
+    donosVisiveis = new Set<string>();
+    for (const v of vinculos ?? []) {
+      const us = unidadesPorVinculo.get(v.id) ?? [];
+      if (us.length === 0 || us.some((id) => unidadesDoEscopo.includes(id))) donosVisiveis.add(v.user_id);
+    }
+  }
 
   // subordinados diretos (gestor = quem tem colaboradores abaixo). admin enxerga todos.
   const reportIds: string[] = (reports ?? []).map((r) => r.user_id);
@@ -75,8 +109,11 @@ export default async function GoalsPage() {
   ]);
 
   // ---------- ONDA 3: o que depende da onda 2 ----------
-  const goalIds = (goals ?? []).map((g) => g.id);
-  const ownerIds = [...new Set((goals ?? []).map((g) => g.owner_id))];
+  // o recorte por unidade entra ANTES de buscar lançamentos e RV: não adianta
+  // carregar o histórico de metas que não vão aparecer
+  const goalsNoEscopo = donosVisiveis ? (goals ?? []).filter((g) => donosVisiveis.has(g.owner_id)) : (goals ?? []);
+  const goalIds = goalsNoEscopo.map((g) => g.id);
+  const ownerIds = [...new Set(goalsNoEscopo.map((g) => g.owner_id))];
   const admin = ownerIds.length ? createServiceClient() : null;
 
   const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }] = await Promise.all([
@@ -161,7 +198,7 @@ export default async function GoalsPage() {
     members = memberList;
   }
 
-  const goalRows: GoalRow[] = (goals ?? []).map((g) => {
+  const goalRows: GoalRow[] = goalsNoEscopo.map((g) => {
     const ds = deptByUser.get(g.owner_id) ?? { dept: null, sub: null };
     return {
       id: g.id,

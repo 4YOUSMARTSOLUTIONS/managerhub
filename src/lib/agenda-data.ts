@@ -1,4 +1,4 @@
-import { requireContext, getMembers } from "@/lib/tenant";
+import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import type { AgendaFull, LogRow, ChecklistSchedFull, ChecklistRunLite, OrgInfo } from "@/lib/agenda-types";
 import type { Tables } from "@/types/database";
@@ -20,9 +20,14 @@ export type AgendaData = {
 
 /** Carrega tudo que as telas de Gestão da rotina precisam (RLS aplicada). */
 export async function loadAgendaData(): Promise<AgendaData> {
-  const { user, tenant, role } = await requireContext();
+  const { user, tenant, role, unitScope } = await requireContext();
   const supabase = await createClient();
   const isAdmin = role === "owner" || role === "admin";
+
+  // `agendas` tem unidade e a tela ignorava o seletor do topo. Mesma regra das
+  // demais telas com unidade: agenda sem unidade aparece em qualquer recorte.
+  const unidadesDoEscopo = effectiveUnitFilter(unitScope);
+  const agendaUnitOr = unidadesDoEscopo ? `unit_id.in.(${unidadesDoEscopo.join(",")}),unit_id.is.null` : null;
 
   const today = new Date().toLocaleDateString("sv-SE");
   const fromD = new Date(); fromD.setDate(fromD.getDate() - 90);
@@ -31,7 +36,10 @@ export async function loadAgendaData(): Promise<AgendaData> {
 
   const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes] = await Promise.all([
     getMembers(tenant.id),
-    supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id).order("created_at", { ascending: false }),
+    (() => {
+      const q = supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id);
+      return (agendaUnitOr ? q.or(agendaUnitOr) : q).order("created_at", { ascending: false });
+    })(),
     supabase.from("agenda_logs").select("id, agenda_id, task_id, log_date, status, note, actual_minutes").eq("tenant_id", tenant.id).gte("log_date", from),
     supabase.from("checklist_schedules").select("id, frequency, fixed_date, weekday, day_of_month, run_time, active, checklist_id, checklists!inner(name, active), checklist_schedule_targets(kind, ref_id)").eq("active", true),
     supabase.from("checklist_runs").select("checklist_id, executor_id, period_key").not("completed_at", "is", null).gte("created_at", fromIso),

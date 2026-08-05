@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportAreaGoalsDialog } from "@/components/ImportAreaGoalsDialog";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
-import { Filter } from "lucide-react";
+import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
 import { ImportAreaEntriesDialog } from "@/components/ImportAreaEntriesDialog";
 import { ExportButton } from "@/components/ui/ExportButton";
 import {
@@ -246,10 +246,14 @@ export function AreaGoalsFarol({
   // comandar a abertura deles
   const [importGoalsOpen, setImportGoalsOpen] = useState(false);
   const [importEntriesOpen, setImportEntriesOpen] = useState(false);
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
+      {/* UMA barra só, tudo à esquerda: Período (o contexto), o que recorta e o
+          que faz, nessa ordem. Filtro e ação em pontas opostas da tela obrigava
+          o olho a atravessar de um lado ao outro. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
         <div>
           <label className="label">Período</label>
           <div style={{ display: "flex", gap: "0.4rem" }}>
@@ -264,47 +268,13 @@ export function AreaGoalsFarol({
             )}
           </div>
         </div>
-        {/* Filtros atrás do funil; o Período fica à vista porque é o contexto da
-            tela, não um recorte. O selo mostra quantos estão ligados, para
-            filtro fechado não virar filtro esquecido. */}
-        <div style={{ alignSelf: "flex-end" }}>
-          <Dropdown rotulo="Filtros" icone={<Filter size={15} />} contador={filtrosAtivos} largura={280}>
-            <>
-              <div>
-                <label className="label">Setor</label>
-                <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
-                  <option value="">Todos</option>
-                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Subsetor</label>
-                <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
-                  <option value="">Todos</option>
-                  {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Responsável</label>
-                <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-                  <option value="">Todos</option>
-                  {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              </div>
-              {filtrosAtivos > 0 && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
-                  Limpar filtros
-                </button>
-              )}
-            </>
-          </Dropdown>
-        </div>
+        <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
         {isAdmin && (
-          <div style={{ marginLeft: "auto", alignSelf: "flex-end", display: "flex", gap: "0.5rem" }}>
+          <>
             {/* Quatro botões de planilha viraram um menu. Os diálogos em si são
                 renderizados FORA daqui: dentro do painel, fechar o menu
                 desmontaria o diálogo que ele acabou de abrir. */}
-            <Dropdown rotulo="Planilhas" alinharDireita largura={280}>
+            <Dropdown rotulo="Planilhas" largura={280}>
               {(fechar) => (
                 <>
                   <ItemDeMenu onClick={() => { setImportGoalsOpen(true); fechar(); }}>Importar indicadores</ItemDeMenu>
@@ -328,9 +298,35 @@ export function AreaGoalsFarol({
               )}
             </Dropdown>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Novo indicador</button>
-          </div>
+          </>
         )}
       </div>
+
+      {filtrosAbertos && (
+        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
+          <div>
+            <label className="label">Setor</label>
+            <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
+              <option value="">Todos</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Subsetor</label>
+            <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
+              <option value="">Todos</option>
+              {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Responsável</label>
+            <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+              <option value="">Todos</option>
+              {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </div>
+        </PainelDeFiltros>
+      )}
 
       {/* Controlados por estado e fora do menu, para sobreviverem ao fechamento dele */}
       {isAdmin && (
