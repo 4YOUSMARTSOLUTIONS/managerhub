@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { MonthInput } from "@/components/ui/MonthInput";
+import { YearSelect } from "@/components/ui/YearSelect";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportPnrDialog } from "@/components/ImportPnrDialog";
@@ -141,6 +142,8 @@ export function PnrFarol({ categories, kpis, members, isAdmin, currentUserId }: 
   const [mode, setMode] = useState<"mes" | "ano">("mes");
   const [month, setMonth] = useState(mesAnterior());
   const [year, setYear] = useState(nowYear());
+  // anos que têm lançamento: entram na lista do seletor de ano
+  const periodosCarregados = useMemo(() => kpis.flatMap((k) => k.entries.map((e) => e.period)), [kpis]);
   const [ownerId, setOwnerId] = useState("");
   const [entryKpi, setEntryKpi] = useState<PnrKpiRow | null>(null);
   const [editKpi, setEditKpi] = useState<PnrKpiRow | null>(null);
@@ -209,7 +212,7 @@ export function PnrFarol({ categories, kpis, members, isAdmin, currentUserId }: 
             {mode === "mes" ? (
               <MonthInput value={month} onChange={(v) => setMonth(v || mesAnterior())} />
             ) : (
-              <input type="number" className="input" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value || nowYear())} style={{ width: 110 }} />
+              <YearSelect value={year} onChange={setYear} periodos={periodosCarregados} />
             )}
           </div>
         </div>

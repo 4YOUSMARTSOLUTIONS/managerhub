@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { MonthInput } from "@/components/ui/MonthInput";
+import { YearSelect } from "@/components/ui/YearSelect";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { Filter } from "lucide-react";
 import { OkNokInput } from "@/components/ui/OkNokInput";
@@ -127,6 +128,8 @@ export function IndividualGoalsFarol({
   );
 
   const period = periodOf(month);
+  // anos que têm lançamento: entram na lista do seletor de ano
+  const periodosCarregados = useMemo(() => goals.flatMap((g) => g.entries.map((e) => e.period)), [goals]);
   // RV vinda de Configurações: valor vigente = última vigência <= competência (0/ausente = sem RV)
   const rvByOwner = useMemo(() => {
     const m = new Map<string, RvTimeline[]>();
@@ -310,7 +313,7 @@ export function IndividualGoalsFarol({
             {mode === "mes" ? (
               <MonthInput value={month} onChange={(v) => setMonth(v || mesAnterior())} />
             ) : (
-              <input type="number" className="input" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value || nowYear())} style={{ width: 110 }} />
+              <YearSelect value={year} onChange={setYear} periodos={periodosCarregados} />
             )}
           </div>
         </div>

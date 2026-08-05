@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { MonthInput } from "@/components/ui/MonthInput";
+import { YearSelect } from "@/components/ui/YearSelect";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportAreaGoalsDialog } from "@/components/ImportAreaGoalsDialog";
@@ -139,6 +140,8 @@ export function AreaGoalsFarol({
   const [mode, setMode] = useState<"mes" | "ano">("mes");
   const [month, setMonth] = useState(mesAnterior());
   const [year, setYear] = useState(nowYear());
+  // anos que têm lançamento: entram na lista do seletor de ano
+  const periodosCarregados = useMemo(() => goals.flatMap((g) => g.entries.map((e) => e.period)), [goals]);
   // a unidade é escolhida no filtro global do cabeçalho da página; "Todas" = Grupo consolidado
   const unitSel = scopedUnitId ?? GROUP;
   const [editGoal, setEditGoal] = useState<AreaGoalRow | null>(null);
@@ -257,7 +260,7 @@ export function AreaGoalsFarol({
             {mode === "mes" ? (
               <MonthInput value={month} onChange={(v) => setMonth(v || mesAnterior())} />
             ) : (
-              <input type="number" className="input" min={2000} max={2100} value={year} onChange={(e) => setYear(e.target.value || nowYear())} style={{ width: 110 }} />
+              <YearSelect value={year} onChange={setYear} periodos={periodosCarregados} />
             )}
           </div>
         </div>
