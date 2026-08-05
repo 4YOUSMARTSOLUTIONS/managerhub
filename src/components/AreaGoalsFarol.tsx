@@ -7,6 +7,8 @@ import { MonthInput } from "@/components/ui/MonthInput";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportAreaGoalsDialog } from "@/components/ImportAreaGoalsDialog";
+import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
+import { Filter } from "lucide-react";
 import { ImportAreaEntriesDialog } from "@/components/ImportAreaEntriesDialog";
 import { ExportButton } from "@/components/ui/ExportButton";
 import {
@@ -235,6 +237,13 @@ export function AreaGoalsFarol({
   const canEnter = (g: AreaGoalRow) => isAdmin || g.ownerId === currentUserId;
   const grouped = unitSel === GROUP;
 
+  // selo do botao de filtros: filtro fechado nao pode virar filtro esquecido
+  const filtrosAtivos = [deptId, subId, ownerId].filter(Boolean).length;
+  // os dois diálogos de planilha viram itens de menu, entao o menu precisa
+  // comandar a abertura deles
+  const [importGoalsOpen, setImportGoalsOpen] = useState(false);
+  const [importEntriesOpen, setImportEntriesOpen] = useState(false);
+
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem", alignItems: "flex-end", marginBottom: "1.1rem" }}>
@@ -252,57 +261,97 @@ export function AreaGoalsFarol({
             )}
           </div>
         </div>
-        <div>
-          <label className="label">Setor</label>
-          <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
-            <option value="">Todos</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Subsetor</label>
-          <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
-            <option value="">Todos</option>
-            {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Responsável</label>
-          <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-            <option value="">Todos</option>
-            {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
+        {/* Filtros atrás do funil; o Período fica à vista porque é o contexto da
+            tela, não um recorte. O selo mostra quantos estão ligados, para
+            filtro fechado não virar filtro esquecido. */}
+        <div style={{ alignSelf: "flex-end" }}>
+          <Dropdown rotulo="Filtros" icone={<Filter size={15} />} contador={filtrosAtivos} largura={280}>
+            <>
+              <div>
+                <label className="label">Setor</label>
+                <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
+                  <option value="">Todos</option>
+                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Subsetor</label>
+                <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
+                  <option value="">Todos</option>
+                  {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Responsável</label>
+                <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+                  <option value="">Todos</option>
+                  {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+              {filtrosAtivos > 0 && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
+                  Limpar filtros
+                </button>
+              )}
+            </>
+          </Dropdown>
         </div>
         {isAdmin && (
-          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-            <ImportAreaGoalsDialog
-              departments={departments}
-              subdepartments={subdepartments}
-              units={units}
-              members={members}
-              existing={goals.map((g) => ({ name: g.name, departmentId: g.departmentId, unitId: g.unitId }))}
-            />
-            <ExportButton
-              filename="metas_area_indicadores.xlsx"
-              sheetName="Indicadores"
-              headers={["Indicador", "Unidade", "Setor", "Subsetor", "Un. medida", "Conceito", "Tipo", "IC pai", "Direção", "Cálculo", "Responsável"]}
-              rows={goals.map((g) => [g.name, g.unitName ?? "Todas as unidades", g.departmentName ?? "", g.subdepartmentName ?? "", g.unit, g.description ?? "", AREA_GOAL_KIND[g.kind], g.parentId ? (goalById.get(g.parentId)?.name ?? "") : "", GOAL_DIRECTION[g.direction], CONSOLIDATION_LABEL[g.consolidation], g.ownerName ?? ""])}
-            />
-            <ImportAreaEntriesDialog
-              departments={departments}
-              units={units}
-              goals={goals.map((g) => ({ name: g.name, departmentId: g.departmentId, unitId: g.unitId, consolidation: g.consolidation }))}
-            />
-            <ExportButton
-              filename="metas_area_lancamentos.xlsx"
-              sheetName="Lançamentos"
-              headers={["Indicador", "Unidade", "Setor", "Competência", "Meta", "Realizado", "Numerador", "Denominador"]}
-              rows={goals.flatMap((g) => g.entries.map((e) => { const [y, m] = e.period.split("-"); return [g.name, (e.unitId ? units.find((u) => u.id === e.unitId)?.name : null) ?? g.unitName ?? "Todas as unidades", g.departmentName ?? "", `${m}/${y}`, e.target ?? "", e.actual ?? "", e.numerator ?? "", e.denominator ?? ""]; }))}
-            />
+          <div style={{ marginLeft: "auto", alignSelf: "flex-end", display: "flex", gap: "0.5rem" }}>
+            {/* Quatro botões de planilha viraram um menu. Os diálogos em si são
+                renderizados FORA daqui: dentro do painel, fechar o menu
+                desmontaria o diálogo que ele acabou de abrir. */}
+            <Dropdown rotulo="Planilhas" alinharDireita largura={280}>
+              {(fechar) => (
+                <>
+                  <ItemDeMenu onClick={() => { setImportGoalsOpen(true); fechar(); }}>Importar indicadores</ItemDeMenu>
+                  <ItemDeMenu onClick={() => { setImportEntriesOpen(true); fechar(); }}>Importar resultados</ItemDeMenu>
+                  <div style={{ borderTop: "1px solid var(--border)", margin: "0.15rem 0" }} />
+                  <ExportButton
+                    label="Exportar indicadores"
+                    filename="metas_area_indicadores.xlsx"
+                    sheetName="Indicadores"
+                    headers={["Indicador", "Unidade", "Setor", "Subsetor", "Un. medida", "Conceito", "Tipo", "IC pai", "Direção", "Cálculo", "Responsável"]}
+                    rows={goals.map((g) => [g.name, g.unitName ?? "Todas as unidades", g.departmentName ?? "", g.subdepartmentName ?? "", g.unit, g.description ?? "", AREA_GOAL_KIND[g.kind], g.parentId ? (goalById.get(g.parentId)?.name ?? "") : "", GOAL_DIRECTION[g.direction], CONSOLIDATION_LABEL[g.consolidation], g.ownerName ?? ""])}
+                  />
+                  <ExportButton
+                    label="Exportar resultados"
+                    filename="metas_area_lancamentos.xlsx"
+                    sheetName="Lançamentos"
+                    headers={["Indicador", "Unidade", "Setor", "Competência", "Meta", "Realizado", "Numerador", "Denominador"]}
+                    rows={goals.flatMap((g) => g.entries.map((e) => { const [y, m] = e.period.split("-"); return [g.name, (e.unitId ? units.find((u) => u.id === e.unitId)?.name : null) ?? g.unitName ?? "Todas as unidades", g.departmentName ?? "", `${m}/${y}`, e.target ?? "", e.actual ?? "", e.numerator ?? "", e.denominator ?? ""]; }))}
+                  />
+                </>
+              )}
+            </Dropdown>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Novo indicador</button>
           </div>
         )}
       </div>
+
+      {/* Controlados por estado e fora do menu, para sobreviverem ao fechamento dele */}
+      {isAdmin && (
+        <>
+          <ImportAreaGoalsDialog
+            hideTrigger
+            open={importGoalsOpen}
+            onClose={() => setImportGoalsOpen(false)}
+            departments={departments}
+            subdepartments={subdepartments}
+            units={units}
+            members={members}
+            existing={goals.map((g) => ({ name: g.name, departmentId: g.departmentId, unitId: g.unitId }))}
+          />
+          <ImportAreaEntriesDialog
+            hideTrigger
+            open={importEntriesOpen}
+            onClose={() => setImportEntriesOpen(false)}
+            departments={departments}
+            units={units}
+            goals={goals.map((g) => ({ name: g.name, departmentId: g.departmentId, unitId: g.unitId, consolidation: g.consolidation }))}
+          />
+        </>
+      )}
 
       {rows.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.2rem" }}>

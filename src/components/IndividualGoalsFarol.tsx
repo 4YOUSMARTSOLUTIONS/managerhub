@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { MonthInput } from "@/components/ui/MonthInput";
+import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
+import { Filter } from "lucide-react";
 import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -261,6 +263,10 @@ export function IndividualGoalsFarol({
       : undefined;
 
   const linhasVisiveis = filtroStatus ? view.rows.filter((r) => r.status === filtroStatus) : view.rows;
+
+  // quantos filtros estao ligados: e o selo no botao, para o funil nao esconder
+  // que a tela esta recortada. Sem ele, filtro fechado vira filtro esquecido.
+  const filtrosAtivos = [deptId, subId, ownerId].filter(Boolean).length;
   const hasRv = view.rvHasPool;
   const canWeights = mode === "mes" && view.rows.length > 0 && owners.size === 1;
   const showOwner = canManageOthers && owners.size > 1;
@@ -308,36 +314,76 @@ export function IndividualGoalsFarol({
             )}
           </div>
         </div>
+        {/* Os filtros saem da barra e entram atrás do funil, com um selo dizendo
+            quantos estão ativos. O PERÍODO fica de fora e continua à vista: ele
+            não é filtro, é o contexto de tudo na tela, e esconder que mês está
+            sendo olhado seria trocar limpeza por confusão. */}
         {canManageOthers && (
-          <>
-            <div>
-              <label className="label">Setor</label>
-              <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
-                <option value="">Todos</option>
-                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Subsetor</label>
-              <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
-                <option value="">Todos</option>
-                {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Colaborador</label>
-              <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-                <option value="">Todos</option>
-                {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-            </div>
-          </>
+          <div style={{ alignSelf: "flex-end" }}>
+            <Dropdown rotulo="Filtros" icone={<Filter size={15} />} contador={filtrosAtivos} largura={280}>
+              <>
+                <div>
+                  <label className="label">Setor</label>
+                  <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
+                    <option value="">Todos</option>
+                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Subsetor</label>
+                  <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
+                    <option value="">Todos</option>
+                    {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Colaborador</label>
+                  <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+                    <option value="">Todos</option>
+                    {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                {filtrosAtivos > 0 && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
+                    Limpar filtros
+                  </button>
+                )}
+              </>
+            </Dropdown>
+          </div>
         )}
         {mode === "mes" && canCreateGoals && (
-          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="btn btn-ghost" disabled={!canCopyPrev} title={ownerId ? (copyCandidates.length ? `Copia as ${copyCandidates.length} metas de ${monthLabel(prevMonth)} para este mês` : "Nenhuma meta do mês anterior para reaproveitar") : "Selecione um colaborador para reaproveitar as metas do mês anterior"} onClick={() => setCopyPrevOpen(true)}>Copiar metas do mês anterior</button>
-            <button type="button" className="btn btn-ghost" disabled={!canCloseMonth} title={canCloseMonth ? "Aprova todas as metas abertas do colaborador nesta competência" : "Selecione um colaborador com metas em apuração"} onClick={() => setCloseMonthOpen(true)}>Fechar mês</button>
-            <button type="button" className="btn btn-ghost" disabled={!canWeights} title={canWeights ? "" : "Selecione um colaborador para distribuir pesos"} onClick={() => setWeightsOpen(true)}>Distribuir pesos</button>
+          <div style={{ marginLeft: "auto", alignSelf: "flex-end", display: "flex", gap: "0.5rem" }}>
+            {/* As secundárias vão para o menu; a primária continua um botão só,
+                à vista. Enterrar "Adicionar meta" num dropdown deixaria a tela
+                mais limpa e o trabalho mais lento, que é uma troca ruim. */}
+            <Dropdown rotulo="Ações" alinharDireita largura={260}>
+              {(fechar) => (
+                <>
+                  <ItemDeMenu
+                    disabled={!canCopyPrev}
+                    titulo={ownerId ? (copyCandidates.length ? `Copia as ${copyCandidates.length} metas de ${monthLabel(prevMonth)} para este mês` : "Nenhuma meta do mês anterior para reaproveitar") : "Selecione um colaborador para reaproveitar as metas do mês anterior"}
+                    onClick={() => { setCopyPrevOpen(true); fechar(); }}
+                  >
+                    Copiar metas do mês anterior
+                  </ItemDeMenu>
+                  <ItemDeMenu
+                    disabled={!canCloseMonth}
+                    titulo={canCloseMonth ? "Aprova todas as metas abertas do colaborador nesta competência" : "Selecione um colaborador com metas em apuração"}
+                    onClick={() => { setCloseMonthOpen(true); fechar(); }}
+                  >
+                    Fechar mês
+                  </ItemDeMenu>
+                  <ItemDeMenu
+                    disabled={!canWeights}
+                    titulo={canWeights ? "" : "Selecione um colaborador para distribuir pesos"}
+                    onClick={() => { setWeightsOpen(true); fechar(); }}
+                  >
+                    Distribuir pesos
+                  </ItemDeMenu>
+                </>
+              )}
+            </Dropdown>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Adicionar meta</button>
           </div>
         )}
