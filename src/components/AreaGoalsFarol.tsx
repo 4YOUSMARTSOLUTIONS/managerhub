@@ -125,6 +125,7 @@ const kpiKey = (g: AreaGoalRow) => `${g.name.trim().toLowerCase()}|${g.consolida
 
 export function AreaGoalsFarol({
   goals, departments, subdepartments, units, members, isAdmin, currentUserId, scopedUnitId = null,
+  unidadesExtras = [],
 }: {
   goals: AreaGoalRow[];
   departments: Opt[];
@@ -134,6 +135,8 @@ export function AreaGoalsFarol({
   isAdmin: boolean;
   currentUserId: string;
   scopedUnitId?: string | null; // unidade do filtro global (trava o seletor)
+  /** unidades fora do vínculo que a pessoa alcança por responder por meta lá */
+  unidadesExtras?: Opt[];
 }) {
   const [deptId, setDeptId] = useState("");
   const [subId, setSubId] = useState("");
@@ -143,8 +146,19 @@ export function AreaGoalsFarol({
   const [year, setYear] = useState(nowYear());
   // anos que têm lançamento: entram na lista do seletor de ano
   const periodosCarregados = useMemo(() => goals.flatMap((g) => g.entries.map((e) => e.period)), [goals]);
-  // a unidade é escolhida no filtro global do cabeçalho da página; "Todas" = Grupo consolidado
-  const unitSel = scopedUnitId ?? GROUP;
+  // A unidade vem do filtro global do cabeçalho; "Todas" = Grupo consolidado.
+  //
+  // A EXCEÇÃO: quem responde por meta de uma unidade fora do seu vínculo ganha um
+  // seletor aqui, e só aqui. O do topo não serve para isso porque vale para o
+  // sistema inteiro — mexer nele daria Filial em chamados, ações e reuniões
+  // também. Este fica ao lado do Período, some para quem não tem unidade extra
+  // (que é quase todo mundo), e não escreve o cookie global.
+  const [unidadeEscolhida, setUnidadeEscolhida] = useState<string>(scopedUnitId ?? GROUP);
+  const temExtras = unidadesExtras.length > 0;
+  const unitSel = temExtras ? unidadeEscolhida : scopedUnitId ?? GROUP;
+  const emUnidadeExtra = unidadesExtras.some((u) => u.id === unitSel);
+  // as duas listas juntas resolvem o nome da unidade em qualquer lugar da tela
+  const unidadesVisiveis = useMemo(() => [...units, ...unidadesExtras], [units, unidadesExtras]);
   const [editGoal, setEditGoal] = useState<AreaGoalRow | null>(null);
   const [entryGoal, setEntryGoal] = useState<AreaGoalRow | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -164,23 +178,17 @@ export function AreaGoalsFarol({
   // filtra por setor/subsetor/responsável e por unidade: indicador de unidade específica só
   // aparece na sua unidade (e no Grupo); indicador "todas" (unitId nulo) aparece sempre.
   //
-  // A META DE QUE VOCÊ É O RESPONSÁVEL NUNCA SOME, seja qual for a unidade.
-  //
-  // Área de apoio centralizada é o caso comum, não a exceção: o Financeiro fica
-  // na Matriz e responde pelas metas das duas unidades. Quem está vinculado a uma
-  // unidade só fica travado nela no seletor do topo, e sem esta linha a meta da
-  // outra unidade simplesmente não existia na tela — nem desabilitada, ausente.
-  //
-  // Não é um furo: a policy `area_goal_entries_write` já autoriza o `owner_id` da
-  // meta a gravar, sem olhar unidade. A tela é que escondia o que o banco
-  // liberava. E o escopo de unidade continua valendo em todo o resto do sistema.
+  // Numa UNIDADE EXTRA (alcançada por responsabilidade, não pelo vínculo), a tela
+  // mostra apenas as metas de que a pessoa responde. Ela ganhou a Filial porque
+  // cuida de três indicadores lá, não para ver a Filial inteira.
   const filtered = useMemo(
     () => goals.filter((g) =>
       (!deptId || g.departmentId === deptId) &&
       (!subId || g.subdepartmentId === subId) &&
       (!ownerId || g.ownerId === ownerId) &&
-      (unitSel === GROUP || g.unitId === null || g.unitId === unitSel || g.ownerId === currentUserId)),
-    [goals, deptId, subId, ownerId, unitSel, currentUserId],
+      (unitSel === GROUP || g.unitId === null || g.unitId === unitSel) &&
+      (!emUnidadeExtra || g.ownerId === currentUserId)),
+    [goals, deptId, subId, ownerId, unitSel, emUnidadeExtra, currentUserId],
   );
 
   const goalById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
@@ -256,7 +264,8 @@ export function AreaGoalsFarol({
     return { counts, accum };
   }, [rows]);
 
-  const unitName = unitSel === GROUP ? "Grupo (consolidado)" : units.find((u) => u.id === unitSel)?.name ?? "—";
+  // resolve na lista combinada: em unidade extra, `units` (o vínculo) não a contém
+  const unitName = unitSel === GROUP ? "Grupo (consolidado)" : unidadesVisiveis.find((u) => u.id === unitSel)?.name ?? "—";
   const canEnter = (g: AreaGoalRow) => isAdmin || g.ownerId === currentUserId;
   const grouped = unitSel === GROUP;
 
@@ -288,6 +297,24 @@ export function AreaGoalsFarol({
             )}
           </div>
         </div>
+        {/* só aparece para quem responde por meta de outra unidade; para o resto
+            a unidade continua sendo assunto do seletor do topo, e nada muda */}
+        {temExtras && (
+          <div>
+            <label className="label">Unidade</label>
+            <select
+              className="select"
+              value={unidadeEscolhida}
+              onChange={(e) => setUnidadeEscolhida(e.target.value)}
+              style={{ width: "auto" }}
+              title="Você responde por indicadores em mais de uma unidade"
+            >
+              {unidadesVisiveis.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
         {isAdmin && (
           // O que a pessoa OLHA fica à esquerda; o que ela FAZ, à direita. O
@@ -323,7 +350,7 @@ export function AreaGoalsFarol({
                     filename="metas_area_lancamentos.xlsx"
                     sheetName="Lançamentos"
                     headers={["Indicador", "Unidade", "Setor", "Competência", "Meta", "Realizado", "Numerador", "Denominador"]}
-                    rows={goals.flatMap((g) => g.entries.map((e) => { const [y, m] = e.period.split("-"); return [g.name, (e.unitId ? units.find((u) => u.id === e.unitId)?.name : null) ?? g.unitName ?? "Todas as unidades", g.departmentName ?? "", `${m}/${y}`, e.target ?? "", e.actual ?? "", e.numerator ?? "", e.denominator ?? ""]; }))}
+                    rows={goals.flatMap((g) => g.entries.map((e) => { const [y, m] = e.period.split("-"); return [g.name, (e.unitId ? unidadesVisiveis.find((u) => u.id === e.unitId)?.name : null) ?? g.unitName ?? "Todas as unidades", g.departmentName ?? "", `${m}/${y}`, e.target ?? "", e.actual ?? "", e.numerator ?? "", e.denominator ?? ""]; }))}
                   />
                 </>
               )}
@@ -430,14 +457,6 @@ export function AreaGoalsFarol({
                       ) : <span style={{ fontWeight: 600 }}>{g.name}</span>}
                       {hasChildren && isCollapsed && <span className="soft" style={{ fontSize: "0.68rem", marginLeft: 4 }}>+{(rows.filter((r) => r.chavePai === chave).length)}</span>}
                       {!grouped && g.unitId === null && <span className="soft" style={{ fontSize: "0.7rem", marginLeft: 6 }}>Todas</span>}
-                      {/* meta de OUTRA unidade, que só está aqui porque você é o
-                          responsável: sem dizer de qual, ela se mistura às da
-                          unidade selecionada e vira número trocado */}
-                      {!grouped && g.unitId !== null && g.unitId !== unitSel && (
-                        <span style={{ marginLeft: 6 }} title={`Indicador da unidade ${g.unitName ?? ""}, sob sua responsabilidade`}>
-                          <Badge tone="blue">{g.unitName ?? "Outra unidade"}</Badge>
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{g.unit || <span className="soft">—</span>}</td>
@@ -500,7 +519,11 @@ export function AreaGoalsFarol({
 
       {addOpen && <GoalDialog mode="new" goals={goals} departments={departments} subdepartments={subdepartments} units={units} members={members} onClose={() => setAddOpen(false)} />}
       {editGoal && <GoalDialog mode="edit" goal={editGoal} goals={goals} departments={departments} subdepartments={subdepartments} units={units} members={members} onClose={() => setEditGoal(null)} />}
-      {entryGoal && <EntryDialog goal={entryGoal} units={units} month={month} unitSel={unitSel} onClose={() => setEntryGoal(null)} />}
+      {/* lista combinada: numa unidade extra, `units` (o vínculo) não a contém, e
+          uma meta de Grupo abriria sem a unidade que a pessoa está olhando.
+          O GoalDialog acima segue com `units`: cadastrar indicador é de admin, que
+          nunca tem unidade extra. */}
+      {entryGoal && <EntryDialog goal={entryGoal} units={unidadesVisiveis} month={month} unitSel={unitSel} onClose={() => setEntryGoal(null)} />}
     </div>
   );
 }

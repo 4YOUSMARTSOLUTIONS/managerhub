@@ -245,6 +245,26 @@ export default async function GoalsPage() {
   // As metas da área usam os mesmos setores/subsetores lidos na onda 1, sem repetir
   // a consulta. A antiga leitura de `units` daqui era descartada: quem alimenta o
   // seletor de unidade é o `unitScope` do requireContext, logo abaixo.
+  // UNIDADES QUE A PESSOA ALCANÇA POR RESPONSABILIDADE, e só em Metas da área.
+  //
+  // O Financeiro é centralizado na Matriz e responde por metas da Filial. O
+  // seletor do topo não resolve: ele vale para o sistema inteiro, e alargar lá
+  // daria acesso à Filial em chamados, ações e reuniões também.
+  //
+  // Então a autorização sai do próprio cadastro da meta: se a meta da Filial está
+  // no seu nome, você alcança a Filial nesta tela. Nada para marcar em lugar
+  // nenhum — cadastrou no nome da pessoa, ela passa a poder; tirou, ela deixa de
+  // poder. E o alcance é só o que ela responde, não a Filial inteira.
+  const unidadesExtras = (() => {
+    const m = new Map<string, string>();
+    for (const g of areaGoals ?? []) {
+      if (g.owner_id !== user.id || !g.unit_id) continue;
+      if (unitScope.allowedUnitIds.includes(g.unit_id)) continue;
+      m.set(g.unit_id, (g.orgUnit as unknown as { name: string } | null)?.name ?? "Outra unidade");
+    }
+    return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  })();
+
   const areaDepartments = (deps ?? []).map((d) => ({ id: d.id, name: d.name }));
   const areaSubdepartments = (subs ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
   const areaMembers = todos;
@@ -281,6 +301,7 @@ export default async function GoalsPage() {
           isAdmin={isAdmin}
           currentUserId={user.id}
           scopedUnitId={unitScope.activeUnitId}
+          unidadesExtras={unidadesExtras}
         />
       ),
     },
