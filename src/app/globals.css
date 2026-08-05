@@ -1564,85 +1564,6 @@ a.tab {
      de um organograma largo */
   overscroll-behavior: contain;
 }
-.org-tree,
-.org-tree ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.org-tree li {
-  position: relative;
-  flex: 0 0 auto; /* cartão nunca é espremido pelo irmão */
-}
-
-/* ----- modo clássico: FAIXAS por hierarquia -----
-
-   Aqui o `<ul>` aninhado não serve. Numa faixa, o gestor pode estar três linhas
-   acima do liderado, com gente de outros ramos no meio, e o conector de borda só
-   liga pai e filho adjacentes. Então a posição vem calculada e a linha é um
-   `<path>` de SVG por cima. O cartão continua sendo o mesmo `.org-card`.
-
-   As medidas (cartão, coluna, faixa, calha) moram no TSX, e não aqui, porque o
-   SVG precisa das mesmas: duas fontes de verdade fariam a linha encostar ao lado
-   do cartão em vez de nele. */
-.org-canvas { position: relative; }
-.org-banda {
-  position: absolute;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  border-top: 1px dashed var(--border);
-}
-.org-banda:nth-child(even) { background: color-mix(in srgb, var(--mh-text-3) 4%, transparent); }
-.org-banda-nome {
-  position: sticky;
-  left: 0;
-  padding-left: 2px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* as linhas ficam ATRÁS dos cartões, que são opacos e escondem o encontro */
-.org-linhas { position: absolute; inset: 0; pointer-events: none; }
-.org-pos { position: absolute; }
-
-/* ----- pele indentada (vertical) ----- */
-.org-tree--v,
-.org-tree--v ul { display: block; }
-.org-tree--v li { padding: 4px 0 0 26px; }
-.org-tree--v > li { padding-left: 0; }
-/* cotovelo: desce do trilho e vira para o cartão */
-.org-tree--v li::before {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: 0;
-  width: 13px;
-  height: var(--org-elbow);
-  border-left: 1px solid var(--border-strong);
-  border-bottom: 1px solid var(--border-strong);
-  border-bottom-left-radius: 7px;
-}
-/* trilho que segue até o próximo irmão; some no último */
-.org-tree--v li::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: var(--org-elbow);
-  bottom: 0;
-  border-left: 1px solid var(--border-strong);
-}
-.org-tree--v li:last-child::after { display: none; }
-.org-tree--v > li::before,
-.org-tree--v > li::after { display: none; }
-
-/* ----- o cartão da pessoa ----- */
 .org-card {
   position: relative;
   display: flex;
@@ -1718,8 +1639,4 @@ a.tab {
 /* altura travada: o SVG desenha a linha a partir dela, e um cartão que crescesse
    com o texto faria a linha encostar no meio da pessoa de baixo */
 .org-canvas .org-card { height: 52px; box-sizing: border-box; }
-/* no indentado ele é o primeiro item da linha */
-.org-tree--v .org-toggle { position: static; flex-shrink: 0; }
-/* espaçador para folha alinhar com quem tem botão */
-.org-tree--v .org-toggle-void { width: 22px; flex-shrink: 0; }
 .org-canvas .org-toggle-void { display: none; }

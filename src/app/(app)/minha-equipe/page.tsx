@@ -144,12 +144,13 @@ export default async function MinhaEquipePage() {
         managerId: null,
       };
 
-  // Lista em primeiro: é o que a tela é hoje, e `Tabs` sem `initialId` abre a
-  // primeira. Quem só quer a tabela nem chega a montar o organograma, porque
-  // `Tabs` renderiza apenas a aba ativa.
+  // Organograma em primeiro: é a leitura que a tela promete ("quem responde a
+  // quem"), e `Tabs` sem `initialId` abre a primeira. A Lista fica ao lado, para
+  // quem precisa da ficha cadastral. `Tabs` só monta a aba ativa, então quem
+  // ficar no organograma nem carrega a tabela.
   const abas: Tab[] = [
-    { id: "lista", label: "Lista", content: <TeamList members={membros} /> },
     { id: "organograma", label: "Organograma", content: <TeamOrgChart members={membros} raiz={raiz} /> },
+    { id: "lista", label: "Lista", content: <TeamList members={membros} /> },
   ];
 
   return (

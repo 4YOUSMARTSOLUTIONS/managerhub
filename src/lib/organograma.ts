@@ -45,10 +45,17 @@ export type Faixas = {
  *   subordinado mandasse. Nesse caso o filho desce para a faixa seguinte.
  * - quem está SEM hierarquia entra na faixa logo abaixo do próprio gestor.
  *
- * A COLUNA é o algoritmo clássico de árvore: cada folha ocupa a próxima vaga,
- * cada gestor fica no meio dos seus. Como a sub-árvore inteira mora dentro da
- * faixa de vagas dela, dois ramos diferentes nunca se sobrepõem — e a regra
- * acima garante que ninguém divide faixa com um ancestral.
+ * A COLUNA: cada folha ocupa a próxima vaga e o gestor fica ALINHADO COM O
+ * PRIMEIRO liderado dele, não centralizado no meio deles.
+ *
+ * Centralizar é o desenho de manual, mas com 9 diretos joga a raiz para o meio
+ * do gráfico: o quadro abre na esquerda e a pessoa não se vê nele. Alinhado à
+ * esquerda, quem abre a tela começa vendo a si mesmo e a cadeia descendo.
+ *
+ * Como a sub-árvore inteira mora dentro da faixa de vagas dela, dois ramos
+ * diferentes nunca se sobrepõem; e a regra acima garante que ninguém divide
+ * faixa com um ancestral, então gestor e primeiro liderado dividirem a coluna
+ * não encosta um no outro.
  */
 export function montarFaixas(raiz: NoOrg, m: Medidas): Faixas {
   const ranks = new Set<number>();
@@ -82,7 +89,7 @@ export function montarFaixas(raiz: NoOrg, m: Medidas): Faixas {
     }
     n.filhos.forEach(posicionar);
     const xs = n.filhos.map((f) => col.get(f.id)!);
-    col.set(n.id, (Math.min(...xs) + Math.max(...xs)) / 2);
+    col.set(n.id, Math.min(...xs));
   };
   posicionar(raiz);
 

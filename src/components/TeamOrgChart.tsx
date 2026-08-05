@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Network, List as ListIcon } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { normalizar, shortName } from "@/lib/format";
@@ -15,18 +15,21 @@ import type { TeamMember } from "./TeamList";
  * estrutura só aparece se a pessoa ler linha por linha e montar a árvore de
  * cabeça. Aqui ela está pronta.
  *
- * As linhas são CSS puro (ver a seção `.org-*` em globals.css), sem biblioteca
- * de diagrama e sem SVG. Dois modos sobre o mesmo markup, porque o clássico
- * cresce em LARGURA com o número de folhas e uma empresa inteira não cabe nele.
+ * Uma faixa horizontal por nível hierárquico, posições calculadas e as linhas
+ * desenhadas em SVG por cima — sem biblioteca de diagrama.
  *
- * Nota: `Tabs` desmonta a aba inativa, então sair para a Lista e voltar reinicia
- * busca, modo e nós recolhidos. É aceitável e mantém o custo em zero para quem
- * só quer a tabela.
+ * Existiu um segundo modo, vertical indentado, pensado para quando a empresa
+ * inteira estiver vinculada: no clássico a largura cresce com o número de FOLHAS.
+ * Saiu porque na prática só o clássico é usado. Se a largura incomodar quando a
+ * árvore crescer, a saída é recolher por nível, que já está aqui.
+ *
+ * Nota: `Tabs` desmonta a aba inativa, então ir até a Lista e voltar reinicia a
+ * busca e os nós recolhidos.
  */
 
-/** Medidas do modo clássico, em um lugar só: o CSS, o SVG e o cálculo das
- *  posições têm de concordar. Se a altura do cartão divergisse aqui, a linha
- *  encostaria ao lado da pessoa em vez de nela. */
+/** Medidas do desenho, em um lugar só: o CSS, o SVG e o cálculo das posições têm
+ *  de concordar. Se a altura do cartão divergisse aqui, a linha encostaria ao
+ *  lado da pessoa em vez de nela. */
 const MEDIDAS = { cardW: 208, cardH: 52, colW: 224, rowH: 104, gutter: 116 };
 const ROW_H = MEDIDAS.rowH;
 const GUTTER = MEDIDAS.gutter;
@@ -62,26 +65,11 @@ const TETO = 12;
 const ABRE_ATE = 60;
 
 export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: TeamMember }) {
-  const [modo, setModo] = useState<"h" | "v">("h");
   const [busca, setBusca] = useState("");
   const [ocultarInativos, setOcultarInativos] = useState(true);
   const [indice, setIndice] = useState(0);
   const refs = useRef(new Map<string, HTMLDivElement>());
-  const quadro = useRef<HTMLDivElement>(null);
 
-  /**
-   * Abrir o organograma e NÃO se ver nele.
-   *
-   * No modo clássico a raiz fica centralizada sobre os filhos, então com 9
-   * diretos ela nasce a mais de mil pixels da borda esquerda — e o quadro abre
-   * rolado em zero, mostrando o meio da segunda linha. Centralizar a rolagem
-   * resolve. No vertical não há o que centralizar: tudo começa à esquerda.
-   */
-  useEffect(() => {
-    const el = quadro.current;
-    if (!el) return;
-    el.scrollLeft = modo === "h" ? Math.max(0, (el.scrollWidth - el.clientWidth) / 2) : 0;
-  }, [modo]);
 
   const { raizNo, fora } = useMemo(() => {
     const porId = new Map<string, TeamMember>([[raiz.userId, raiz]]);
@@ -235,7 +223,7 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
   }, [raizNo, visivel, recolhidos, revelados]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Posição de cada pessoa no modo clássico: FAIXA por hierarquia.
+   * Posição de cada pessoa: uma FAIXA por nível hierárquico.
    *
    * A linha vem do nível hierárquico, não da profundidade na árvore, então todo
    * Auxiliar fica na mesma altura mesmo respondendo a gestores diferentes. É o
@@ -304,39 +292,9 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
     );
   };
 
-  /** modo vertical: continua sendo `<ul>` aninhado com conector em CSS */
-  const desenharLista = (no: No): React.ReactNode => {
-    if (!visivel(no)) return null;
-    const filhosVisiveis = no.filhos.filter(visivel);
-    return (
-      <li key={no.m.userId}>
-        {cartao(no)}
-        {filhosVisiveis.length > 0 && !estaRecolhido(no.m.userId) && (
-          <ul>{filhosVisiveis.map(desenharLista)}</ul>
-        )}
-      </li>
-    );
-  };
-
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "center", marginBottom: "0.9rem" }}>
-        <div className="status-seg" role="group" aria-label="Modo de visualização">
-          {([["h", "Clássico", Network], ["v", "Vertical", ListIcon]] as const).map(([id, rotulo, Icone]) => (
-            <button
-              key={id}
-              type="button"
-              className="status-seg-btn"
-              data-active={modo === id}
-              style={modo === id ? { background: "var(--primary)" } : undefined}
-              onClick={() => setModo(id)}
-            >
-              <Icone size={13} style={{ verticalAlign: "-0.15em", marginRight: 4 }} />
-              {rotulo}
-            </button>
-          ))}
-        </div>
-
         <input
           className="input"
           placeholder="Localizar pessoa na árvore…"
@@ -375,10 +333,8 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
         </span>
       </div>
 
-      <div className="org-wrap" ref={quadro}>
-        {modo === "v" || !bandas ? (
-          <ul className="org-tree org-tree--v">{desenharLista(raizNo)}</ul>
-        ) : (
+      <div className="org-wrap">
+        {bandas && (
           <div className="org-canvas" style={{ width: bandas.largura, height: bandas.altura }}>
             {bandas.faixas.map((f) => (
               <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }}>
