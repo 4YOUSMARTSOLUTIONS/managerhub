@@ -156,7 +156,6 @@ export function AreaGoalsFarol({
   const [unidadeEscolhida, setUnidadeEscolhida] = useState<string>(scopedUnitId ?? GROUP);
   const temExtras = unidadesExtras.length > 0;
   const unitSel = temExtras ? unidadeEscolhida : scopedUnitId ?? GROUP;
-  const emUnidadeExtra = unidadesExtras.some((u) => u.id === unitSel);
   // as duas listas juntas resolvem o nome da unidade em qualquer lugar da tela
   const unidadesVisiveis = useMemo(() => [...units, ...unidadesExtras], [units, unidadesExtras]);
   const [editGoal, setEditGoal] = useState<AreaGoalRow | null>(null);
@@ -178,17 +177,21 @@ export function AreaGoalsFarol({
   // filtra por setor/subsetor/responsável e por unidade: indicador de unidade específica só
   // aparece na sua unidade (e no Grupo); indicador "todas" (unitId nulo) aparece sempre.
   //
-  // Numa UNIDADE EXTRA (alcançada por responsabilidade, não pelo vínculo), a tela
-  // mostra apenas as metas de que a pessoa responde. Ela ganhou a Filial porque
-  // cuida de três indicadores lá, não para ver a Filial inteira.
+  // Na unidade extra a pessoa vê o farol INTEIRO daquela unidade, não só as metas
+  // dela: quem responde por um indicador da Filial precisa do contexto ao redor
+  // para saber se o número dele ajuda ou atrapalha o conjunto.
+  //
+  // Ver não é mexer. Lançar continua preso ao `canEnter` (admin ou responsável) e,
+  // no banco, à policy `area_goal_entries_write`. E ler o farol da área nunca foi
+  // restrito: a policy `area_goals_select` já libera para qualquer membro da
+  // empresa — a tela é que recortava.
   const filtered = useMemo(
     () => goals.filter((g) =>
       (!deptId || g.departmentId === deptId) &&
       (!subId || g.subdepartmentId === subId) &&
       (!ownerId || g.ownerId === ownerId) &&
-      (unitSel === GROUP || g.unitId === null || g.unitId === unitSel) &&
-      (!emUnidadeExtra || g.ownerId === currentUserId)),
-    [goals, deptId, subId, ownerId, unitSel, emUnidadeExtra, currentUserId],
+      (unitSel === GROUP || g.unitId === null || g.unitId === unitSel)),
+    [goals, deptId, subId, ownerId, unitSel],
   );
 
   const goalById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
