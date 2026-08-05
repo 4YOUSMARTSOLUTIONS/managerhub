@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importSust, type SustImportRow, type SustImportResult } from "@/lib/actions/sustainability";
 import { IconImport } from "@/components/ui/ImpExpIcons";
+import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
 export function ImportSustainabilityDialog({ open: openProp, onClose, hideTrigger }: { open?: boolean; onClose?: () => void; hideTrigger?: boolean } = {}) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const { lendo, ler } = useLeituraDePlanilha();
   const controlled = openProp !== undefined;
   const open = controlled ? openProp : internalOpen;
   const [rows, setRows] = useState<SustImportRow[]>([]);
@@ -112,7 +114,11 @@ export function ImportSustainabilityDialog({ open: openProp, onClose, hideTrigge
               <div><button type="button" className="btn btn-ghost btn-sm" onClick={downloadTemplate}>↓ Baixar modelo</button></div>
               <div>
                 <label className="label">Arquivo</label>
-                <input type="file" accept=".xlsx,.xls,.csv" className="input" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+                <input type="file" accept=".xlsx,.xls,.csv" className="input" disabled={lendo}
+                  // limpa o value depois de ler: sem isso, reescolher o MESMO
+                  // arquivo nao dispara o onChange e parece que nada aconteceu
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) ler(() => onFile(f)); }} />
+                <AvisoLendoPlanilha lendo={lendo} />
               </div>
               {parseError && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{parseError}</p>}
               {fileName && !summary && (
