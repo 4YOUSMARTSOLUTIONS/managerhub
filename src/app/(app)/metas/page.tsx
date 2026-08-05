@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
-import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite } from "@/components/IndividualGoalsFarol";
+import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow } from "@/components/IndividualGoalsFarol";
 import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 
@@ -116,7 +116,7 @@ export default async function GoalsPage() {
   const ownerIds = [...new Set(goalsNoEscopo.map((g) => g.owner_id))];
   const admin = ownerIds.length ? createServiceClient() : null;
 
-  const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }] = await Promise.all([
+  const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }, { data: ausencias }] = await Promise.all([
     goalIds.length
       ? supabase
           .from("individual_goal_entries")
@@ -128,9 +128,18 @@ export default async function GoalsPage() {
     admin
       ? admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id)
       : Promise.resolve({ data: [] as { scope: string; position_id: string | null; user_id: string | null; effective_from: string; value: number }[] }),
+    // admissao/desligamento entram junto: quem trabalhou meio mês recebe meio mês,
+    // e a data do vínculo é o mesmo tipo de recorte que as férias
     admin
-      ? admin.from("memberships").select("user_id, position_id").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { user_id: string; position_id: string | null }[] }),
+      ? admin.from("memberships").select("user_id, position_id, admission_date, dismissed_at").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { user_id: string; position_id: string | null; admission_date: string | null; dismissed_at: string | null }[] }),
+    // Férias e afastamentos que descontam. Pelo service client, como a RV: a RLS
+    // da tabela é owner/admin, mas o GESTOR precisa do fator para entender o valor
+    // da equipe dele. O que chega aqui é só o intervalo, já recortado aos donos
+    // visíveis, e o que chega ao navegador é a contagem de dias.
+    admin
+      ? admin.from("employee_absences").select("user_id, start_date, end_date").eq("tenant_id", tenant.id).eq("discounts_rv", true).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { user_id: string; start_date: string; end_date: string }[] }),
   ]);
 
   // evidências: uma consulta só para todos os lançamentos em vista, e não uma por
@@ -184,6 +193,22 @@ export default async function GoalsPage() {
       }
     }
   }
+
+  // Dias que NÃO contam na RV de cada dono: férias/afastamentos que descontam,
+  // mais o que estiver fora do vínculo (antes da admissão, depois do
+  // desligamento). Quem não tem nada aqui fica de fora do mapa e o fator é 1.
+  const rvDias: RvDiasRow[] = ownerIds
+    .map((ownerId) => {
+      const m = (ownerMems ?? []).find((x) => x.user_id === ownerId);
+      return {
+        ownerId,
+        ausencias: (ausencias ?? [])
+          .filter((a) => a.user_id === ownerId)
+          .map((a) => ({ inicio: a.start_date, fim: a.end_date })),
+        vinculo: { admissao: m?.admission_date ?? null, desligamento: m?.dismissed_at ?? null },
+      };
+    })
+    .filter((r) => r.ausencias.length > 0 || r.vinculo.admissao || r.vinculo.desligamento);
 
   // mapa dono -> setor/subsetor + opcoes de filtro (so p/ quem ve multiplos colaboradores)
   const deptByUser = new Map<string, { dept: string | null; sub: string | null }>();
@@ -305,6 +330,7 @@ export default async function GoalsPage() {
           departments={departments}
           subdepartments={subdepartments}
           rvTimelines={rvTimelines}
+          rvDias={rvDias}
         />
       ),
     },

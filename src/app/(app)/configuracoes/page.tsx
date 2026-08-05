@@ -22,6 +22,7 @@ import { addFeedbackCompetencyForm, removeFeedbackCompetencyForm, toggleFeedback
 import { FeedbackCadenceEditor } from "@/components/FeedbackCadenceEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
+import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
 import { createRoom, updateRoom, toggleRoom, deleteRoom } from "@/lib/actions/rooms";
 import { createHoliday, deleteHoliday } from "@/lib/actions/holidays";
 import { ImportHolidaysDialog } from "@/components/ImportHolidaysDialog";
@@ -70,7 +71,7 @@ export default async function SettingsPage() {
     { data: subdepartments }, { data: positions }, { data: levels }, { data: hierarchies }, { data: rooms }, { data: holidays },
     { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
     { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
-    { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData },
+    { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData }, { data: absencesData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -105,6 +106,12 @@ export default async function SettingsPage() {
     // owner/admin da empresa ativa.
     supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
     supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    // férias e afastamentos: a RLS é owner/admin, e esta tela já é
+    supabase
+      .from("employee_absences")
+      .select("id, user_id, kind, start_date, end_date, discounts_rv, note")
+      .eq("tenant_id", tenant.id)
+      .order("start_date", { ascending: false }),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -255,6 +262,16 @@ export default async function SettingsPage() {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
+  const absenceRows: AbsenceRow[] = (absencesData ?? []).map((a) => ({
+    id: a.id,
+    userId: a.user_id,
+    kind: a.kind,
+    startDate: a.start_date,
+    endDate: a.end_date,
+    discountsRv: a.discounts_rv,
+    note: a.note,
+  }));
+
   // ---------- Conteúdo das abas ----------
   const empresaTab = (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", maxWidth: 760 }}>
@@ -268,18 +285,37 @@ export default async function SettingsPage() {
     </div>
   );
 
+  // Férias moram DENTRO de Colaboradores, e não numa aba de topo: é dado por
+  // pessoa, e a barra de cima já tem nove itens. Quem procura "férias" procura no
+  // cadastro de gente.
   const usuariosTab = (
-    <UsersManager
-      employees={employees}
-      units={unitOpts}
-      departments={deptOpts}
-      subdepartments={subOpts}
-      positions={posOpts}
-      levels={levelOpts}
-      hierarchies={hierarchyOpts}
-      people={people}
-      currentUserId={user.id}
-      isSuperAdmin={isSuperAdmin}
+    <Tabs
+      variant="sub"
+      tabs={[
+        {
+          id: "cadastro",
+          label: "Cadastro",
+          content: (
+            <UsersManager
+              employees={employees}
+              units={unitOpts}
+              departments={deptOpts}
+              subdepartments={subOpts}
+              positions={posOpts}
+              levels={levelOpts}
+              hierarchies={hierarchyOpts}
+              people={people}
+              currentUserId={user.id}
+              isSuperAdmin={isSuperAdmin}
+            />
+          ),
+        },
+        {
+          id: "ausencias",
+          label: "Férias e afastamentos",
+          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} absences={absenceRows} />,
+        },
+      ]}
     />
   );
 

@@ -700,6 +700,16 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; scope?: string; position_id?: string | null; user_id?: string | null; effective_from?: string; value?: number; created_by?: string | null; created_at?: string }
         Relationships: []
       }
+      // Férias e afastamentos. `discounts_rv` é separado de `kind` de propósito: o
+      // tipo diz o que foi, a marcação diz se reduz a remuneração variável daquele
+      // mês. Um atestado de um dia e um de trinta não têm o mesmo peso, e isso é
+      // política da empresa, não do esquema.
+      employee_absences: {
+        Row: { id: string; tenant_id: string; user_id: string; kind: Database["public"]["Enums"]["absence_kind"]; start_date: string; end_date: string; discounts_rv: boolean; note: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date: string; end_date: string; discounts_rv?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date?: string; end_date?: string; discounts_rv?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       area_goals: {
         Row: { id: string; tenant_id: string; department_id: string | null; subdepartment_id: string | null; unit_id: string | null; parent_id: string | null; name: string; description: string | null; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; department_id?: string | null; subdepartment_id?: string | null; unit_id?: string | null; parent_id?: string | null; name: string; description?: string | null; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
@@ -1430,6 +1440,7 @@ export type Database = {
       // cálculo do farol não tem caso especial nenhum.
       goal_direction: "maior_melhor" | "menor_melhor" | "binaria"
       goal_entry_status: "aberta" | "aprovada" | "reprovada"
+      absence_kind: "ferias" | "licenca" | "afastamento" | "atestado"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
       feedback_channel: "presencial" | "reuniao_1a1" | "videochamada" | "mensagem" | "outro"

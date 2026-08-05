@@ -224,6 +224,34 @@ export const GOAL_ENTRY_STATUS_TONE: Record<Enums<"goal_entry_status">, Tone> = 
   reprovada: "red",
 };
 
+// ---------- Férias e ausências ----------
+export const ABSENCE_KIND_LABEL: Record<Enums<"absence_kind">, string> = {
+  ferias: "Férias",
+  licenca: "Licença",
+  afastamento: "Afastamento",
+  atestado: "Atestado",
+};
+
+export const ABSENCE_KIND_TONE: Record<Enums<"absence_kind">, Tone> = {
+  ferias: "blue",
+  licenca: "purple",
+  afastamento: "amber",
+  atestado: "gray",
+};
+
+/**
+ * Se o tipo vem marcado como "desconta da remuneração variável" ao abrir o
+ * formulário. É só o PADRÃO: a marcação é gravada por lançamento e pode ser
+ * trocada, porque um atestado de um dia e um de trinta não merecem o mesmo
+ * tratamento, e quem decide isso é a empresa.
+ */
+export const ABSENCE_DESCONTA_PADRAO: Record<Enums<"absence_kind">, boolean> = {
+  ferias: true,
+  licenca: true,
+  afastamento: true,
+  atestado: false,
+};
+
 // ---------- Feedbacks ----------
 export const FEEDBACK_TYPE_LABEL: Record<Enums<"feedback_type">, string> = {
   reconhecimento: "Reconhecimento",

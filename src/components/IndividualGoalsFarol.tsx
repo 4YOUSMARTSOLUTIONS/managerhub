@@ -20,6 +20,7 @@ import {
 } from "@/lib/actions/individual-goals";
 import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
+import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
 import { formatNumber, formatMetaValor } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -31,6 +32,11 @@ export type GoalEvidenceLite = { id: string; path: string; filename: string; siz
 export type GoalEntryLite = { period: string; target: number; actual: number | null; weight: number; note: string | null; partial: number | null; status: Enums<"goal_entry_status">; approvedAt: string | null; reprovalNote: string | null; evidences: GoalEvidenceLite[] };
 // linha do tempo da RV resolvida em Configurações: valor vale a partir de `from` até a próxima vigência
 export type RvTimeline = { ownerId: string; from: string; value: number };
+/**
+ * O que reduz os dias trabalhados do mês: férias e afastamentos que descontam,
+ * mais o recorte do vínculo. Só vem quem tem alguma coisa; ausente = mês cheio.
+ */
+export type RvDiasRow = { ownerId: string; ausencias: AusenciaLite[]; vinculo: VinculoLite };
 export type GoalRow = {
   id: string;
   name: string;
@@ -82,7 +88,7 @@ const BAR_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", 
 type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: number | null; actual: number | null; weight: number; partial: number | null; rvShare: number | null; rvPay: number; entryStatus: Enums<"goal_entry_status"> | null; reprovalNote: string | null };
 
 export function IndividualGoalsFarol({
-  goals, canManageOthers, canCreateGoals, isAdmin, reportIds, currentUserId, members, departments, subdepartments, rvTimelines = [],
+  goals, canManageOthers, canCreateGoals, isAdmin, reportIds, currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [],
 }: {
   goals: GoalRow[];
   canManageOthers: boolean;
@@ -94,6 +100,7 @@ export function IndividualGoalsFarol({
   departments: Opt[];
   subdepartments: SubOpt[];
   rvTimelines?: RvTimeline[];
+  rvDias?: RvDiasRow[];
 }) {
   const reportSet = useMemo(() => new Set(reportIds), [reportIds]);
   // pode editar a DEFINIÇÃO da meta (alvo, peso, conceito) do dono
@@ -152,12 +159,29 @@ export function IndividualGoalsFarol({
     return best && best.value > 0 ? best.value : null;
   }, [rvByOwner]);
 
+  /**
+   * Quanto do mês a pessoa trabalhou, para a RV ser proporcional.
+   *
+   * Férias reduzem o DINHEIRO, não o desempenho: o farol, o status e o acumulado
+   * ficam intactos, e só o pote é multiplicado por este fator. Quem não tem
+   * ausência nem recorte de vínculo não entra no mapa e recebe o mês cheio.
+   */
+  const diasPorDono = useMemo(() => new Map(rvDias.map((d) => [d.ownerId, d])), [rvDias]);
+  const fatorFor = useMemo(() => (owner: string, at: string) => {
+    const d = diasPorDono.get(owner);
+    return d ? fatorRv(at, d.ausencias, d.vinculo) : { dias: 0, trabalhados: 0, fator: 1 };
+  }, [diasPorDono]);
+
   const view = useMemo(() => {
     const counts: Record<FarolStatus, number> = { atingida: 0, parcial: 0, nao_atingida: 0, pendente: 0 };
     const rows: Row[] = [];
     let rvPayTotal = 0;
     let rvHasPool = false; // existe pote de RV no período em vista
     let rvWarn = false;    // pote existe mas pesos ≠ 100% em algum colaborador/mês
+    // dias trabalhados do mês, para explicar um valor menor que o cheio. Só faz
+    // sentido com UM colaborador em vista: com vários, cada um teria o seu.
+    const descontos: { ownerId: string; f: FatorRv }[] = [];
+    const donosComPote = new Set<string>();
 
     if (mode === "ano") {
       const prefix = `${year}-`;
@@ -190,8 +214,11 @@ export function IndividualGoalsFarol({
         rows.push({ goal: g, pct: r.pct, status: r.status, target: has ? tSum : null, actual: has ? aSum : null, weight: 0, partial: hasP ? pSum : null, rvShare: null, rvPay: 0, entryStatus: null, reprovalNote: null });
       }
       for (const [, items] of byOwnerMonth) {
-        const pool = rvFor(items[0].ownerId, items[0].period);
-        if (pool == null) continue;
+        const cheio = rvFor(items[0].ownerId, items[0].period);
+        if (cheio == null) continue;
+        // no ano o fator é do MÊS de cada grupo, não do ano: quem tirou férias em
+        // julho perde a parte de julho, e os outros onze meses seguem inteiros
+        const pool = cheio * fatorFor(items[0].ownerId, items[0].period).fator;
         rvHasPool = true;
         const sumW = Math.round(items.reduce((s, x) => s + x.weight, 0));
         if (sumW !== 100) { rvWarn = true; continue; }
@@ -204,7 +231,7 @@ export function IndividualGoalsFarol({
       for (const r of rows) r.rvPay = rvPayByGoal.get(r.goal.id) ?? 0;
       const allWeighted = tot > 0 && allW;
       const accum = tot === 0 ? null : Math.round((allWeighted && tw > 0 ? aw / tw : creditSum / tot) * 100);
-      return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, sub: accum == null ? "Sem registros no ano" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${tot} metas-mês${allWeighted ? " · ponderado" : ""}` };
+      return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes: null as FatorRv | null, sub: accum == null ? "Sem registros no ano" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${tot} metas-mês${allWeighted ? " · ponderado" : ""}` };
     }
 
     // ---- mensal ----
@@ -221,8 +248,14 @@ export function IndividualGoalsFarol({
     const byOwner = new Map<string, typeof raw>();
     for (const x of raw) { const arr = byOwner.get(x.goal.ownerId) ?? []; arr.push(x); byOwner.set(x.goal.ownerId, arr); }
     for (const [ownerId, items] of byOwner) {
-      const pool = rvFor(ownerId, period);
-      if (pool == null) continue;
+      const cheio = rvFor(ownerId, period);
+      if (cheio == null) continue;
+      // proporcional aos dias trabalhados. Descontar no POTE, e não no fim,
+      // acerta a linha e o total de uma vez: o valor pago é linear no pote.
+      const f = fatorFor(ownerId, period);
+      const pool = cheio * f.fator;
+      donosComPote.add(ownerId);
+      if (f.fator < 1) descontos.push({ ownerId, f });
       rvHasPool = true;
       const sumW = Math.round(items.reduce((s, x) => s + x.e.weight, 0));
       if (sumW !== 100) { rvWarn = true; for (const x of items) rvByGoal.set(x.goal.id, { share: null, pay: 0 }); continue; }
@@ -249,8 +282,11 @@ export function IndividualGoalsFarol({
         accum = Math.round((creditSum / rows.length) * 100);
       }
     }
-    return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
-  }, [filtered, mode, period, year, rvFor]);
+    // um colaborador em vista e um desconto: dá para dizer 15 de 31 dias. Com
+    // vários, cada um teria o seu recorte e o rótulo mentiria.
+    const rvDiasMes = donosComPote.size === 1 && descontos.length === 1 ? descontos[0].f : null;
+    return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
+  }, [filtered, mode, period, year, rvFor, fatorFor]);
 
   const owners = useMemo(() => new Set(view.rows.map((r) => r.goal.ownerId)), [view.rows]);
 
@@ -412,7 +448,21 @@ export function IndividualGoalsFarol({
             active={filtroStatus === "nao_atingida"} onClick={cardFiltravel("nao_atingida")} />
           <SummaryCard label="Pendentes" value={String(view.counts.pendente)} tone="gray"
             active={filtroStatus === "pendente"} onClick={cardFiltravel("pendente")} />
-          {hasRv && <SummaryCard label="RV a pagar" value={fmtBRL(view.rvPayTotal)} tone={view.rvWarn ? "amber" : "green"} sub={view.rvWarn ? "Ajuste os pesos p/ somar 100%" : (mode === "ano" ? `Ano ${year}` : monthLabel(month))} />}
+          {hasRv && (
+            <SummaryCard
+              label="RV a pagar"
+              value={fmtBRL(view.rvPayTotal)}
+              tone={view.rvWarn ? "amber" : "green"}
+              sub={
+                view.rvWarn
+                  ? "Ajuste os pesos p/ somar 100%"
+                  : mode === "ano"
+                    ? `Ano ${year}`
+                    // sem o sufixo, um valor menor que o cheio vira dúvida
+                    : `${monthLabel(month)}${view.rvDiasMes ? ` · ${view.rvDiasMes.trabalhados} de ${view.rvDiasMes.dias} dias` : ""}`
+              }
+            />
+          )}
         </div>
       )}
 
@@ -528,7 +578,14 @@ export function IndividualGoalsFarol({
                       {mode === "ano" ? (
                         rvPay > 0 ? <span style={{ fontWeight: 700 }}>{fmtBRL(rvPay)}</span> : <span className="soft">—</span>
                       ) : rvShare != null ? (
-                        <span style={{ fontWeight: 700, color: BAR_COLOR[status] === "transparent" ? "var(--text-muted)" : BAR_COLOR[status] }} title={`Cota da RV (peso): ${fmtBRL(rvShare)}`}>{fmtBRL(rvPay)}</span>
+                        <span
+                          style={{ fontWeight: 700, color: BAR_COLOR[status] === "transparent" ? "var(--text-muted)" : BAR_COLOR[status] }}
+                          title={(() => {
+                            const f = fatorFor(g.ownerId, period);
+                            const cota = `Cota da RV (peso): ${fmtBRL(rvShare)}`;
+                            return f.fator < 1 ? `${cota}\nJá proporcional a ${f.trabalhados} de ${f.dias} dias trabalhados` : cota;
+                          })()}
+                        >{fmtBRL(rvPay)}</span>
                       ) : <span className="soft" title="RV configurada em Configurações; ajuste os pesos p/ somar 100%">—</span>}
                     </td>
                   )}
