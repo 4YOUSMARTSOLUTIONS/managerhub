@@ -131,6 +131,28 @@ export async function upsertAreaEntry(input: UpsertAreaEntryInput): Promise<Acti
     if (!input.period) return { error: "Informe a competência." };
     const num = (v: number | null) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
+    // O LANÇAMENTO TEM DE SER DA UNIDADE DA META.
+    //
+    // Quem pode gravar já é decidido pela RLS (owner/admin ou o responsável da
+    // meta). Só que ela não olha ONDE: nada no banco liga
+    // `area_goal_entries.unit_id` a `area_goals.unit_id`, então um responsável
+    // podia gravar o resultado da meta da Matriz carimbado como Filial, e o
+    // número apareceria na unidade errada sem erro nenhum.
+    //
+    // A folga existia antes, mas era abafada pela tela, que só oferecia a
+    // unidade em que a pessoa estava. Agora a tela entrega de propósito metas de
+    // fora do escopo de unidade dela, então a conferência passa para cá.
+    const { data: meta } = await supabase
+      .from("area_goals")
+      .select("unit_id")
+      .eq("id", input.area_goal_id)
+      .maybeSingle();
+    if (!meta) return { error: "Indicador não encontrado." };
+    // meta de Grupo (unit_id nulo) segue aceitando qualquer unidade ou o consolidado
+    if (meta.unit_id !== null && input.unit_id !== meta.unit_id) {
+      return { error: "Este indicador é de outra unidade. O resultado precisa ser lançado na unidade dele." };
+    }
+
     // upsert manual por (area_goal_id, period, unit_id) — RLS garante permissão (owner/admin ou responsável)
     let sel = supabase
       .from("area_goal_entries")

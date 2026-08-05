@@ -162,14 +162,25 @@ export function AreaGoalsFarol({
   }, [goals]);
 
   // filtra por setor/subsetor/responsável e por unidade: indicador de unidade específica só
-  // aparece na sua unidade (e no Grupo); indicador "todas" (unitId nulo) aparece sempre
+  // aparece na sua unidade (e no Grupo); indicador "todas" (unitId nulo) aparece sempre.
+  //
+  // A META DE QUE VOCÊ É O RESPONSÁVEL NUNCA SOME, seja qual for a unidade.
+  //
+  // Área de apoio centralizada é o caso comum, não a exceção: o Financeiro fica
+  // na Matriz e responde pelas metas das duas unidades. Quem está vinculado a uma
+  // unidade só fica travado nela no seletor do topo, e sem esta linha a meta da
+  // outra unidade simplesmente não existia na tela — nem desabilitada, ausente.
+  //
+  // Não é um furo: a policy `area_goal_entries_write` já autoriza o `owner_id` da
+  // meta a gravar, sem olhar unidade. A tela é que escondia o que o banco
+  // liberava. E o escopo de unidade continua valendo em todo o resto do sistema.
   const filtered = useMemo(
     () => goals.filter((g) =>
       (!deptId || g.departmentId === deptId) &&
       (!subId || g.subdepartmentId === subId) &&
       (!ownerId || g.ownerId === ownerId) &&
-      (unitSel === GROUP || g.unitId === null || g.unitId === unitSel)),
-    [goals, deptId, subId, ownerId, unitSel],
+      (unitSel === GROUP || g.unitId === null || g.unitId === unitSel || g.ownerId === currentUserId)),
+    [goals, deptId, subId, ownerId, unitSel, currentUserId],
   );
 
   const goalById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
@@ -190,7 +201,10 @@ export function AreaGoalsFarol({
         const entries = members.flatMap((g) => g.entries).filter((x) => inPeriod(x.period));
         const { target, actual } = accumulate(rep.consolidation, rep.unit, entries);
         const { pct, status } = farolAttainment(rep.direction, target ?? 0, actual);
-        return { goal: rep, members, isGroup: members.length > 1, parentName: parentNameOf(rep), target, actual, pct, status, computed: true };
+        // no consolidado a linha representa um GRUPO de metas, então pai e filho
+        // só podem se achar pelo nome: o `parentId` do representante aponta para
+        // uma meta específica, que pode não ser a representante do grupo pai
+        return { goal: rep, members, isGroup: members.length > 1, chave: rep.name, chavePai: parentNameOf(rep), target, actual, pct, status, computed: true };
       });
     }
     // unidade específica: cada indicador com o seu próprio valor
@@ -198,33 +212,38 @@ export function AreaGoalsFarol({
       const entries = g.entries.filter((x) => inPeriod(x.period));
       const { target, actual, computed } = accumulate(g.consolidation, g.unit, entries);
       const { pct, status } = farolAttainment(g.direction, target ?? 0, actual);
-      return { goal: g, members: [g], isGroup: false, parentName: parentNameOf(g), target, actual, pct, status, computed };
+      // unidade específica: liga pai e filho pelo ID, que é exato.
+      //
+      // Ligar por nome aqui daria árvore errada: as 21 metas existem com o MESMO
+      // NOME nas duas unidades ("OBZ Total" da Matriz e da Filial), e desde que a
+      // lista passou a poder conter as duas, o nome deixou de identificar a linha.
+      return { goal: g, members: [g], isGroup: false, chave: g.id, chavePai: g.parentId, target, actual, pct, status, computed };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, mode, month, year, unitSel, goalById]);
 
   type DisplayRow = (typeof rows)[number];
-  // monta a árvore por IC pai (nome) e achata respeitando os recolhidos
+  // monta a árvore de IC pai/filho pela `chave` da linha e achata respeitando os recolhidos
   const tree = useMemo(() => {
-    const byName = new Map<string, DisplayRow>();
-    for (const r of rows) if (!byName.has(r.goal.name)) byName.set(r.goal.name, r);
+    const porChave = new Map<string, DisplayRow>();
+    for (const r of rows) if (!porChave.has(r.chave)) porChave.set(r.chave, r);
     const childrenOf = new Map<string, DisplayRow[]>();
     const roots: DisplayRow[] = [];
     for (const r of rows) {
-      const pn = r.parentName;
-      if (pn && byName.has(pn) && pn !== r.goal.name) {
-        const arr = childrenOf.get(pn) ?? [];
+      const pai = r.chavePai;
+      if (pai && porChave.has(pai) && pai !== r.chave) {
+        const arr = childrenOf.get(pai) ?? [];
         arr.push(r);
-        childrenOf.set(pn, arr);
+        childrenOf.set(pai, arr);
       } else {
         roots.push(r);
       }
     }
     const out: { row: DisplayRow; depth: number; hasChildren: boolean }[] = [];
     const walk = (r: DisplayRow, depth: number) => {
-      const kids = childrenOf.get(r.goal.name) ?? [];
+      const kids = childrenOf.get(r.chave) ?? [];
       out.push({ row: r, depth, hasChildren: kids.length > 0 });
-      if (kids.length && !collapsed.has(r.goal.name)) for (const k of kids) walk(k, depth + 1);
+      if (kids.length && !collapsed.has(r.chave)) for (const k of kids) walk(k, depth + 1);
     };
     for (const r of roots) walk(r, 0);
     return out;
@@ -397,20 +416,28 @@ export function AreaGoalsFarol({
               </tr>
             </thead>
             <tbody>
-              {tree.map(({ row: { goal: g, target, actual, pct, status }, depth, hasChildren }) => {
-                const isCollapsed = collapsed.has(g.name);
+              {tree.map(({ row: { goal: g, chave, target, actual, pct, status }, depth, hasChildren }) => {
+                const isCollapsed = collapsed.has(chave);
                 return (
                 <tr key={g.id}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: depth * 16 }}>
                       {hasChildren ? (
-                        <button type="button" onClick={() => toggleCollapse(g.name)} title={isCollapsed ? "Expandir" : "Recolher"} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", width: 16, padding: 0, fontSize: "0.7rem", lineHeight: 1 }}>{isCollapsed ? "▸" : "▾"}</button>
+                        <button type="button" onClick={() => toggleCollapse(chave)} title={isCollapsed ? "Expandir" : "Recolher"} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", width: 16, padding: 0, fontSize: "0.7rem", lineHeight: 1 }}>{isCollapsed ? "▸" : "▾"}</button>
                       ) : <span style={{ display: "inline-block", width: 16 }} />}
                       {isAdmin && !grouped ? (
                         <button type="button" onClick={() => setEditGoal(g)} title="Editar indicador" style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--text)", cursor: "pointer", textAlign: "left" }}>{g.name}</button>
                       ) : <span style={{ fontWeight: 600 }}>{g.name}</span>}
-                      {hasChildren && isCollapsed && <span className="soft" style={{ fontSize: "0.68rem", marginLeft: 4 }}>+{(rows.filter((r) => r.parentName === g.name).length)}</span>}
+                      {hasChildren && isCollapsed && <span className="soft" style={{ fontSize: "0.68rem", marginLeft: 4 }}>+{(rows.filter((r) => r.chavePai === chave).length)}</span>}
                       {!grouped && g.unitId === null && <span className="soft" style={{ fontSize: "0.7rem", marginLeft: 6 }}>Todas</span>}
+                      {/* meta de OUTRA unidade, que só está aqui porque você é o
+                          responsável: sem dizer de qual, ela se mistura às da
+                          unidade selecionada e vira número trocado */}
+                      {!grouped && g.unitId !== null && g.unitId !== unitSel && (
+                        <span style={{ marginLeft: 6 }} title={`Indicador da unidade ${g.unitName ?? ""}, sob sua responsabilidade`}>
+                          <Badge tone="blue">{g.unitName ?? "Outra unidade"}</Badge>
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{g.unit || <span className="soft">—</span>}</td>
@@ -696,8 +723,14 @@ function GoalDialog({ mode, goal, bulkGoals, goals, departments, subdepartments,
 function EntryDialog({ goal, units, month, unitSel, onClose }: { goal: AreaGoalRow; units: Opt[]; month: string; unitSel: string; onClose: () => void }) {
   const groupAllowed = goal.consolidation === "manual";
   const isRatio = goal.consolidation === "razao";
-  // indicador de unidade específica: lançamentos travados naquela unidade
-  const unitOpts = goal.unitId ? units.filter((un) => un.id === goal.unitId) : units;
+  // Indicador de unidade específica: lançamentos travados naquela unidade, e a
+  // opção sai da PRÓPRIA META, não da lista de unidades de quem está olhando.
+  //
+  // Sem isso, o responsável por uma meta de outra unidade abria o diálogo com o
+  // select vazio: `units` é o escopo dele, que não contém a unidade da meta. O
+  // select já vem `disabled` neste caso, então aqui é só o rótulo do que vai ser
+  // gravado.
+  const unitOpts = goal.unitId ? [{ id: goal.unitId, name: goal.unitName ?? "Unidade" }] : units;
   const initialUnit = goal.unitId
     ? goal.unitId
     : unitSel === GROUP ? (groupAllowed ? GROUP : units[0]?.id ?? "") : unitSel;
