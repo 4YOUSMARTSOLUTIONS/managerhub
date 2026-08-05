@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Filter, X } from "lucide-react";
 
 /**
@@ -50,7 +51,19 @@ export function BotaoFiltros({
   );
 }
 
-/** Painel dos filtros: grade que se acomoda à largura disponível. */
+/**
+ * Painel dos filtros: os campos ficam lado a lado, do tamanho de um campo, e
+ * param onde acabam.
+ *
+ * A primeira versão usava uma grade de colunas iguais (`1fr`), e com três
+ * filtros cada um esticava até um terço da tela. Campo de escolher setor com
+ * meio metro de largura não fica melhor, fica só maior. Aqui cada um tem largura
+ * de campo e o que sobra continua sobrando, à direita.
+ *
+ * O envelope de largura fica AQUI, e não em cada chamador: assim as telas
+ * continuam passando `<div><label/><select/></div>` e todos os painéis do
+ * sistema saem do mesmo tamanho.
+ */
 export function PainelDeFiltros({
   children,
   contador = 0,
@@ -64,27 +77,33 @@ export function PainelDeFiltros({
     <div
       className="card"
       style={{
-        padding: "0.9rem 1rem",
+        padding: "0.75rem 0.9rem",
         marginBottom: "1.1rem",
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-        gap: "0.8rem",
-        alignItems: "end",
+        // o cartão termina onde os filtros terminam: uma faixa vazia atravessando
+        // a tela para segurar três campinhos é o que estava pesando na vista
+        width: "fit-content",
+        maxWidth: "100%",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.75rem",
+        alignItems: "flex-end",
       }}
     >
-      {children}
+      {React.Children.map(children, (filho) =>
+        // sem encolher: com `flex-shrink`, o `fit-content` do cartão media pelo
+        // tamanho mínimo dos campos e quebrava a linha antes da hora
+        filho == null ? null : <div style={{ flex: "0 0 210px", maxWidth: "100%" }}>{filho}</div>,
+      )}
       {contador > 0 && (
-        <div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={onLimpar}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
-          >
-            <X size={14} />
-            Limpar filtros
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onLimpar}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+        >
+          <X size={14} />
+          Limpar filtros
+        </button>
       )}
     </div>
   );
