@@ -30,9 +30,12 @@ import type { TeamMember } from "./TeamList";
 /** Medidas do desenho, em um lugar só: o CSS, o SVG e o cálculo das posições têm
  *  de concordar. Se a altura do cartão divergisse aqui, a linha encostaria ao
  *  lado da pessoa em vez de nela. */
-const MEDIDAS = { cardW: 208, cardH: 52, colW: 224, rowH: 104, gutter: 116 };
+/** `gutter` aqui é só um respiro antes do primeiro cartão: a coluna dos níveis
+ *  não entra nessa conta porque vive FORA da área que rola. */
+const MEDIDAS = { cardW: 208, cardH: 52, colW: 224, rowH: 104, gutter: 16 };
 const ROW_H = MEDIDAS.rowH;
-const GUTTER = MEDIDAS.gutter;
+/** largura da coluna de níveis, que é irmã do quadro e não rola com ele */
+const CALHA_W = 116;
 
 type No = {
   m: TeamMember;
@@ -352,15 +355,23 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
         </span>
       </div>
 
-      <div className="org-wrap" ref={quadro}>
+      {/* A CALHA DOS NÍVEIS FICA FORA DA ÁREA QUE ROLA.
+          Tentei antes deixá-la dentro, grudada na esquerda e opaca, com os
+          cartões passando por trás. Não serve: por mais bem resolvido que fique
+          o empilhamento, cartão e rótulo ocupam o mesmo lugar e a leitura fica
+          confusa. Sendo duas colunas irmãs, o organograma simplesmente COMEÇA
+          depois do cabeçalho e não tem como invadi-lo. */}
+      <div className="org-quadro">
+        <div className="org-calha" style={{ width: CALHA_W }} aria-hidden>
+          {(bandas?.faixas ?? []).map((f) => (
+            <div key={f.i} className="org-calha-item" style={{ height: ROW_H }}>{f.nome}</div>
+          ))}
+        </div>
+        <div className="org-wrap" ref={quadro}>
         {bandas && (
           <div className="org-canvas" style={{ width: bandas.largura, height: bandas.altura }}>
             {bandas.faixas.map((f) => (
-              <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }}>
-                {/* sticky: o nome da faixa acompanha a rolagem lateral, senão
-                    some assim que a pessoa anda para o lado do gráfico */}
-                <span className="org-banda-nome" style={{ width: GUTTER }}>{f.nome}</span>
-              </div>
+              <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }} />
             ))}
             <svg className="org-linhas" width={bandas.largura} height={bandas.altura} aria-hidden>
               {bandas.linhas.map((l) => (
@@ -381,6 +392,7 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
             })}
           </div>
         )}
+        </div>
       </div>
 
       {ocultarInativos && inativos > 0 && (

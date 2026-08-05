@@ -1550,24 +1550,55 @@ a.tab {
    passaria de 200.000px de largura. No indentado a largura cresce com a
    PROFUNDIDADE, que é um punhado de níveis, e só a altura acompanha o tamanho
    do time. */
-.org-wrap {
-  --org-gap: 22px;    /* corredor de cada metade do conector */
+/* Duas colunas irmas: a dos NIVEIS, que nao rola, e a do desenho, que rola.
+   Assim o organograma comeca DEPOIS do cabecalho e nao tem como escrever por
+   cima dele — o que nenhuma combinacao de `sticky` + `z-index` garantia, porque
+   ali cartao e rotulo dividem o mesmo espaco. */
+.org-quadro {
+  /* mesma medida que o TSX usa para calcular as posicoes; se divergir, a linha
+     do conector encosta ao lado do cartao em vez de nele */
   --org-card-w: 208px;
-  --org-elbow: 26px;  /* meia altura do cartão: onde o cotovelo do --v encosta */
-  overflow: auto;
-  max-height: 72vh;
-  /* sem respiro LATERAL: `sticky left: 0` gruda no inicio do conteudo, e um
-     padding aqui abriria uma fresta antes da calha por onde o cartao aparece.
-     O respiro da esquerda quem da e a propria calha; o da direita, a folga que o
-     canvas ja soma na largura. */
-  padding: var(--mh-space-6) 0;
+  display: flex;
+  align-items: stretch;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--mh-radius-lg);
-  /* a rolagem é DAQUI: a página nunca deve ganhar barra horizontal por causa
+  overflow: hidden;
+}
+.org-calha {
+  flex: 0 0 auto;
+  padding: var(--mh-space-6) 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.org-calha-item {
+  display: flex;
+  align-items: center;
+  padding: 0 0.7rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.org-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* rola SO na horizontal. Com `max-height` havia rolagem vertical aqui dentro,
+     e a coluna dos niveis, que e irma e nao rola, desalinhava dos cartoes ao
+     descer. Sem teto de altura o quadro cresce com o conteudo e quem rola na
+     vertical e a pagina, com os dois lados juntos. */
+  overflow-x: auto;
+  padding: var(--mh-space-6) 0;
+  /* a rolagem e DAQUI: a pagina nunca deve ganhar barra horizontal por causa
      de um organograma largo */
   overscroll-behavior: contain;
 }
+
 /* ----- as faixas de hierarquia e o posicionamento -----
 
    Numa faixa, o gestor pode estar tres linhas acima do liderado, com gente de
@@ -1582,38 +1613,10 @@ a.tab {
   position: absolute;
   left: 0;
   right: 0;
-  display: flex;
-  align-items: center;
   border-top: 1px dashed var(--border);
 }
 .org-banda:nth-child(even) { background: color-mix(in srgb, var(--mh-text-3) 4%, transparent); }
 
-/* CALHA CONGELADA dos niveis.
-   `sticky` sozinho nao bastava: o rotulo grudava na esquerda, mas os cartoes sao
-   posicionados DEPOIS dele no DOM e passavam por cima assim que a pessoa rolava
-   para o lado, e os nomes das faixas sumiam atras das pessoas. Precisa das tres
-   coisas juntas: grudar, ficar acima e ser opaco. */
-.org-banda-nome {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  /* cobre a FAIXA INTEIRA, nao so a largura do texto: o cartao que desliza para
-     ca tem de passar POR TRAS da calha, e nao por cima do nome do nivel */
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  background: var(--surface-2);
-  border-right: 1px solid var(--border);
-  padding: 0 0.7rem 0 0.75rem;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* as linhas ficam ATRAS dos cartoes, que sao opacos e escondem o encontro */
 .org-linhas { position: absolute; inset: 0; pointer-events: none; }
 .org-pos { position: absolute; }
