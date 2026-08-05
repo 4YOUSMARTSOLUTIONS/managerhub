@@ -241,6 +241,26 @@ export function IndividualGoalsFarol({
   }, [filtered, mode, period, year, rvFor]);
 
   const owners = useMemo(() => new Set(view.rows.map((r) => r.goal.ownerId)), [view.rows]);
+
+  /**
+   * Filtro por status, acionado clicando nos cards do resumo.
+   *
+   * O valor guardado é "bruto" e o que vale é o derivado: se o status escolhido
+   * deixar de existir no período (trocou de mês, de colaborador, de setor), o
+   * filtro simplesmente para de valer, em vez de deixar a pessoa olhando uma
+   * tabela vazia sem entender por quê. Derivar resolve isso sem um `useEffect`
+   * de sincronia, que é justamente o tipo de efeito que costuma virar bug.
+   */
+  const [filtroBruto, setFiltroBruto] = useState<FarolStatus | null>(null);
+  const filtroStatus = filtroBruto && view.counts[filtroBruto] > 0 ? filtroBruto : null;
+
+  // card sem nenhuma meta não vira botão: não haveria o que mostrar ao clicar
+  const cardFiltravel = (status: FarolStatus) =>
+    view.counts[status] > 0
+      ? () => setFiltroBruto((atual) => (atual === status ? null : status))
+      : undefined;
+
+  const linhasVisiveis = filtroStatus ? view.rows.filter((r) => r.status === filtroStatus) : view.rows;
   const hasRv = view.rvHasPool;
   const canWeights = mode === "mes" && view.rows.length > 0 && owners.size === 1;
   const showOwner = canManageOthers && owners.size > 1;
@@ -331,10 +351,14 @@ export function IndividualGoalsFarol({
             tone={view.accum === 100 ? "green" : "neutral"}
             sub={view.sub}
           />
-          <SummaryCard label="Metas atingidas" value={String(view.counts.atingida)} tone="green" />
-          <SummaryCard label="Parciais" value={String(view.counts.parcial)} tone="amber" />
-          <SummaryCard label="Não atingidas" value={String(view.counts.nao_atingida)} tone="red" />
-          <SummaryCard label="Pendentes" value={String(view.counts.pendente)} tone="gray" />
+          <SummaryCard label="Metas atingidas" value={String(view.counts.atingida)} tone="green"
+            active={filtroStatus === "atingida"} onClick={cardFiltravel("atingida")} />
+          <SummaryCard label="Parciais" value={String(view.counts.parcial)} tone="amber"
+            active={filtroStatus === "parcial"} onClick={cardFiltravel("parcial")} />
+          <SummaryCard label="Não atingidas" value={String(view.counts.nao_atingida)} tone="red"
+            active={filtroStatus === "nao_atingida"} onClick={cardFiltravel("nao_atingida")} />
+          <SummaryCard label="Pendentes" value={String(view.counts.pendente)} tone="gray"
+            active={filtroStatus === "pendente"} onClick={cardFiltravel("pendente")} />
           {hasRv && <SummaryCard label="RV a pagar" value={fmtBRL(view.rvPayTotal)} tone={view.rvWarn ? "amber" : "green"} sub={view.rvWarn ? "Ajuste os pesos p/ somar 100%" : (mode === "ano" ? `Ano ${year}` : monthLabel(month))} />}
         </div>
       )}
@@ -345,6 +369,17 @@ export function IndividualGoalsFarol({
           description={mode === "ano" ? "Não há registros de metas para o ano selecionado." : "Use “+ Adicionar meta” para incluir as metas desta competência."}
         />
       ) : (
+        <>
+          {/* a tabela filtrada precisa dizer que está filtrada: sem isso, "sumiu
+              meta" vira chamado de suporte */}
+          {filtroStatus && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+              <span className="muted" style={{ fontSize: "0.85rem" }}>
+                Mostrando {linhasVisiveis.length} de {view.rows.length} · só <strong>{FAROL_LABEL[filtroStatus]}</strong>
+              </span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFiltroBruto(null)}>Mostrar todas</button>
+            </div>
+          )}
         <div className="card" style={{ overflowX: "auto" }}>
           <table className="table metas-table">
             <thead>
@@ -365,7 +400,7 @@ export function IndividualGoalsFarol({
               </tr>
             </thead>
             <tbody>
-              {view.rows.map(({ goal: g, pct, status, target, actual, weight, partial, rvShare, rvPay, entryStatus, reprovalNote }) => (
+              {linhasVisiveis.map(({ goal: g, pct, status, target, actual, weight, partial, rvShare, rvPay, entryStatus, reprovalNote }) => (
                 <tr key={g.id} style={entryStatus === "reprovada" ? { background: "rgba(220,38,38,0.06)" } : undefined}>
                   <td>
                     {canEditDef(g.ownerId) ? (
@@ -453,6 +488,7 @@ export function IndividualGoalsFarol({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {editGoal && <GoalDialog goal={editGoal} month={month} onClose={() => setEditGoal(null)} />}
@@ -485,13 +521,58 @@ const TONE_FG: Record<string, string> = {
   green: "var(--mh-success)", amber: "var(--mh-warning)", red: "var(--mh-danger)", gray: "var(--text)", blue: "var(--mh-info)", purple: "var(--mh-primary-500)", neutral: "var(--text)",
 };
 
-function SummaryCard({ label, value, tone, sub }: { label: string; value: string; tone: string; sub?: string }) {
-  return (
-    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.25rem", justifyContent: "center", minHeight: 100 }}>
+/**
+ * Card do resumo. Vira botão de filtro quando recebe `onClick`.
+ *
+ * Os cards de contagem (atingidas, parciais, não atingidas, pendentes) filtram a
+ * tabela. Acumulado e RV a pagar não: são totais do período, não um recorte, e
+ * clicar neles não teria o que mostrar.
+ *
+ * O número no card continua sendo o do PERÍODO INTEIRO, não o do filtro. Se ele
+ * passasse a contar só o que está filtrado, os outros cards zerariam e não
+ * haveria como trocar de filtro sem antes limpar.
+ */
+function SummaryCard({ label, value, tone, sub, onClick, active }: {
+  label: string; value: string; tone: string; sub?: string;
+  onClick?: () => void; active?: boolean;
+}) {
+  const cor = TONE_FG[tone] ?? "var(--text)";
+  const conteudo = (
+    <>
       <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
-      <div style={{ fontSize: "2rem", fontWeight: 800, lineHeight: 1.05, color: TONE_FG[tone] ?? "var(--text)" }}>{value}</div>
+      <div style={{ fontSize: "2rem", fontWeight: 800, lineHeight: 1.05, color: cor }}>{value}</div>
       {sub && <div className="soft" style={{ fontSize: "0.74rem" }}>{sub}</div>}
-    </div>
+    </>
+  );
+  const base: React.CSSProperties = {
+    display: "flex", flexDirection: "column", gap: "0.25rem",
+    justifyContent: "center", minHeight: 100,
+  };
+
+  if (!onClick) return <div className="card card-pad" style={base}>{conteudo}</div>;
+
+  return (
+    <button
+      type="button"
+      className="card card-pad"
+      onClick={onClick}
+      aria-pressed={!!active}
+      title={active ? "Clique para mostrar todas" : `Mostrar só: ${label}`}
+      style={{
+        ...base,
+        textAlign: "left",
+        font: "inherit",
+        cursor: "pointer",
+        borderColor: active ? cor : undefined,
+        boxShadow: active ? `inset 0 0 0 1px ${cor}` : undefined,
+        transition: "border-color var(--mh-dur-fast) var(--mh-ease)",
+      }}
+    >
+      {conteudo}
+      <span className="soft" style={{ fontSize: "0.68rem", fontWeight: 600, color: active ? cor : undefined }}>
+        {active ? "Filtrando · clique para limpar" : "Clique para filtrar"}
+      </span>
+    </button>
   );
 }
 
