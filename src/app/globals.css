@@ -1564,6 +1564,52 @@ a.tab {
      de um organograma largo */
   overscroll-behavior: contain;
 }
+/* ----- as faixas de hierarquia e o posicionamento -----
+
+   Numa faixa, o gestor pode estar tres linhas acima do liderado, com gente de
+   outros ramos no meio: conector de borda so liga pai e filho vizinhos, entao a
+   posicao vem calculada e a linha e um `<path>` de SVG por cima.
+
+   As medidas (cartao, coluna, faixa, calha) moram no TSX, e nao aqui, porque o
+   SVG precisa das mesmas: duas fontes de verdade fariam a linha encostar ao lado
+   do cartao em vez de nele. */
+.org-canvas { position: relative; }
+.org-banda {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  border-top: 1px dashed var(--border);
+}
+.org-banda:nth-child(even) { background: color-mix(in srgb, var(--mh-text-3) 4%, transparent); }
+
+/* CALHA CONGELADA dos niveis.
+   `sticky` sozinho nao bastava: o rotulo grudava na esquerda, mas os cartoes sao
+   posicionados DEPOIS dele no DOM e passavam por cima assim que a pessoa rolava
+   para o lado, e os nomes das faixas sumiam atras das pessoas. Precisa das tres
+   coisas juntas: grudar, ficar acima e ser opaco. */
+.org-banda-nome {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  padding: 0.3rem 0.55rem 0.3rem 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* as linhas ficam ATRAS dos cartoes, que sao opacos e escondem o encontro */
+.org-linhas { position: absolute; inset: 0; pointer-events: none; }
+.org-pos { position: absolute; }
+
+/* ----- o cartao da pessoa ----- */
 .org-card {
   position: relative;
   display: flex;

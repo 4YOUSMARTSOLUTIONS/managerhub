@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -69,6 +69,25 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
   const [ocultarInativos, setOcultarInativos] = useState(true);
   const [indice, setIndice] = useState(0);
   const refs = useRef(new Map<string, HTMLDivElement>());
+  const quadro = useRef<HTMLDivElement>(null);
+
+  /**
+   * Abre com a rolagem no meio, que é onde a raiz está.
+   *
+   * O gestor fica centralizado sobre os liderados, então com 9 diretos ele nasce
+   * a mais de mil pixels da borda: abrindo em zero, a pessoa não se via no
+   * próprio organograma.
+   *
+   * Isso já foi confundido com "a tela abre torta". Não era: o incômodo real era
+   * a calha dos níveis sumindo atrás dos cartões ao rolar, o que está resolvido
+   * no CSS (`.org-banda-nome`). Com a calha sempre à vista, abrir centralizado
+   * mostra a raiz E os níveis.
+   */
+  useEffect(() => {
+    const el = quadro.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+  }, []);
 
 
   const { raizNo, fora } = useMemo(() => {
@@ -333,7 +352,7 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
         </span>
       </div>
 
-      <div className="org-wrap">
+      <div className="org-wrap" ref={quadro}>
         {bandas && (
           <div className="org-canvas" style={{ width: bandas.largura, height: bandas.altura }}>
             {bandas.faixas.map((f) => (
