@@ -36,6 +36,8 @@ const MEDIDAS = { cardW: 208, cardH: 52, colW: 224, rowH: 104, gutter: 16 };
 const ROW_H = MEDIDAS.rowH;
 /** largura da coluna de níveis, que é irmã do quadro e não rola com ele */
 const CALHA_W = 116;
+/** altura do cabeçalho das subáreas; a calha reserva o mesmo para não desalinhar */
+const TOPO_H = 30;
 
 type No = {
   m: TeamMember;
@@ -74,23 +76,7 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
   const refs = useRef(new Map<string, HTMLDivElement>());
   const quadro = useRef<HTMLDivElement>(null);
 
-  /**
-   * Abre com a rolagem no meio, que é onde a raiz está.
-   *
-   * O gestor fica centralizado sobre os liderados, então com 9 diretos ele nasce
-   * a mais de mil pixels da borda: abrindo em zero, a pessoa não se via no
-   * próprio organograma.
-   *
-   * Isso já foi confundido com "a tela abre torta". Não era: o incômodo real era
-   * a calha dos níveis sumindo atrás dos cartões ao rolar, o que está resolvido
-   * no CSS (`.org-banda-nome`). Com a calha sempre à vista, abrir centralizado
-   * mostra a raiz E os níveis.
-   */
-  useEffect(() => {
-    const el = quadro.current;
-    if (!el) return;
-    el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
-  }, []);
+  const jaPosicionou = useRef(false);
 
 
   const { raizNo, fora } = useMemo(() => {
@@ -245,24 +231,17 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
   }, [raizNo, visivel, recolhidos, revelados]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Posição de cada pessoa: uma FAIXA por nível hierárquico.
+   * Posição de cada pessoa: uma GRADE de nível hierárquico por subárea.
    *
-   * A linha vem do nível hierárquico, não da profundidade na árvore, então todo
+   * A ALTURA vem do nível hierárquico, não da profundidade na árvore, então todo
    * Auxiliar fica na mesma altura mesmo respondendo a gestores diferentes. É o
    * que um organograma de empresa quer dizer.
    *
-   * DUAS REGRAS QUE O DADO EXIGE:
+   * A COLUNA vem do subsetor, com uma exceção: quem lidera gente de mais de um
+   * subsetor não pertence a nenhum deles e fica centralizado sobre os seus.
    *
-   * - Filho NUNCA fica na mesma faixa do gestor nem acima dele. Se o cadastro
-   *   disser que um Coordenador responde a um Auxiliar, a linha desceria de baixo
-   *   para cima e leria como se o subordinado mandasse. Nesse caso o filho é
-   *   empurrado para a faixa seguinte. Hoje não há nenhum caso assim; com os 987
-   *   vínculos a atribuir, vai haver.
-   * - Quem está SEM hierarquia entra na faixa logo abaixo do próprio gestor.
-   *
-   * A coluna sai do algoritmo clássico de árvore: cada folha ocupa a próxima
-   * vaga, cada gestor fica no meio dos seus. Como a sub-árvore inteira mora
-   * dentro da faixa de vagas dela, dois ramos diferentes nunca se sobrepõem.
+   * A regra fica em `montarFaixas`, e não aqui, porque é a única parte com
+   * decisão de verdade e se confere sem abrir o navegador.
    */
   const bandas = useMemo(() => {
     if (!arvoreVisivel) return null;
@@ -270,6 +249,7 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
       id: v.no.m.userId,
       rank: v.no.m.hierarchyRank,
       hierarquia: v.no.m.hierarchyName,
+      subarea: v.no.m.subdepartmentName,
       filhos: v.filhos.map(paraOrg),
     });
     const geometria = montarFaixas(paraOrg(arvoreVisivel), MEDIDAS);
@@ -278,6 +258,29 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
     indexar(arvoreVisivel);
     return { ...geometria, porId };
   }, [arvoreVisivel]);
+
+  /**
+   * Onde a rolagem começa: na PRIMEIRA subárea, e só sai dali se a raiz não
+   * couber na tela.
+   *
+   * Abrir sempre centralizado cortava a primeira coluna junto com o cabeçalho
+   * dela. Abrir sempre em zero escondia o gestor, que fica centralizado sobre os
+   * liderados e, com 9 diretos, nasce longe da borda. A regra atende os dois:
+   * zero quando a raiz já cabe, o mínimo necessário quando não cabe.
+   *
+   * Só na primeira vez: recolher um nó move os cartões, e reposicionar a cada
+   * mudança jogaria a rolagem de volta debaixo do dedo de quem está navegando.
+   */
+  const temGeometria = bandas != null;
+  useEffect(() => {
+    const el = quadro.current;
+    if (!el || jaPosicionou.current || !temGeometria) return;
+    jaPosicionou.current = true;
+    const eu = bandas?.nos.find((n) => n.id === raiz.userId);
+    el.scrollLeft = eu ? Math.max(0, eu.x + MEDIDAS.cardW + MEDIDAS.gutter - el.clientWidth) : 0;
+    // `bandas` fora das deps de propósito: quem dispara é a geometria existir
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [temGeometria, raiz.userId]);
 
   const cartao = (no: No) => {
     const filhosVisiveis = no.filhos.filter(visivel);
@@ -363,33 +366,52 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
           depois do cabeçalho e não tem como invadi-lo. */}
       <div className="org-quadro">
         <div className="org-calha" style={{ width: CALHA_W }} aria-hidden>
+          {/* reserva a altura do cabeçalho das subáreas: as duas colunas são
+              irmãs, então o alinhamento é por medida, não por sorte */}
+          <div style={{ height: TOPO_H }} />
           {(bandas?.faixas ?? []).map((f) => (
             <div key={f.i} className="org-calha-item" style={{ height: ROW_H }}>{f.nome}</div>
           ))}
         </div>
         <div className="org-wrap" ref={quadro}>
         {bandas && (
-          <div className="org-canvas" style={{ width: bandas.largura, height: bandas.altura }}>
-            {bandas.faixas.map((f) => (
-              <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }} />
-            ))}
-            <svg className="org-linhas" width={bandas.largura} height={bandas.altura} aria-hidden>
-              {bandas.linhas.map((l) => (
-                <path
-                  key={`${l.de}->${l.para}`}
-                  d={`M ${l.x1} ${l.y1} V ${l.y2 - 18} H ${l.x2} V ${l.y2}`}
-                  fill="none"
-                  stroke="var(--border-strong)"
-                  strokeWidth={1}
-                />
+          <div style={{ width: bandas.largura }}>
+            {/* O cabeçalho das subáreas rola JUNTO na horizontal, ao contrário da
+                calha dos níveis: a coluna se move com os cartões dela. */}
+            <div className="org-topo" style={{ height: TOPO_H }} aria-hidden>
+              {bandas.colunas.map((c) => (
+                <div key={c.nome} className="org-topo-item" style={{ left: c.x, width: c.largura }}>
+                  <span>{c.nome}</span>
+                </div>
               ))}
-            </svg>
-            {bandas.nos.map(({ id, x, y }) => {
-              const no = bandas.porId.get(id);
-              return no ? (
-                <div key={id} className="org-pos" style={{ left: x, top: y }}>{cartao(no)}</div>
-              ) : null;
-            })}
+            </div>
+            <div className="org-canvas" style={{ width: bandas.largura, height: bandas.altura }}>
+              {bandas.faixas.map((f) => (
+                <div key={f.i} className="org-banda" style={{ top: f.i * ROW_H, height: ROW_H }} />
+              ))}
+              {/* divisórias das subáreas: separam sem competir com os cartões */}
+              {bandas.colunas.slice(1).map((c) => (
+                <div key={`div-${c.nome}`} className="org-divisor" style={{ left: c.x }} />
+              ))}
+              <svg className="org-linhas" width={bandas.largura} height={bandas.altura} aria-hidden>
+                {bandas.linhas.map((l) => (
+                  <path
+                    key={`${l.de}->${l.para}`}
+                    d={`M ${l.x1} ${l.y1} V ${l.y2 - 18} H ${l.x2} V ${l.y2}`}
+                    fill="none"
+                    stroke="var(--border-strong)"
+                    strokeWidth={1}
+                    strokeOpacity={0.55}
+                  />
+                ))}
+              </svg>
+              {bandas.nos.map(({ id, x, y }) => {
+                const no = bandas.porId.get(id);
+                return no ? (
+                  <div key={id} className="org-pos" style={{ left: x, top: y }}>{cartao(no)}</div>
+                ) : null;
+              })}
+            </div>
           </div>
         )}
         </div>

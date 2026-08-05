@@ -1599,6 +1599,43 @@ a.tab {
   overscroll-behavior: contain;
 }
 
+/* ----- o cabecalho das subareas (eixo X) -----
+
+   Ao contrario da calha dos niveis, este rola JUNTO na horizontal: a coluna do
+   Financeiro tem de andar com os cartoes do Financeiro. Por isso mora DENTRO da
+   area que rola, e a calha reserva a mesma altura para os dois lados baterem. */
+.org-topo { position: relative; }
+.org-topo-item {
+  position: absolute;
+  top: 0;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.org-topo-item span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* divisoria entre subareas: separa sem competir com o cartao */
+.org-divisor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+  opacity: 0.7;
+}
+
 /* ----- as faixas de hierarquia e o posicionamento -----
 
    Numa faixa, o gestor pode estar tres linhas acima do liderado, com gente de
