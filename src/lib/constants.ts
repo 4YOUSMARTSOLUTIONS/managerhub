@@ -163,10 +163,39 @@ export const GOAL_STATUS_TONE: Record<Enums<"goal_status">, Tone> = {
 };
 
 // ---------- Metas individuais (farol) ----------
+/**
+ * Tipo da meta. O nome do campo no banco é `direction`, que ficou estreito: hoje
+ * ele diz o TIPO, não só o sentido.
+ *
+ * "Sim ou não" é um marcador de INTERFACE, não uma regra de cálculo. Por baixo
+ * ela é `maior_melhor` com meta 100 e realizado 0 ou 100, então `farolAttainment`
+ * e `attainmentCredit` já a tratam certo sem nenhuma linha nova. O que muda é a
+ * tela: pede OK/NOK em vez de um número, e não pergunta meta nem parcial.
+ */
 export const GOAL_DIRECTION: Record<Enums<"goal_direction">, string> = {
   maior_melhor: "Maior é melhor",
   menor_melhor: "Menor é melhor",
+  binaria: "Sim ou não (atingiu ou não)",
 };
+
+/**
+ * Só os tipos numéricos, para as telas que não fazem sentido com sim/não.
+ *
+ * PNR e Sustentabilidade compartilham o mesmo campo `direction`, e tecnicamente
+ * funcionariam com meta binária. Ficam de fora porque ninguém pediu, e opção que
+ * não vai ser usada é ruído no formulário. Se um dia precisarem, é só apagar o
+ * filtro nas duas telas.
+ */
+export const DIRECOES_NUMERICAS: Enums<"goal_direction">[] = ["maior_melhor", "menor_melhor"];
+
+/** true quando a meta é do tipo sim/não: a tela troca número por OK/NOK. */
+export function isMetaBinaria(direction: Enums<"goal_direction">): boolean {
+  return direction === "binaria";
+}
+
+/** Valor gravado no `actual_value` de uma meta binária. */
+export const BINARIA_OK = 100;
+export const BINARIA_NOK = 0;
 
 export const FAROL_LABEL: Record<"atingida" | "parcial" | "nao_atingida" | "pendente", string> = {
   atingida: "Atingida",

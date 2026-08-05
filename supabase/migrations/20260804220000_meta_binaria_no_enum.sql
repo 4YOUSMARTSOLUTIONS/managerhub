@@ -1,0 +1,19 @@
+-- Terceiro tipo de meta: "Sim ou não" (atingiu ou não atingiu).
+--
+-- Existe um caso que não cabe em "maior é melhor" nem em "menor é melhor": a
+-- meta que só pode ser feita ou não feita. O farol de cartões de crédito ou foi
+-- enviado, ou não foi. Não há 47%.
+--
+-- O nome da coluna segue `direction`, que ficou estreito: hoje ela é o TIPO da
+-- meta, não só o sentido. Renomear custaria tocar em cinco telas e duas RPCs
+-- para ganhar só clareza de nome, então fica documentado aqui.
+--
+-- A MATEMÁTICA NÃO MUDA. Uma meta binária é `maior_melhor` com meta 100 e
+-- realizado 0 ou 100: `farolAttainment` já devolve 0%/100% e não atingida/
+-- atingida nesse caso, e `attainmentCredit` já devolve 0 ou 1, então o acumulado
+-- ponderado funciona sem tocar em nada. O valor novo é um marcador de INTERFACE,
+-- que diz à tela para pedir OK/NOK em vez de um número.
+--
+-- Esta migração vai SOZINHA: valor novo de enum não pode ser USADO na mesma
+-- transação em que é criado, e o apply_migration envolve tudo numa.
+alter type public.goal_direction add value 'binaria' after 'menor_melhor';

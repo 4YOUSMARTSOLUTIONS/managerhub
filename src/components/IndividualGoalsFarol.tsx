@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { MonthInput } from "@/components/ui/MonthInput";
+import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
@@ -12,9 +13,9 @@ import {
   approveGoalEntry, reproveGoalEntry, approveMonth, reopenGoalEntry,
   copyPreviousMonthEntries,
 } from "@/lib/actions/individual-goals";
-import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE } from "@/lib/constants";
+import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatMetaValor } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import { confirmDialog } from "@/components/ui/confirm";
 
@@ -385,9 +386,11 @@ export function IndividualGoalsFarol({
                       </span>
                     </td>
                   )}
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{target != null ? formatNumber(target) : "—"}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }} className="muted">{partial != null ? formatNumber(partial) : "—"}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{actual != null ? formatNumber(actual) : "—"}</td>
+                  {/* na meta de sim/não o número gravado é 100/0, mas quem lê
+                      precisa ver OK/NOK; a meta e o parcial nem fazem sentido ali */}
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{isMetaBinaria(g.direction) ? "—" : formatMetaValor(target, false)}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }} className="muted">{isMetaBinaria(g.direction) ? "—" : formatMetaValor(partial, false)}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{formatMetaValor(actual, isMetaBinaria(g.direction))}</td>
                   <td><Badge tone={FAROL_TONE[status]}>{FAROL_LABEL[status]}</Badge></td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -673,6 +676,7 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
   const [target, setTarget] = useState("");
   const [partial, setPartial] = useState("");
   const [actual, setActual] = useState("");
+  const [binValor, setBinValor] = useState<number | null>(null);
   const [weight, setWeight] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -680,13 +684,19 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
   const router = useRouter();
 
   const isNew = sel === "__new__";
+  // meta de sim/nao: no indicador NOVO vem do seletor; no existente, do proprio
+  // indicador, que ja tem o tipo gravado
+  const binaria = isNew
+    ? isMetaBinaria(direction)
+    : isMetaBinaria(existing.find((g) => g.id === sel)?.direction ?? "maior_melhor");
 
   const submit = () => {
     setError("");
     if (isNew && !name.trim()) { setError("Informe o nome do indicador."); return; }
-    if (target.trim() === "" || Number.isNaN(Number(target))) { setError("Informe a meta do período."); return; }
+    // binaria nao pergunta meta: ela e sempre 100 (= OK), fixa
+    if (!binaria && (target.trim() === "" || Number.isNaN(Number(target)))) { setError("Informe a meta do período."); return; }
     // se há meta parcial, o % do parcial é obrigatório (> 0)
-    if (partial.trim() !== "") {
+    if (!binaria && partial.trim() !== "") {
       if (isNew) {
         if (partialPct.trim() === "" || !(Number(partialPct) > 0)) { setError("Como há meta parcial, informe o % do parcial (maior que 0)."); return; }
       } else {
@@ -697,18 +707,27 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
     start(async () => {
       let goalId = sel;
       if (isNew) {
-        const res = await createIndividualGoal({ name, description, unit, direction, partial_pct: partialPct.trim() === "" ? null : Number(partialPct), owner_id: isAdmin ? ownerId || undefined : undefined });
+        const res = await createIndividualGoal({
+          name, description,
+          // sim/nao nao tem unidade de medida: OK/NOK e o proprio resultado
+          unit: binaria ? "OK/NOK" : unit,
+          direction,
+          // num sim/nao nao existe meio-termo, entao nao ha parcial a creditar
+          partial_pct: binaria ? null : (partialPct.trim() === "" ? null : Number(partialPct)),
+          owner_id: isAdmin ? ownerId || undefined : undefined,
+        });
         if ("error" in res) { setError(res.error); return; }
         goalId = res.id;
       }
       const r = await upsertGoalEntry({
         goal_id: goalId,
         period,
-        target_value: Number(target),
-        actual_value: actual.trim() === "" ? null : Number(actual),
+        // a coluna e `not null`, entao a binaria grava 100 (= OK) como meta fixa
+        target_value: binaria ? BINARIA_OK : Number(target),
+        actual_value: binaria ? binValor : (actual.trim() === "" ? null : Number(actual)),
         weight: weight.trim() === "" ? 0 : Number(weight),
         note,
-        partial_value: partial.trim() === "" ? null : Number(partial),
+        partial_value: binaria ? null : (partial.trim() === "" ? null : Number(partial)),
       });
       if (r.error) { setError(r.error); return; }
       onClose();
@@ -743,13 +762,15 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
             <label className="label">Conceito <span className="soft">(métrica)</span></label>
             <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: binaria ? "1fr" : "1fr 1fr", gap: "0.8rem" }}>
+            {!binaria && (
+              <div>
+                <label className="label">Unidade</label>
+                <input className="input" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="R$, %, un…" />
+              </div>
+            )}
             <div>
-              <label className="label">Unidade</label>
-              <input className="input" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="R$, %, un…" />
-            </div>
-            <div>
-              <label className="label">Direção</label>
+              <label className="label">Tipo de meta</label>
               <select className="select" value={direction} onChange={(e) => setDirection(e.target.value as Enums<"goal_direction">)}>
                 {DIRECTION_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
@@ -764,26 +785,36 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
               </select>
             </div>
           )}
-          <div style={{ maxWidth: 220 }}>
-            <label className="label">% do parcial</label>
-            <input type="number" step="any" min={0} max={100} className="input" value={partialPct} onChange={(e) => setPartialPct(e.target.value)} placeholder="0" />
-            <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>Quanto o parcial credita na nota e paga da RV.</p>
-          </div>
+          {!binaria && (
+            <div style={{ maxWidth: 220 }}>
+              <label className="label">% do parcial</label>
+              <input type="number" step="any" min={0} max={100} className="input" value={partialPct} onChange={(e) => setPartialPct(e.target.value)} placeholder="0" />
+              <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>Quanto o parcial credita na nota e paga da RV.</p>
+            </div>
+          )}
         </>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.8rem" }}>
-        <div>
-          <label className="label">Meta</label>
-          <input type="number" step="any" className="input" value={target} onChange={(e) => setTarget(e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Parcial <span className="soft">(opc.)</span></label>
-          <input type="number" step="any" className="input" value={partial} onChange={(e) => setPartial(e.target.value)} placeholder="—" />
-        </div>
+      {/* Meta e parcial nao aparecem no sim/nao: a meta e sempre "fez", e nao ha
+          meio-termo a informar. Sobram realizado e peso. */}
+      <div style={{ display: "grid", gridTemplateColumns: binaria ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: "0.8rem" }}>
+        {!binaria && (
+          <>
+            <div>
+              <label className="label">Meta</label>
+              <input type="number" step="any" className="input" value={target} onChange={(e) => setTarget(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Parcial <span className="soft">(opc.)</span></label>
+              <input type="number" step="any" className="input" value={partial} onChange={(e) => setPartial(e.target.value)} placeholder="—" />
+            </div>
+          </>
+        )}
         <div>
           <label className="label">Realizado <span className="soft">(opc.)</span></label>
-          <input type="number" step="any" className="input" value={actual} onChange={(e) => setActual(e.target.value)} placeholder="—" />
+          {binaria
+            ? <OkNokInput value={binValor} onChange={setBinValor} />
+            : <input type="number" step="any" className="input" value={actual} onChange={(e) => setActual(e.target.value)} placeholder="—" />}
         </div>
         <div>
           <label className="label">Peso (%)</label>
@@ -814,6 +845,7 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
   const [pending, start] = useTransition();
   const router = useRouter();
 
+  const binaria = isMetaBinaria(direction);
   const monthEntry = goal.entries.find((x) => x.period === periodOf(m)) ?? null;
   useEffect(() => {
     setTarget(monthEntry ? String(monthEntry.target) : "");
@@ -824,25 +856,31 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
   const save = () => {
     setError("");
     if (!name.trim()) { setError("Informe o nome do indicador."); return; }
-    if (target.trim() !== "" && Number.isNaN(Number(target))) { setError("Meta da competência inválida."); return; }
+    if (!binaria && target.trim() !== "" && Number.isNaN(Number(target))) { setError("Meta da competência inválida."); return; }
     // se há meta parcial, o % do parcial é obrigatório (> 0)
-    if (partial.trim() !== "" && (partialPct.trim() === "" || !(Number(partialPct) > 0))) {
+    if (!binaria && partial.trim() !== "" && (partialPct.trim() === "" || !(Number(partialPct) > 0))) {
       setError("Como há meta parcial, informe o % do parcial (maior que 0).");
       return;
     }
     start(async () => {
-      const res = await updateIndividualGoal({ id: goal.id, name, description, unit, direction, partial_pct: partialPct.trim() === "" ? null : Number(partialPct) });
+      const res = await updateIndividualGoal({
+        id: goal.id, name, description,
+        unit: binaria ? "OK/NOK" : unit,
+        direction,
+        partial_pct: binaria ? null : (partialPct.trim() === "" ? null : Number(partialPct)),
+      });
       if (res.error) { setError(res.error); return; }
       // grava os valores da competência (preserva o realizado); só se houver meta
-      if (target.trim() !== "") {
+      // na binaria nao ha meta a digitar, entao basta existir a competencia
+      if (binaria || target.trim() !== "") {
         const e = await upsertGoalEntry({
           goal_id: goal.id,
           period: periodOf(m),
-          target_value: Number(target),
+          target_value: binaria ? BINARIA_OK : Number(target),
           actual_value: monthEntry?.actual ?? null,
           weight: weight.trim() === "" ? 0 : Number(weight),
           note: monthEntry?.note ?? "",
-          partial_value: partial.trim() === "" ? null : Number(partial),
+          partial_value: binaria ? null : (partial.trim() === "" ? null : Number(partial)),
         });
         if (e.error) { setError(e.error); return; }
       }
@@ -878,23 +916,27 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
         <label className="label">Conceito <span className="soft">(métrica)</span></label>
         <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: binaria ? "1fr" : "1fr 1fr", gap: "0.8rem" }}>
+        {!binaria && (
+          <div>
+            <label className="label">Unidade</label>
+            <input className="input" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="R$, %, un…" />
+          </div>
+        )}
         <div>
-          <label className="label">Unidade</label>
-          <input className="input" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="R$, %, un…" />
-        </div>
-        <div>
-          <label className="label">Direção</label>
+          <label className="label">Tipo de meta</label>
           <select className="select" value={direction} onChange={(e) => setDirection(e.target.value as Enums<"goal_direction">)}>
             {DIRECTION_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
       </div>
-      <div style={{ maxWidth: 220 }}>
-        <label className="label">% do parcial</label>
-        <input type="number" step="any" min={0} max={100} className="input" value={partialPct} onChange={(e) => setPartialPct(e.target.value)} placeholder="0" />
-        <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>Quanto o atingimento parcial credita na nota e paga da RV (ex.: 50%).</p>
-      </div>
+      {!binaria && (
+        <div style={{ maxWidth: 220 }}>
+          <label className="label">% do parcial</label>
+          <input type="number" step="any" min={0} max={100} className="input" value={partialPct} onChange={(e) => setPartialPct(e.target.value)} placeholder="0" />
+          <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>Quanto o atingimento parcial credita na nota e paga da RV (ex.: 50%).</p>
+        </div>
+      )}
 
       <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem", display: "flex", flexDirection: "column", gap: "0.8rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.8rem" }}>
@@ -904,22 +946,26 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
             <MonthInput value={m} onChange={setM} style={{ width: 160 }} />
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.8rem" }}>
-          <div>
-            <label className="label">Meta {unit && <span className="soft">({unit})</span>}</label>
-            <input type="number" step="any" className="input" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="—" />
-          </div>
-          <div>
-            <label className="label">Meta parcial <span className="soft">(opc.)</span></label>
-            <input type="number" step="any" className="input" value={partial} onChange={(e) => setPartial(e.target.value)} placeholder="—" />
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: binaria ? "1fr" : "1fr 1fr 1fr", gap: "0.8rem" }}>
+          {!binaria && (
+            <>
+              <div>
+                <label className="label">Meta {unit && <span className="soft">({unit})</span>}</label>
+                <input type="number" step="any" className="input" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="—" />
+              </div>
+              <div>
+                <label className="label">Meta parcial <span className="soft">(opc.)</span></label>
+                <input type="number" step="any" className="input" value={partial} onChange={(e) => setPartial(e.target.value)} placeholder="—" />
+              </div>
+            </>
+          )}
           <div>
             <label className="label">Peso (%)</label>
             <input type="number" step="any" min={0} max={100} className="input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0" />
           </div>
         </div>
         <p className="soft" style={{ fontSize: "0.72rem", margin: 0 }}>
-          Meta, parcial e peso valem para a competência selecionada. O realizado é lançado em “Registrar”. {monthEntry ? "" : "Esta meta ainda não está nesta competência — preencha a meta para incluí-la."}
+          {binaria ? "O peso vale para a competência selecionada. O resultado (OK/NOK) é lançado em “Registrar”." : "Meta, parcial e peso valem para a competência selecionada. O realizado é lançado em “Registrar”."}{" "} {monthEntry ? "" : "Esta meta ainda não está nesta competência — preencha a meta para incluí-la."}
         </p>
       </div>
       {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
@@ -928,6 +974,7 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
 }
 
 function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; onClose: () => void }) {
+  const binaria = isMetaBinaria(goal.direction);
   const entry = goal.entries.find((x) => x.period === periodOf(month)) ?? null;
   const [actual, setActual] = useState("");
   const [note, setNote] = useState("");
@@ -976,14 +1023,20 @@ function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; o
         <button type="button" className="btn btn-primary" disabled={pending || !entry} onClick={submit}>{pending ? "Salvando…" : "Salvar"}</button>
       </>}
     >
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.8rem" }}>
-        {readonly(<>Meta {goal.unit && <span className="soft">({goal.unit})</span>}</>, entry ? formatNumber(entry.target) : "—")}
-        {readonly(<>Meta parcial</>, entry?.partial != null ? formatNumber(entry.partial) : "—")}
-        {readonly(<>Peso</>, entry ? `${entry.weight}%` : "—")}
-      </div>
+      {binaria ? (
+        <div style={{ maxWidth: 200 }}>{readonly(<>Peso</>, entry ? `${entry.weight}%` : "—")}</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.8rem" }}>
+          {readonly(<>Meta {goal.unit && <span className="soft">({goal.unit})</span>}</>, entry ? formatNumber(entry.target) : "—")}
+          {readonly(<>Meta parcial</>, entry?.partial != null ? formatNumber(entry.partial) : "—")}
+          {readonly(<>Peso</>, entry ? `${entry.weight}%` : "—")}
+        </div>
+      )}
       <div>
-        <label className="label">Realizado {goal.unit && <span className="soft">({goal.unit})</span>}</label>
-        <input type="number" step="any" className="input" value={actual} onChange={(e) => setActual(e.target.value)} placeholder="—" autoFocus />
+        <label className="label">{binaria ? "Resultado" : <>Realizado {goal.unit && <span className="soft">({goal.unit})</span>}</>}</label>
+        {binaria
+          ? <OkNokInput value={actual.trim() === "" ? null : Number(actual)} onChange={(v) => setActual(v == null ? "" : String(v))} autoFocus />
+          : <input type="number" step="any" className="input" value={actual} onChange={(e) => setActual(e.target.value)} placeholder="—" autoFocus />}
       </div>
       <div>
         <label className="label">Observação <span className="soft">(opcional)</span></label>

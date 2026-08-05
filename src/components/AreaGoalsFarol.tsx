@@ -12,7 +12,7 @@ import { ExportButton } from "@/components/ui/ExportButton";
 import {
   createAreaGoal, updateAreaGoal, deleteAreaGoal, upsertAreaEntry,
 } from "@/lib/actions/area-goals";
-import { GOAL_DIRECTION, AREA_GOAL_KIND, CONSOLIDATION_LABEL } from "@/lib/constants";
+import { GOAL_DIRECTION, AREA_GOAL_KIND, CONSOLIDATION_LABEL, isMetaBinaria } from "@/lib/constants";
 import { farolAttainment, type FarolStatus } from "@/lib/goals-farol";
 import { shortName } from "@/lib/format";
 import type { Enums } from "@/types/database";
@@ -454,6 +454,7 @@ function GoalDialog({ mode, goal, bulkGoals, goals, departments, subdepartments,
   const [kind, setKind] = useState<Enums<"area_goal_kind">>(goal?.kind ?? "ic");
   const [direction, setDirection] = useState<Enums<"goal_direction">>(goal?.direction ?? "maior_melhor");
   const [consolidation, setConsolidation] = useState<Enums<"area_consolidation">>(goal?.consolidation ?? "soma");
+  const binaria = isMetaBinaria(direction);
   const [ownerId, setOwnerId] = useState(goal?.ownerId ?? "");
   // IC pai — não-lote: id do IC (mesma unidade); lote: nome do IC (resolvido por unidade ao salvar)
   const parentInit = isBulk
@@ -487,9 +488,19 @@ function GoalDialog({ mode, goal, bulkGoals, goals, departments, subdepartments,
     if (!isBulk && !orgUnitId) { setError("Informe a unidade do indicador."); return; }
     if (!departmentId) { setError("Informe o setor."); return; }
     if (!subdepartmentId) { setError("Informe o subsetor."); return; }
-    if (!unit.trim()) { setError("Informe a unidade de medida."); return; }
+    // sim/não não tem unidade de medida: OK/NOK é o próprio resultado
+    if (!binaria && !unit.trim()) { setError("Informe a unidade de medida."); return; }
     if (!ownerId) { setError("Informe o responsável."); return; }
-    const shared = { department_id: departmentId || null, subdepartment_id: subdepartmentId || null, name, description: description || null, unit, kind, direction, consolidation, owner_id: ownerId || null };
+    const shared = {
+      department_id: departmentId || null, subdepartment_id: subdepartmentId || null,
+      name, description: description || null,
+      unit: binaria ? "OK/NOK" : unit,
+      kind, direction,
+      // Entre unidades, somar 100+0+100 daria 200, que não quer dizer nada. A
+      // MÉDIA dá 67%, que é a leitura certa: duas de três unidades fizeram.
+      consolidation: binaria ? "media" : consolidation,
+      owner_id: ownerId || null,
+    };
     const nrm = (s: string) => s.trim().toLowerCase();
     start(async () => {
       if (isBulk) {

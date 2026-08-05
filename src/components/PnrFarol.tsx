@@ -11,7 +11,7 @@ import { ExportButton } from "@/components/ui/ExportButton";
 import {
   createPnrKpi, updatePnrKpi, deletePnrKpi, upsertPnrEntry, deletePnrEntry,
 } from "@/lib/actions/pnr";
-import { GOAL_DIRECTION, CONSOLIDATION_LABEL, PNR_TIER_LABEL, PNR_TIER_TONE } from "@/lib/constants";
+import { GOAL_DIRECTION, CONSOLIDATION_LABEL, PNR_TIER_LABEL, PNR_TIER_TONE, DIRECOES_NUMERICAS } from "@/lib/constants";
 import { pnrScore, type PnrTier } from "@/lib/pnr-score";
 import { formatNumber, shortName } from "@/lib/format";
 import type { Enums } from "@/types/database";
@@ -437,7 +437,8 @@ function EntryDialog({ kpi, month, onClose }: { kpi: PnrKpiRow; month: string; o
   );
 }
 
-const DIR_OPTS = Object.entries(GOAL_DIRECTION) as [Enums<"goal_direction">, string][];
+// PNR nao usa meta de sim/nao: a lista exclui `binaria` de proposito.
+const DIR_OPTS = DIRECOES_NUMERICAS.map((v) => [v, GOAL_DIRECTION[v]] as [Enums<"goal_direction">, string]);
 const CONS_OPTS = Object.entries(CONSOLIDATION_LABEL) as [Enums<"area_consolidation">, string][];
 
 function KpiDialog({ mode, kpi, categories, members, onClose }: { mode: "new" | "edit"; kpi?: PnrKpiRow; categories: PnrCategory[]; members: Member[]; onClose: () => void }) {

@@ -69,3 +69,16 @@ export function initials(name: string | null | undefined): string {
   const parts = name.trim().split(/\s+/);
   return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
 }
+
+/**
+ * Valor de uma meta como ele deve APARECER.
+ *
+ * Numa meta de sim/não o número gravado é 100 ou 0, mas mostrar "100" não diz
+ * nada a quem lê: o que importa é se foi feito. Aqui vira OK/NOK. Vale para
+ * meta e realizado, e o `null` continua sendo o travessão de vazio.
+ */
+export function formatMetaValor(valor: number | null | undefined, binaria: boolean): string {
+  if (valor == null) return "\u2014";
+  if (binaria) return valor > 0 ? "OK" : "NOK";
+  return formatNumber(valor);
+}

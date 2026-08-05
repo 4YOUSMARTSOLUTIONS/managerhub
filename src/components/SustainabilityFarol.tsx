@@ -11,7 +11,7 @@ import { ExportButton } from "@/components/ui/ExportButton";
 import {
   createSustKpi, updateSustKpi, deleteSustKpi, upsertSustEntry, deleteSustEntry,
 } from "@/lib/actions/sustainability";
-import { GOAL_DIRECTION, CONSOLIDATION_LABEL, FAROL_LABEL, FAROL_TONE } from "@/lib/constants";
+import { GOAL_DIRECTION, CONSOLIDATION_LABEL, FAROL_LABEL, FAROL_TONE, DIRECOES_NUMERICAS } from "@/lib/constants";
 import { farolAttainment, type FarolStatus } from "@/lib/goals-farol";
 import { formatNumber, shortName } from "@/lib/format";
 import type { Enums } from "@/types/database";
@@ -319,7 +319,8 @@ function EntryDialog({ kpi, month, onClose }: { kpi: SustKpiRow; month: string; 
   );
 }
 
-const DIR_OPTS = Object.entries(GOAL_DIRECTION) as [Enums<"goal_direction">, string][];
+// Sustentabilidade nao usa meta de sim/nao: a lista exclui `binaria`.
+const DIR_OPTS = DIRECOES_NUMERICAS.map((v) => [v, GOAL_DIRECTION[v]] as [Enums<"goal_direction">, string]);
 const CONS_OPTS = Object.entries(CONSOLIDATION_LABEL) as [Enums<"area_consolidation">, string][];
 
 function KpiDialog({ mode, kpi, members, onClose }: { mode: "new" | "edit"; kpi?: SustKpiRow; members: Member[]; onClose: () => void }) {

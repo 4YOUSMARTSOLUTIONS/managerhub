@@ -1419,7 +1419,10 @@ export type Database = {
       recording_transcript_status: "pendente" | "processando" | "concluida" | "falha"
       action_status: "open" | "in_progress" | "blocked" | "done" | "cancelled"
       goal_status: "active" | "at_risk" | "achieved" | "missed" | "archived"
-      goal_direction: "maior_melhor" | "menor_melhor"
+      // `binaria` = meta de sim/não. É marcador de INTERFACE: por baixo ela se
+      // comporta como maior_melhor com meta 100 e realizado 0 ou 100, então o
+      // cálculo do farol não tem caso especial nenhum.
+      goal_direction: "maior_melhor" | "menor_melhor" | "binaria"
       goal_entry_status: "aberta" | "aprovada" | "reprovada"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
