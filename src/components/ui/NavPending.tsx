@@ -21,17 +21,29 @@ import { TopProgress } from "./TopProgress";
  * ancestral que tiver `transform`, e a barra lateral usa translate no modo
  * celular, o que grudaria a barra dentro do menu em vez do topo da janela.
  */
-export function NavPending({ stripe = true }: { stripe?: boolean }) {
+/**
+ * Um sinal por navegação, nunca dois.
+ *
+ * No menu, a listra no próprio item já diz para onde está indo, e é o melhor
+ * sinal possível: fica exatamente onde o olho está, no item recém-clicado.
+ * Somar a barra do topo ali era redundância pura, duas coisas piscando pela
+ * mesma navegação.
+ *
+ * A barra existe só onde a listra é impossível: paginação e abas do Painel ADM
+ * não são `position: relative` e não têm onde desenhá-la. Nesses casos ela é o
+ * único retorno, e tirá-la deixaria o clique mudo.
+ */
+export function NavPending({ barraNoTopo = false }: { barraNoTopo?: boolean }) {
   const { pending } = useLinkStatus();
   if (!pending) return null;
 
-  return (
-    <>
-      {/* a listra depende de o link ser `position: relative`; onde não é (botão de
-          paginação, aba), fica só a barra do topo */}
-      {stripe && <span className="nav-pending" aria-hidden />}
-      {typeof document !== "undefined" &&
-        createPortal(<TopProgress active />, document.body)}
-    </>
-  );
+  if (barraNoTopo) {
+    // portal para o body: `position: fixed` se ancora no ancestral que tiver
+    // `transform`, e a barra lateral usa translate no modo celular
+    return typeof document !== "undefined"
+      ? createPortal(<TopProgress active />, document.body)
+      : null;
+  }
+
+  return <span className="nav-pending" aria-hidden />;
 }

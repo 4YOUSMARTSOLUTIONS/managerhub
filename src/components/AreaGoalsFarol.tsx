@@ -329,7 +329,11 @@ export function AreaGoalsFarol({
                 <th className="col-real" style={{ textAlign: "right" }}>Realizado</th>
                 <th>Atingimento</th>
                 {grouped && <th>Tipo de cálculo</th>}
-                {!grouped && <th style={{ textAlign: "right" }}>Ações</th>}
+                {/* a coluna de Ações existe SEMPRE. No consolidado ela vem com o
+                    botão desabilitado e o motivo no title: some-la fazia o usuário
+                    concluir que não tinha permissão, quando na verdade faltava
+                    escolher a unidade */}
+                <th style={{ textAlign: "right" }}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -366,7 +370,23 @@ export function AreaGoalsFarol({
                     </div>
                   </td>
                   {grouped && <td className="muted" style={{ whiteSpace: "nowrap", fontSize: "0.72rem" }} title="Consolidado entre as unidades pelo cálculo do KPI">{CONSOLIDATION_LABEL[g.consolidation]}</td>}
-                  {!grouped && (
+                  {grouped ? (
+                    // Consolidado: a linha é a soma/média de várias unidades, então
+                    // não existe UM registro para gravar. O botão fica visível e
+                    // desabilitado, dizendo o que fazer, em vez de sumir.
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {canEnter(g) && (
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          disabled
+                          title="Escolha uma unidade no seletor do topo para lançar o resultado. Aqui a linha é o consolidado de várias unidades."
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+                        </button>
+                      )}
+                    </td>
+                  ) : (
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
                         {isAdmin && (

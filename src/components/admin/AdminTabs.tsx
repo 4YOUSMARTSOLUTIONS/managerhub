@@ -26,7 +26,7 @@ export function AdminTabs() {
         return (
           <Link key={t.href} href={t.href} className={`tab${active ? " tab-active" : ""}`} aria-current={active ? "page" : undefined}>
             {t.label}
-            <NavPending stripe={false} />
+            <NavPending barraNoTopo />
           </Link>
         );
       })}
