@@ -8,6 +8,9 @@ import type { Enums } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { souGestorDe } from "@/lib/team";
+import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
+
+const BUCKET_EVIDENCIA = "goal-evidence";
 
 function isAdminRole(role: Enums<"member_role">) {
   return role === "owner" || role === "admin";
@@ -44,6 +47,8 @@ export type CreateGoalInput = {
   direction: Enums<"goal_direction">;
   partial_pct?: number | null;
   owner_id?: string;
+  /** true = não aceita gravar o realizado sem pelo menos um anexo de evidência */
+  evidence_required?: boolean;
 };
 
 const numOrNull = (v: number | null | undefined) =>
@@ -75,6 +80,7 @@ export async function createIndividualGoal(input: CreateGoalInput): Promise<Crea
         unit: (input.unit ?? "").trim(),
         direction: input.direction,
         partial_pct: numOrNull(input.partial_pct),
+        evidence_required: input.evidence_required === true,
         created_by: userId,
       })
       .select("id")
@@ -95,6 +101,7 @@ export type UpdateGoalInput = {
   unit?: string;
   direction: Enums<"goal_direction">;
   partial_pct?: number | null;
+  evidence_required?: boolean;
 };
 
 export async function updateIndividualGoal(input: UpdateGoalInput): Promise<ActionState> {
@@ -113,6 +120,7 @@ export async function updateIndividualGoal(input: UpdateGoalInput): Promise<Acti
         unit: (input.unit ?? "").trim(),
         direction: input.direction,
         partial_pct: numOrNull(input.partial_pct),
+        evidence_required: input.evidence_required === true,
       })
       .eq("id", input.id);
     if (error) return { error: error.message };
@@ -167,7 +175,7 @@ export async function upsertGoalEntry(input: UpsertEntryInput): Promise<ActionSt
     }
     const { data: existing } = await supabase
       .from("individual_goal_entries")
-      .select("approval_status")
+      .select("id, approval_status")
       .eq("goal_id", input.goal_id)
       .eq("period", input.period)
       .maybeSingle();
@@ -177,6 +185,32 @@ export async function upsertGoalEntry(input: UpsertEntryInput): Promise<ActionSt
 
     const actual =
       input.actual_value == null || Number.isNaN(Number(input.actual_value)) ? null : Number(input.actual_value);
+
+    // EVIDÊNCIA OBRIGATÓRIA: sem anexo, não grava o realizado.
+    //
+    // A conferência mora aqui, e não só na tela, porque é aqui que o número entra
+    // no sistema — venha do diálogo de registrar, do de cadastrar ou de qualquer
+    // caminho futuro. E só vale quando há realizado: cadastrar a meta, distribuir
+    // peso ou limpar o valor continuam livres, senão o gestor não conseguiria nem
+    // criar a meta que exige evidência.
+    if (actual != null) {
+      const { data: meta } = await supabase
+        .from("individual_goals")
+        .select("evidence_required")
+        .eq("id", input.goal_id)
+        .maybeSingle();
+      if (meta?.evidence_required) {
+        const { count } = existing?.id
+          ? await supabase
+              .from("individual_goal_entry_attachments")
+              .select("id", { count: "exact", head: true })
+              .eq("entry_id", existing.id)
+          : { count: 0 };
+        if (!count) {
+          return { error: "Esta meta exige evidência: anexe pelo menos um arquivo antes de registrar o realizado." };
+        }
+      }
+    }
 
     // ao revisar uma meta reprovada, ela volta a ficar pendente de fechamento
     const reset = existing?.approval_status === "reprovada"
@@ -434,6 +468,157 @@ export async function reopenGoalEntry(input: { goal_id: string; period: string; 
     if (error) return { error: error.message };
     revalidatePath("/metas");
     return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------- Evidência do atingimento ----------
+//
+// O anexo pende do LANÇAMENTO (a competência), não da meta: a prova é do
+// resultado daquele mês. A permissão de quem sobe e de quem apaga é a mesma que
+// já decide quem lança o realizado, e a RLS da tabela espelha isso sem reescrever
+// a regra — inclusive a trava de não apagar depois de aprovada.
+
+/** Localiza o lançamento e confere se quem chama pode mexer nele. */
+async function entryParaEvidencia(
+  ctx: Ctx,
+  goalId: string,
+  period: string,
+): Promise<{ id: string; aprovada: boolean } | { error: string }> {
+  const owner = await goalOwner(ctx, goalId);
+  const canManage = await canManageOwner(ctx, owner);
+  if (!(owner === ctx.userId || canManage)) {
+    return { error: "Você não tem permissão para mexer nesta meta." };
+  }
+  const { data } = await ctx.supabase
+    .from("individual_goal_entries")
+    .select("id, approval_status")
+    .eq("goal_id", goalId)
+    .eq("period", period)
+    .maybeSingle();
+  if (!data) return { error: "Esta meta não está cadastrada nesta competência." };
+  return { id: data.id, aprovada: data.approval_status === "aprovada" };
+}
+
+export async function uploadGoalEvidence(formData: FormData): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    const goalId = String(formData.get("goal_id") ?? "");
+    const period = String(formData.get("period") ?? "");
+    if (!goalId || !period) return { error: "Lançamento inválido." };
+
+    const alvo = await entryParaEvidencia(ctx, goalId, period);
+    if ("error" in alvo) return alvo;
+    if (alvo.aprovada) return { error: "Competência aprovada: a evidência não pode mais ser alterada." };
+
+    const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    if (files.length === 0) return { error: "Selecione ao menos um arquivo." };
+
+    for (const file of files) {
+      // recusa cedo e em português; o limite que vale mesmo é o do bucket
+      const recusa = recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO);
+      if (recusa) return { error: recusa };
+    }
+
+    for (const file of files) {
+      const safe = file.name.replace(/[^\w.\-]+/g, "_");
+      const path = `${ctx.tenantId}/${alvo.id}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
+      const up = await ctx.supabase.storage
+        .from(BUCKET_EVIDENCIA)
+        .upload(path, file, { contentType: file.type || undefined, upsert: false });
+      if (up.error) return { error: `Falha ao enviar "${file.name}": ${up.error.message}` };
+      const { error } = await ctx.supabase.from("individual_goal_entry_attachments").insert({
+        tenant_id: ctx.tenantId,
+        entry_id: alvo.id,
+        path,
+        filename: file.name,
+        size: file.size,
+        content_type: file.type || null,
+        uploaded_by: ctx.userId,
+      });
+      if (error) {
+        // o arquivo já subiu: sem isso ele fica órfão no bucket, ocupando espaço
+        // e sem nenhuma linha que o alcance
+        await ctx.supabase.storage.from(BUCKET_EVIDENCIA).remove([path]);
+        return { error: error.message };
+      }
+    }
+
+    revalidatePath("/metas");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function deleteGoalEvidence(id: string): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    if (!id) return { error: "Anexo inválido." };
+    const { data: att } = await ctx.supabase
+      .from("individual_goal_entry_attachments")
+      .select("id, path, entry_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!att) return { error: "Anexo não encontrado." };
+
+    // a RLS já recusa apagar anexo de competência aprovada; aqui é só para a
+    // mensagem sair em português em vez de "0 linhas afetadas"
+    const { data: entry } = await ctx.supabase
+      .from("individual_goal_entries")
+      .select("approval_status, goal_id, actual_value")
+      .eq("id", att.entry_id)
+      .maybeSingle();
+    if (entry?.approval_status === "aprovada") {
+      return { error: "Competência aprovada: a evidência não pode mais ser removida." };
+    }
+    if (entry?.goal_id) {
+      const owner = await goalOwner(ctx, entry.goal_id);
+      const canManage = await canManageOwner(ctx, owner);
+      if (!(owner === ctx.userId || canManage)) return { error: "Você não tem permissão para remover esta evidência." };
+
+      // NÃO DEIXA O REALIZADO FICAR ÓRFÃO DE EVIDÊNCIA.
+      //
+      // Exigir o anexo só na hora de gravar deixava uma porta aberta: salvar com
+      // evidência e apagar o arquivo em seguida, ficando com o número comprovado
+      // por nada. Quem precisa trocar o arquivo sobe o novo primeiro e aí remove
+      // o antigo, que já não é o último.
+      const { data: meta } = await ctx.supabase
+        .from("individual_goals")
+        .select("evidence_required")
+        .eq("id", entry.goal_id)
+        .maybeSingle();
+      if (meta?.evidence_required && entry.actual_value != null) {
+        const { count } = await ctx.supabase
+          .from("individual_goal_entry_attachments")
+          .select("id", { count: "exact", head: true })
+          .eq("entry_id", att.entry_id);
+        if ((count ?? 0) <= 1) {
+          return { error: "Esta meta exige evidência e já tem realizado lançado. Anexe o arquivo novo antes de remover o atual." };
+        }
+      }
+    }
+
+    const { error } = await ctx.supabase.from("individual_goal_entry_attachments").delete().eq("id", id);
+    if (error) return { error: error.message };
+    const rm = await ctx.supabase.storage.from(BUCKET_EVIDENCIA).remove([att.path]);
+    if (rm.error) console.error("[evidencia] limpeza do arquivo:", rm.error.message);
+
+    revalidatePath("/metas");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Link temporário para baixar. O bucket é privado: sem isso não há como abrir. */
+export async function goalEvidenceUrl(path: string): Promise<{ url?: string; error?: string }> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.storage.from(BUCKET_EVIDENCIA).createSignedUrl(path, 60 * 10);
+    if (error) return { error: error.message };
+    return { url: data?.signedUrl };
   } catch (e) {
     return { error: (e as Error).message };
   }

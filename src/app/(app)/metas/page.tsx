@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
-import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite } from "@/components/IndividualGoalsFarol";
+import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite } from "@/components/IndividualGoalsFarol";
 import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 
@@ -86,7 +86,7 @@ export default async function GoalsPage() {
   // ---------- ONDA 2: o que depende da onda 1 ----------
   let goalsQuery = supabase
     .from("individual_goals")
-    .select("id, name, description, unit, direction, partial_pct, owner_id, owner:profiles!owner_id(full_name)")
+    .select("id, name, description, unit, direction, partial_pct, evidence_required, owner_id, owner:profiles!owner_id(full_name)")
     .eq("tenant_id", tenant.id);
   if (allowedOwnerIds) goalsQuery = goalsQuery.in("owner_id", allowedOwnerIds);
 
@@ -120,9 +120,9 @@ export default async function GoalsPage() {
     goalIds.length
       ? supabase
           .from("individual_goal_entries")
-          .select("goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
+          .select("id, goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
           .in("goal_id", goalIds)
-      : Promise.resolve({ data: [] as { goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: "aberta" | "aprovada" | "reprovada"; approved_at: string | null; reproval_note: string | null }[] }),
+      : Promise.resolve({ data: [] as { id: string; goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: "aberta" | "aprovada" | "reprovada"; approved_at: string | null; reproval_note: string | null }[] }),
     // RV configurada em Configuracoes (vigencias por funcao/colaborador). Leitura via
     // service client (a RLS da config e owner/admin) - escopo restrito aos owners visiveis.
     admin
@@ -133,10 +133,29 @@ export default async function GoalsPage() {
       : Promise.resolve({ data: [] as { user_id: string; position_id: string | null }[] }),
   ]);
 
+  // evidências: uma consulta só para todos os lançamentos em vista, e não uma por
+  // linha. A RLS da tabela de anexos espelha a do lançamento, então o recorte de
+  // quem pode ver já vem pronto do banco.
+  const entryIds = (entries ?? []).map((e) => e.id);
+  const { data: anexos } = entryIds.length
+    ? await supabase
+        .from("individual_goal_entry_attachments")
+        .select("id, entry_id, path, filename, size, created_at")
+        .in("entry_id", entryIds)
+        .order("created_at")
+    : { data: [] as { id: string; entry_id: string; path: string; filename: string; size: number | null; created_at: string }[] };
+
+  const anexosPorEntry = new Map<string, GoalEvidenceLite[]>();
+  for (const a of anexos ?? []) {
+    const arr = anexosPorEntry.get(a.entry_id) ?? [];
+    arr.push({ id: a.id, path: a.path, filename: a.filename, size: a.size });
+    anexosPorEntry.set(a.entry_id, arr);
+  }
+
   const entriesByGoal = new Map<string, GoalEntryLite[]>();
   for (const e of entries ?? []) {
     const arr = entriesByGoal.get(e.goal_id) ?? [];
-    arr.push({ period: e.period, target: e.target_value, actual: e.actual_value, weight: e.weight, note: e.note, partial: e.partial_value, status: e.approval_status, approvedAt: e.approved_at, reprovalNote: e.reproval_note });
+    arr.push({ period: e.period, target: e.target_value, actual: e.actual_value, weight: e.weight, note: e.note, partial: e.partial_value, status: e.approval_status, approvedAt: e.approved_at, reprovalNote: e.reproval_note, evidences: anexosPorEntry.get(e.id) ?? [] });
     entriesByGoal.set(e.goal_id, arr);
   }
 
@@ -207,6 +226,7 @@ export default async function GoalsPage() {
       unit: g.unit,
       direction: g.direction,
       partialPct: g.partial_pct,
+      evidenceRequired: g.evidence_required,
       ownerId: g.owner_id,
       ownerName: (g.owner as unknown as { full_name: string | null } | null)?.full_name ?? "—",
       deptId: ds.dept,

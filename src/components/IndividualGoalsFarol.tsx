@@ -7,6 +7,8 @@ import { MonthInput } from "@/components/ui/MonthInput";
 import { YearSelect } from "@/components/ui/YearSelect";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
+import { GoalEvidencePanel } from "@/components/GoalEvidencePanel";
+import { Paperclip } from "lucide-react";
 import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -24,7 +26,9 @@ import { confirmDialog } from "@/components/ui/confirm";
 
 const fmtBRL = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-export type GoalEntryLite = { period: string; target: number; actual: number | null; weight: number; note: string | null; partial: number | null; status: Enums<"goal_entry_status">; approvedAt: string | null; reprovalNote: string | null };
+/** arquivo de evidência do atingimento, preso à competência (não à meta) */
+export type GoalEvidenceLite = { id: string; path: string; filename: string; size: number | null };
+export type GoalEntryLite = { period: string; target: number; actual: number | null; weight: number; note: string | null; partial: number | null; status: Enums<"goal_entry_status">; approvedAt: string | null; reprovalNote: string | null; evidences: GoalEvidenceLite[] };
 // linha do tempo da RV resolvida em Configurações: valor vale a partir de `from` até a próxima vigência
 export type RvTimeline = { ownerId: string; from: string; value: number };
 export type GoalRow = {
@@ -34,6 +38,8 @@ export type GoalRow = {
   unit: string;
   direction: Enums<"goal_direction">;
   partialPct: number | null;
+  /** true = o realizado só grava com pelo menos um anexo de evidência */
+  evidenceRequired: boolean;
   ownerId: string;
   ownerName: string;
   deptId: string | null;
@@ -455,6 +461,27 @@ export function IndividualGoalsFarol({
                         {g.name}
                       </button>
                     ) : <span style={{ fontWeight: 600 }}>{g.name}</span>}
+                    {/* Estado da evidência, de relance: o gestor precisa saber
+                        quem já comprovou sem abrir meta por meta. Vermelho é
+                        pendência real (exige e não tem), cinza é informação. */}
+                    {mode === "mes" && (() => {
+                      const ev = g.entries.find((x) => x.period === period)?.evidences ?? [];
+                      if (ev.length > 0) {
+                        return (
+                          <span className="soft" title={`${ev.length} evidência(s) anexada(s)`} style={{ marginLeft: 6, whiteSpace: "nowrap" }}>
+                            <Paperclip size={12} style={{ verticalAlign: "-0.1em" }} />{ev.length > 1 ? ` ${ev.length}` : ""}
+                          </span>
+                        );
+                      }
+                      if (g.evidenceRequired) {
+                        return (
+                          <span title="Esta meta exige evidência e ainda não tem anexo" style={{ marginLeft: 6, color: "var(--mh-danger)", whiteSpace: "nowrap" }}>
+                            <Paperclip size={12} style={{ verticalAlign: "-0.1em" }} />
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{g.unit || <span className="soft">—</span>}</td>
                   <td className="muted" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.85rem" }} title={g.description ?? ""}>
@@ -800,6 +827,7 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
   const [description, setDescription] = useState("");
   const [direction, setDirection] = useState<Enums<"goal_direction">>("maior_melhor");
   const [partialPct, setPartialPct] = useState("0");
+  const [evidencia, setEvidencia] = useState(false);
   const [ownerId, setOwnerId] = useState(defaultOwner);
   const [target, setTarget] = useState("");
   const [partial, setPartial] = useState("");
@@ -836,6 +864,7 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
       let goalId = sel;
       if (isNew) {
         const res = await createIndividualGoal({
+          evidence_required: evidencia,
           name, description,
           // sim/nao nao tem unidade de medida: OK/NOK e o proprio resultado
           unit: binaria ? "OK/NOK" : unit,
@@ -953,8 +982,31 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
         <label className="label">Observação <span className="soft">(opcional)</span></label>
         <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
+      <CampoEvidenciaObrigatoria valor={evidencia} onChange={setEvidencia} />
       {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
     </Modal>
+  );
+}
+
+/**
+ * A decisão do gestor: esta meta exige comprovação?
+ *
+ * Fica no cadastro da meta e não no lançamento porque é uma regra da meta, que
+ * vale para todas as competências. Metas já cadastradas nascem sem exigência.
+ */
+function CampoEvidenciaObrigatoria({ valor, onChange }: { valor: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}>
+        <input type="checkbox" checked={valor} onChange={(e) => onChange(e.target.checked)} style={{ marginTop: 3 }} />
+        <span>
+          <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Exigir evidência do atingimento</span>
+          <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+            O realizado desta meta só é salvo com pelo menos um arquivo anexado (planilha, imagem, PDF…).
+          </span>
+        </span>
+      </label>
+    </div>
   );
 }
 
@@ -964,6 +1016,7 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
   const [unit, setUnit] = useState(goal.unit);
   const [direction, setDirection] = useState<Enums<"goal_direction">>(goal.direction);
   const [partialPct, setPartialPct] = useState(goal.partialPct != null ? String(goal.partialPct) : "0");
+  const [evidencia, setEvidencia] = useState(goal.evidenceRequired);
   // valores por competência
   const [m, setM] = useState(month);
   const [target, setTarget] = useState("");
@@ -992,6 +1045,7 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
     }
     start(async () => {
       const res = await updateIndividualGoal({
+        evidence_required: evidencia,
         id: goal.id, name, description,
         unit: binaria ? "OK/NOK" : unit,
         direction,
@@ -1096,6 +1150,7 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
           {binaria ? "O peso vale para a competência selecionada. O resultado (OK/NOK) é lançado em “Registrar”." : "Meta, parcial e peso valem para a competência selecionada. O realizado é lançado em “Registrar”."}{" "} {monthEntry ? "" : "Esta meta ainda não está nesta competência — preencha a meta para incluí-la."}
         </p>
       </div>
+      <CampoEvidenciaObrigatoria valor={evidencia} onChange={setEvidencia} />
       {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
     </Modal>
   );
@@ -1170,6 +1225,16 @@ function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; o
         <label className="label">Observação <span className="soft">(opcional)</span></label>
         <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
+      {entry && (
+        <GoalEvidencePanel
+          goalId={goal.id}
+          period={periodOf(month)}
+          evidences={entry.evidences}
+          obrigatoria={goal.evidenceRequired}
+          travado={entry.status === "aprovada"}
+          onMudou={() => router.refresh()}
+        />
+      )}
       <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
         {GOAL_DIRECTION[goal.direction]} — meta, parcial e peso são definidos em “Editar” / “Distribuir pesos”. Aqui você registra apenas o realizado da competência.
       </p>

@@ -677,15 +677,21 @@ export type Database = {
         Relationships: []
       }
       individual_goals: {
-        Row: { id: string; tenant_id: string; owner_id: string; name: string; description: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; partial_pct: number | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; owner_id: string; name: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; partial_pct?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; owner_id?: string; name?: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; partial_pct?: number | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; owner_id: string; name: string; description: string | null; unit: string; direction: Database["public"]["Enums"]["goal_direction"]; partial_pct: number | null; evidence_required: boolean; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; owner_id: string; name: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; partial_pct?: number | null; evidence_required?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; owner_id?: string; name?: string; description?: string | null; unit?: string; direction?: Database["public"]["Enums"]["goal_direction"]; partial_pct?: number | null; evidence_required?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       individual_goal_entries: {
         Row: { id: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: Enums<"goal_entry_status">; approved_by: string | null; approved_at: string | null; reproval_note: string | null; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; goal_id: string; period: string; target_value: number; actual_value?: number | null; weight?: number; note?: string | null; partial_value?: number | null; rv_value?: number | null; approval_status?: Enums<"goal_entry_status">; approved_by?: string | null; approved_at?: string | null; reproval_note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Update: { id?: string; tenant_id?: string; goal_id?: string; period?: string; target_value?: number; actual_value?: number | null; weight?: number; note?: string | null; partial_value?: number | null; rv_value?: number | null; approval_status?: Enums<"goal_entry_status">; approved_by?: string | null; approved_at?: string | null; reproval_note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      individual_goal_entry_attachments: {
+        Row: { id: string; tenant_id: string; entry_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; entry_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; entry_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
         Relationships: []
       }
       individual_rv_config: {
