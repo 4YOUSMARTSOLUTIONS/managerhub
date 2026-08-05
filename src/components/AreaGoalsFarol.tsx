@@ -8,10 +8,11 @@ import { YearSelect } from "@/components/ui/YearSelect";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchSelect } from "@/components/SearchSelect";
 import { ImportAreaGoalsDialog } from "@/components/ImportAreaGoalsDialog";
-import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
+import { Dropdown } from "@/components/ui/Dropdown";
 import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
 import { ImportAreaEntriesDialog } from "@/components/ImportAreaEntriesDialog";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { IconImport } from "@/components/ui/ImpExpIcons";
 import {
   createAreaGoal, updateAreaGoal, deleteAreaGoal, upsertAreaEntry,
 } from "@/lib/actions/area-goals";
@@ -270,15 +271,26 @@ export function AreaGoalsFarol({
         </div>
         <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
         {isAdmin && (
-          <>
+          // O que a pessoa OLHA fica à esquerda; o que ela FAZ, à direita. O
+          // painel do menu alinha pela direita para não vazar da tela.
+          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
             {/* Quatro botões de planilha viraram um menu. Os diálogos em si são
                 renderizados FORA daqui: dentro do painel, fechar o menu
-                desmontaria o diálogo que ele acabou de abrir. */}
-            <Dropdown rotulo="Planilhas" largura={280}>
+                desmontaria o diálogo que ele acabou de abrir.
+
+                Importar e Exportar são o MESMO botão com o ícone virado: as duas
+                importações eram item de menu (texto puro) e as exportações vinham
+                do `ExportButton`, que traz o próprio estilo. Quatro linhas
+                fazendo a mesma classe de coisa, duas de cada jeito. */}
+            <Dropdown rotulo="Planilhas" alinharDireita largura={280}>
               {(fechar) => (
                 <>
-                  <ItemDeMenu onClick={() => { setImportGoalsOpen(true); fechar(); }}>Importar indicadores</ItemDeMenu>
-                  <ItemDeMenu onClick={() => { setImportEntriesOpen(true); fechar(); }}>Importar resultados</ItemDeMenu>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setImportGoalsOpen(true); fechar(); }}>
+                    <IconImport /> Importar indicadores
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setImportEntriesOpen(true); fechar(); }}>
+                    <IconImport /> Importar resultados
+                  </button>
                   <div style={{ borderTop: "1px solid var(--border)", margin: "0.15rem 0" }} />
                   <ExportButton
                     label="Exportar indicadores"
@@ -298,7 +310,7 @@ export function AreaGoalsFarol({
               )}
             </Dropdown>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Novo indicador</button>
-          </>
+          </div>
         )}
       </div>
 

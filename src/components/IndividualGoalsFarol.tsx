@@ -326,11 +326,13 @@ export function IndividualGoalsFarol({
           <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
         )}
         {mode === "mes" && canCreateGoals && (
-          <>
+          // O que a pessoa OLHA fica à esquerda; o que ela FAZ, à direita. O
+          // painel do menu alinha pela direita para não vazar da tela.
+          <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
             {/* As secundárias vão para o menu; a primária continua um botão só,
                 à vista. Enterrar "Adicionar meta" num dropdown deixaria a tela
                 mais limpa e o trabalho mais lento, que é uma troca ruim. */}
-            <Dropdown rotulo="Ações" largura={260}>
+            <Dropdown rotulo="Ações" alinharDireita largura={260}>
               {(fechar) => (
                 <>
                   <ItemDeMenu
@@ -358,7 +360,7 @@ export function IndividualGoalsFarol({
               )}
             </Dropdown>
             <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Adicionar meta</button>
-          </>
+          </div>
         )}
       </div>
 
