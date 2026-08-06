@@ -379,12 +379,14 @@ export function ActionsManager({
                 Segmentado e miúdo porque divide a linha do cabeçalho com os
                 outros controles; os dois grupos ficam separados para não lerem
                 como uma escolha única de cinco opções. */}
+            {/* "Todas" antes de "Minhas": a leitura vai do amplo para o estreito, e
+                "Minhas" fica encostado nos papéis que o "como" qualifica */}
             <div style={{ display: "inline-flex", gap: "0.25rem" }}>
-              <Seg on={minhasLigado} onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }} title="Só as ações ligadas a você">
-                <User size={12} /> Minhas
-              </Seg>
               <Seg on={!minhasLigado} onClick={() => { if (minhasLigado) aplicarMinhas([]); }} title="Todas as ações que você alcança">
                 Todas
+              </Seg>
+              <Seg on={minhasLigado} onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }} title="Só as ações ligadas a você">
+                <User size={12} /> Minhas
               </Seg>
             </div>
             {minhasLigado && (
