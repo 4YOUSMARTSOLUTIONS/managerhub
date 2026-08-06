@@ -11,6 +11,7 @@ import { TopProgress } from "@/components/ui/TopProgress";
 import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, effStatus, type EffStatus } from "@/lib/constants";
 import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { MINHA_PAPEIS, MINHA_PADRAO, MINHA_TODAS, PAPEL_LABEL, PAPEL_HINT, type MinhaPapel } from "@/lib/acoes-minhas";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
 import { deleteAction, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
@@ -56,27 +57,6 @@ const VAZIO: ActionFilters = {
   mine: [],
 };
 
-/**
- * Os papéis por que uma ação pode ser "minha". Os valores são os mesmos na URL,
- * aqui e no banco (`search_action_ids`): um vocabulário só, sem tabela de
- * tradução no meio para sair de sincronia.
- */
-export const MINHA_PAPEIS = ["resp", "sol", "cri"] as const;
-export type MinhaPapel = (typeof MINHA_PAPEIS)[number];
-const PAPEL_LABEL: Record<MinhaPapel, string> = {
-  resp: "Responsável",
-  sol: "Solicitante",
-  cri: "Criador",
-};
-const PAPEL_HINT: Record<MinhaPapel, string> = {
-  resp: "Ações em que você é responsável por alguma demanda",
-  sol: "Ações abertas a seu pedido",
-  cri: "Ações que você registrou no sistema",
-};
-/** o que a tela abre marcado quando a URL não diz nada */
-export const MINHA_PADRAO: MinhaPapel[] = ["resp"];
-/** sentinela de "Todas": ausente na URL significa o padrão, então desligar precisa ser explícito */
-export const MINHA_TODAS = "todas";
 
 /** Opções dos selects, extraídas da base inteira (não só da página). */
 /**

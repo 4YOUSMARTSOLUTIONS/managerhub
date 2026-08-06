@@ -1,6 +1,9 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
-import { ActionsManager, MINHA_PADRAO, MINHA_PAPEIS, type ActionRow, type FilterOptions, type MinhaPapel } from "@/components/ActionsManager";
+import { ActionsManager, type ActionRow, type FilterOptions } from "@/components/ActionsManager";
+// de um módulo neutro, NÃO de ActionsManager: constante exportada de arquivo
+// "use client" chega aqui como proxy de referência, e `.includes` estoura
+import { MINHA_PARAM, resolverMinhas } from "@/lib/acoes-minhas";
 import { Pager } from "@/components/ui/Pager";
 import { moduleGate } from "@/lib/module-gate";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
@@ -41,10 +44,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
    * Isto é EXIBIÇÃO, não permissão: quem alcançava as 7.522 ações continua
    * alcançando, a um clique em "Todas". A regra de quem vê o quê segue no banco.
    */
-  const minhasNaUrl = asList(sp.minhas);
-  const mine = minhasNaUrl.length === 0
-    ? MINHA_PADRAO
-    : (minhasNaUrl.filter((v) => (MINHA_PAPEIS as readonly string[]).includes(v)) as MinhaPapel[]);
+  const mine = resolverMinhas(asList(sp.minhas));
 
   // filtros vivem na URL: a busca é feita no banco, sobre a base inteira
   const filters = {
@@ -232,7 +232,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   }
   // `minhas` entra aqui como veio da URL, e não resolvido: trocar de página não
   // pode transformar um "Todas" explícito no padrão de novo
-  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, minhas: sp.minhas })) {
+  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, [MINHA_PARAM]: sp.minhas })) {
     asList(v).forEach((x) => pagerQuery.append(k, x));
   }
 
