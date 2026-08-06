@@ -85,6 +85,15 @@ const monthLabel = (month: string) => {
 
 const BAR_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", parcial: "var(--mh-warning)", nao_atingida: "var(--mh-danger)", pendente: "transparent" };
 
+/**
+ * Quantos colaboradores o aviso de mês proporcional detalha antes de resumir.
+ *
+ * Sem teto, um admin abrindo a empresa inteira num mês de férias coletivas
+ * receberia uma parede de texto acima da tabela, e o aviso deixaria de ser aviso.
+ * Os detalhados são os mais afetados, que são os que geram pergunta.
+ */
+const MAX_AVISO = 5;
+
 type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: number | null; actual: number | null; weight: number; partial: number | null; rvShare: number | null; rvPay: number; entryStatus: Enums<"goal_entry_status"> | null; reprovalNote: string | null };
 
 export function IndividualGoalsFarol({
@@ -289,6 +298,8 @@ export function IndividualGoalsFarol({
     // Com vários, cada um teria o seu recorte e o rótulo mentiria, então lá fica
     // só o valor e o aviso abaixo detalha um por um.
     const rvDiasMes = donosComPote.size === 1 && descontos.length === 1 ? descontos[0].f : null;
+    // mais afetado primeiro: é quem perde mais e quem vai perguntar
+    descontos.sort((a, b) => a.f.fator - b.f.fator || a.nome.localeCompare(b.nome, "pt-BR"));
     return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes, descontos, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
   }, [filtered, mode, period, year, rvFor, fatorFor]);
 
@@ -490,8 +501,11 @@ export function IndividualGoalsFarol({
         >
           <CalendarOff size={16} style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 3 }} aria-hidden />
           <div style={{ fontSize: "0.84rem", lineHeight: 1.5, minWidth: 0 }}>
-            <strong>Remuneração variável proporcional em {monthLabel(month)}</strong>
-            {view.descontos.map((d) => {
+            <strong>
+              Remuneração variável proporcional em {monthLabel(month)}
+              {view.descontos.length > 1 && ` · ${view.descontos.length} colaboradores`}
+            </strong>
+            {view.descontos.slice(0, MAX_AVISO).map((d) => {
               const eu = d.ownerId === currentUserId;
               const quem = eu ? "Você" : d.nome;
               const periodos = ausenciasDoMes(d.ownerId, d.f.dias);
@@ -512,6 +526,12 @@ export function IndividualGoalsFarol({
                 </p>
               );
             })}
+            {view.descontos.length > MAX_AVISO && (
+              <p className="muted" style={{ margin: "0.3rem 0 0" }}>
+                E mais {view.descontos.length - MAX_AVISO} colaborador(es) com mês proporcional.
+                Filtre por colaborador para ver o detalhe de cada um.
+              </p>
+            )}
             <p className="muted" style={{ margin: "0.45rem 0 0", fontSize: "0.78rem" }}>
               O atingimento das metas não muda: a proporção vale só para o valor a pagar.
             </p>
