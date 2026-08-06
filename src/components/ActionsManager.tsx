@@ -39,7 +39,9 @@ export type DemandaCard = {
 /** Campos que aceitam vários valores ao mesmo tempo. */
 export type ActionFilters = {
   q: string; sdpo: string; from: string; to: string;
-  priority: string[]; status: string[]; programa: string[];
+  // sem `priority`: o filtro saiu da tela e o campo sai junto, senão um link
+  // antigo com ?prio=alta continuaria recortando a lista sem nada marcado à vista
+  status: string[]; programa: string[];
   pilar: string[]; meeting: string[]; requester: string[]; assignee: string[];
   /**
    * "Minhas ações", por PAPEL. Vazio = todas da empresa.
@@ -53,7 +55,7 @@ export type ActionFilters = {
 /** Estado "sem filtro nenhum", usado ao limpar. */
 const VAZIO: ActionFilters = {
   q: "", sdpo: "", from: "", to: "",
-  priority: [], status: [], programa: [], pilar: [], meeting: [], requester: [], assignee: [],
+  status: [], programa: [], pilar: [], meeting: [], requester: [], assignee: [],
   mine: [],
 };
 
@@ -170,7 +172,7 @@ function PapeisDropdown({ selected, onToggle }: { selected: MinhaPapel[]; onTogg
 
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
-  q: "q", priority: "prio", sdpo: "sdpo", status: "st",
+  q: "q", sdpo: "sdpo", status: "st",
   programa: "prog", pilar: "pilar", meeting: "reuniao",
   requester: "sol", assignee: "resp", from: "de", to: "ate",
   mine: "minhas",
@@ -398,16 +400,15 @@ export function ActionsManager({
         return { a, items: its };
       })
       .filter(({ items }) => items.length > 0)
-      // busca livre: se a ação casa, mantém todas as demandas; senão, só as que casam
+      // Busca só por ID e descrição. Antes varria pilar, seção, bloco, item,
+      // solicitante, KPI, ferramenta e nome de responsável, e o resultado vinha
+      // cheio de ação que não tinha o termo em lugar nenhum visível na linha:
+      // quem procurava por um nome caía em tudo que aquela pessoa pedia. Cada um
+      // desses campos tem filtro próprio ao lado, que faz o recorte sem ambiguidade.
       .map(({ a, items }) => {
         if (!term) return { a, items };
-        const actionHay = norm(
-          [`#${a.code}`, a.pilarName, a.secaoName, a.blocoName, a.itemName, a.requesterName, a.kpiName, a.toolName]
-            .filter(Boolean).join(" "),
-        );
-        if (actionHay.includes(term)) return { a, items };
-        const its = items.filter((x) => norm([x.d.description, ...x.d.assigneeNames].join(" ")).includes(term));
-        return { a, items: its };
+        if (norm(`#${a.code}`).includes(term)) return { a, items };
+        return { a, items: items.filter((x) => norm(x.d.description).includes(term)) };
       })
       .filter(({ items }) => items.length > 0);
   }, [actions, term, filters.status, filters.assignee]);
@@ -485,13 +486,13 @@ export function ActionsManager({
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.85rem" }}>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>Buscar</span>
-                <input className="input" value={qDraft} onChange={(e) => setQDraft(e.target.value)} placeholder="#ID, descrição, responsável…" style={{ width: "100%" }} />
+                <input className="input" value={qDraft} onChange={(e) => setQDraft(e.target.value)} placeholder="#ID ou descrição…" style={{ width: "100%" }} />
               </label>
               <MultiSelect
-                label="Prioridade" allLabel="Todas"
-                options={Object.entries(PRIORITY).map(([v, l]) => ({ value: v, label: l }))}
-                selected={filtrosVistos.priority}
-                onChange={(v) => applyFilters({ priority: v })}
+                label="Status"
+                options={(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => ({ value: k, label: EFF_STATUS_LABEL[k] }))}
+                selected={filtrosVistos.status}
+                onChange={(v) => applyFilters({ status: v })}
               />
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                 <span className="label" style={{ margin: 0 }}>SDPO</span>
@@ -501,12 +502,6 @@ export function ActionsManager({
                   <option value="nao">Não</option>
                 </select>
               </label>
-              <MultiSelect
-                label="Status"
-                options={(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => ({ value: k, label: EFF_STATUS_LABEL[k] }))}
-                selected={filtrosVistos.status}
-                onChange={(v) => applyFilters({ status: v })}
-              />
               <MultiSelect
                 label="Programa"
                 options={programaOpts.map((p) => ({ value: p, label: p }))}
@@ -546,11 +541,11 @@ export function ActionsManager({
                 onChange={(v) => applyFilters({ assignee: v })}
               />
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Aberta de</span>
+                <span className="label" style={{ margin: 0 }}>Criada em</span>
                 <input type="date" className="input" value={filtrosVistos.from} onChange={(e) => applyFilters({ from: e.target.value })} />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Aberta até</span>
+                <span className="label" style={{ margin: 0 }}>Criada até</span>
                 <input type="date" className="input" value={filtrosVistos.to} onChange={(e) => applyFilters({ to: e.target.value })} />
               </label>
             </div>

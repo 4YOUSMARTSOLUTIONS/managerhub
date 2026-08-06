@@ -14,7 +14,7 @@ const PAGE_SIZE = 50;
 /** Multivalor chega como parâmetro repetido (?sol=A&sol=B) e vira string[]. */
 type SP = {
   p?: string; q?: string; sdpo?: string; de?: string; ate?: string;
-  prio?: string | string[]; st?: string | string[]; prog?: string | string[];
+  st?: string | string[]; prog?: string | string[];
   pilar?: string | string[]; reuniao?: string | string[];
   sol?: string | string[]; resp?: string | string[];
   minhas?: string | string[];
@@ -49,7 +49,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   // filtros vivem na URL: a busca é feita no banco, sobre a base inteira
   const filters = {
     q: sp.q ?? "", sdpo: sp.sdpo ?? "", from: sp.de ?? "", to: sp.ate ?? "",
-    priority: asList(sp.prio), status: asList(sp.st), programa: asList(sp.prog),
+    status: asList(sp.st), programa: asList(sp.prog),
     pilar: asList(sp.pilar), meeting: asList(sp.reuniao),
     requester: asList(sp.sol), assignee: asList(sp.resp),
     mine,
@@ -232,7 +232,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   }
   // `minhas` entra aqui como veio da URL, e não resolvido: trocar de página não
   // pode transformar um "Todas" explícito no padrão de novo
-  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, [MINHA_PARAM]: sp.minhas })) {
+  for (const [k, v] of Object.entries({ st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, [MINHA_PARAM]: sp.minhas })) {
     asList(v).forEach((x) => pagerQuery.append(k, x));
   }
 
