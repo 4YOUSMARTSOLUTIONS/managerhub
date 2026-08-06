@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, Filter, MessageSquare, User } from "lucide-react";
+// sem ícone de "marcado" nos papéis: o preenchimento do segmento já diz isso, e
+// um check em cada um devolveria o peso que este controle acabou de perder
+import { Filter, MessageSquare, User } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -73,6 +75,58 @@ export type FilterOptions = {
 };
 
 const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações antigas.";
+
+/**
+ * Segmentado miúdo do cabeçalho.
+ *
+ * Não usa `.btn` de propósito: o botão do sistema tem altura para ser o alvo
+ * principal de uma tela, e aqui são cinco controles dividindo a linha com o
+ * título e o funil. Com a altura de botão, a linha estourava e o recorte, que é
+ * secundário, gritava mais que a lista.
+ */
+const grupoSeg: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 2,
+  padding: 2,
+  borderRadius: 999,
+  border: "1px solid var(--mh-border)",
+  background: "var(--mh-surface-2)",
+};
+
+function Seg({ on, onClick, title, children }: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.25rem",
+        padding: "0.2rem 0.55rem",
+        fontSize: "0.72rem",
+        fontWeight: 600,
+        lineHeight: 1.5,
+        whiteSpace: "nowrap",
+        border: "none",
+        borderRadius: 999,
+        cursor: "pointer",
+        background: on ? "var(--mh-primary)" : "transparent",
+        color: on ? "#fff" : "var(--text-muted)",
+        transition: "background 120ms, color 120ms",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
@@ -343,7 +397,32 @@ export function ActionsManager({
            clicável: o usuário pode marcar o próximo filtro sem esperar este */
         bodyStyle={isPending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}
         action={
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {/* MODO DA TELA, fora do painel de filtros de propósito: é o recorte
+                principal e precisa estar à vista, não atrás de um funil.
+                Segmentado e miúdo porque divide a linha do cabeçalho com os
+                outros controles; os dois grupos ficam separados para não lerem
+                como uma escolha única de cinco opções. */}
+            <div style={grupoSeg}>
+              <Seg on={minhasLigado} onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }} title="Só as ações ligadas a você">
+                <User size={12} /> Minhas
+              </Seg>
+              <Seg on={!minhasLigado} onClick={() => { if (minhasLigado) aplicarMinhas([]); }} title="Todas as ações que você alcança">
+                Todas
+              </Seg>
+            </div>
+            {minhasLigado && (
+              <>
+                <span className="muted" style={{ fontSize: "0.72rem" }}>como</span>
+                <div style={grupoSeg}>
+                  {MINHA_PAPEIS.map((p) => (
+                    <Seg key={p} on={minhas.includes(p)} onClick={() => alternarPapel(p)} title={PAPEL_HINT[p]}>
+                      {PAPEL_LABEL[p]}
+                    </Seg>
+                  ))}
+                </div>
+              </>
+            )}
             {hasFilters && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>Limpar filtros</button>
             )}
@@ -360,50 +439,6 @@ export function ActionsManager({
           </div>
         }
       >
-        {/* MODO DA TELA, fora do painel de filtros de propósito.
-            A tela abria com as 7.522 ações da empresa e cabia à pessoa se achar no
-            meio. O caso normal é querer o que está no colo dela, e o papel muda a
-            pergunta: responsável executa, solicitante cobra, criador só registrou. */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", padding: "0.7rem 1.25rem", borderBottom: "1px solid var(--mh-border)" }}>
-          <span className="label" style={{ margin: 0 }}>Mostrar</span>
-          <button
-            type="button"
-            className={`btn btn-sm ${minhasLigado ? "btn-primary" : "btn-ghost"}`}
-            onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
-          >
-            <User size={14} /> Minhas
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${minhasLigado ? "btn-ghost" : "btn-primary"}`}
-            onClick={() => { if (minhasLigado) aplicarMinhas([]); }}
-          >
-            Todas
-          </button>
-          {minhasLigado && (
-            <>
-              <span className="muted" style={{ fontSize: "0.8rem" }}>como</span>
-              {MINHA_PAPEIS.map((p) => {
-                const on = minhas.includes(p);
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`btn btn-sm ${on ? "btn-primary" : "btn-ghost"}`}
-                    title={PAPEL_HINT[p]}
-                    onClick={() => alternarPapel(p)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
-                  >
-                    {on && <Check size={13} />}
-                    {PAPEL_LABEL[p]}
-                  </button>
-                );
-              })}
-            </>
-          )}
-        </div>
-
         {filtersOpen && (
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)", background: "var(--mh-surface-2)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.85rem" }}>
