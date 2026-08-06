@@ -58,6 +58,7 @@ const FIELD_LABEL: Record<string, string> = {
   gender: "Sexo", cpf: "CPF", email: "E-mail", phone: "Telefone", employee_code: "Código funcionário",
   admission_date: "Admissão", birth_date: "Nascimento", day: "Data", nps_score: "NPS", nps_comment: "Comentário NPS",
   resolved_at: "Resolvido em", approval_requested_at: "Aprovação solicitada em",
+  problem_statement: "Problema/Diagnóstico",
 };
 
 const fieldLabel = (f: string) => FIELD_LABEL[f] ?? f;

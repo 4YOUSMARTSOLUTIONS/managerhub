@@ -21,7 +21,7 @@ export type CollectedAction = {
   payload: {
     is_sdpo: boolean; pilar_id: string; secao_id: string; bloco_id: string; item_id: string;
     meeting_series_id: string; kpi_id: string; tool_id: string; unit_id?: string;
-    requester_id: string; due_date: string; priority: string; cc: string[];
+    requester_id: string; problem_statement: string; due_date: string; priority: string; cc: string[];
     demandas: { description: string; assignees: string[] }[];
   };
   headerFiles: File[];
@@ -67,6 +67,7 @@ export function ActionDialog({
   const [toolId, setToolId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("medium");
+  const [problema, setProblema] = useState("");
   const [requesterId, setRequesterId] = useState("");
   const [cc, setCc] = useState<string[]>([]);
   const [demandas, setDemandas] = useState<Demanda[]>([{ description: "", assignees: [], files: [] }]);
@@ -91,12 +92,14 @@ export function ActionDialog({
       setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
       setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || defaultUnitId || "all");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
+      setProblema(p.problem_statement ?? "");
       setDemandas(p.demandas.map((d, i) => ({ description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
       setFiles(editing.headerFiles);
     } else {
       setIsSdpo(true); setPilarId(""); setSecaoId(""); setBlocoId(""); setItemId("");
       setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId(""); setUnitId(defaultUnitId ?? "");
       setDueDate(""); setPriority("medium"); setRequesterId(defaultRequesterId ?? ""); setCc([]);
+      setProblema("");
       setDemandas([{ description: "", assignees: defaultAssignees ?? [], files: [] }]); setFiles([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +202,7 @@ export function ActionDialog({
     setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setOccurrenceId(lockedSeries ? "" : p.occurrence_id);
     setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(defaultUnitId ?? "");
     setRequesterId(p.requester_id); setCc(p.cc);
-    setPriority(p.priority); setDueDate(p.due_date);
+    setPriority(p.priority); setDueDate(p.due_date); setProblema(p.problem_statement);
     const allDemandas = res.actions.flatMap((a) => a.payload.demandas);
     setDemandas(
       allDemandas.length
@@ -227,7 +230,7 @@ export function ActionDialog({
           pilar_id: pilarId, secao_id: secaoId, bloco_id: blocoId, item_id: itemId,
           meeting_series_id: seriesId,
           kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
-          requester_id: requesterId, due_date: dueDate, priority, cc,
+          requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
           demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
         },
         headerFiles: files,
@@ -243,7 +246,7 @@ export function ActionDialog({
       pilar_id: pilarId, secao_id: secaoId, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
       kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
-      requester_id: requesterId, due_date: dueDate, priority, cc,
+      requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
       demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
     };
     const fd = new FormData();
@@ -258,6 +261,9 @@ export function ActionDialog({
       if (keepOpen) {
         setDemandas([{ description: "", assignees: [], files: [] }]);
         setFiles([]);
+        // o problema é conteúdo da ação, não parâmetro: limpa junto com a descrição,
+        // senão a próxima ação nasce com o diagnóstico da anterior
+        setProblema("");
         setSaved("Ação criada. Os parâmetros foram mantidos — adicione a próxima.");
       } else {
         onClose();
@@ -350,6 +356,22 @@ export function ActionDialog({
             <div>
               <label className="label">Prazo <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Problema/Diagnóstico: fica acima da cascata SDPO de propósito, é o
+              contexto que o responsável lê antes de executar */}
+          <div style={{ background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
+            <label className="label">Problema / Diagnóstico <span className="soft">(opcional)</span></label>
+            <textarea
+              className="textarea"
+              value={problema}
+              onChange={(e) => setProblema(e.target.value)}
+              placeholder="Ex.: o giro de vasilhame caiu 12% no trimestre e os relatórios chegam sem o corte por rota, o que impede identificar onde está a perda."
+              style={{ minHeight: 76 }}
+            />
+            <div className="soft" style={{ fontSize: "0.76rem", marginTop: "0.35rem" }}>
+              Qual problema esta ação resolve? É isto que o responsável vê ao abrir a demanda.
             </div>
           </div>
 

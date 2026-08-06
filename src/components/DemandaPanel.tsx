@@ -10,7 +10,7 @@ import { formatDate, formatDateTime, isOverdue } from "@/lib/format";
 import {
   getDemandaTimeline, demandaComment, demandaRequest,
   demandaDecide, demandaReopen, demandaCancel, demandaReassign, getAttachmentUrl,
-  demandaAssigneeSubmit, demandaAssigneeDecide, demandaAssigneeReopen,
+  demandaAssigneeSubmit, demandaAssigneeDecide, demandaAssigneeReopen, demandaSetProblem,
   type TimelineEvent, type PendingReq,
 } from "@/lib/actions/actions";
 import { PeoplePicker, type Person } from "./PeoplePicker";
@@ -31,6 +31,8 @@ export type DemandaInfo = {
   assigneeStates: AssigneeState[];
   attachments: { id: string; filename: string; path: string }[];
   requesterName: string | null;
+  /** Problema/diagnóstico. É do CABEÇALHO da ação: as demandas irmãs mostram o mesmo. */
+  problem: string | null;
   ccNames: string[];
   isSdpo: boolean;
   pilarName: string | null;
@@ -101,6 +103,9 @@ export function DemandaPanel({
   const [requests, setRequests] = useState<PendingReq[]>([]);
   const [status, setStatus] = useState<Enums<"action_status">>("open");
   const [due, setDue] = useState<string | null>(null);
+  // o painel recebe um retrato da ação feito na hora do clique; sem estado local o
+  // problema recém-salvo só apareceria ao reabrir
+  const [problema, setProblema] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [mode, setMode] = useState<string>("");
   const [note, setNote] = useState("");
@@ -115,7 +120,7 @@ export function DemandaPanel({
   useEffect(() => {
     if (open && demanda) {
       setComment(""); setMode(""); setNote(""); setDueInput(""); setError("");
-      setStatus(demanda.status); setDue(demanda.dueDate);
+      setStatus(demanda.status); setDue(demanda.dueDate); setProblema(demanda.problem);
       setReassignIds(demanda.assigneeIds);
       load(demanda.id);
     }
@@ -175,6 +180,15 @@ export function DemandaPanel({
         </div>
 
         <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+          {/* Problema/Diagnóstico antes da ficha: a ordem de leitura é o quê (título),
+              por quê (aqui) e só então os detalhes */}
+          {problema && (
+            <div style={{ background: "var(--surface-2)", borderRadius: 9, borderLeft: "3px solid var(--mh-primary-500)", padding: "0.85rem 1.15rem" }}>
+              <div className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em" }}>Problema / Diagnóstico</div>
+              <div style={{ fontSize: "0.88rem", marginTop: 4, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{problema}</div>
+            </div>
+          )}
+
           {/* informações da ação */}
           <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "1rem 1.15rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.9rem" }}>
             <Field label="Prazo"><span style={{ color: due && !finalizada && isOverdue(due) ? "var(--mh-danger)" : undefined }}>{due ? formatDate(due) : "—"}</span></Field>
@@ -269,6 +283,22 @@ export function DemandaPanel({
             {canManage && !finalizada && <Btn m="reassign" label="Reatribuir" />}
             {canManage && !finalizada && <Btn m="cancel" label="Cancelar" tone="danger" />}
             {canManage && status === "done" && <Btn m="reopen" label="Reabrir" />}
+            {/* sem gate de `finalizada`: preencher o problema de ação antiga já
+                concluída é o caso de uso principal deste botão */}
+            {canManage && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  const aberto = mode === "problema";
+                  setMode(aberto ? "" : "problema");
+                  setNote(aberto ? "" : (problema ?? ""));
+                  setDueInput("");
+                }}
+              >
+                {problema ? "Editar problema" : "Informar problema"}
+              </button>
+            )}
           </div>
 
           {/* Mini-formulários */}
@@ -289,6 +319,34 @@ export function DemandaPanel({
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
               <input className="input" placeholder="Motivo da reabertura (opcional)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: "1 1 240px" }} />
               <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaReopen(demanda.id, note))}>Reabrir</button>
+            </div>
+          )}
+          {mode === "problema" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <textarea
+                className="textarea"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Qual problema esta ação resolve?"
+                style={{ minHeight: 90 }}
+              />
+              <span className="soft" style={{ fontSize: "0.78rem" }}>Vale para todas as demandas desta ação.</span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={pending}
+                style={{ alignSelf: "flex-start" }}
+                onClick={() => {
+                  const texto = note.trim();
+                  run(async () => {
+                    const res = await demandaSetProblem(demanda.id, note);
+                    if (!res.error) setProblema(texto || null);
+                    return res;
+                  });
+                }}
+              >
+                Salvar problema
+              </button>
             </div>
           )}
           {mode === "reassign" && (

@@ -353,6 +353,7 @@ export type ActionRow = {
   unitName: string | null;
   requesterId: string | null;
   requesterName: string | null;
+  problem: string | null;
   createdAt: string;
   priority: Enums<"priority_level">;
   dueDate: string | null;
@@ -427,6 +428,7 @@ export function ActionsManager({
         assigneeStates: d.assigneeStates,
         attachments: d.attachments,
         requesterName: a.requesterName,
+        problem: a.problem,
         ccNames: a.ccNames,
         isSdpo: a.isSdpo,
         pilarName: a.pilarName,

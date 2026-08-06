@@ -224,6 +224,7 @@ export type SuggestedActionPayload = {
   kpi_id: string;
   tool_id: string;
   requester_id: string;
+  problem_statement: string;
   due_date: string;
   priority: string;
   cc: string[];
@@ -290,13 +291,17 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       "\"reuniao_index\" (índice da lista de Reuniões, ou null), " +
       "\"referencia_data\" (data YYYY-MM-DD de uma ocorrência específica da reunião citada, ou null), " +
       "\"solicitante\" (nome de quem pediu a ação, da lista de Pessoas, ou null), " +
-      "\"em_copia\" (array de nomes da lista de Pessoas que devem ter conhecimento), e " +
+      "\"em_copia\" (array de nomes da lista de Pessoas que devem ter conhecimento), " +
+      "\"problema\" (string: o problema, a situação ou o diagnóstico que motivou esta ação, nas palavras do próprio texto, ou null), e " +
       "\"demandas\" (array com 1+ objetos { \"descricao\": string, \"responsaveis\": [nomes] }). " +
       "Regras: para nomes (responsaveis, solicitante, em_copia) use SOMENTE nomes que aparecem na lista de Pessoas; " +
       "para índices use SOMENTE valores válidos dos catálogos fornecidos (nunca invente índices); " +
       "preencha um campo APENAS quando a informação estiver clara no texto — caso contrário use null (ou array vazio). " +
       "\"ferramenta_index\": preencha SOMENTE se o texto mencionar EXPLICITAMENTE o nome de uma das Ferramentas de gestão listadas " +
       "(ex.: \"usar 5W2H\", \"aplicar PDCA\"); NUNCA infira ou deduza uma ferramenta a partir do contexto — na dúvida, use null. " +
+      "\"problema\": preencha SOMENTE se o texto descrever a situação, a causa ou o motivo por trás da ação; " +
+      "NUNCA reescreva a própria tarefa como se fosse o problema, e NUNCA produza frases genéricas de gestão " +
+      "(ex.: \"melhorar a eficiência do processo\") — na dúvida, use null. " +
       "seja fiel ao texto — NÃO invente nada que não esteja no rascunho. " +
       (input.single
         ? "IMPORTANTE: consolide TUDO em UMA única ação (um único objeto no array \"acoes\") com quantas demandas forem necessárias. "
@@ -434,6 +439,7 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
           kpi_id,
           tool_id,
           requester_id,
+          problem_statement: toText(obj.problema),
           due_date,
           priority,
           cc,

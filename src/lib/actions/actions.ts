@@ -19,6 +19,8 @@ export type ActionPayload = {
   kpi_id: string;
   tool_id: string;
   requester_id: string;
+  /** Problema/diagnóstico que motivou a ação. Do cabeçalho: vale para todas as demandas. */
+  problem_statement: string;
   due_date: string;
   cc: string[];
   demandas: { description: string; assignees: string[] }[];
@@ -388,6 +390,21 @@ export async function demandaReassign(demandaId: string, userIds: string[], note
   try {
     const { supabase } = await actionContext();
     const { error } = await supabase.rpc("demanda_reassign", { p_demanda: demandaId, p_users: userIds, p_note: note });
+    if (error) return { error: error.message };
+    rv();
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+/**
+ * Preenche ou corrige o Problema/Diagnóstico. Recebe a demanda porque é o que o
+ * painel conhece, mas escreve no CABEÇALHO: muda o que todas as demandas irmãs
+ * da mesma ação exibem.
+ */
+export async function demandaSetProblem(demandaId: string, texto: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("demanda_set_problem", { p_demanda: demandaId, p_texto: texto });
     if (error) return { error: error.message };
     rv();
     return { ok: true };

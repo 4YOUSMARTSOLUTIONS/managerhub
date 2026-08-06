@@ -242,6 +242,7 @@ export function RegisterDialog({
           is_sdpo: p.is_sdpo, pilar_id: p.pilar_id, secao_id: p.secao_id, bloco_id: p.bloco_id, item_id: p.item_id,
           meeting_series_id: series.id, kpi_id: p.kpi_id, tool_id: p.tool_id,
           requester_id: p.requester_id || defaultRequester,
+          problem_statement: p.problem_statement,
           due_date: p.due_date, priority: p.priority, cc: p.cc,
           demandas: p.demandas,
         },

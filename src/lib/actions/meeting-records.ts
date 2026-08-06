@@ -269,7 +269,7 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
   // o recorte (série, ocorrência atual, demandas relevantes) já veio da RPC
   const { data: acts, error: errActs } = await supabase
     .from("actions")
-    .select("id, code, is_sdpo, priority, due_date, requester_id, occurrence_id, pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id, meeting_series_id")
+    .select("id, code, is_sdpo, priority, due_date, requester_id, problem_statement, occurrence_id, pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id, meeting_series_id")
     .in("id", relevantes)
     .order("code", { ascending: true });
   if (errActs) console.error("[getMeetingFollow] ações", errActs);
@@ -352,6 +352,7 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
           assigneeStates: asgStates.get(d.id) ?? [],
           attachments: attByDemanda.get(d.id) ?? [],
           requesterName: a.requester_id ? (nameById.get(a.requester_id) ?? null) : null,
+          problem: a.problem_statement,
           ccNames: ccByAction.get(a.id) ?? [],
           isSdpo: a.is_sdpo,
           pilarName: a.pilar_id ? catalog.pilar.get(a.pilar_id) ?? null : null,
@@ -643,6 +644,7 @@ export type CollectedDraft = {
   payload: {
     is_sdpo: boolean; pilar_id: string; secao_id: string; bloco_id: string; item_id: string;
     meeting_series_id: string; kpi_id: string; tool_id: string; requester_id: string;
+    problem_statement: string;
     due_date: string; priority: string; cc: string[];
     demandas: { description: string; assignees: string[] }[];
   };

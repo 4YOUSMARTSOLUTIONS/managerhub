@@ -219,6 +219,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     unitName: (a.unit_id ? unitById.get(a.unit_id) ?? null : null) ?? a.legacy_unit ?? null,
     requesterId: a.requester_id,
     requesterName: (a.requester_id ? nameById.get(a.requester_id) ?? null : null) ?? a.legacy_requester ?? null,
+    problem: a.problem_statement,
     createdAt: a.created_at,
     priority: a.priority,
     dueDate: a.due_date,
