@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-// sem ícone de "marcado" nos papéis: o preenchimento do segmento já diz isso, e
-// um check em cada um devolveria o peso que este controle acabou de perder
-import { Filter, MessageSquare, User } from "lucide-react";
+import { Check, ChevronDown, Filter, MessageSquare, User } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -101,6 +99,72 @@ function Seg({ on, onClick, title, children }: {
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Os papéis, recolhidos: só o escolhido aparece, o resto abre ao clicar.
+ *
+ * Não usa o `MultiSelect` do painel de filtros, apesar de ser a mesma ideia:
+ * aquele é um campo de formulário com rótulo em cima e altura de `.select`, e
+ * traria de volta o peso que este cabeçalho acabou de perder.
+ *
+ * O painel NÃO fecha ao marcar, porque a escolha é múltipla e fechar a cada
+ * clique obrigaria a reabrir para somar o segundo papel.
+ */
+function PapeisDropdown({ selected, onToggle }: { selected: MinhaPapel[]; onToggle: (p: MinhaPapel) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const fora = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fora); document.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  // com dois ou três marcados o nome não cabe, e listar todos anularia o ganho
+  const resumo = selected.length === 1 ? PAPEL_LABEL[selected[0]] : `${selected.length} papéis`;
+
+  return (
+    <div ref={box} style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        type="button"
+        className="btn btn-xs btn-primary"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={selected.map((p) => PAPEL_LABEL[p]).join(", ")}
+      >
+        {resumo}
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <div
+          className="card"
+          style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 40, padding: "0.25rem", minWidth: 168, boxShadow: "var(--mh-shadow-e3)" }}
+        >
+          {MINHA_PAPEIS.map((p) => {
+            const on = selected.includes(p);
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onToggle(p)}
+                title={PAPEL_HINT[p]}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.45rem", padding: "0.32rem 0.4rem", background: on ? "var(--surface-2)" : "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.78rem", color: "var(--text)" }}
+              >
+                <span style={{ width: 13, height: 13, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "var(--mh-primary-500)" : "transparent" }}>
+                  {on && <Check size={10} color="#fff" />}
+                </span>
+                {PAPEL_LABEL[p]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -393,13 +457,7 @@ export function ActionsManager({
             {minhasLigado && (
               <>
                 <span className="muted" style={{ fontSize: "0.68rem" }}>como</span>
-                <div style={{ display: "inline-flex", gap: "0.2rem" }}>
-                  {MINHA_PAPEIS.map((p) => (
-                    <Seg key={p} on={minhas.includes(p)} onClick={() => alternarPapel(p)} title={PAPEL_HINT[p]}>
-                      {PAPEL_LABEL[p]}
-                    </Seg>
-                  ))}
-                </div>
+                <PapeisDropdown selected={minhas} onToggle={alternarPapel} />
               </>
             )}
           </div>
