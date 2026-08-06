@@ -100,10 +100,76 @@ const CAMPOS = [
   { key: "meeting", label: "Reunião" },
   { key: "requester", label: "Solicitante" },
   { key: "assignee", label: "Responsável" },
-  { key: "from", label: "Criada em" },
-  { key: "to", label: "Criada até" },
+  // um campo só, e não "de" e "até" separados: período é UMA informação, e em
+  // pílulas separadas dava para remover uma metade e sair com o recorte pela
+  // metade sem perceber
+  { key: "periodo", label: "Criada" },
 ] as const;
 type CampoKey = (typeof CAMPOS)[number]["key"];
+
+/**
+ * Período de criação, num campo só.
+ *
+ * As duas datas entram e saem juntas: "de 01/07 até 31/07" é uma informação, e
+ * separá-las deixava remover uma ponta e continuar filtrando pela outra sem que
+ * a tela dissesse nada. Preencher só uma ponta continua valendo, e o resumo diz
+ * qual das duas é ("a partir de", "até").
+ */
+function PeriodoPilula({ from, to, onChange }: {
+  from: string;
+  to: string;
+  onChange: (patch: { from?: string; to?: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const fora = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fora); document.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  const resumo = from && to ? `${formatDate(from)} a ${formatDate(to)}`
+    : from ? `a partir de ${formatDate(from)}`
+    : to ? `até ${formatDate(to)}`
+    : "Qualquer data";
+
+  return (
+    <div ref={box} style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", maxWidth: 280, padding: "0.24rem 0.5rem", fontSize: "0.76rem", lineHeight: 1.5, borderRadius: "6px 0 0 6px", border: "1px solid var(--mh-border)", background: "var(--mh-surface-1)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>Criada:</span>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: from || to ? "var(--text)" : "var(--text-muted)" }}>{resumo}</span>
+        <ChevronDown size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div
+          className="card"
+          style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 40, padding: "0.6rem", minWidth: 210, boxShadow: "var(--mh-shadow-e3)", display: "flex", flexDirection: "column", gap: "0.5rem" }}
+        >
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            <span className="label" style={{ margin: 0 }}>De</span>
+            <input type="date" className="input" value={from} onChange={(e) => onChange({ from: e.target.value })} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            <span className="label" style={{ margin: 0 }}>Até</span>
+            <input type="date" className="input" value={to} onChange={(e) => onChange({ to: e.target.value })} />
+          </label>
+          {from && to && to < from && (
+            <span style={{ color: "var(--mh-danger)", fontSize: "0.72rem" }}>A data final é anterior à inicial.</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** casca da pílula: o × limpa o valor E tira o filtro da tela, nessa ordem */
 function Pilula({ onRemove, children }: { onRemove: () => void; children: React.ReactNode }) {
@@ -486,6 +552,9 @@ export function ActionsManager({
    */
   const [adicionados, setAdicionados] = useState<Set<CampoKey>>(new Set());
   const temValor = (k: CampoKey) => {
+    // o período é uma pílula só sobre DUAS chaves de filtro; qualquer ponta
+    // preenchida já conta como em uso
+    if (k === "periodo") return !!filtrosVistos.from || !!filtrosVistos.to;
     const v = filtrosVistos[k];
     return Array.isArray(v) ? v.length > 0 : !!v;
   };
@@ -493,20 +562,10 @@ export function ActionsManager({
 
   const removerFiltro = (k: CampoKey) => {
     setAdicionados((s) => { const n = new Set(s); n.delete(k); return n; });
+    // as duas pontas do período saem juntas, senão sobraria metade do recorte
+    if (k === "periodo") { applyFilters({ from: "", to: "" }); return; }
     applyFilters({ [k]: Array.isArray(VAZIO[k]) ? [] : "" } as Partial<ActionFilters>);
   };
-
-  const dataDoFiltro = (k: "from" | "to", rotulo: string) => (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.16rem 0.5rem", fontSize: "0.76rem", border: "1px solid var(--mh-border)", borderRadius: "6px 0 0 6px", background: "var(--mh-surface-1)" }}>
-      <span style={{ color: "var(--text-muted)" }}>{rotulo}:</span>
-      <input
-        type="date"
-        value={filtrosVistos[k]}
-        onChange={(e) => applyFilters({ [k]: e.target.value } as Partial<ActionFilters>)}
-        style={{ border: "none", background: "none", color: "var(--text)", font: "inherit", padding: 0, colorScheme: "dark" }}
-      />
-    </span>
-  );
 
   const campoDoFiltro = (k: CampoKey) => {
     switch (k) {
@@ -541,10 +600,8 @@ export function ActionsManager({
         return <MultiSelect inline searchable label="Solicitante" legacyHint={PESSOA_LEGADA} options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.requester} onChange={(v) => applyFilters({ requester: v })} />;
       case "assignee":
         return <MultiSelect inline searchable label="Responsável" legacyHint={PESSOA_LEGADA} options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.assignee} onChange={(v) => applyFilters({ assignee: v })} />;
-      case "from":
-        return dataDoFiltro("from", "Criada em");
-      case "to":
-        return dataDoFiltro("to", "Criada até");
+      case "periodo":
+        return <PeriodoPilula from={filtrosVistos.from} to={filtrosVistos.to} onChange={(p) => applyFilters(p)} />;
     }
   };
 
