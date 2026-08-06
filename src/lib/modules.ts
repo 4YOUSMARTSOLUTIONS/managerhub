@@ -35,7 +35,7 @@ export type ModuleDef = {
   href: string;
   group: GroupKey | null; // null = item de topo
   core?: true; // sempre "on", não aparece na lista de venda
-  minRole?: "team_lead" | "manager" | "admin" | "super"; // restrição por papel (independente da venda)
+  minRole?: "team_lead" | "manager" | "admin" | "owner" | "super"; // restrição por papel (independente da venda)
 };
 
 export const MODULE_GROUPS: { key: GroupKey; label: string }[] = [
@@ -93,7 +93,10 @@ export const MODULES: ModuleDef[] = [
   { key: "seg_relatos", label: "Relatos", href: "/seguranca/relatos", group: "g_seguranca" },
   { key: "seg_epis", label: "Gestão de EPIs", href: "/seguranca/epis", group: "g_seguranca" },
 
-  { key: "auditoria", label: "Logs do sistema", href: "/auditoria", group: null, core: true, minRole: "manager" },
+  // só o proprietário por enquanto: o log mostra o de→para de toda alteração da
+  // empresa, inclusive salário, CPF e remuneração variável de quem o leitor não
+  // gerencia. Enquanto não houver recorte por escopo dentro da tela, fica fechado.
+  { key: "auditoria", label: "Logs do sistema", href: "/auditoria", group: null, core: true, minRole: "owner" },
   { key: "configuracoes", label: "Configurações", href: "/configuracoes", group: null, core: true, minRole: "admin" },
   { key: "admin", label: "Painel ADM", href: "/admin", group: null, core: true, minRole: "super" },
 ];

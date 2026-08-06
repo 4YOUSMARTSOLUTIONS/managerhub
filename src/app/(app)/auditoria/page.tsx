@@ -11,13 +11,17 @@ type SP = { p?: string; q?: string; acao?: string; tipo?: string; autor?: string
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<SP> }) {
   const { tenant, role } = await requireContext();
-  const canView = role === "owner" || role === "admin" || role === "manager";
+  // Só o proprietário por enquanto. O log é da empresa inteira e mostra o de→para
+  // de toda alteração, inclusive salário, CPF e remuneração variável de quem o
+  // leitor não gerencia. Admin e gestor saem daqui até a tela ter recorte próprio.
+  // Super admin de plataforma chega como "owner" pelo requireContext.
+  const canView = role === "owner";
 
   if (!canView) {
     return (
       <div>
         <PageHeader title="Logs do sistema" />
-        <EmptyState title="Acesso restrito" description="Apenas gestores e administradores podem ver os logs do sistema." />
+        <EmptyState title="Acesso restrito" description="Apenas o proprietário da empresa pode ver os logs do sistema." />
       </div>
     );
   }

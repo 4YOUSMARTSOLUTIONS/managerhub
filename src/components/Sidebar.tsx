@@ -74,6 +74,9 @@ export function Sidebar({
   // enxerga a mais vem da RLS, pelo vínculo de chefia, não do papel na tela.
   const canManage = role === "owner" || role === "admin" || role === "manager";
   const canAdmin = role === "owner" || role === "admin";
+  // super admin de plataforma entra na empresa já como "owner" (requireContext),
+  // então não precisa de exceção aqui
+  const isOwner = role === "owner";
   // "Gestor ou acima": quem tem alçada sobre uma equipe. Some do menu de quem
   // não lidera ninguém, para "Minha equipe" não virar item morto para ~880 pessoas.
   const canLeadTeam = canManage || role === "team_lead";
@@ -85,6 +88,7 @@ export function Sidebar({
     if (m.minRole === "team_lead" && !canLeadTeam) return false;
     if (m.minRole === "manager" && !canManage) return false;
     if (m.minRole === "admin" && !canAdmin) return false;
+    if (m.minRole === "owner" && !isOwner) return false;
     if (m.minRole === "super" && !isSuperAdmin) return false;
     return moduleState[m.key] !== "hidden";
   };
