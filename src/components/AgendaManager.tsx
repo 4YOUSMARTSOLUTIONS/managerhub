@@ -61,6 +61,11 @@ export function AgendaManager(props: {
     setMeDate(c);
   }, []);
 
+  // Diário de bordo de outra pessoa. Começa sempre no próprio usuário; a lista de
+  // quem pode ser escolhido repete a regra que o banco já aplica em
+  // agenda_can_view: owner/admin alcançam a empresa, gestor alcança a cadeia dele.
+  const [subject, setSubject] = useState(currentUserId);
+
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AgendaFull | null>(null);
   const [detail, setDetail] = useState<LogDetailCtx | null>(null);
@@ -188,30 +193,60 @@ export function AgendaManager(props: {
 
   const canEditAgenda = (a: AgendaFull) => isAdmin || a.ownerId === currentUserId;
 
+  // ----- de quem é o diário em tela -----
+  // Só entram na lista pessoas que têm agenda (como dona ou como responsável):
+  // sem agenda o dia vem vazio, e para o owner o seletor viraria o quadro de
+  // pessoal inteiro. O próprio usuário aparece sempre, mesmo sem agenda.
+  const comAgenda = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of agendas) { s.add(a.ownerId); s.add(a.responsibleId); }
+    return s;
+  }, [agendas]);
+
+  const subjectOptions = useMemo(() => {
+    const permitidos = isAdmin ? people.map((p) => p.id) : [currentUserId, ...reportIds];
+    const vistos = new Set<string>();
+    const outros: Opt[] = [];
+    for (const id of permitidos) {
+      if (id === currentUserId || vistos.has(id) || !comAgenda.has(id)) continue;
+      vistos.add(id);
+      outros.push({ id, name: nameById[id] ?? "Usuário" });
+    }
+    outros.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    return [{ id: currentUserId, name: "Minha agenda" }, ...outros];
+  }, [isAdmin, people, currentUserId, reportIds, comAgenda, nameById]);
+
+  // derivado em vez de efeito: se o escolhido sair da lista (troca de unidade no
+  // seletor do topo, agenda inativada), volta sozinho para o próprio usuário
+  const subjectId = subjectOptions.some((o) => o.id === subject) ? subject : currentUserId;
+  const isMe = subjectId === currentUserId;
+  const subjectName = isMe ? "Minha agenda" : (nameById[subjectId] ?? "Colaborador");
+  const subjectCanFill = canFillFor(subjectId);
+
   // ----- aba: Meu dia -----
-  const meDay = buildDayItems(currentUserId, meDate);
+  const meDay = buildDayItems(subjectId, meDate);
   const meTab = (
     <AgendaDayView
-      subjectName="Minha agenda"
+      subjectName={subjectName}
       dateStr={meDate}
       todayStr={todayStr}
       items={meDay.items}
       nonWorking={meDay.nonWorking}
       reservedMin={meDay.reserved}
-      canFill
+      canFill={subjectCanFill}
       dayAdherence={dayAdherence(meDay.items, meDay.nonWorking)}
       onChangeDate={(delta) => { const d = dateFromYMD(meDate); d.setDate(d.getDate() + delta); setMeDate(ymd(d)); }}
       onToday={() => setMeDate(todayStr)}
       onSetStatus={(item, status) => onSetStatus(item, status, meDate)}
-      onOpenDetail={(item) => openDetail(item, meDate, true)}
+      onOpenDetail={(item) => openDetail(item, meDate, subjectCanFill)}
     />
   );
 
   const openItem = (item: DayItem) => {
     if (item.kind === "checklist") { router.push("/checklists"); return; }
-    openDetail(item, item.date, true);
+    openDetail(item, item.date, subjectCanFill);
   };
-  const getDayItems = (ds: string) => { const r = buildDayItems(currentUserId, ds); return { items: r.items, nonWorking: r.nonWorking }; };
+  const getDayItems = (ds: string) => { const r = buildDayItems(subjectId, ds); return { items: r.items, nonWorking: r.nonWorking }; };
   const VIEWS: [typeof calView, string][] = [["dia", "Dia"], ["semana", "Semana"], ["mes", "Mês"]];
   const calTab = (
     <div>
@@ -225,7 +260,7 @@ export function AgendaManager(props: {
       </div>
       {calView === "dia" ? (
         <AgendaDayCalendar
-          subjectName="Minha agenda"
+          subjectName={subjectName}
           dateStr={meDate}
           todayStr={todayStr}
           items={meDay.items}
@@ -444,15 +479,39 @@ export function AgendaManager(props: {
   );
 
   const HEADERS: Record<AgendaSection, { title: string; subtitle: string }> = {
-    diario: { title: "Diário de bordo", subtitle: "Sua rotina do dia, com aderência e integração aos checklists." },
+    diario: {
+      title: "Diário de bordo",
+      subtitle: isMe
+        ? "Sua rotina do dia, com aderência e integração aos checklists."
+        : `Rotina de ${subjectName}, com aderência e integração aos checklists.`,
+    },
     agendas: { title: "Agendas", subtitle: "Crie e gerencie as agendas de rotina, suas e da sua equipe." },
     equipe: { title: "Equipe", subtitle: "Aderência e rotina dos colaboradores que você gerencia." },
     historico: { title: "Histórico", subtitle: "Execuções registradas das rotinas." },
   };
   const diarioTabs: Tab[] = [
-    { id: "dia", label: "Meu dia", content: meTab },
+    { id: "dia", label: isMe ? "Meu dia" : "O dia", content: meTab },
     { id: "calendario", label: "Calendário", content: calTab },
   ];
+
+  // o seletor só aparece para quem alcança mais alguém; para o colaborador comum
+  // a tela continua exatamente como era
+  // select nativo, não SearchSelect: aquele só abre a lista quando está vazio, e
+  // este filtro nunca fica vazio (sem escolha, volta para o próprio usuário)
+  const seletorDeDiario = section === "diario" && subjectOptions.length > 1 && (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}>
+      <span className="soft" style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>Diário de:</span>
+      <select
+        className="select"
+        value={subjectId}
+        onChange={(e) => setSubject(e.target.value)}
+        style={{ width: "auto", maxWidth: 260 }}
+        title="Escolha de quem é o diário de bordo em tela"
+      >
+        {subjectOptions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+    </div>
+  );
 
   return (
     <div>
@@ -460,7 +519,12 @@ export function AgendaManager(props: {
         title={HEADERS[section].title}
         subtitle={HEADERS[section].subtitle}
         action={section === "diario" || section === "agendas"
-          ? <button className="btn btn-primary" onClick={() => { setEditing(null); setBuilderOpen(true); }}><Users size={15} /> Nova agenda</button>
+          ? (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {seletorDeDiario}
+              <button className="btn btn-primary" onClick={() => { setEditing(null); setBuilderOpen(true); }}><Users size={15} /> Nova agenda</button>
+            </div>
+          )
           : undefined}
       />
       {section === "diario" && <Tabs tabs={diarioTabs} />}
