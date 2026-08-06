@@ -8,7 +8,7 @@ import { YearSelect } from "@/components/ui/YearSelect";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
 import { GoalEvidencePanel } from "@/components/GoalEvidencePanel";
-import { Paperclip } from "lucide-react";
+import { CalendarOff, Paperclip } from "lucide-react";
 import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -21,7 +21,7 @@ import {
 import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
 import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
-import { formatNumber, formatMetaValor } from "@/lib/format";
+import { formatDate, formatNumber, formatMetaValor } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import { confirmDialog } from "@/components/ui/confirm";
 
@@ -178,9 +178,8 @@ export function IndividualGoalsFarol({
     let rvPayTotal = 0;
     let rvHasPool = false; // existe pote de RV no período em vista
     let rvWarn = false;    // pote existe mas pesos ≠ 100% em algum colaborador/mês
-    // dias trabalhados do mês, para explicar um valor menor que o cheio. Só faz
-    // sentido com UM colaborador em vista: com vários, cada um teria o seu.
-    const descontos: { ownerId: string; f: FatorRv }[] = [];
+    // quem teve o mês recortado, para o aviso na tela explicar o valor menor
+    const descontos: { ownerId: string; nome: string; f: FatorRv; pago: number }[] = [];
     const donosComPote = new Set<string>();
 
     if (mode === "ano") {
@@ -231,7 +230,9 @@ export function IndividualGoalsFarol({
       for (const r of rows) r.rvPay = rvPayByGoal.get(r.goal.id) ?? 0;
       const allWeighted = tot > 0 && allW;
       const accum = tot === 0 ? null : Math.round((allWeighted && tw > 0 ? aw / tw : creditSum / tot) * 100);
-      return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes: null as FatorRv | null, sub: accum == null ? "Sem registros no ano" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${tot} metas-mês${allWeighted ? " · ponderado" : ""}` };
+      // no ano o aviso não cabe: cada mês tem o seu recorte, e listar doze linhas
+      // seria pior que não avisar. Quem quiser o detalhe troca para o mês.
+      return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes: null as FatorRv | null, descontos: [] as typeof descontos, sub: accum == null ? "Sem registros no ano" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${tot} metas-mês${allWeighted ? " · ponderado" : ""}` };
     }
 
     // ---- mensal ----
@@ -255,16 +256,18 @@ export function IndividualGoalsFarol({
       const f = fatorFor(ownerId, period);
       const pool = cheio * f.fator;
       donosComPote.add(ownerId);
-      if (f.fator < 1) descontos.push({ ownerId, f });
       rvHasPool = true;
       const sumW = Math.round(items.reduce((s, x) => s + x.e.weight, 0));
       if (sumW !== 100) { rvWarn = true; for (const x of items) rvByGoal.set(x.goal.id, { share: null, pay: 0 }); continue; }
+      let pagoDoDono = 0;
       for (const x of items) {
         const share = pool * (x.e.weight / 100);
         const pay = share * x.credit;
         rvByGoal.set(x.goal.id, { share, pay });
+        pagoDoDono += pay;
         rvPayTotal += pay;
       }
+      if (f.fator < 1) descontos.push({ ownerId, nome: items[0].goal.ownerName, f, pago: pagoDoDono });
     }
     for (const x of raw) {
       const rv = rvByGoal.get(x.goal.id);
@@ -282,13 +285,22 @@ export function IndividualGoalsFarol({
         accum = Math.round((creditSum / rows.length) * 100);
       }
     }
-    // um colaborador em vista e um desconto: dá para dizer 15 de 31 dias. Com
-    // vários, cada um teria o seu recorte e o rótulo mentiria.
+    // um colaborador em vista e um desconto: dá para dizer 15 de 31 dias no card.
+    // Com vários, cada um teria o seu recorte e o rótulo mentiria, então lá fica
+    // só o valor e o aviso abaixo detalha um por um.
     const rvDiasMes = donosComPote.size === 1 && descontos.length === 1 ? descontos[0].f : null;
-    return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
+    return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes, descontos, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
   }, [filtered, mode, period, year, rvFor, fatorFor]);
 
   const owners = useMemo(() => new Set(view.rows.map((r) => r.goal.ownerId)), [view.rows]);
+
+  /** os períodos de ausência que encostam no mês em vista, para nomear as datas no aviso */
+  const ausenciasDoMes = (ownerId: string, diasDoMes: number) => {
+    const d = diasPorDono.get(ownerId);
+    if (!d) return [];
+    const ultimo = `${period.slice(0, 7)}-${String(diasDoMes).padStart(2, "0")}`;
+    return d.ausencias.filter((a) => a.inicio <= ultimo && a.fim >= period);
+  };
 
   /**
    * Filtro por status, acionado clicando nos cards do resumo.
@@ -463,6 +475,47 @@ export function IndividualGoalsFarol({
               }
             />
           )}
+        </div>
+      )}
+
+      {/* AVISO DO MÊS PROPORCIONAL.
+          O sufixo no card ("15 de 31 dias") é discreto demais para quem vai
+          receber menos: a pessoa vê um valor abaixo do combinado e não tem como
+          saber por quê. Aqui a conta fica escrita, com as datas e com o valor que
+          o mesmo atingimento pagaria num mês cheio. */}
+      {mode === "mes" && hasRv && view.descontos.length > 0 && (
+        <div
+          className="card"
+          style={{ padding: "0.8rem 1rem", marginBottom: "1.2rem", borderLeft: "3px solid var(--mh-warning)", display: "flex", gap: "0.7rem", alignItems: "flex-start" }}
+        >
+          <CalendarOff size={16} style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 3 }} aria-hidden />
+          <div style={{ fontSize: "0.84rem", lineHeight: 1.5, minWidth: 0 }}>
+            <strong>Remuneração variável proporcional em {monthLabel(month)}</strong>
+            {view.descontos.map((d) => {
+              const eu = d.ownerId === currentUserId;
+              const quem = eu ? "Você" : d.nome;
+              const periodos = ausenciasDoMes(d.ownerId, d.f.dias);
+              const datas = periodos.map((a) => `${formatDate(a.inicio)} a ${formatDate(a.fim)}`).join("; ");
+              return (
+                <p key={d.ownerId} className="muted" style={{ margin: "0.3rem 0 0" }}>
+                  {d.f.trabalhados === 0 ? (
+                    <>
+                      {quem} esteve ausente o mês inteiro{datas ? ` (${datas})` : ""}, então não há RV a pagar nesta competência.
+                    </>
+                  ) : (
+                    <>
+                      {quem} trabalhou <strong>{d.f.trabalhados} dos {d.f.dias} dias</strong> do mês
+                      {datas ? ` (ausência de ${datas})` : ""}. A RV ficou em <strong>{fmtBRL(d.pago)}</strong>;
+                      no mês cheio, o mesmo atingimento pagaria {fmtBRL(d.f.fator > 0 ? d.pago / d.f.fator : 0)}.
+                    </>
+                  )}
+                </p>
+              );
+            })}
+            <p className="muted" style={{ margin: "0.45rem 0 0", fontSize: "0.78rem" }}>
+              O atingimento das metas não muda: a proporção vale só para o valor a pagar.
+            </p>
+          </div>
         </div>
       )}
 
