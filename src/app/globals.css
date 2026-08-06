@@ -621,10 +621,10 @@ a {
    titulo e outros botoes. Continua herdando cor e canto do `.btn`: e so tamanho,
    e nao um botao de outra familia. */
 .btn-xs {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.72rem;
-  border-radius: 6px;
-  gap: 0.3rem;
+  padding: 0.14rem 0.42rem;
+  font-size: 0.68rem;
+  border-radius: 5px;
+  gap: 0.25rem;
 }
 .btn-block {
   width: 100%;

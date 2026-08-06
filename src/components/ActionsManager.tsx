@@ -372,27 +372,28 @@ export function ActionsManager({
         /* a lista esmaece enquanto o novo resultado vem, mas segue legível e
            clicável: o usuário pode marcar o próximo filtro sem esperar este */
         bodyStyle={isPending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}
-        action={
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {/* MODO DA TELA, fora do painel de filtros de propósito: é o recorte
-                principal e precisa estar à vista, não atrás de um funil.
-                Segmentado e miúdo porque divide a linha do cabeçalho com os
-                outros controles; os dois grupos ficam separados para não lerem
-                como uma escolha única de cinco opções. */}
-            {/* "Todas" antes de "Minhas": a leitura vai do amplo para o estreito, e
-                "Minhas" fica encostado nos papéis que o "como" qualifica */}
-            <div style={{ display: "inline-flex", gap: "0.25rem" }}>
+        /* MODO DA TELA, colado no contador e não no funil.
+           Fica fora do painel de filtros de propósito: é o recorte principal e
+           precisa estar à vista. E fica à ESQUERDA porque se lê junto do número:
+           "85 ações · Minhas como Responsável" é uma frase só; do outro lado da
+           linha, o número e o recorte que o explica ficavam distantes.
+           Os dois grupos ficam separados para não lerem como uma escolha única de
+           cinco opções, e "Todas" vem antes de "Minhas" para a leitura ir do
+           amplo para o estreito. */
+        titleExtra={
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+            <div style={{ display: "inline-flex", gap: "0.2rem" }}>
               <Seg on={!minhasLigado} onClick={() => { if (minhasLigado) aplicarMinhas([]); }} title="Todas as ações que você alcança">
                 Todas
               </Seg>
               <Seg on={minhasLigado} onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }} title="Só as ações ligadas a você">
-                <User size={12} /> Minhas
+                <User size={11} /> Minhas
               </Seg>
             </div>
             {minhasLigado && (
               <>
-                <span className="muted" style={{ fontSize: "0.72rem" }}>como</span>
-                <div style={{ display: "inline-flex", gap: "0.25rem" }}>
+                <span className="muted" style={{ fontSize: "0.68rem" }}>como</span>
+                <div style={{ display: "inline-flex", gap: "0.2rem" }}>
                   {MINHA_PAPEIS.map((p) => (
                     <Seg key={p} on={minhas.includes(p)} onClick={() => alternarPapel(p)} title={PAPEL_HINT[p]}>
                       {PAPEL_LABEL[p]}
@@ -401,6 +402,10 @@ export function ActionsManager({
                 </div>
               </>
             )}
+          </div>
+        }
+        action={
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
             {hasFilters && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>Limpar filtros</button>
             )}
