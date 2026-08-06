@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, Filter, MessageSquare, User } from "lucide-react";
+import { Check, ChevronDown, Filter, MessageSquare, Plus, User, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -81,6 +81,92 @@ export type FilterOptions = {
 };
 
 const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações antigas.";
+
+/**
+ * Os filtros que entram e saem da tela, na ordem em que o menu os oferece.
+ *
+ * `q` fica de fora porque a busca é permanente, e `mine` também, porque tem
+ * controle próprio no cabeçalho.
+ */
+const CAMPOS = [
+  { key: "status", label: "Status" },
+  { key: "sdpo", label: "SDPO" },
+  { key: "programa", label: "Programa" },
+  { key: "pilar", label: "Pilar" },
+  { key: "bloco", label: "Bloco" },
+  { key: "item", label: "Item" },
+  { key: "kpi", label: "KPI" },
+  { key: "tool", label: "Ferramenta de gestão" },
+  { key: "meeting", label: "Reunião" },
+  { key: "requester", label: "Solicitante" },
+  { key: "assignee", label: "Responsável" },
+  { key: "from", label: "Criada em" },
+  { key: "to", label: "Criada até" },
+] as const;
+type CampoKey = (typeof CAMPOS)[number]["key"];
+
+/** casca da pílula: o × limpa o valor E tira o filtro da tela, nessa ordem */
+function Pilula({ onRemove, children }: { onRemove: () => void; children: React.ReactNode }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remover filtro"
+        title="Remover filtro"
+        style={{ display: "inline-flex", alignItems: "center", padding: "0.24rem 0.3rem", border: "1px solid var(--mh-border)", borderLeft: "none", borderRadius: "0 6px 6px 0", background: "var(--mh-surface-1)", color: "var(--text-muted)", cursor: "pointer", lineHeight: 1 }}
+      >
+        <X size={12} />
+      </button>
+    </span>
+  );
+}
+
+/** o menu do "+ Filtro": só oferece o que ainda não está na tela */
+function AdicionarFiltro({ disponiveis, onAdd }: {
+  disponiveis: { key: CampoKey; label: string }[];
+  onAdd: (k: CampoKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const fora = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fora); document.removeEventListener("keydown", esc); };
+  }, [open]);
+
+  if (disponiveis.length === 0) return null;
+
+  return (
+    <div ref={box} style={{ position: "relative", display: "inline-flex" }}>
+      <button type="button" className="btn btn-xs btn-ghost" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <Plus size={12} /> Filtro
+      </button>
+      {open && (
+        <div
+          className="card"
+          style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 40, padding: "0.25rem", minWidth: 190, maxHeight: 300, overflowY: "auto", boxShadow: "var(--mh-shadow-e3)" }}
+        >
+          {disponiveis.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => { onAdd(c.key); setOpen(false); }}
+              style={{ width: "100%", display: "block", padding: "0.32rem 0.45rem", background: "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.8rem", color: "var(--text)" }}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Botão do seletor de modo, no cabeçalho.
@@ -364,6 +450,9 @@ export function ActionsManager({
 
   const clearFilters = () => {
     setQDraft("");
+    // as pílulas abertas e ainda vazias somem junto: senão "Limpar filtros"
+    // deixaria a fileira de campos em branco na tela, que é o oposto do pedido
+    setAdicionados(new Set());
     // "Minhas" não é filtro de painel: limpar os filtros não muda o modo da tela
     const next = new URLSearchParams();
     searchParams.getAll(PARAM.mine).forEach((v) => next.append(PARAM.mine, v));
@@ -387,6 +476,77 @@ export function ActionsManager({
     kpis: kpiOpts, tools: toolOpts, meetings: meetingOpts,
     requesters: requesterOpts, assignees: assigneeOpts,
   } = filterOptions;
+
+  /**
+   * Filtros que a pessoa abriu mas ainda não preencheu.
+   *
+   * Quem tem valor aparece sozinho, porque vem da URL; este estado existe só para
+   * o intervalo entre escolher o filtro no menu e escolher o valor dele. Sem ele,
+   * o filtro escolhido sumia no mesmo instante em que era escolhido.
+   */
+  const [adicionados, setAdicionados] = useState<Set<CampoKey>>(new Set());
+  const temValor = (k: CampoKey) => {
+    const v = filtrosVistos[k];
+    return Array.isArray(v) ? v.length > 0 : !!v;
+  };
+  const visiveis = CAMPOS.map((c) => c.key).filter((k) => temValor(k) || adicionados.has(k));
+
+  const removerFiltro = (k: CampoKey) => {
+    setAdicionados((s) => { const n = new Set(s); n.delete(k); return n; });
+    applyFilters({ [k]: Array.isArray(VAZIO[k]) ? [] : "" } as Partial<ActionFilters>);
+  };
+
+  const dataDoFiltro = (k: "from" | "to", rotulo: string) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.16rem 0.5rem", fontSize: "0.76rem", border: "1px solid var(--mh-border)", borderRadius: "6px 0 0 6px", background: "var(--mh-surface-1)" }}>
+      <span style={{ color: "var(--text-muted)" }}>{rotulo}:</span>
+      <input
+        type="date"
+        value={filtrosVistos[k]}
+        onChange={(e) => applyFilters({ [k]: e.target.value } as Partial<ActionFilters>)}
+        style={{ border: "none", background: "none", color: "var(--text)", font: "inherit", padding: 0, colorScheme: "dark" }}
+      />
+    </span>
+  );
+
+  const campoDoFiltro = (k: CampoKey) => {
+    switch (k) {
+      case "status":
+        return <MultiSelect inline label="Status" options={(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((s) => ({ value: s, label: EFF_STATUS_LABEL[s] }))} selected={filtrosVistos.status} onChange={(v) => applyFilters({ status: v })} />;
+      case "sdpo":
+        return (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.16rem 0.5rem", fontSize: "0.76rem", border: "1px solid var(--mh-border)", borderRadius: "6px 0 0 6px", background: "var(--mh-surface-1)" }}>
+            <span style={{ color: "var(--text-muted)" }}>SDPO:</span>
+            <select value={filtrosVistos.sdpo} onChange={(e) => applyFilters({ sdpo: e.target.value })} style={{ border: "none", background: "none", color: "var(--text)", font: "inherit", padding: 0, cursor: "pointer" }}>
+              <option value="">Todos</option>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+            </select>
+          </span>
+        );
+      case "programa":
+        return <MultiSelect inline label="Programa" options={programaOpts.map((p) => ({ value: p, label: p }))} selected={filtrosVistos.programa} onChange={(v) => applyFilters({ programa: v })} />;
+      case "pilar":
+        return <MultiSelect inline searchable label="Pilar" legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={pilarOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.pilar} onChange={(v) => applyFilters({ pilar: v })} />;
+      case "bloco":
+        return <MultiSelect inline searchable label="Bloco" legacyHint="Bloco que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={blocoOpts.map((b) => ({ value: b.nome, label: b.nome, legacy: b.legacy }))} selected={filtrosVistos.bloco} onChange={(v) => applyFilters({ bloco: v })} />;
+      case "item":
+        return <MultiSelect inline searchable label="Item" legacyHint="Item que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={itemOpts.map((i) => ({ value: i.nome, label: i.nome, legacy: i.legacy }))} selected={filtrosVistos.item} onChange={(v) => applyFilters({ item: v })} />;
+      case "kpi":
+        return <MultiSelect inline searchable label="KPI" legacyHint="KPI que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={kpiOpts.map((x) => ({ value: x.nome, label: x.nome, legacy: x.legacy }))} selected={filtrosVistos.kpi} onChange={(v) => applyFilters({ kpi: v })} />;
+      case "tool":
+        return <MultiSelect inline searchable allLabel="Todas" label="Ferramenta" legacyLabel="Legadas" legacyHint="Ferramenta que não está mais no cadastro ou foi desativada. Continua nas ações antigas." options={toolOpts.map((t) => ({ value: t.nome, label: t.nome, legacy: t.legacy }))} selected={filtrosVistos.tool} onChange={(v) => applyFilters({ tool: v })} />;
+      case "meeting":
+        return <MultiSelect inline searchable allLabel="Todas" label="Reunião" legacyLabel="Legadas" legacyHint="Reunião que não existe mais como série ativa na agenda. Continua nas ações antigas." options={meetingOpts.map((m) => ({ value: m.nome, label: m.nome, legacy: m.legacy }))} selected={filtrosVistos.meeting} onChange={(v) => applyFilters({ meeting: v })} />;
+      case "requester":
+        return <MultiSelect inline searchable label="Solicitante" legacyHint={PESSOA_LEGADA} options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.requester} onChange={(v) => applyFilters({ requester: v })} />;
+      case "assignee":
+        return <MultiSelect inline searchable label="Responsável" legacyHint={PESSOA_LEGADA} options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.assignee} onChange={(v) => applyFilters({ assignee: v })} />;
+      case "from":
+        return dataDoFiltro("from", "Criada em");
+      case "to":
+        return dataDoFiltro("to", "Criada até");
+    }
+  };
 
   // O banco já devolveu só as ações que casam. Aqui resta recortar as DEMANDAS
   // exibidas dentro de cada ação, para refletir os filtros de status/responsável/busca.
@@ -493,107 +653,25 @@ export function ActionsManager({
         }
       >
         {filtersOpen && (
-          <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)", background: "var(--mh-surface-2)" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.85rem" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Buscar</span>
-                <input className="input" value={qDraft} onChange={(e) => setQDraft(e.target.value)} placeholder="#ID ou descrição…" style={{ width: "100%" }} />
-              </label>
-              <MultiSelect
-                label="Status"
-                options={(Object.keys(EFF_STATUS_LABEL) as EffStatus[]).map((k) => ({ value: k, label: EFF_STATUS_LABEL[k] }))}
-                selected={filtrosVistos.status}
-                onChange={(v) => applyFilters({ status: v })}
+          <div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--mh-border)", background: "var(--mh-surface-2)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.45rem" }}>
+              {/* A busca fica SEMPRE, porque é a porta de entrada. O resto só
+                  aparece quando está em uso: com treze filtros fixos, a tela
+                  mostrava treze caixas para expressar, no uso real, uma ou duas. */}
+              <input
+                className="input"
+                value={qDraft}
+                onChange={(e) => setQDraft(e.target.value)}
+                placeholder="#ID ou descrição…"
+                style={{ width: 240, padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}
               />
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>SDPO</span>
-                <select className="select" value={filtrosVistos.sdpo} onChange={(e) => applyFilters({ sdpo: e.target.value })}>
-                  <option value="">Todos</option>
-                  <option value="sim">Sim</option>
-                  <option value="nao">Não</option>
-                </select>
-              </label>
-              <MultiSelect
-                label="Programa"
-                options={programaOpts.map((p) => ({ value: p, label: p }))}
-                selected={filtrosVistos.programa}
-                onChange={(v) => applyFilters({ programa: v })}
+              {visiveis.map((k) => (
+                <Pilula key={k} onRemove={() => removerFiltro(k)}>{campoDoFiltro(k)}</Pilula>
+              ))}
+              <AdicionarFiltro
+                disponiveis={CAMPOS.filter((c) => !visiveis.includes(c.key)).map((c) => ({ key: c.key, label: c.label }))}
+                onAdd={(k) => setAdicionados((s) => new Set(s).add(k))}
               />
-              <MultiSelect
-                label="Pilar" searchable
-                options={pilarOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
-                legacyLabel="Legados"
-                legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
-                selected={filtrosVistos.pilar}
-                onChange={(v) => applyFilters({ pilar: v })}
-              />
-              {/* Bloco e Item vêm logo depois de Pilar porque é a cadeia do SDPO
-                  (Programa → Pilar → Bloco → Item); KPI e Ferramenta são atributos
-                  da própria ação e fecham o grupo antes de Reunião. */}
-              <MultiSelect
-                label="Bloco" searchable placeholder="Digite o nome do bloco…"
-                options={blocoOpts.map((b) => ({ value: b.nome, label: b.nome, legacy: b.legacy }))}
-                legacyLabel="Legados"
-                legacyHint="Bloco que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
-                selected={filtrosVistos.bloco}
-                onChange={(v) => applyFilters({ bloco: v })}
-              />
-              <MultiSelect
-                label="Item" searchable placeholder="Digite o nome do item…"
-                options={itemOpts.map((i) => ({ value: i.nome, label: i.nome, legacy: i.legacy }))}
-                legacyLabel="Legados"
-                legacyHint="Item que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
-                selected={filtrosVistos.item}
-                onChange={(v) => applyFilters({ item: v })}
-              />
-              <MultiSelect
-                label="KPI" searchable placeholder="Digite o nome do KPI…"
-                options={kpiOpts.map((k) => ({ value: k.nome, label: k.nome, legacy: k.legacy }))}
-                legacyLabel="Legados"
-                legacyHint="KPI que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
-                selected={filtrosVistos.kpi}
-                onChange={(v) => applyFilters({ kpi: v })}
-              />
-              <MultiSelect
-                label="Ferramenta de gestão" searchable allLabel="Todas" placeholder="Digite o nome da ferramenta…"
-                options={toolOpts.map((t) => ({ value: t.nome, label: t.nome, legacy: t.legacy }))}
-                legacyLabel="Legadas"
-                legacyHint="Ferramenta que não está mais no cadastro ou foi desativada. Continua nas ações antigas."
-                selected={filtrosVistos.tool}
-                onChange={(v) => applyFilters({ tool: v })}
-              />
-              <MultiSelect
-                label="Reunião" searchable allLabel="Todas" placeholder="Digite o nome da reunião…"
-                options={meetingOpts.map((m) => ({ value: m.nome, label: m.nome, legacy: m.legacy }))}
-                legacyLabel="Legadas"
-                legacyHint="Reunião que não existe mais como série ativa na agenda. Continua nas ações antigas."
-                selected={filtrosVistos.meeting}
-                onChange={(v) => applyFilters({ meeting: v })}
-              />
-              <MultiSelect
-                label="Solicitante" searchable placeholder="Digite o nome…"
-                options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
-                legacyLabel="Legados"
-                legacyHint={PESSOA_LEGADA}
-                selected={filtrosVistos.requester}
-                onChange={(v) => applyFilters({ requester: v })}
-              />
-              <MultiSelect
-                label="Responsável" searchable placeholder="Digite o nome…"
-                options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))}
-                legacyLabel="Legados"
-                legacyHint={PESSOA_LEGADA}
-                selected={filtrosVistos.assignee}
-                onChange={(v) => applyFilters({ assignee: v })}
-              />
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Criada em</span>
-                <input type="date" className="input" value={filtrosVistos.from} onChange={(e) => applyFilters({ from: e.target.value })} />
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <span className="label" style={{ margin: 0 }}>Criada até</span>
-                <input type="date" className="input" value={filtrosVistos.to} onChange={(e) => applyFilters({ to: e.target.value })} />
-              </label>
             </div>
           </div>
         )}

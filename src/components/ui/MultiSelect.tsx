@@ -26,6 +26,7 @@ export function MultiSelect({
   placeholder = "Digite para buscar…",
   legacyLabel = "Legados",
   legacyHint,
+  inline = false,
 }: {
   label: string;
   options: MultiOption[];
@@ -36,6 +37,15 @@ export function MultiSelect({
   placeholder?: string;
   legacyLabel?: string;
   legacyHint?: string;
+  /**
+   * Pílula: o rótulo entra DENTRO do gatilho ("Status: 2 selecionados") em vez de
+   * ficar acima dele, e o campo ocupa a largura do próprio conteúdo.
+   *
+   * Existe para a tela de Ações, onde os filtros só aparecem quando estão em uso:
+   * com rótulo em cima, cada filtro custava duas linhas de altura, e era isso que
+   * fazia treze filtros virarem uma parede.
+   */
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -93,21 +103,32 @@ export function MultiSelect({
       : `${selected.length} selecionados`;
 
   return (
-    <div ref={boxRef} style={{ position: "relative", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-      <span className="label" style={{ margin: 0 }}>{label}</span>
+    <div
+      ref={boxRef}
+      style={inline
+        ? { position: "relative", display: "inline-flex" }
+        : { position: "relative", display: "flex", flexDirection: "column", gap: "0.3rem" }}
+    >
+      {!inline && <span className="label" style={{ margin: 0 }}>{label}</span>}
 
       <button
         type="button"
-        className="select"
+        className={inline ? undefined : "select"}
         onClick={() => { setOpen((v) => !v); setTerm(""); }}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.4rem", textAlign: "left", cursor: "pointer" }}
+        style={inline
+          ? { display: "inline-flex", alignItems: "center", gap: "0.35rem", maxWidth: 280, padding: "0.24rem 0.5rem", fontSize: "0.76rem", lineHeight: 1.5, borderRadius: 6, border: "1px solid var(--mh-border)", background: "var(--mh-surface-1)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit" }
+          : { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.4rem", textAlign: "left", cursor: "pointer" }}
         title={selected.length > 1 ? selected.join(", ") : undefined}
       >
+        {inline && <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>{label}:</span>}
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected.length ? "var(--text)" : "var(--text-muted)" }}>
           {resumo}
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", flexShrink: 0 }}>
-          {selected.length > 0 && (
+          {/* na pílula quem limpa é o × da própria pílula, que além de limpar
+              remove o filtro da tela: dois × lado a lado com sentidos diferentes
+              seria pior que não ter nenhum */}
+          {!inline && selected.length > 0 && (
             <span
               role="button"
               tabIndex={0}
@@ -126,7 +147,11 @@ export function MultiSelect({
       {open && (
         <div
           className="card"
-          style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 40, boxShadow: "var(--mh-shadow-e3)", maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden" }}
+          /* na pílula o container tem a largura do texto, então `right: 0` faria o
+             painel encolher junto; largura mínima própria resolve */
+          style={inline
+            ? { position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 40, boxShadow: "var(--mh-shadow-e3)", maxHeight: 280, minWidth: 240, display: "flex", flexDirection: "column", overflow: "hidden" }
+            : { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 40, boxShadow: "var(--mh-shadow-e3)", maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden" }}
         >
           {searchable && (
             <div style={{ padding: "0.5rem", borderBottom: "1px solid var(--border)" }}>
