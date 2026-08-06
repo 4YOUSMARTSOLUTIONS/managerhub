@@ -1,6 +1,6 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
-import { ActionsManager, type ActionRow, type FilterOptions } from "@/components/ActionsManager";
+import { ActionsManager, MINHA_PADRAO, MINHA_PAPEIS, type ActionRow, type FilterOptions, type MinhaPapel } from "@/components/ActionsManager";
 import { Pager } from "@/components/ui/Pager";
 import { moduleGate } from "@/lib/module-gate";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
@@ -14,6 +14,7 @@ type SP = {
   prio?: string | string[]; st?: string | string[]; prog?: string | string[];
   pilar?: string | string[]; reuniao?: string | string[];
   sol?: string | string[]; resp?: string | string[];
+  minhas?: string | string[];
 };
 
 const asList = (v: string | string[] | undefined): string[] =>
@@ -30,12 +31,28 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   const page = Math.max(1, Number(sp.p) || 1);
   const from = (page - 1) * PAGE_SIZE;
 
+  /**
+   * "Minhas ações": o PADRÃO da tela, e não um filtro que a pessoa precisa achar.
+   *
+   * Parâmetro AUSENTE vale `resp`, porque quem entra em Ações quase sempre quer o
+   * que está no colo dele. Desligar é explícito (`?minhas=todas`), senão não teria
+   * como distinguir "abri a tela agora" de "pedi para ver tudo".
+   *
+   * Isto é EXIBIÇÃO, não permissão: quem alcançava as 7.522 ações continua
+   * alcançando, a um clique em "Todas". A regra de quem vê o quê segue no banco.
+   */
+  const minhasNaUrl = asList(sp.minhas);
+  const mine = minhasNaUrl.length === 0
+    ? MINHA_PADRAO
+    : (minhasNaUrl.filter((v) => (MINHA_PAPEIS as readonly string[]).includes(v)) as MinhaPapel[]);
+
   // filtros vivem na URL: a busca é feita no banco, sobre a base inteira
   const filters = {
     q: sp.q ?? "", sdpo: sp.sdpo ?? "", from: sp.de ?? "", to: sp.ate ?? "",
     priority: asList(sp.prio), status: asList(sp.st), programa: asList(sp.prog),
     pilar: asList(sp.pilar), meeting: asList(sp.reuniao),
     requester: asList(sp.sol), assignee: asList(sp.resp),
+    mine,
   };
 
   const unitIds = effectiveUnitFilter(unitScope);
@@ -213,7 +230,9 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   for (const [k, v] of Object.entries({ q: sp.q, sdpo: sp.sdpo, de: sp.de, ate: sp.ate })) {
     if (v) pagerQuery.set(k, v as string);
   }
-  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp })) {
+  // `minhas` entra aqui como veio da URL, e não resolvido: trocar de página não
+  // pode transformar um "Todas" explícito no padrão de novo
+  for (const [k, v] of Object.entries({ prio: sp.prio, st: sp.st, prog: sp.prog, pilar: sp.pilar, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, minhas: sp.minhas })) {
     asList(v).forEach((x) => pagerQuery.append(k, x));
   }
 

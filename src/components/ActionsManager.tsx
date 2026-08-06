@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Filter, MessageSquare } from "lucide-react";
+import { Check, Filter, MessageSquare, User } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -40,16 +40,43 @@ export type ActionFilters = {
   q: string; sdpo: string; from: string; to: string;
   priority: string[]; status: string[]; programa: string[];
   pilar: string[]; meeting: string[]; requester: string[]; assignee: string[];
+  /**
+   * "Minhas ações", por PAPEL. Vazio = todas da empresa.
+   *
+   * Não é um filtro do painel, é o modo de exibição da tela, e por isso fica de
+   * fora da contagem do botão Filtros e sobrevive ao "Limpar filtros".
+   */
+  mine: MinhaPapel[];
 };
 
 /** Estado "sem filtro nenhum", usado ao limpar. */
 const VAZIO: ActionFilters = {
   q: "", sdpo: "", from: "", to: "",
   priority: [], status: [], programa: [], pilar: [], meeting: [], requester: [], assignee: [],
+  mine: [],
 };
 
-const MULTI_KEYS = ["priority", "status", "programa", "pilar", "meeting", "requester", "assignee"] as const;
-type MultiKey = (typeof MULTI_KEYS)[number];
+/**
+ * Os papéis por que uma ação pode ser "minha". Os valores são os mesmos na URL,
+ * aqui e no banco (`search_action_ids`): um vocabulário só, sem tabela de
+ * tradução no meio para sair de sincronia.
+ */
+export const MINHA_PAPEIS = ["resp", "sol", "cri"] as const;
+export type MinhaPapel = (typeof MINHA_PAPEIS)[number];
+const PAPEL_LABEL: Record<MinhaPapel, string> = {
+  resp: "Responsável",
+  sol: "Solicitante",
+  cri: "Criador",
+};
+const PAPEL_HINT: Record<MinhaPapel, string> = {
+  resp: "Ações em que você é responsável por alguma demanda",
+  sol: "Ações abertas a seu pedido",
+  cri: "Ações que você registrou no sistema",
+};
+/** o que a tela abre marcado quando a URL não diz nada */
+export const MINHA_PADRAO: MinhaPapel[] = ["resp"];
+/** sentinela de "Todas": ausente na URL significa o padrão, então desligar precisa ser explícito */
+export const MINHA_TODAS = "todas";
 
 /** Opções dos selects, extraídas da base inteira (não só da página). */
 /**
@@ -72,6 +99,7 @@ const PARAM: Record<keyof ActionFilters, string> = {
   q: "q", priority: "prio", sdpo: "sdpo", status: "st",
   programa: "prog", pilar: "pilar", meeting: "reuniao",
   requester: "sol", assignee: "resp", from: "de", to: "ate",
+  mine: "minhas",
 };
 
 export type ActionRow = {
@@ -196,9 +224,16 @@ export function ActionsManager({
 
   const countOf = (v: string | string[]) => (Array.isArray(v) ? (v.length > 0 ? 1 : 0) : v ? 1 : 0);
   // contagem e botão "Limpar" seguem o que o usuário ACABOU de marcar, não o que o
-  // servidor já confirmou: é o que faz o clique responder na hora
-  const activeCount = Object.values(filtrosVistos).reduce((n, v) => n + countOf(v), 0);
+  // servidor já confirmou: é o que faz o clique responder na hora.
+  // `mine` fica DE FORA: é o modo da tela, tem controle próprio à vista, e contá-lo
+  // faria o painel de filtros abrir sozinho toda vez que alguém entra em Ações.
+  const activeCount = Object.entries(filtrosVistos)
+    .filter(([k]) => k !== "mine")
+    .reduce((n, [, v]) => n + countOf(v), 0);
   const hasFilters = activeCount > 0;
+
+  const minhas = filtrosVistos.mine;
+  const minhasLigado = minhas.length > 0;
 
   const [filtersOpen, setFiltersOpen] = useState(hasFilters);
   const [qDraft, setQDraft] = useState(filters.q);
@@ -223,11 +258,36 @@ export function ActionsManager({
     });
   }, [router, searchParams, marcarOtimista]);
 
+  /**
+   * Troca o modo de exibição. Não passa pelo `applyFilters` porque a URL e o
+   * estado divergem aqui: "Todas" é lista vazia no estado, mas precisa de uma
+   * sentinela na URL, já que o parâmetro AUSENTE significa o padrão.
+   */
+  const aplicarMinhas = (papeis: MinhaPapel[]) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete(PARAM.mine);
+    if (papeis.length === 0) next.set(PARAM.mine, MINHA_TODAS);
+    else papeis.forEach((p) => next.append(PARAM.mine, p));
+    next.delete("p");
+    startTransition(() => {
+      marcarOtimista((atual) => ({ ...atual, mine: papeis }));
+      router.push(`/acoes?${next.toString()}`, { scroll: false });
+    });
+  };
+
+  /** desmarcar o último papel equivale a pedir "Todas", que é o que a pessoa quis dizer */
+  const alternarPapel = (p: MinhaPapel) =>
+    aplicarMinhas(minhas.includes(p) ? minhas.filter((x) => x !== p) : [...minhas, p]);
+
   const clearFilters = () => {
     setQDraft("");
+    // "Minhas" não é filtro de painel: limpar os filtros não muda o modo da tela
+    const next = new URLSearchParams();
+    searchParams.getAll(PARAM.mine).forEach((v) => next.append(PARAM.mine, v));
+    const qs = next.toString();
     startTransition(() => {
-      marcarOtimista(() => VAZIO);
-      router.push("/acoes", { scroll: false });
+      marcarOtimista((atual) => ({ ...VAZIO, mine: atual.mine }));
+      router.push(qs ? `/acoes?${qs}` : "/acoes", { scroll: false });
     });
   };
 
@@ -287,7 +347,10 @@ export function ActionsManager({
         action={
           <div style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}>
             {isOwner && <ImportActionsDialog />}
-            {isOwner && <ExportActionsButton filters={filters} hasFilters={hasFilters} />}
+            {/* o modo "Minhas" entra no recorte exportado, então tem de entrar
+                também no aviso do botão: senão ele prometeria a base inteira e
+                entregaria só as do usuário */}
+            {isOwner && <ExportActionsButton filters={filters} hasFilters={hasFilters || minhasLigado} />}
             <button className="btn btn-primary" onClick={abrirNovaAcao}>+ Nova ação</button>
           </div>
         }
@@ -317,6 +380,50 @@ export function ActionsManager({
           </div>
         }
       >
+        {/* MODO DA TELA, fora do painel de filtros de propósito.
+            A tela abria com as 7.522 ações da empresa e cabia à pessoa se achar no
+            meio. O caso normal é querer o que está no colo dela, e o papel muda a
+            pergunta: responsável executa, solicitante cobra, criador só registrou. */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", padding: "0.7rem 1.25rem", borderBottom: "1px solid var(--mh-border)" }}>
+          <span className="label" style={{ margin: 0 }}>Mostrar</span>
+          <button
+            type="button"
+            className={`btn btn-sm ${minhasLigado ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+          >
+            <User size={14} /> Minhas
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${minhasLigado ? "btn-ghost" : "btn-primary"}`}
+            onClick={() => { if (minhasLigado) aplicarMinhas([]); }}
+          >
+            Todas
+          </button>
+          {minhasLigado && (
+            <>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>como</span>
+              {MINHA_PAPEIS.map((p) => {
+                const on = minhas.includes(p);
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`btn btn-sm ${on ? "btn-primary" : "btn-ghost"}`}
+                    title={PAPEL_HINT[p]}
+                    onClick={() => alternarPapel(p)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
+                  >
+                    {on && <Check size={13} />}
+                    {PAPEL_LABEL[p]}
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>
+
         {filtersOpen && (
           <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)", background: "var(--mh-surface-2)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.85rem" }}>
