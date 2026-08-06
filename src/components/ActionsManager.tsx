@@ -103,7 +103,7 @@ const CAMPOS = [
   // um campo só, e não "de" e "até" separados: período é UMA informação, e em
   // pílulas separadas dava para remover uma metade e sair com o recorte pela
   // metade sem perceber
-  { key: "periodo", label: "Criada" },
+  { key: "periodo", label: "Data de criação" },
 ] as const;
 type CampoKey = (typeof CAMPOS)[number]["key"];
 
@@ -145,7 +145,7 @@ function PeriodoPilula({ from, to, onChange }: {
         aria-expanded={open}
         style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", maxWidth: 280, padding: "0.24rem 0.5rem", fontSize: "0.76rem", lineHeight: 1.5, borderRadius: "6px 0 0 6px", border: "1px solid var(--mh-border)", background: "var(--mh-surface-1)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit" }}
       >
-        <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>Criada:</span>
+        <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>Data de criação:</span>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: from || to ? "var(--text)" : "var(--text-muted)" }}>{resumo}</span>
         <ChevronDown size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
       </button>
