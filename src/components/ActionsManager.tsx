@@ -42,7 +42,8 @@ export type ActionFilters = {
   // sem `priority`: o filtro saiu da tela e o campo sai junto, senão um link
   // antigo com ?prio=alta continuaria recortando a lista sem nada marcado à vista
   status: string[]; programa: string[];
-  pilar: string[]; meeting: string[]; requester: string[]; assignee: string[];
+  pilar: string[]; bloco: string[]; item: string[]; kpi: string[]; tool: string[];
+  meeting: string[]; requester: string[]; assignee: string[];
   /**
    * "Minhas ações", por PAPEL. Vazio = todas da empresa.
    *
@@ -55,7 +56,8 @@ export type ActionFilters = {
 /** Estado "sem filtro nenhum", usado ao limpar. */
 const VAZIO: ActionFilters = {
   q: "", sdpo: "", from: "", to: "",
-  status: [], programa: [], pilar: [], meeting: [], requester: [], assignee: [],
+  status: [], programa: [], pilar: [], bloco: [], item: [], kpi: [], tool: [],
+  meeting: [], requester: [], assignee: [],
   mine: [],
 };
 
@@ -69,6 +71,10 @@ export type FilterOption = { nome: string; legacy: boolean };
 export type FilterOptions = {
   programas: string[];
   pilares: FilterOption[];
+  blocos: FilterOption[];
+  itens: FilterOption[];
+  kpis: FilterOption[];
+  tools: FilterOption[];
   meetings: FilterOption[];
   requesters: FilterOption[];
   assignees: FilterOption[];
@@ -173,7 +179,8 @@ function PapeisDropdown({ selected, onToggle }: { selected: MinhaPapel[]; onTogg
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
   q: "q", sdpo: "sdpo", status: "st",
-  programa: "prog", pilar: "pilar", meeting: "reuniao",
+  programa: "prog", pilar: "pilar", bloco: "bloco", item: "item",
+  kpi: "kpi", tool: "ferr", meeting: "reuniao",
   requester: "sol", assignee: "resp", from: "de", to: "ate",
   mine: "minhas",
 };
@@ -375,7 +382,11 @@ export function ActionsManager({
   }, [qDraft, filters.q, applyFilters]);
   useEffect(() => { setQDraft(filters.q); }, [filters.q]);
 
-  const { programas: programaOpts, pilares: pilarOpts, meetings: meetingOpts, requesters: requesterOpts, assignees: assigneeOpts } = filterOptions;
+  const {
+    programas: programaOpts, pilares: pilarOpts, blocos: blocoOpts, itens: itemOpts,
+    kpis: kpiOpts, tools: toolOpts, meetings: meetingOpts,
+    requesters: requesterOpts, assignees: assigneeOpts,
+  } = filterOptions;
 
   // O banco já devolveu só as ações que casam. Aqui resta recortar as DEMANDAS
   // exibidas dentro de cada ação, para refletir os filtros de status/responsável/busca.
@@ -515,6 +526,41 @@ export function ActionsManager({
                 legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
                 selected={filtrosVistos.pilar}
                 onChange={(v) => applyFilters({ pilar: v })}
+              />
+              {/* Bloco e Item vêm logo depois de Pilar porque é a cadeia do SDPO
+                  (Programa → Pilar → Bloco → Item); KPI e Ferramenta são atributos
+                  da própria ação e fecham o grupo antes de Reunião. */}
+              <MultiSelect
+                label="Bloco" searchable placeholder="Digite o nome do bloco…"
+                options={blocoOpts.map((b) => ({ value: b.nome, label: b.nome, legacy: b.legacy }))}
+                legacyLabel="Legados"
+                legacyHint="Bloco que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
+                selected={filtrosVistos.bloco}
+                onChange={(v) => applyFilters({ bloco: v })}
+              />
+              <MultiSelect
+                label="Item" searchable placeholder="Digite o nome do item…"
+                options={itemOpts.map((i) => ({ value: i.nome, label: i.nome, legacy: i.legacy }))}
+                legacyLabel="Legados"
+                legacyHint="Item que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
+                selected={filtrosVistos.item}
+                onChange={(v) => applyFilters({ item: v })}
+              />
+              <MultiSelect
+                label="KPI" searchable placeholder="Digite o nome do KPI…"
+                options={kpiOpts.map((k) => ({ value: k.nome, label: k.nome, legacy: k.legacy }))}
+                legacyLabel="Legados"
+                legacyHint="KPI que não está mais no cadastro ou foi desativado. Continua nas ações antigas."
+                selected={filtrosVistos.kpi}
+                onChange={(v) => applyFilters({ kpi: v })}
+              />
+              <MultiSelect
+                label="Ferramenta de gestão" searchable allLabel="Todas" placeholder="Digite o nome da ferramenta…"
+                options={toolOpts.map((t) => ({ value: t.nome, label: t.nome, legacy: t.legacy }))}
+                legacyLabel="Legadas"
+                legacyHint="Ferramenta que não está mais no cadastro ou foi desativada. Continua nas ações antigas."
+                selected={filtrosVistos.tool}
+                onChange={(v) => applyFilters({ tool: v })}
               />
               <MultiSelect
                 label="Reunião" searchable allLabel="Todas" placeholder="Digite o nome da reunião…"
