@@ -88,8 +88,41 @@ export function initials(name: string | null | undefined): string {
  * nada a quem lê: o que importa é se foi feito. Aqui vira OK/NOK. Vale para
  * meta e realizado, e o `null` continua sendo o travessão de vazio.
  */
-export function formatMetaValor(valor: number | null | undefined, binaria: boolean): string {
+export function formatMetaValor(valor: number | null | undefined, binaria: boolean, unidade: string | null | undefined): string {
   if (valor == null) return "\u2014";
   if (binaria) return valor > 0 ? "OK" : "NOK";
-  return formatNumber(valor);
+  return formatValorComUnidade(valor, unidade);
+}
+
+// trunca em 2 casas (nunca arredonda; o epsilon corrige o erro de float da multiplica\u00e7\u00e3o)
+function trunc2(v: number): number {
+  const s = v < 0 ? -1 : 1;
+  return (s * Math.floor(Math.abs(v) * 100 + 1e-9)) / 100;
+}
+const nfMeta = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * N\u00famero de meta com a unidade de medida colada, como ele deve APARECER.
+ *
+ * Sempre 2 casas, truncadas: "R$ 1.234,5" est\u00e1 errado para dinheiro, e
+ * arredondar para cima faria um realizado abaixo da meta parecer dentro dela.
+ *
+ * A unidade \u00e9 texto livre digitado no cadastro, ent\u00e3o o tratamento \u00e9 por
+ * conven\u00e7\u00e3o: dinheiro vem antes do n\u00famero, porcentagem vem colada, e o resto
+ * vira sufixo separado por espa\u00e7o.
+ *
+ * Mora aqui, e n\u00e3o dentro de uma tela, porque nasceu privado do farol da \u00e1rea e
+ * foi exatamente isso que deixou as metas individuais sem unidade nenhuma.
+ */
+export function formatValorComUnidade(valor: number | null | undefined, unidade: string | null | undefined): string {
+  if (valor == null) return "\u2014";
+  const t = trunc2(valor);
+  const u = (unidade ?? "").trim();
+  // "OK/NOK" n\u00e3o \u00e9 unidade digitada: \u00e9 o marcador que o formul\u00e1rio grava sozinho
+  // na meta de sim/n\u00e3o. Numa meta num\u00e9rica ele sobra de um cadastro que mudou de
+  // tipo, e "97,00 OK/NOK" n\u00e3o quer dizer nada.
+  if (u.toUpperCase() === "OK/NOK") return nfMeta.format(t);
+  if (u.toLowerCase().includes("r$")) return "R$ " + nfMeta.format(t);
+  if (u === "%") return nfMeta.format(t) + "%";
+  return nfMeta.format(t) + (u ? ` ${u}` : "");
 }

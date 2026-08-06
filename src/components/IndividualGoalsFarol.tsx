@@ -21,7 +21,7 @@ import {
 import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
 import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
-import { formatDate, formatNumber, formatMetaValor } from "@/lib/format";
+import { formatDate, formatMetaValor, formatValorComUnidade } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import { confirmDialog } from "@/components/ui/confirm";
 
@@ -620,9 +620,9 @@ export function IndividualGoalsFarol({
                   )}
                   {/* na meta de sim/não o número gravado é 100/0, mas quem lê
                       precisa ver OK/NOK; a meta e o parcial nem fazem sentido ali */}
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{isMetaBinaria(g.direction) ? "—" : formatMetaValor(target, false)}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }} className="muted">{isMetaBinaria(g.direction) ? "—" : formatMetaValor(partial, false)}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{formatMetaValor(actual, isMetaBinaria(g.direction))}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{isMetaBinaria(g.direction) ? "—" : formatMetaValor(target, false, g.unit)}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }} className="muted">{isMetaBinaria(g.direction) ? "—" : formatMetaValor(partial, false, g.unit)}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatMetaValor(actual, isMetaBinaria(g.direction), g.unit)}</td>
                   <td><Badge tone={FAROL_TONE[status]}>{FAROL_LABEL[status]}</Badge></td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -1340,8 +1340,10 @@ function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; o
         <div style={{ maxWidth: 200 }}>{readonly(<>Peso</>, entry ? `${entry.weight}%` : "—")}</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.8rem" }}>
-          {readonly(<>Meta {goal.unit && <span className="soft">({goal.unit})</span>}</>, entry ? formatNumber(entry.target) : "—")}
-          {readonly(<>Meta parcial</>, entry?.partial != null ? formatNumber(entry.partial) : "—")}
+          {/* a unidade vem colada no valor, então o rótulo não a repete; no
+              Realizado abaixo ela fica no rótulo, que ali é campo de digitação */}
+          {readonly(<>Meta</>, entry ? formatValorComUnidade(entry.target, goal.unit) : "—")}
+          {readonly(<>Meta parcial</>, formatValorComUnidade(entry?.partial, goal.unit))}
           {readonly(<>Peso</>, entry ? `${entry.weight}%` : "—")}
         </div>
       )}

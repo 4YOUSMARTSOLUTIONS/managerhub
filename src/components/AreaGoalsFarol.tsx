@@ -18,7 +18,7 @@ import {
 } from "@/lib/actions/area-goals";
 import { GOAL_DIRECTION, AREA_GOAL_KIND, CONSOLIDATION_LABEL, isMetaBinaria } from "@/lib/constants";
 import { farolAttainment, type FarolStatus } from "@/lib/goals-farol";
-import { shortName } from "@/lib/format";
+import { shortName, formatValorComUnidade } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import { confirmDialog } from "@/components/ui/confirm";
 
@@ -68,22 +68,10 @@ const GROUP = "__grupo__";
 const BAR_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", parcial: "var(--mh-warning)", nao_atingida: "var(--mh-danger)", pendente: "transparent" };
 const VAL_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", parcial: "var(--mh-warning)", nao_atingida: "var(--mh-danger)", pendente: "var(--text-muted)" };
 
-// trunca em 2 casas (nunca arredonda; o epsilon corrige o erro de float da multiplicação)
-function trunc2(v: number): number {
-  const s = v < 0 ? -1 : 1;
-  return (s * Math.floor(Math.abs(v) * 100 + 1e-9)) / 100;
-}
-// formata o valor com a unidade de medida — sempre 2 casas decimais, truncadas
-const nf2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-function fmtValue(v: number | null, unit: string): string {
-  if (v == null) return "—";
-  const t = trunc2(v);
-  const u = (unit ?? "").trim();
-  const low = u.toLowerCase();
-  if (low.includes("r$")) return "R$ " + nf2.format(t);
-  if (u === "%") return nf2.format(t) + "%";
-  return nf2.format(t) + (u ? ` ${u}` : "");
-}
+// a regra de formatar valor com unidade agora mora em lib/format, compartilhada
+// com o farol das metas individuais: enquanto era privada daqui, aquela tela
+// mostrava os números sem unidade nenhuma
+const fmtValue = formatValorComUnidade;
 
 type Resolved = { target: number | null; actual: number | null; computed: boolean };
 
