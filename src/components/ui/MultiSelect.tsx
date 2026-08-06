@@ -78,7 +78,7 @@ export function MultiSelect({
         title={o.legacy ? legacyHint : undefined}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.5rem", background: on ? "var(--surface-2)" : "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.85rem", color: o.legacy ? "var(--text-muted)" : "var(--text)" }}
       >
-        <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "var(--mh-primary)" : "transparent" }}>
+        <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "var(--mh-primary-500)" : "transparent" }}>
           {on && <Check size={11} color="#fff" />}
         </span>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>

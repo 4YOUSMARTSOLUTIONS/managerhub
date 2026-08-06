@@ -77,23 +77,14 @@ export type FilterOptions = {
 const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações antigas.";
 
 /**
- * Segmentado miúdo do cabeçalho.
+ * Botão do seletor de modo, no cabeçalho.
  *
- * Não usa `.btn` de propósito: o botão do sistema tem altura para ser o alvo
- * principal de uma tela, e aqui são cinco controles dividindo a linha com o
- * título e o funil. Com a altura de botão, a linha estourava e o recorte, que é
- * secundário, gritava mais que a lista.
+ * Usa `.btn` do sistema, e só troca o TAMANHO (`btn-xs`). A primeira versão
+ * desenhou o estilo à mão e custou caro: o selecionado apontava para
+ * `var(--mh-primary)`, token que não existe (o certo é `--mh-primary-500`), e
+ * ficou sem fundo nenhum. Herdando a classe, cor e canto vêm de um lugar só e
+ * não têm como divergir do resto da tela.
  */
-const grupoSeg: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 2,
-  padding: 2,
-  borderRadius: 999,
-  border: "1px solid var(--mh-border)",
-  background: "var(--mh-surface-2)",
-};
-
 function Seg({ on, onClick, title, children }: {
   on: boolean;
   onClick: () => void;
@@ -106,22 +97,7 @@ function Seg({ on, onClick, title, children }: {
       onClick={onClick}
       title={title}
       aria-pressed={on}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.25rem",
-        padding: "0.2rem 0.55rem",
-        fontSize: "0.72rem",
-        fontWeight: 600,
-        lineHeight: 1.5,
-        whiteSpace: "nowrap",
-        border: "none",
-        borderRadius: 999,
-        cursor: "pointer",
-        background: on ? "var(--mh-primary)" : "transparent",
-        color: on ? "#fff" : "var(--text-muted)",
-        transition: "background 120ms, color 120ms",
-      }}
+      className={`btn btn-xs ${on ? "btn-primary" : "btn-ghost"}`}
     >
       {children}
     </button>
@@ -403,7 +379,7 @@ export function ActionsManager({
                 Segmentado e miúdo porque divide a linha do cabeçalho com os
                 outros controles; os dois grupos ficam separados para não lerem
                 como uma escolha única de cinco opções. */}
-            <div style={grupoSeg}>
+            <div style={{ display: "inline-flex", gap: "0.25rem" }}>
               <Seg on={minhasLigado} onClick={() => { if (!minhasLigado) aplicarMinhas(MINHA_PADRAO); }} title="Só as ações ligadas a você">
                 <User size={12} /> Minhas
               </Seg>
@@ -414,7 +390,7 @@ export function ActionsManager({
             {minhasLigado && (
               <>
                 <span className="muted" style={{ fontSize: "0.72rem" }}>como</span>
-                <div style={grupoSeg}>
+                <div style={{ display: "inline-flex", gap: "0.25rem" }}>
                   {MINHA_PAPEIS.map((p) => (
                     <Seg key={p} on={minhas.includes(p)} onClick={() => alternarPapel(p)} title={PAPEL_HINT[p]}>
                       {PAPEL_LABEL[p]}

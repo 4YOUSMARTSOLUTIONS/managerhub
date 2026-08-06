@@ -617,6 +617,15 @@ a {
   font-size: 0.8rem;
   border-radius: 7px;
 }
+/* Um degrau abaixo do `sm`, para controle que divide a linha do cabecalho com o
+   titulo e outros botoes. Continua herdando cor e canto do `.btn`: e so tamanho,
+   e nao um botao de outra familia. */
+.btn-xs {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  gap: 0.3rem;
+}
 .btn-block {
   width: 100%;
 }

@@ -273,7 +273,7 @@ export function ImportActionsDialog({ open: openProp, onClose, hideTrigger }: { 
                     <span className="muted">{progress.done} / {progress.total}</span>
                   </div>
                   <div style={{ height: 8, borderRadius: 999, background: "var(--surface-2)", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, background: "var(--mh-primary)", transition: "width 0.2s" }} />
+                    <div style={{ height: "100%", width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, background: "var(--mh-primary-500)", transition: "width 0.2s" }} />
                   </div>
                   <div className="muted" style={{ fontSize: "0.78rem", marginTop: 6 }}>Não feche esta janela até concluir.</div>
                 </div>
