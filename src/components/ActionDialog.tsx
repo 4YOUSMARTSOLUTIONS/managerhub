@@ -359,22 +359,6 @@ export function ActionDialog({
             </div>
           </div>
 
-          {/* Problema/Diagnóstico: fica acima da cascata SDPO de propósito, é o
-              contexto que o responsável lê antes de executar */}
-          <div style={{ background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
-            <label className="label">Problema / Diagnóstico <span className="soft">(opcional)</span></label>
-            <textarea
-              className="textarea"
-              value={problema}
-              onChange={(e) => setProblema(e.target.value)}
-              placeholder="Ex.: o giro de vasilhame caiu 12% no trimestre e os relatórios chegam sem o corte por rota, o que impede identificar onde está a perda."
-              style={{ minHeight: 76 }}
-            />
-            <div className="soft" style={{ fontSize: "0.76rem", marginTop: "0.35rem" }}>
-              Qual problema esta ação resolve? É isto que o responsável vê ao abrir a demanda.
-            </div>
-          </div>
-
           {/* SDPO */}
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", fontWeight: 600 }}>
             <input type="checkbox" checked={isSdpo} onChange={(e) => setIsSdpo(e.target.checked)} />
@@ -441,6 +425,22 @@ export function ActionDialog({
             <div>
               <label className="label">Em cópia <span className="soft">(conhecimento)</span></label>
               <PeoplePicker people={people} selected={cc} onChange={setCc} placeholder="Adicionar em cópia…" />
+            </div>
+          </div>
+
+          {/* Problema/Diagnóstico: encostado nas Demandas de propósito, para quem
+              preenche escrever o porquê logo antes de escrever o que fazer */}
+          <div style={{ background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
+            <label className="label">Problema / Diagnóstico <span className="soft">(opcional)</span></label>
+            <textarea
+              className="textarea"
+              value={problema}
+              onChange={(e) => setProblema(e.target.value)}
+              placeholder="Ex.: o giro de vasilhame caiu 12% no trimestre e os relatórios chegam sem o corte por rota, o que impede identificar onde está a perda."
+              style={{ minHeight: 76 }}
+            />
+            <div className="soft" style={{ fontSize: "0.76rem", marginTop: "0.35rem" }}>
+              Qual problema esta ação resolve? É isto que o responsável vê ao abrir a demanda.
             </div>
           </div>
 
