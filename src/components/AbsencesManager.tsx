@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Pencil, Trash2 } from "lucide-react";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { Badge } from "@/components/ui/Badge";
+import { ExportButton } from "@/components/ui/ExportButton";
+import { ImportAbsencesDialog } from "@/components/ImportAbsencesDialog";
 import { confirmDialog } from "@/components/ui/confirm";
 import { upsertAbsence, deleteAbsence } from "@/lib/actions/absences";
 import { ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE, ABSENCE_DESCONTA_PADRAO } from "@/lib/constants";
@@ -145,9 +147,27 @@ export function AbsencesManager({ members, absences }: { members: { id: string; 
           <option value="">Todos os anos</option>
           {anos.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }} onClick={abrirNovo}>
-          + Lançar período
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
+          <ImportAbsencesDialog members={members} />
+          {/* exporta o que está EM VISTA, e no mesmo formato que a importação lê:
+              dá para exportar, corrigir na planilha e reimportar por cima */}
+          <ExportButton
+            filename="ferias_e_afastamentos.xlsx"
+            sheetName="Ausências"
+            headers={["Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"]}
+            rows={lista.map((a) => [
+              nomePorId.get(a.userId) ?? "",
+              ABSENCE_KIND_LABEL[a.kind],
+              formatDate(a.startDate),
+              formatDate(a.endDate),
+              a.discountsRv ? "Sim" : "Não",
+              a.note ?? "",
+            ])}
+          />
+          <button type="button" className="btn btn-primary btn-sm" onClick={abrirNovo}>
+            + Lançar período
+          </button>
+        </div>
       </div>
 
       {rascunho && (
