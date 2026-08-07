@@ -396,20 +396,11 @@ export async function demandaReassign(demandaId: string, userIds: string[], note
   } catch (e) { return { error: (e as Error).message }; }
 }
 
-/**
- * Preenche ou corrige o Problema/Diagnóstico. Recebe a demanda porque é o que o
- * painel conhece, mas escreve no CABEÇALHO: muda o que todas as demandas irmãs
- * da mesma ação exibem.
- */
-export async function demandaSetProblem(demandaId: string, texto: string): Promise<ActionState> {
-  try {
-    const { supabase } = await actionContext();
-    const { error } = await supabase.rpc("demanda_set_problem", { p_demanda: demandaId, p_texto: texto });
-    if (error) return { error: error.message };
-    rv();
-    return { ok: true };
-  } catch (e) { return { error: (e as Error).message }; }
-}
+// `demandaSetProblem` foi removida: o Problema/Diagnóstico passou a ser escrito
+// só no cadastro da ação, e no tratamento ele é leitura. Server action exportada
+// é endpoint público, então deixar uma sem chamador seria superfície à toa. A
+// função `demanda_set_problem` continua no banco, com a guarda dela, esperando
+// uma migração que a derrube.
 
 /** Responsável marca "concluí minha parte" (auto-aprova se for o solicitante). */
 export async function demandaAssigneeSubmit(demandaId: string): Promise<ActionState> {
