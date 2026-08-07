@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TimerOff, Trash2, X } from "lucide-react";
+import { FileText, Plus, TimerOff, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { SearchSelect } from "./SearchSelect";
 import { AGENDA_FREQUENCY_LABEL, WEEKDAYS_PT } from "@/lib/constants";
@@ -25,7 +25,7 @@ const newKey = () => `t${seq++}`;
  * pendurar o rótulo das colunas: quem abria a agenda via "08:30", "10" e
  * "Diária" sem saber qual caixa era qual.
  */
-const COLUNAS = "minmax(0, 1fr) 96px 92px 118px 32px 32px";
+const COLUNAS = "minmax(0, 1fr) 96px 92px 118px 32px 32px 32px";
 /** Campos mais baixos que o padrão: são treze linhas na mesma tela. */
 const CAMPO: React.CSSProperties = { padding: "0.42rem 0.55rem", fontSize: "0.82rem" };
 const BOTAO_LINHA: React.CSSProperties = { width: 32, height: 32 };
@@ -97,10 +97,21 @@ export function AgendaBuilderDialog({
   const [canEdit, setCanEdit] = useState(false);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Tarefa com a descrição aberta para edição, num diálogo à frente do
+   * formulário.
+   *
+   * Não é um campo embutido na linha: a descrição é texto corrido e longo, e
+   * abrir uma caixa embaixo da tarefa devolveria a segunda linha que essa tela
+   * acabou de perder. O texto fica num rascunho próprio e só entra na tarefa ao
+   * confirmar, que é o que se espera de um diálogo.
+   */
+  const [descEditando, setDescEditando] = useState<{ key: string; titulo: string; texto: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setDescEditando(null);
     if (agenda) {
       setName(agenda.name);
       setDescription(agenda.description ?? "");
@@ -123,6 +134,11 @@ export function AgendaBuilderDialog({
   if (!open) return null;
 
   const patch = (key: string, p: Partial<TaskDraft>) => setTasks((ts) => ts.map((t) => t.key === key ? { ...t, ...p } : t));
+  const aplicarDescricao = () => {
+    if (!descEditando) return;
+    patch(descEditando.key, { description: descEditando.texto });
+    setDescEditando(null);
+  };
   const toggleWeekday = (key: string, wd: number) => setTasks((ts) => ts.map((t) => {
     if (t.key !== key) return t;
     const set = new Set(t.weekdays ?? []);
@@ -161,9 +177,9 @@ export function AgendaBuilderDialog({
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(3,6,14,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 50, overflowY: "auto" }}>
-      {/* 720 e não 680: as tarefas viraram uma grade de colunas fixas, e o resto
-          da largura é o campo de título. Com 680 ele ficava com 230px. */}
-      <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--mh-shadow-e3)" }}>
+      {/* 760 e não 680: as tarefas viraram uma grade de colunas fixas que soma
+          450px, e o resto da largura é o campo de título. */}
+      <div className="card" style={{ width: "100%", maxWidth: 760, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{agenda ? "Editar agenda" : "Nova agenda"}</h2>
           <button type="button" onClick={onClose} className="icon-btn" aria-label="Fechar"><X size={16} /></button>
@@ -208,6 +224,7 @@ export function AgendaBuilderDialog({
                 <span>Frequência/Dia</span>
                 <span />
                 <span />
+                <span />
               </div>
             )}
             <div style={{ borderTop: tasks.length > 0 ? "1px solid var(--mh-border)" : undefined }}>
@@ -215,7 +232,8 @@ export function AgendaBuilderDialog({
                 // segunda linha só quando a frequência tem parâmetro que não cabe
                 // ao lado do seletor. O dia do mês tem dois dígitos e cabe; o
                 // seletor de data, não.
-                const temSegundaLinha = t.frequency === "semanal" || t.frequency === "unica";
+                const temParametro = t.frequency === "semanal" || t.frequency === "unica";
+                const temDescricao = !!(t.description ?? "").trim();
                 return (
                   <div key={t.key} style={{ borderBottom: "1px solid var(--mh-border)", padding: "0.4rem 0" }}>
                     <div style={{ display: "grid", gridTemplateColumns: COLUNAS, gap: "0.5rem", alignItems: "center" }}>
@@ -244,6 +262,21 @@ export function AgendaBuilderDialog({
                           <input type="number" min={1} max={31} className="input" title="Dia do mês" style={{ ...CAMPO, width: 42, flexShrink: 0, textAlign: "center", padding: "0.42rem 0.2rem" }} value={t.day_of_month ?? 1} onChange={(e) => patch(t.key, { day_of_month: Number(e.target.value) })} />
                         )}
                       </div>
+                      {/* A descrição existe no banco e aparece na ficha da agenda,
+                          mas não tinha onde ser escrita: o editor carregava e
+                          devolvia o texto intacto, e ninguém conseguia mudá-lo.
+                          Abre num diálogo à frente, para não custar altura na
+                          linha, e o ícone acende sozinho quando já há texto. */}
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn-primary"
+                        title={temDescricao ? "Editar a descrição" : "Adicionar descrição"}
+                        aria-label={temDescricao ? "Editar a descrição" : "Adicionar descrição"}
+                        style={{ ...BOTAO_LINHA, ...(temDescricao ? { color: "var(--mh-primary-500)" } : null) }}
+                        onClick={() => setDescEditando({ key: t.key, titulo: t.title, texto: t.description ?? "" })}
+                      >
+                        <FileText size={14} />
+                      </button>
                       {/* era um checkbox com rótulo de 32 caracteres, repetido em
                           TODA tarefa. Como ele governa o campo de horário, virou
                           um interruptor de ícone: ligado, o horário some e a
@@ -268,7 +301,7 @@ export function AgendaBuilderDialog({
                       </button>
                     </div>
 
-                    {temSegundaLinha && (
+                    {temParametro && (
                       <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center", marginTop: "0.4rem" }}>
                         {t.frequency === "semanal" ? (
                           <>
@@ -313,6 +346,51 @@ export function AgendaBuilderDialog({
           <button type="button" className="btn btn-primary" onClick={submit} disabled={pending || overlaps.length > 0}>{agenda ? "Salvar" : "Criar agenda"}</button>
         </div>
       </div>
+
+      {/* Descrição da tarefa, à frente do formulário.
+          zIndex 60 contra os 50 do construtor, e sem fechar por clique fora:
+          é um formulário, e clique fora que apaga texto digitado é armadilha. */}
+      {descEditando && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(3,6,14,0.55)", backdropFilter: "blur(3px)",
+            display: "flex", alignItems: "flex-start", justifyContent: "center",
+            padding: "12vh 1rem", zIndex: 60, overflowY: "auto",
+          }}
+        >
+          <div className="card" style={{ width: "100%", maxWidth: 520, boxShadow: "var(--mh-shadow-e3)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)" }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>Descrição da tarefa</h3>
+                <div className="soft" style={{ fontSize: "0.78rem", marginTop: 2 }}>
+                  {descEditando.titulo.trim() || "Tarefa sem título"}
+                </div>
+              </div>
+              <button type="button" className="icon-btn" aria-label="Fechar" onClick={() => setDescEditando(null)}><X size={16} /></button>
+            </div>
+
+            <div style={{ padding: "1.1rem 1.25rem" }}>
+              <textarea
+                className="textarea"
+                autoFocus
+                rows={5}
+                value={descEditando.texto}
+                onChange={(e) => setDescEditando((d) => (d ? { ...d, texto: e.target.value } : d))}
+                placeholder="O que a tarefa envolve, onde, com quem, o que precisa estar pronto antes."
+              />
+              <p className="soft" style={{ fontSize: "0.76rem", margin: "0.5rem 0 0" }}>
+                Aparece na ficha da agenda e no detalhe da tarefa no diário de bordo.
+                Só é gravada quando você salvar a agenda.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--mh-border)" }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setDescEditando(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={aplicarDescricao}>Aplicar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
