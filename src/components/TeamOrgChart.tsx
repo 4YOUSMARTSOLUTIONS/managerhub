@@ -419,8 +419,8 @@ export function TeamOrgChart({ members, raiz }: { members: TeamMember[]; raiz: T
 
       {ocultarInativos && inativos > 0 && (
         <p className="muted" style={{ fontSize: "0.78rem", marginTop: "0.6rem" }}>
-          Quem está inativo mas ainda tem gente respondendo a ele continua na árvore, tracejado.
-          Escondê-lo apagaria a equipe inteira que está abaixo.
+          Usuários inativos que ainda possuem colaboradores respondendo a eles continuam na árvore,
+          em modo tracejado. Escondê-los ocultaria a equipe inteira abaixo.
         </p>
       )}
 
