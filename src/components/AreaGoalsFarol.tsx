@@ -131,10 +131,10 @@ export function AreaGoalsFarol({
   /** subsetor do próprio usuário; quando existe, é ele que manda */
   subPadrao?: string;
 }) {
-  // SETOR É ESCOLHA ÚNICA E OBRIGATÓRIA, e por isso mora na barra de cima, ao lado
-  // do Período, e não no painel de filtros: farol de área é sempre o farol DE UM
-  // setor. Somar dois setores no mesmo quadro produz um número que não é de
-  // ninguém. Não existe "Todos" aqui.
+  // SETOR É ESCOLHA ÚNICA E OBRIGATÓRIA: farol de área é sempre o farol DE UM
+  // setor, e somar dois no mesmo quadro produz um número que não é de ninguém.
+  // Não existe "Todos" aqui. Como o painel fica fechado por padrão, o nome do
+  // setor vai escrito no próprio botão Filtros.
   //
   // Subsetor e responsável seguem múltiplos: dentro do mesmo setor, comparar dois
   // subsetores ou dois responsáveis é leitura legítima.
@@ -191,6 +191,18 @@ export function AreaGoalsFarol({
       .sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
     [subdepartments, deptEfetivo],
   );
+  /**
+   * Subsetores efetivos: derivado, não zerado na troca de setor.
+   *
+   * Limpar a escolha ao trocar de setor perdia o subsetor PADRÃO para sempre —
+   * bastava passar por outro setor e voltar. Descartando na leitura, o padrão da
+   * pessoa reaparece assim que ela volta ao setor dela.
+   */
+  const subIdsEfetivos = useMemo(() => {
+    const validos = new Set(subOpts.map((o) => o.value));
+    return subIds.filter((id) => validos.has(id));
+  }, [subIds, subOpts]);
+
   const ownerOpts = useMemo(() => {
     const seen = new Map<string, string>();
     for (const g of goals) if (g.ownerId && !seen.has(g.ownerId)) seen.set(g.ownerId, g.ownerName ?? "—");
@@ -220,10 +232,10 @@ export function AreaGoalsFarol({
   const filtered = useMemo(
     () => goals.filter((g) =>
       (g.departmentId === null || g.departmentId === deptEfetivo) &&
-      (subIds.length === 0 || g.subdepartmentId === null || subIds.includes(g.subdepartmentId)) &&
+      (subIdsEfetivos.length === 0 || g.subdepartmentId === null || subIdsEfetivos.includes(g.subdepartmentId)) &&
       (ownerIds.length === 0 || (!!g.ownerId && ownerIds.includes(g.ownerId))) &&
       (unitSel === GROUP || g.unitId === null || g.unitId === unitSel)),
-    [goals, deptEfetivo, subIds, ownerIds, unitSel],
+    [goals, deptEfetivo, subIdsEfetivos, ownerIds, unitSel],
   );
 
   const goalById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
@@ -306,7 +318,10 @@ export function AreaGoalsFarol({
 
   // selo do botao de filtros: filtro fechado nao pode virar filtro esquecido
   // setor nao entra na conta: ele nao e opcional, e mora na barra de cima
-  const filtrosAtivos = (subIds.length ? 1 : 0) + (ownerIds.length ? 1 : 0);
+  const filtrosAtivos = (subIdsEfetivos.length ? 1 : 0) + (ownerIds.length ? 1 : 0);
+  // vai escrito no botão Filtros: com o painel fechado, o selo numérico diria que
+  // há um recorte, mas não qual, e olhar o setor errado sem perceber é o erro caro
+  const nomeDoSetor = departments.find((d) => d.id === deptEfetivo)?.name;
   // os dois diálogos de planilha viram itens de menu, entao o menu precisa
   // comandar a abertura deles
   const [importGoalsOpen, setImportGoalsOpen] = useState(false);
@@ -333,21 +348,6 @@ export function AreaGoalsFarol({
             )}
           </div>
         </div>
-        {/* Setor é o recorte principal do farol de área, não um filtro opcional:
-            fica sempre visível, escolha única, sem "Todos". Metas sem setor (as da
-            empresa) aparecem em qualquer escolha. */}
-        <div>
-          <label className="label">Setor</label>
-          <select
-            className="select"
-            value={deptEfetivo}
-            onChange={(e) => { setDeptId(e.target.value); setSubIds([]); }}
-            style={{ width: "auto", maxWidth: 260 }}
-            title="O farol da área é sempre de um setor por vez"
-          >
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-        </div>
         {/* só aparece para quem responde por meta de outra unidade; para o resto
             a unidade continua sendo assunto do seletor do topo, e nada muda */}
         {temExtras && (
@@ -366,7 +366,7 @@ export function AreaGoalsFarol({
             </select>
           </div>
         )}
-        <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
+        <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} resumo={nomeDoSetor} />
         {isAdmin && (
           // O que a pessoa OLHA fica à esquerda; o que ela FAZ, à direita. O
           // painel do menu alinha pela direita para não vazar da tela.
@@ -413,11 +413,25 @@ export function AreaGoalsFarol({
 
       {filtrosAbertos && (
         <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setSubIds([]); setOwnerIds([]); }}>
+          {/* Setor é escolha única e obrigatória: o farol de área é sempre o de UM
+              setor, e não existe "Todos". Fica junto dos demais para a barra de
+              cima ficar limpa, e o nome aparece no próprio botão Filtros. */}
+          <div>
+            <label className="label">Setor</label>
+            <select
+              className="select"
+              value={deptEfetivo}
+              onChange={(e) => setDeptId(e.target.value)}
+              title="O farol da área é sempre de um setor por vez"
+            >
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
           <div>
             <MultiSelect
               label="Subsetor"
               options={subOpts}
-              selected={subIds}
+              selected={subIdsEfetivos}
               onChange={setSubIds}
               searchable
               allLabel="Todos"

@@ -18,22 +18,35 @@ export function BotaoFiltros({
   aberto,
   onToggle,
   contador = 0,
+  resumo,
 }: {
   aberto: boolean;
   onToggle: () => void;
   /** quantos filtros estão ativos. Sem o selo, filtro fechado vira filtro esquecido. */
   contador?: number;
+  /**
+   * Recorte que vale mesmo com o painel fechado, escrito no próprio botão.
+   *
+   * Existe para o filtro OBRIGATÓRIO: um selo com "1" diz que há filtro, não
+   * QUAL. No farol de área, olhar o setor errado sem perceber é o erro caro.
+   */
+  resumo?: string;
 }) {
   return (
     <button
       type="button"
-      className={`btn ${aberto || contador > 0 ? "btn-secondary" : "btn-ghost"}`}
+      className={`btn ${aberto || contador > 0 || resumo ? "btn-secondary" : "btn-ghost"}`}
       aria-expanded={aberto}
       onClick={onToggle}
       style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem" }}
     >
       <Filter size={15} />
       Filtros
+      {resumo && (
+        <span className="soft" style={{ fontWeight: 400, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          · {resumo}
+        </span>
+      )}
       {contador > 0 && (
         <span
           aria-label={`${contador} filtro(s) ativo(s)`}
