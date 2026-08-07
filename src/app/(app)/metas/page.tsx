@@ -1,6 +1,7 @@
 import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow } from "@/components/IndividualGoalsFarol";
@@ -129,7 +130,8 @@ export default async function GoalsPage() {
   const ownerIds = [...new Set(goalsNoEscopo.map((g) => g.owner_id))];
   const admin = ownerIds.length ? createServiceClient() : null;
 
-  const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }, { data: ausencias }] = await Promise.all([
+  const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }, { data: ausencias },
+         { data: sancoes }, { data: regrasRaw }, { data: faixasRaw }] = await Promise.all([
     goalIds.length
       ? supabase
           .from("individual_goal_entries")
@@ -150,9 +152,23 @@ export default async function GoalsPage() {
     // da tabela é owner/admin, mas o GESTOR precisa do fator para entender o valor
     // da equipe dele. O que chega aqui é só o intervalo, já recortado aos donos
     // visíveis, e o que chega ao navegador é a contagem de dias.
+    //
+    // Vêm TODAS, e não só as que descontam: o `discounts_rv` governa o
+    // proporcional, mas o redutor por faixa (atestado, falta) precisa contar os
+    // dias mesmo com a marcação desligada — que é justamente como esses dois
+    // tipos nascem.
     admin
-      ? admin.from("employee_absences").select("user_id, start_date, end_date").eq("tenant_id", tenant.id).eq("discounts_rv", true).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { user_id: string; start_date: string; end_date: string }[] }),
+      ? admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { user_id: string; kind: string; start_date: string; end_date: string; discounts_rv: boolean }[] }),
+    // Punições: service client pelo mesmo motivo das ausências, e o que chega ao
+    // NAVEGADOR é só a contagem por mês dentro do fator. A lista de punições, com
+    // tipo e observação, não sai daqui.
+    admin
+      ? admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { user_id: string; sanction_type_id: string; occurred_on: string }[] }),
+    // Regras e faixas são configuração: leitura de membro, então cliente normal.
+    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenant.id).eq("active", true).order("sort"),
+    supabase.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
   ]);
 
   // evidências: uma consulta só para todos os lançamentos em vista, e não uma por
@@ -207,21 +223,48 @@ export default async function GoalsPage() {
     }
   }
 
+  // Regras de redução configuradas pela empresa, já com as faixas penduradas.
+  // Sem regra ativa a lista fica vazia, `redutoresDoMes` devolve fator 1 e o
+  // valor pago é exatamente o de antes desta funcionalidade existir.
+  const faixasPorRegra = new Map<string, { min: number; max: number | null; pct: number }[]>();
+  for (const b of faixasRaw ?? []) {
+    const arr = faixasPorRegra.get(b.rule_id) ?? [];
+    arr.push({ min: b.min_qtd, max: b.max_qtd, pct: Number(b.reduction_pct) });
+    faixasPorRegra.set(b.rule_id, arr);
+  }
+  const regrasRedutor: RegraRedutor[] = (regrasRaw ?? [])
+    .map((r) => ({
+      id: r.id, nome: r.name, fonte: r.source as "absence" | "sanction",
+      absenceKind: r.absence_kind, sanctionTypeId: r.sanction_type_id,
+      faixas: faixasPorRegra.get(r.id) ?? [],
+    }))
+    .filter((r) => r.faixas.length > 0); // motivo sem faixa não corta nada
+
+  const kindsPorFaixa = kindsComRedutor(regrasRedutor);
+
   // Dias que NÃO contam na RV de cada dono: férias/afastamentos que descontam,
   // mais o que estiver fora do vínculo (antes da admissão, depois do
   // desligamento). Quem não tem nada aqui fica de fora do mapa e o fator é 1.
+  //
+  // O `kind` viaja junto porque `fatorRv` precisa dele para pular os tipos que já
+  // são cobrados por faixa. E o filtro de `discounts_rv` saiu do banco para cá:
+  // o proporcional continua olhando só quem desconta, e o redutor olha o tipo.
   const rvDias: RvDiasRow[] = ownerIds
     .map((ownerId) => {
       const m = (ownerMems ?? []).find((x) => x.user_id === ownerId);
+      const minhas = (ausencias ?? []).filter((a) => a.user_id === ownerId);
       return {
         ownerId,
-        ausencias: (ausencias ?? [])
-          .filter((a) => a.user_id === ownerId)
-          .map((a) => ({ inicio: a.start_date, fim: a.end_date })),
+        ausencias: minhas
+          .filter((a) => a.discounts_rv || kindsPorFaixa.has(a.kind))
+          .map((a) => ({ inicio: a.start_date, fim: a.end_date, kind: a.kind })),
+        sancoes: (sancoes ?? [])
+          .filter((x) => x.user_id === ownerId)
+          .map((x) => ({ tipoId: x.sanction_type_id, data: x.occurred_on })),
         vinculo: { admissao: m?.admission_date ?? null, desligamento: m?.dismissed_at ?? null },
       };
     })
-    .filter((r) => r.ausencias.length > 0 || r.vinculo.admissao || r.vinculo.desligamento);
+    .filter((r) => r.ausencias.length > 0 || r.sancoes.length > 0 || r.vinculo.admissao || r.vinculo.desligamento);
 
   // mapa dono -> setor/subsetor + opcoes de filtro (so p/ quem ve multiplos colaboradores)
   const deptByUser = new Map<string, { dept: string | null; sub: string | null }>();
@@ -345,6 +388,7 @@ export default async function GoalsPage() {
           subdepartments={subdepartments}
           rvTimelines={rvTimelines}
           rvDias={rvDias}
+          regrasRedutor={regrasRedutor}
         />
       ),
     },

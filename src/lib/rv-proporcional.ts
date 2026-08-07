@@ -17,8 +17,10 @@
  * Sem ausência e sem recorte de vínculo o fator é 1, e nada no valor muda.
  */
 
-/** intervalo FECHADO nas duas pontas: o dia de início e o de fim são ausência */
-export type AusenciaLite = { inicio: string; fim: string };
+/** intervalo FECHADO nas duas pontas: o dia de início e o de fim são ausência.
+ *  O `kind` entrou para o proporcional poder pular os tipos que já são cobrados
+ *  por faixa em `rv-redutores.ts`. */
+export type AusenciaLite = { inicio: string; fim: string; kind?: string };
 export type VinculoLite = { admissao: string | null; desligamento: string | null };
 export type FatorRv = {
   /** dias do mês (28 a 31) */
@@ -57,7 +59,18 @@ export function contarDias(inicio: string, fim: string): number {
  * As datas são comparadas como texto `YYYY-MM-DD`, que ordena igual à data. Sem
  * `new Date` na comparação, sem fuso, sem o dia virando o anterior às 21h.
  */
-export function fatorRv(period: string, ausencias: AusenciaLite[], vinculo: VinculoLite): FatorRv {
+export function fatorRv(
+  period: string,
+  ausencias: AusenciaLite[],
+  vinculo: VinculoLite,
+  /**
+   * Tipos de ausência que NÃO entram aqui porque já têm redutor por faixa
+   * (`kindsComRedutor` em rv-redutores.ts). Sem esta exclusão, um atestado de 5
+   * dias cortaria 50% pela faixa e mais 5/31 pelo tempo fora — duas punições
+   * pelo mesmo dia, e um valor final que ninguém consegue explicar.
+   */
+  kindsIgnorados?: Set<string>,
+): FatorRv {
   if (!/^\d{4}-\d{2}/.test(period)) return CHEIO;
   const ano = Number(period.slice(0, 4));
   const mes = Number(period.slice(5, 7));
@@ -72,7 +85,9 @@ export function fatorRv(period: string, ausencias: AusenciaLite[], vinculo: Vinc
     const iso = `${aaaaMm}-${String(d).padStart(2, "0")}`;
     if (vinculo.admissao && iso < vinculo.admissao) continue;
     if (vinculo.desligamento && iso > vinculo.desligamento) continue;
-    if (ausencias.some((a) => iso >= a.inicio && iso <= a.fim)) continue;
+    if (ausencias.some((a) =>
+      !(a.kind && kindsIgnorados?.has(a.kind)) && iso >= a.inicio && iso <= a.fim
+    )) continue;
     trabalhados += 1;
   }
 

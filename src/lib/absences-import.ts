@@ -63,6 +63,7 @@ export function parseTipo(v: string): AbsenceKind | null {
   if (s.includes("licen")) return "licenca";
   if (s.includes("afasta")) return "afastamento";
   if (s.includes("atestad")) return "atestado";
+  if (s.includes("falta")) return "falta";
   return null;
 }
 

@@ -22,6 +22,7 @@ import {
 import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
 import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
+import { redutoresDoMes, kindsComRedutor, type RegraRedutor, type SancaoLite, type ResultadoRedutor } from "@/lib/rv-redutores";
 import { formatDate, formatMetaValor, formatValorComUnidade } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -37,7 +38,7 @@ export type RvTimeline = { ownerId: string; from: string; value: number };
  * O que reduz os dias trabalhados do mês: férias e afastamentos que descontam,
  * mais o recorte do vínculo. Só vem quem tem alguma coisa; ausente = mês cheio.
  */
-export type RvDiasRow = { ownerId: string; ausencias: AusenciaLite[]; vinculo: VinculoLite };
+export type RvDiasRow = { ownerId: string; ausencias: AusenciaLite[]; sancoes: SancaoLite[]; vinculo: VinculoLite };
 export type GoalRow = {
   id: string;
   name: string;
@@ -99,7 +100,7 @@ type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: num
 
 export function IndividualGoalsFarol({
   goals, canManageOthers, canCreateGoals, isAdmin, reportIds,
-  currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [],
+  currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [], regrasRedutor = [],
 }: {
   goals: GoalRow[];
   canManageOthers: boolean;
@@ -113,6 +114,8 @@ export function IndividualGoalsFarol({
   subdepartments: SubOpt[];
   rvTimelines?: RvTimeline[];
   rvDias?: RvDiasRow[];
+  /** motivos de corte configurados pela empresa; vazio = nada é descontado */
+  regrasRedutor?: RegraRedutor[];
 }) {
   const reportSet = useMemo(() => new Set(reportIds), [reportIds]);
   // pode editar a DEFINIÇÃO da meta (alvo, peso, conceito) do dono
@@ -225,10 +228,26 @@ export function IndividualGoalsFarol({
    * ausência nem recorte de vínculo não entra no mapa e recebe o mês cheio.
    */
   const diasPorDono = useMemo(() => new Map(rvDias.map((d) => [d.ownerId, d])), [rvDias]);
+  // tipos de ausência já cobrados por faixa saem do proporcional, senão o mesmo
+  // dia seria descontado duas vezes
+  const kindsPorFaixa = useMemo(() => kindsComRedutor(regrasRedutor), [regrasRedutor]);
   const fatorFor = useMemo(() => (owner: string, at: string) => {
     const d = diasPorDono.get(owner);
-    return d ? fatorRv(at, d.ausencias, d.vinculo) : { dias: 0, trabalhados: 0, fator: 1 };
-  }, [diasPorDono]);
+    return d ? fatorRv(at, d.ausencias, d.vinculo, kindsPorFaixa) : { dias: 0, trabalhados: 0, fator: 1 };
+  }, [diasPorDono, kindsPorFaixa]);
+
+  /**
+   * Corte por conduta do mês (falta, atestado, punição), conforme os motivos que
+   * a empresa configurou. Multiplica o pote junto com o proporcional: um é
+   * "quanto do mês ela esteve aqui", o outro é "o que aconteceu no mês".
+   */
+  const SEM_CORTE: ResultadoRedutor = useMemo(() => ({ aplicados: [], pctTotal: 0, fator: 1 }), []);
+  const redutorFor = useMemo(() => (owner: string, at: string) => {
+    if (regrasRedutor.length === 0) return SEM_CORTE;
+    const d = diasPorDono.get(owner);
+    if (!d) return SEM_CORTE;
+    return redutoresDoMes(at, d.ausencias.map((a) => ({ kind: a.kind ?? "", inicio: a.inicio, fim: a.fim })), d.sancoes, regrasRedutor);
+  }, [diasPorDono, regrasRedutor, SEM_CORTE]);
 
   const view = useMemo(() => {
     const counts: Record<FarolStatus, number> = { atingida: 0, parcial: 0, nao_atingida: 0, pendente: 0 };
@@ -237,7 +256,7 @@ export function IndividualGoalsFarol({
     let rvHasPool = false; // existe pote de RV no período em vista
     let rvWarn = false;    // pote existe mas pesos ≠ 100% em algum colaborador/mês
     // quem teve o mês recortado, para o aviso na tela explicar o valor menor
-    const descontos: { ownerId: string; nome: string; f: FatorRv; pago: number }[] = [];
+    const descontos: { ownerId: string; nome: string; f: FatorRv; red: ResultadoRedutor; pago: number }[] = [];
     const donosComPote = new Set<string>();
 
     if (mode === "ano") {
@@ -275,7 +294,8 @@ export function IndividualGoalsFarol({
         if (cheio == null) continue;
         // no ano o fator é do MÊS de cada grupo, não do ano: quem tirou férias em
         // julho perde a parte de julho, e os outros onze meses seguem inteiros
-        const pool = cheio * fatorFor(items[0].ownerId, items[0].period).fator;
+        const pool = cheio * fatorFor(items[0].ownerId, items[0].period).fator
+          * redutorFor(items[0].ownerId, items[0].period).fator;
         rvHasPool = true;
         const sumW = Math.round(items.reduce((s, x) => s + x.weight, 0));
         if (sumW !== 100) { rvWarn = true; continue; }
@@ -312,7 +332,8 @@ export function IndividualGoalsFarol({
       // proporcional aos dias trabalhados. Descontar no POTE, e não no fim,
       // acerta a linha e o total de uma vez: o valor pago é linear no pote.
       const f = fatorFor(ownerId, period);
-      const pool = cheio * f.fator;
+      const red = redutorFor(ownerId, period);
+      const pool = cheio * f.fator * red.fator;
       donosComPote.add(ownerId);
       rvHasPool = true;
       const sumW = Math.round(items.reduce((s, x) => s + x.e.weight, 0));
@@ -325,7 +346,7 @@ export function IndividualGoalsFarol({
         pagoDoDono += pay;
         rvPayTotal += pay;
       }
-      if (f.fator < 1) descontos.push({ ownerId, nome: items[0].goal.ownerName, f, pago: pagoDoDono });
+      if (f.fator < 1 || red.pctTotal > 0) descontos.push({ ownerId, nome: items[0].goal.ownerName, f, red, pago: pagoDoDono });
     }
     for (const x of raw) {
       const rv = rvByGoal.get(x.goal.id);
@@ -350,16 +371,18 @@ export function IndividualGoalsFarol({
     // mais afetado primeiro: é quem perde mais e quem vai perguntar
     descontos.sort((a, b) => a.f.fator - b.f.fator || a.nome.localeCompare(b.nome, "pt-BR"));
     return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes, descontos, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
-  }, [filtered, mode, period, year, rvFor, fatorFor]);
+  }, [filtered, mode, period, year, rvFor, fatorFor, redutorFor]);
 
   const owners = useMemo(() => new Set(view.rows.map((r) => r.goal.ownerId)), [view.rows]);
 
-  /** os períodos de ausência que encostam no mês em vista, para nomear as datas no aviso */
+  /** os períodos de ausência que encostam no mês em vista, para nomear as datas
+   *  no aviso. Só os que contam no PROPORCIONAL: atestado e falta têm frase
+   *  própria, com o percentual da faixa. */
   const ausenciasDoMes = (ownerId: string, diasDoMes: number) => {
     const d = diasPorDono.get(ownerId);
     if (!d) return [];
     const ultimo = `${period.slice(0, 7)}-${String(diasDoMes).padStart(2, "0")}`;
-    return d.ausencias.filter((a) => a.inicio <= ultimo && a.fim >= period);
+    return d.ausencias.filter((a) => !(a.kind && kindsPorFaixa.has(a.kind)) && a.inicio <= ultimo && a.fim >= period);
   };
 
   /**
@@ -566,7 +589,7 @@ export function IndividualGoalsFarol({
           <CalendarOff size={16} style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 3 }} aria-hidden />
           <div style={{ fontSize: "0.84rem", lineHeight: 1.5, minWidth: 0 }}>
             <strong>
-              Remuneração variável proporcional em {monthLabel(month)}
+              Remuneração variável reduzida em {monthLabel(month)}
               {view.descontos.length > 1 && ` · ${view.descontos.length} colaboradores`}
             </strong>
             {view.descontos.slice(0, MAX_AVISO).map((d) => {
@@ -574,17 +597,33 @@ export function IndividualGoalsFarol({
               const quem = eu ? "Você" : d.nome;
               const periodos = ausenciasDoMes(d.ownerId, d.f.dias);
               const datas = periodos.map((a) => `${formatDate(a.inicio)} a ${formatDate(a.fim)}`).join("; ");
+              // corte por conduta: nomeia o motivo e a quantidade que caiu na
+              // faixa. O detalhe do fato (qual punição, qual observação) NÃO sai
+              // do servidor — aqui chega só o rótulo do motivo e o percentual.
+              const cortes = d.red.aplicados
+                .map((a) => `${a.nome} (${a.quantidade}) reduz ${a.pct >= 100 ? "toda a RV" : `${a.pct}%`}`)
+                .join("; ");
+              const cheio = d.f.fator > 0 && d.red.fator > 0 ? d.pago / (d.f.fator * d.red.fator) : null;
               return (
                 <p key={d.ownerId} className="muted" style={{ margin: "0.3rem 0 0" }}>
-                  {d.f.trabalhados === 0 ? (
+                  {d.red.pctTotal >= 100 ? (
+                    <>
+                      {quem} perdeu a RV desta competência por {cortes}.
+                    </>
+                  ) : d.f.trabalhados === 0 ? (
                     <>
                       {quem} esteve ausente o mês inteiro{datas ? ` (${datas})` : ""}, então não há RV a pagar nesta competência.
                     </>
                   ) : (
                     <>
-                      {quem} trabalhou <strong>{d.f.trabalhados} dos {d.f.dias} dias</strong> do mês
-                      {datas ? ` (ausência de ${datas})` : ""}. A RV ficou em <strong>{fmtBRL(d.pago)}</strong>;
-                      no mês cheio, o mesmo atingimento pagaria {fmtBRL(d.f.fator > 0 ? d.pago / d.f.fator : 0)}.
+                      {quem}
+                      {d.f.fator < 1 && (
+                        <> trabalhou <strong>{d.f.trabalhados} dos {d.f.dias} dias</strong> do mês{datas ? ` (ausência de ${datas})` : ""}</>
+                      )}
+                      {d.f.fator < 1 && d.red.pctTotal > 0 && ", e"}
+                      {d.red.pctTotal > 0 && <> teve redução de <strong>{d.red.pctTotal}%</strong> por {cortes}</>}
+                      . A RV ficou em <strong>{fmtBRL(d.pago)}</strong>
+                      {cheio != null && <>; sem os cortes, o mesmo atingimento pagaria {fmtBRL(cheio)}</>}.
                     </>
                   )}
                 </p>

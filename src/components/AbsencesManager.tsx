@@ -37,7 +37,7 @@ export type AbsenceRow = {
   note: string | null;
 };
 
-const TIPOS: Enums<"absence_kind">[] = ["ferias", "licenca", "afastamento", "atestado"];
+const TIPOS: Enums<"absence_kind">[] = ["ferias", "licenca", "afastamento", "atestado", "falta"];
 const hoje = () => new Date().toISOString().slice(0, 10);
 
 type Rascunho = {

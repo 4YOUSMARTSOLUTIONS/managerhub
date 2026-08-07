@@ -710,6 +710,35 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date?: string; end_date?: string; discounts_rv?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // ---- redutores da remuneração variável ----
+      // O catálogo de punições e as REGRAS são configuração: leitura para
+      // qualquer membro. `employee_sanctions` é dado disciplinar, e a leitura é
+      // owner/admin/manager — a tela de Metas chega nele pelo service client e
+      // manda ao cliente só o percentual, nunca a lista.
+      sanction_types: {
+        Row: { id: string; tenant_id: string; name: string; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      employee_sanctions: {
+        Row: { id: string; tenant_id: string; user_id: string; sanction_type_id: string; occurred_on: string; note: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; sanction_type_id: string; occurred_on: string; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; sanction_type_id?: string; occurred_on?: string; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      rv_reducer_rules: {
+        Row: { id: string; tenant_id: string; name: string; source: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind: Database["public"]["Enums"]["absence_kind"] | null; sanction_type_id: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; source: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind?: Database["public"]["Enums"]["absence_kind"] | null; sanction_type_id?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; source?: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind?: Database["public"]["Enums"]["absence_kind"] | null; sanction_type_id?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      rv_reducer_bands: {
+        Row: { id: string; rule_id: string; tenant_id: string; min_qtd: number; max_qtd: number | null; reduction_pct: number; created_at: string }
+        Insert: { id?: string; rule_id: string; tenant_id: string; min_qtd?: number; max_qtd?: number | null; reduction_pct: number; created_at?: string }
+        Update: { id?: string; rule_id?: string; tenant_id?: string; min_qtd?: number; max_qtd?: number | null; reduction_pct?: number; created_at?: string }
+        Relationships: []
+      }
       area_goals: {
         Row: { id: string; tenant_id: string; department_id: string | null; subdepartment_id: string | null; unit_id: string | null; parent_id: string | null; name: string; description: string | null; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; department_id?: string | null; subdepartment_id?: string | null; unit_id?: string | null; parent_id?: string | null; name: string; description?: string | null; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
@@ -1441,7 +1470,8 @@ export type Database = {
       // cálculo do farol não tem caso especial nenhum.
       goal_direction: "maior_melhor" | "menor_melhor" | "binaria"
       goal_entry_status: "aberta" | "aprovada" | "reprovada"
-      absence_kind: "ferias" | "licenca" | "afastamento" | "atestado"
+      absence_kind: "ferias" | "licenca" | "afastamento" | "atestado" | "falta"
+      rv_reducer_source: "absence" | "sanction"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
       feedback_channel: "presencial" | "reuniao_1a1" | "videochamada" | "mensagem" | "outro"

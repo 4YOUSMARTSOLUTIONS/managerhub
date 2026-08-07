@@ -230,6 +230,7 @@ export const ABSENCE_KIND_LABEL: Record<Enums<"absence_kind">, string> = {
   licenca: "Licença",
   afastamento: "Afastamento",
   atestado: "Atestado",
+  falta: "Falta sem justificativa",
 };
 
 export const ABSENCE_KIND_TONE: Record<Enums<"absence_kind">, Tone> = {
@@ -237,6 +238,7 @@ export const ABSENCE_KIND_TONE: Record<Enums<"absence_kind">, Tone> = {
   licenca: "purple",
   afastamento: "amber",
   atestado: "gray",
+  falta: "red",
 };
 
 /**
@@ -245,11 +247,20 @@ export const ABSENCE_KIND_TONE: Record<Enums<"absence_kind">, Tone> = {
  * trocada, porque um atestado de um dia e um de trinta não merecem o mesmo
  * tratamento, e quem decide isso é a empresa.
  */
+/**
+ * Marcação inicial do "desconta RV proporcional" ao escolher o tipo.
+ *
+ * `atestado` e `falta` nascem DESMARCADOS porque quem cuida deles é o redutor
+ * por faixa (`rv_reducer_rules`), e descontar os dias além da faixa puniria duas
+ * vezes o mesmo dia. O cálculo não depende desta marcação: `fatorRv` ignora
+ * qualquer tipo que tenha regra ativa. Isto aqui é só o palpite do formulário.
+ */
 export const ABSENCE_DESCONTA_PADRAO: Record<Enums<"absence_kind">, boolean> = {
   ferias: true,
   licenca: true,
   afastamento: true,
   atestado: false,
+  falta: false,
 };
 
 // ---------- Feedbacks ----------
