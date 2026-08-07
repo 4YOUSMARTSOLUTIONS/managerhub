@@ -739,6 +739,24 @@ export type Database = {
         Update: { id?: string; rule_id?: string; tenant_id?: string; min_qtd?: number; max_qtd?: number | null; reduction_pct?: number; created_at?: string }
         Relationships: []
       }
+      // ---- congelamento da competência ----
+      // `rv_period_locks` guarda SÓ as competências fechadas: reabrir apaga a
+      // linha, e quem fechou/reabriu fica em `audit_logs`.
+      rv_period_locks: {
+        Row: { id: string; tenant_id: string; period: string; locked_at: string; locked_by: string | null; note: string | null }
+        Insert: { id?: string; tenant_id: string; period: string; locked_at?: string; locked_by?: string | null; note?: string | null }
+        Update: { id?: string; tenant_id?: string; period?: string; locked_at?: string; locked_by?: string | null; note?: string | null }
+        Relationships: []
+      }
+      // O retrato dos três números que vêm de fora do lançamento da meta, um por
+      // colaborador que tinha pote na competência. `detail` traz os motivos do
+      // corte, para o aviso da tela continuar explicando o valor menor.
+      rv_period_snapshots: {
+        Row: { id: string; tenant_id: string; period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; pool: number; detail: Json; created_at: string }
+        Insert: { id?: string; tenant_id: string; period: string; user_id: string; rv_full: number; prop_factor?: number; reducer_pct?: number; pool: number; detail?: Json; created_at?: string }
+        Update: { id?: string; tenant_id?: string; period?: string; user_id?: string; rv_full?: number; prop_factor?: number; reducer_pct?: number; pool?: number; detail?: Json; created_at?: string }
+        Relationships: []
+      }
       area_goals: {
         Row: { id: string; tenant_id: string; department_id: string | null; subdepartment_id: string | null; unit_id: string | null; parent_id: string | null; name: string; description: string | null; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; department_id?: string | null; subdepartment_id?: string | null; unit_id?: string | null; parent_id?: string | null; name: string; description?: string | null; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }

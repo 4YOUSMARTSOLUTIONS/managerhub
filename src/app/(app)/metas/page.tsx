@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
-import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow } from "@/components/IndividualGoalsFarol";
+import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type RvCongeladoRow } from "@/components/IndividualGoalsFarol";
 import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 
@@ -131,7 +131,8 @@ export default async function GoalsPage() {
   const admin = ownerIds.length ? createServiceClient() : null;
 
   const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }, { data: ausencias },
-         { data: sancoes }, { data: regrasRaw }, { data: faixasRaw }] = await Promise.all([
+         { data: sancoes }, { data: regrasRaw }, { data: faixasRaw },
+         { data: cadeados }, { data: retratos }] = await Promise.all([
     goalIds.length
       ? supabase
           .from("individual_goal_entries")
@@ -169,6 +170,14 @@ export default async function GoalsPage() {
     // Regras e faixas são configuração: leitura de membro, então cliente normal.
     supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenant.id).eq("active", true).order("sort"),
     supabase.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
+    // Competências fechadas e o retrato de cada uma. Leitura de membro nas duas,
+    // de propósito: se só o administrador enxergasse o cadeado, o colaborador
+    // veria o valor recalculado ao vivo e o chefe veria o congelado, cada um com
+    // um número na mão e ninguém sabendo qual vale.
+    supabase.from("rv_period_locks").select("period, locked_at").eq("tenant_id", tenant.id),
+    ownerIds.length
+      ? supabase.from("rv_period_snapshots").select("period, user_id, rv_full, prop_factor, reducer_pct, detail").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; detail: unknown }[] }),
   ]);
 
   // evidências: uma consulta só para todos os lançamentos em vista, e não uma por
@@ -265,6 +274,27 @@ export default async function GoalsPage() {
       };
     })
     .filter((r) => r.ausencias.length > 0 || r.sancoes.length > 0 || r.vinculo.admissao || r.vinculo.desligamento);
+
+  // ---------------------------------------------------------- congelamento
+  // Competência fechada não recalcula: o pote, o proporcional e o corte vêm do
+  // retrato tirado no fechamento, e um lançamento retroativo de férias, atestado
+  // ou punição deixa de mexer no que já foi pago.
+  //
+  // O atingimento continua vivo, porque ele tem o próprio fechamento por
+  // lançamento. Aqui se trava o dinheiro; lá se trava o desempenho.
+  const periodosFechados = (cadeados ?? []).map((c) => c.period);
+  const rvCongelados: RvCongeladoRow[] = (retratos ?? []).map((r) => ({
+    period: r.period,
+    ownerId: r.user_id,
+    cheio: Number(r.rv_full),
+    fator: Number(r.prop_factor),
+    pctTotal: Number(r.reducer_pct),
+    motivos: Array.isArray(r.detail)
+      ? (r.detail as { motivo?: string; quantidade?: number; pct?: number }[]).map((d) => ({
+          nome: String(d.motivo ?? ""), quantidade: Number(d.quantidade ?? 0), pct: Number(d.pct ?? 0),
+        }))
+      : [],
+  }));
 
   // mapa dono -> setor/subsetor + opcoes de filtro (so p/ quem ve multiplos colaboradores)
   const deptByUser = new Map<string, { dept: string | null; sub: string | null }>();
@@ -389,6 +419,9 @@ export default async function GoalsPage() {
           rvTimelines={rvTimelines}
           rvDias={rvDias}
           regrasRedutor={regrasRedutor}
+          periodosFechados={periodosFechados}
+          rvCongelados={rvCongelados}
+          canLockPeriod={isAdmin}
         />
       ),
     },

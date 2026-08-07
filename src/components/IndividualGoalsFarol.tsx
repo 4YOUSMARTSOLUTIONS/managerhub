@@ -9,7 +9,7 @@ import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { GoalEvidencePanel } from "@/components/GoalEvidencePanel";
-import { CalendarOff, Paperclip } from "lucide-react";
+import { CalendarOff, Paperclip, Lock, LockOpen } from "lucide-react";
 import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,6 +19,7 @@ import {
   approveGoalEntry, reproveGoalEntry, approveMonth, reopenGoalEntry,
   copyPreviousMonthEntries,
 } from "@/lib/actions/individual-goals";
+import { lockRvPeriod, reopenRvPeriod } from "@/lib/actions/rv-lock";
 import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
 import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
@@ -53,6 +54,21 @@ export type GoalRow = {
   deptId: string | null;
   subdeptId: string | null;
   entries: GoalEntryLite[];
+};
+/**
+ * O retrato de uma competência FECHADA, um por colaborador.
+ *
+ * Guarda os três números que vêm de fora do lançamento da meta, que são os que
+ * um lançamento retroativo de férias, atestado ou punição mexeria. Quando existe
+ * retrato, ele ganha do cálculo ao vivo.
+ */
+export type RvCongeladoRow = {
+  period: string;
+  ownerId: string;
+  cheio: number;
+  fator: number;
+  pctTotal: number;
+  motivos: { nome: string; quantidade: number; pct: number }[];
 };
 export type Opt = { id: string; name: string };
 export type SubOpt = { id: string; name: string; departmentId: string };
@@ -101,6 +117,7 @@ type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: num
 export function IndividualGoalsFarol({
   goals, canManageOthers, canCreateGoals, isAdmin, reportIds,
   currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [], regrasRedutor = [],
+  periodosFechados = [], rvCongelados = [], canLockPeriod = false,
 }: {
   goals: GoalRow[];
   canManageOthers: boolean;
@@ -116,6 +133,12 @@ export function IndividualGoalsFarol({
   rvDias?: RvDiasRow[];
   /** motivos de corte configurados pela empresa; vazio = nada é descontado */
   regrasRedutor?: RegraRedutor[];
+  /** competências fechadas da empresa, no formato `YYYY-MM-01` */
+  periodosFechados?: string[];
+  /** o retrato de cada competência fechada */
+  rvCongelados?: RvCongeladoRow[];
+  /** owner/admin: fecha e reabre a competência. O RH fica de fora de propósito */
+  canLockPeriod?: boolean;
 }) {
   const reportSet = useMemo(() => new Set(reportIds), [reportIds]);
   // pode editar a DEFINIÇÃO da meta (alvo, peso, conceito) do dono
@@ -141,6 +164,13 @@ export function IndividualGoalsFarol({
   const [closeMonthOpen, setCloseMonthOpen] = useState(false);
   const [copyPrevOpen, setCopyPrevOpen] = useState(false);
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  // fechamento da competência: o cadeado do DINHEIRO, separado do fechamento por
+  // lançamento, que é o do desempenho
+  const [reabrirOpen, setReabrirOpen] = useState(false);
+  const [senhaReabrir, setSenhaReabrir] = useState("");
+  const [erroCadeado, setErroCadeado] = useState("");
+  const [mexendoCadeado, iniciarCadeado] = useTransition();
+  const routerCadeado = useRouter();
 
   const subOpts = useMemo(
     () => (deptId ? subdepartments.filter((s) => s.departmentId === deptId) : subdepartments),
@@ -249,6 +279,38 @@ export function IndividualGoalsFarol({
     return redutoresDoMes(at, d.ausencias.map((a) => ({ kind: a.kind ?? "", inicio: a.inicio, fim: a.fim })), d.sancoes, regrasRedutor);
   }, [diasPorDono, regrasRedutor, SEM_CORTE]);
 
+  /**
+   * Os três números do dinheiro, com o retrato ganhando do cálculo ao vivo.
+   *
+   * Só existe um lugar que resolve isso, e as duas visões (mês e ano) passam por
+   * aqui: se a substituição morasse em cada bloco, congelar julho no mês e não no
+   * ano daria dois totais diferentes para a mesma competência.
+   */
+  const fechados = useMemo(() => new Set(periodosFechados), [periodosFechados]);
+  const congelados = useMemo(
+    () => new Map(rvCongelados.map((c) => [`${c.period}|${c.ownerId}`, c])),
+    [rvCongelados],
+  );
+  const moedaFor = useMemo(() => (owner: string, at: string) => {
+    const congelado = fechados.has(at) ? congelados.get(`${at}|${owner}`) : undefined;
+    if (congelado) {
+      return {
+        cheio: congelado.cheio > 0 ? congelado.cheio : null,
+        // `dias` e `trabalhados` não são congelados porque não entram no valor:
+        // servem só para escrever "15 de 31 dias" no aviso, e o retrato guarda o
+        // fator, que é o que multiplica
+        f: { dias: 0, trabalhados: 0, fator: congelado.fator } as FatorRv,
+        red: {
+          aplicados: congelado.motivos.map((m) => ({ regraId: "", nome: m.nome, quantidade: m.quantidade, pct: m.pct })),
+          pctTotal: congelado.pctTotal,
+          fator: 1 - congelado.pctTotal / 100,
+        } as ResultadoRedutor,
+        congelado: true,
+      };
+    }
+    return { cheio: rvFor(owner, at), f: fatorFor(owner, at), red: redutorFor(owner, at), congelado: false };
+  }, [fechados, congelados, rvFor, fatorFor, redutorFor]);
+
   const view = useMemo(() => {
     const counts: Record<FarolStatus, number> = { atingida: 0, parcial: 0, nao_atingida: 0, pendente: 0 };
     const rows: Row[] = [];
@@ -290,12 +352,12 @@ export function IndividualGoalsFarol({
         rows.push({ goal: g, pct: r.pct, status: r.status, target: has ? tSum : null, actual: has ? aSum : null, weight: 0, partial: hasP ? pSum : null, rvShare: null, rvPay: 0, entryStatus: null, reprovalNote: null });
       }
       for (const [, items] of byOwnerMonth) {
-        const cheio = rvFor(items[0].ownerId, items[0].period);
+        const moeda = moedaFor(items[0].ownerId, items[0].period);
+        const cheio = moeda.cheio;
         if (cheio == null) continue;
         // no ano o fator é do MÊS de cada grupo, não do ano: quem tirou férias em
         // julho perde a parte de julho, e os outros onze meses seguem inteiros
-        const pool = cheio * fatorFor(items[0].ownerId, items[0].period).fator
-          * redutorFor(items[0].ownerId, items[0].period).fator;
+        const pool = cheio * moeda.f.fator * moeda.red.fator;
         rvHasPool = true;
         const sumW = Math.round(items.reduce((s, x) => s + x.weight, 0));
         if (sumW !== 100) { rvWarn = true; continue; }
@@ -327,12 +389,13 @@ export function IndividualGoalsFarol({
     const byOwner = new Map<string, typeof raw>();
     for (const x of raw) { const arr = byOwner.get(x.goal.ownerId) ?? []; arr.push(x); byOwner.set(x.goal.ownerId, arr); }
     for (const [ownerId, items] of byOwner) {
-      const cheio = rvFor(ownerId, period);
+      const moeda = moedaFor(ownerId, period);
+      const cheio = moeda.cheio;
       if (cheio == null) continue;
       // proporcional aos dias trabalhados. Descontar no POTE, e não no fim,
       // acerta a linha e o total de uma vez: o valor pago é linear no pote.
-      const f = fatorFor(ownerId, period);
-      const red = redutorFor(ownerId, period);
+      const f = moeda.f;
+      const red = moeda.red;
       const pool = cheio * f.fator * red.fator;
       donosComPote.add(ownerId);
       rvHasPool = true;
@@ -371,7 +434,7 @@ export function IndividualGoalsFarol({
     // mais afetado primeiro: é quem perde mais e quem vai perguntar
     descontos.sort((a, b) => a.f.fator - b.f.fator || a.nome.localeCompare(b.nome, "pt-BR"));
     return { rows, counts, accum, allWeighted, rvPayTotal, rvHasPool, rvWarn, rvDiasMes, descontos, sub: accum == null ? "Sem registros no mês" : `${counts.atingida} atingidas · ${counts.parcial} parciais em ${rows.length}${allWeighted ? " · ponderado" : ""}` };
-  }, [filtered, mode, period, year, rvFor, fatorFor, redutorFor]);
+  }, [filtered, mode, period, year, moedaFor]);
 
   const owners = useMemo(() => new Set(view.rows.map((r) => r.goal.ownerId)), [view.rows]);
 
@@ -415,6 +478,25 @@ export function IndividualGoalsFarol({
   // há alguém em vista que a pessoa não pode editar nem fechar
   const temLinhaSoLeitura = view.rows.some((r) => !canEditDef(r.goal.ownerId) && r.goal.ownerId !== currentUserId);
   const hasRv = view.rvHasPool;
+  const mesFechado = fechados.has(period);
+
+  function fecharCompetencia() {
+    setErroCadeado("");
+    iniciarCadeado(async () => {
+      const res = await lockRvPeriod(period);
+      if (res?.error) { setErroCadeado(res.error); return; }
+      routerCadeado.refresh();
+    });
+  }
+  function reabrirCompetencia() {
+    setErroCadeado("");
+    iniciarCadeado(async () => {
+      const res = await reopenRvPeriod(period, senhaReabrir);
+      if (res?.error) { setErroCadeado(res.error); return; }
+      setReabrirOpen(false); setSenhaReabrir("");
+      routerCadeado.refresh();
+    });
+  }
   const canWeights = mode === "mes" && view.rows.length > 0 && owners.size === 1;
   const showOwner = canManageOthers && owners.size > 1;
   const periodText = mode === "ano" ? `Ano ${year}` : monthLabel(month);
@@ -572,6 +654,60 @@ export function IndividualGoalsFarol({
                     : `${monthLabel(month)}${view.rvDiasMes ? ` · ${view.rvDiasMes.trabalhados} de ${view.rvDiasMes.dias} dias` : ""}`
               }
             />
+          )}
+        </div>
+      )}
+
+      {/* O CADEADO DA COMPETÊNCIA.
+          Existe porque o valor pago era recalculado a cada abertura da tela: uma
+          punição lançada em outubro mudava a RV de julho, e mudava calada.
+          Fechado, o pote, o proporcional e o corte vêm do retrato tirado no
+          fechamento; o atingimento continua vivo, porque ele tem o próprio
+          fechamento, por lançamento. */}
+      {mode === "mes" && hasRv && (
+        <div
+          className="card"
+          style={{
+            padding: "0.7rem 1rem", marginBottom: "1.2rem",
+            borderLeft: `3px solid ${mesFechado ? "var(--mh-success)" : "var(--border)"}`,
+            display: "flex", gap: "0.7rem", alignItems: "center", flexWrap: "wrap",
+          }}
+        >
+          {mesFechado
+            ? <Lock size={16} style={{ color: "var(--mh-success)", flexShrink: 0 }} aria-hidden />
+            : <LockOpen size={16} className="soft" style={{ flexShrink: 0 }} aria-hidden />}
+          <div style={{ fontSize: "0.84rem", lineHeight: 1.5, minWidth: 0, flex: 1 }}>
+            {mesFechado ? (
+              <>
+                <strong>Competência {monthLabel(month)} fechada.</strong>{" "}
+                <span className="muted">
+                  O valor não muda mais: férias, atestado, punição ou vigência de RV lançados
+                  agora não alcançam este mês.
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>Competência {monthLabel(month)} aberta.</strong>{" "}
+                <span className="muted">
+                  O valor é recalculado a cada abertura da tela, então um lançamento retroativo
+                  ainda o altera.
+                </span>
+              </>
+            )}
+            {erroCadeado && <div style={{ color: "var(--mh-danger)", marginTop: 4 }}>{erroCadeado}</div>}
+          </div>
+          {canLockPeriod && (
+            mesFechado ? (
+              <button type="button" className="btn btn-ghost btn-sm" disabled={mexendoCadeado}
+                onClick={() => { setErroCadeado(""); setSenhaReabrir(""); setReabrirOpen(true); }}>
+                Reabrir
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary btn-sm" disabled={mexendoCadeado}
+                onClick={fecharCompetencia}>
+                {mexendoCadeado ? "Fechando…" : "Fechar competência"}
+              </button>
+            )
           )}
         </div>
       )}
@@ -844,6 +980,37 @@ export function IndividualGoalsFarol({
       )}
       {copyPrevOpen && ownerUnico && (
         <CopyPrevMonthDialog ownerId={ownerUnico} ownerName={copyOwnerName} count={copyCandidates.length} fromPeriod={prevPeriod} toPeriod={period} fromLabel={monthLabel(prevMonth)} toLabel={monthLabel(month)} onClose={() => setCopyPrevOpen(false)} />
+      )}
+      {/* A senha não é uma segunda autorização: quem chegou até aqui já é
+          proprietário ou administrador. Ela é um freio contra o clique distraído
+          numa tela aberta há horas, e é o que amarra o registro no log a alguém
+          que estava de fato no teclado. */}
+      {reabrirOpen && (
+        <Modal
+          title={`Reabrir a competência ${monthLabel(month)}`}
+          onClose={() => setReabrirOpen(false)}
+          footer={
+            <>
+              <button type="button" className="btn btn-ghost" onClick={() => setReabrirOpen(false)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" disabled={!senhaReabrir || mexendoCadeado} onClick={reabrirCompetencia}>
+                {mexendoCadeado ? "Reabrindo…" : "Reabrir"}
+              </button>
+            </>
+          }
+        >
+          <p style={{ margin: "0 0 0.9rem", fontSize: "0.88rem", lineHeight: 1.55 }}>
+            Reaberta, a remuneração variável de {monthLabel(month)} volta a ser recalculada a cada
+            abertura da tela, e um lançamento retroativo de férias, atestado, punição ou vigência
+            de RV passa a alterar o valor deste mês outra vez.
+          </p>
+          <label className="label">Sua senha</label>
+          <input
+            type="password" className="input" autoComplete="current-password"
+            value={senhaReabrir} onChange={(e) => setSenhaReabrir(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && senhaReabrir) reabrirCompetencia(); }}
+          />
+          {erroCadeado && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: "0.6rem 0 0" }}>{erroCadeado}</p>}
+        </Modal>
       )}
     </div>
   );
