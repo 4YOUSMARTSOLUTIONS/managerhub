@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
-import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow } from "@/components/IndividualGoalsFarol";
+import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type EscopoMetas } from "@/components/IndividualGoalsFarol";
 import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 
@@ -24,9 +24,13 @@ export default async function GoalsPage() {
   // `departments` e `subdepartments` eram consultados DUAS vezes cada, com a query
   // identica: uma para o filtro das metas individuais, outra para as da area. Agora
   // e uma leitura so, usada pelas duas.
-  const reportsP = isAdmin
-    ? Promise.resolve({ data: null as { user_id: string }[] | null })
-    : supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id);
+  // A equipe passa a ser lida para TODO MUNDO, admin inclusive: agora ela não serve
+  // só de permissão, serve de escopo padrão da tela. Antes o admin nem consultava,
+  // porque abria a empresa inteira de uma vez.
+  const reportsP = supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id);
+  // quem pode ampliar o escopo para fora da própria cadeia. É o mesmo conjunto que a
+  // policy individual_goals_select passou a aceitar.
+  const podeAmpliar = isAdmin || role === "manager";
 
   // Meta individual não tem unidade própria: quem tem é o DONO dela. Para o
   // seletor do topo valer aqui, o recorte é pela unidade do dono. Só custa uma
@@ -75,31 +79,40 @@ export default async function GoalsPage() {
     }
   }
 
-  // subordinados diretos (gestor = quem tem colaboradores abaixo). admin enxerga todos.
+  // a CADEIA inteira abaixo (recursiva). É a base de PERMISSÃO: quem eu posso
+  // editar, fechar e apurar. Não confundir com o escopo padrão de exibição.
   const reportIds: string[] = (reports ?? []).map((r) => r.user_id);
   // so gestores (com subordinados) ou admin cadastram metas
   const canCreateGoals = isAdmin || reportIds.length > 0;
-  const canSeeMultiple = canCreateGoals; // ve metas de mais de um colaborador
-  // colaboradores visiveis: admin/owner = todos (null); demais = ele + subordinados
-  const allowedOwnerIds: string[] | null = isAdmin ? null : [user.id, ...reportIds];
+  // Ve metas de mais de um colaborador. Desacoplado de canCreateGoals de propósito:
+  // um Gerencial sem equipe não cadastra meta, mas acompanha a empresa inteira, e
+  // sem isto a coluna Colaborador sumiria justamente da tela dele.
+  const canSeeMultiple = canCreateGoals || podeAmpliar;
 
   // ---------- ONDA 2: o que depende da onda 1 ----------
-  let goalsQuery = supabase
+  // Sem recorte por dono: o teto passa a ser a RLS, e só ela. São 25 metas no total,
+  // então carregar tudo o que a policy entrega e recortar em memória é mais barato
+  // que uma ida ao servidor por troca de escopo. Se um dia forem milhares, isto vira
+  // filtro no banco, como já é em /acoes.
+  const goalsQuery = supabase
     .from("individual_goals")
     .select("id, name, description, unit, direction, partial_pct, evidence_required, owner_id, owner:profiles!owner_id(full_name)")
     .eq("tenant_id", tenant.id);
-  if (allowedOwnerIds) goalsQuery = goalsQuery.in("owner_id", allowedOwnerIds);
 
-  let memQuery = supabase.from("memberships").select("user_id, department_id, subdepartment_id").eq("tenant_id", tenant.id);
-  if (allowedOwnerIds) memQuery = memQuery.in("user_id", allowedOwnerIds); // gestor: so o time
+  // `manager_id` entra para o escopo padrão (subordinados DIRETOS). Quem não tem
+  // equipe nem pode ampliar lê só a própria linha, que a aba de metas da área
+  // precisa para saber o setor/subsetor padrão.
+  let memQuery = supabase
+    .from("memberships")
+    .select("user_id, manager_id, department_id, subdepartment_id")
+    .eq("tenant_id", tenant.id);
+  if (!canSeeMultiple) memQuery = memQuery.eq("user_id", user.id);
 
   const areaIds = (areaGoals ?? []).map((g) => g.id);
 
   const [{ data: goals }, { data: mems }, { data: areaEntries }] = await Promise.all([
     goalsQuery.order("name"),
-    canSeeMultiple
-      ? memQuery
-      : Promise.resolve({ data: null as { user_id: string; department_id: string | null; subdepartment_id: string | null }[] | null }),
+    memQuery,
     areaIds.length
       ? supabase
           .from("area_goal_entries")
@@ -225,22 +238,38 @@ export default async function GoalsPage() {
   let subdepartments: { id: string; name: string; departmentId: string }[] = [];
   let members: { id: string; name: string }[] = [];
   if (canSeeMultiple) {
-    let depList = deps ?? [];
-    let subList = subs ?? [];
-    let memberList = todos;
-    // gestor: restringe setores/subsetores/colaboradores ao seu time
-    if (!isAdmin && allowedOwnerIds) {
-      const allow = new Set(allowedOwnerIds);
-      memberList = memberList.filter((m) => allow.has(m.id));
-      const teamDepts = new Set([...deptByUser.values()].map((v) => v.dept).filter((x): x is string => !!x));
-      const teamSubs = new Set([...deptByUser.values()].map((v) => v.sub).filter((x): x is string => !!x));
-      depList = depList.filter((d) => teamDepts.has(d.id));
-      subList = subList.filter((s) => teamSubs.has(s.id));
-    }
-    departments = depList.map((d) => ({ id: d.id, name: d.name }));
-    subdepartments = subList.map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
-    members = memberList;
+    // setor e subsetor deixam de ser recortados pelo time: com o escopo ampliável,
+    // as metas em vista podem ser de qualquer setor. São catálogos pequenos e o
+    // filtro é em memória.
+    departments = (deps ?? []).map((d) => ({ id: d.id, name: d.name }));
+    subdepartments = (subs ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
+    // Já a lista de quem pode RECEBER uma meta nova continua a CADEIA, porque é o
+    // que canManageOwner (lib/actions/individual-goals.ts) vai aceitar. Oferecer
+    // alguém que o servidor recusa é a definição de tela quebrada.
+    const naCadeia = new Set([user.id, ...reportIds]);
+    members = isAdmin ? todos : todos.filter((m) => naCadeia.has(m.id));
   }
+
+  // ---------- escopo de exibição ----------
+  // Diretos = manager_id apontando para mim E dentro da cadeia que a RLS entrega.
+  // A interseção devolve a trava de papel de my_managed_memberships: um `member`
+  // com gente pendurada nele não vira gestor por acidente (ver src/lib/team.ts:12).
+  const cadeiaSet = new Set(reportIds);
+  const diretosIds = (mems ?? [])
+    .filter((m) => m.manager_id === user.id && cadeiaSet.has(m.user_id))
+    .map((m) => m.user_id);
+  // `escopoPadraoIds` é EXIBIÇÃO; `reportIds` é PERMISSÃO. Não podem ser a mesma
+  // lista: quem amplia o escopo passa a ver gente que não pode editar.
+  const escopoPadraoIds = [user.id, ...diretosIds];
+  const escoposDisponiveis: EscopoMetas[] = ["diretos"];
+  if (reportIds.length > diretosIds.length) escoposDisponiveis.push("cadeia");
+  if (podeAmpliar) escoposDisponiveis.push("empresa");
+
+  // setor/subsetor do próprio usuário: é o recorte com que a aba de metas da área
+  // abre. Subsetor quando tem; setor quando não tem.
+  const minhaLinha = (mems ?? []).find((m) => m.user_id === user.id);
+  const deptPadrao = minhaLinha?.department_id ?? "";
+  const subPadrao = minhaLinha?.subdepartment_id ?? "";
 
   const goalRows: GoalRow[] = goalsNoEscopo.map((g) => {
     const ds = deptByUser.get(g.owner_id) ?? { dept: null, sub: null };
@@ -325,6 +354,8 @@ export default async function GoalsPage() {
           canCreateGoals={canCreateGoals}
           isAdmin={isAdmin}
           reportIds={reportIds}
+          escopoPadraoIds={escopoPadraoIds}
+          escoposDisponiveis={escoposDisponiveis}
           currentUserId={user.id}
           members={members}
           departments={departments}
@@ -348,6 +379,8 @@ export default async function GoalsPage() {
           currentUserId={user.id}
           scopedUnitId={unitScope.activeUnitId}
           unidadesExtras={unidadesExtras}
+          deptPadrao={deptPadrao}
+          subPadrao={subPadrao}
         />
       ),
     },

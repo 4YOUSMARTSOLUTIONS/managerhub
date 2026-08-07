@@ -113,7 +113,7 @@ const kpiKey = (g: AreaGoalRow) => `${g.name.trim().toLowerCase()}|${g.consolida
 
 export function AreaGoalsFarol({
   goals, departments, subdepartments, units, members, isAdmin, currentUserId, scopedUnitId = null,
-  unidadesExtras = [],
+  unidadesExtras = [], deptPadrao = "", subPadrao = "",
 }: {
   goals: AreaGoalRow[];
   departments: Opt[];
@@ -125,9 +125,18 @@ export function AreaGoalsFarol({
   scopedUnitId?: string | null; // unidade do filtro global (trava o seletor)
   /** unidades fora do vínculo que a pessoa alcança por responder por meta lá */
   unidadesExtras?: Opt[];
+  /** setor do próprio usuário: a tela abre recortada por ele */
+  deptPadrao?: string;
+  /** subsetor do próprio usuário; quando existe, é ele que manda */
+  subPadrao?: string;
 }) {
-  const [deptId, setDeptId] = useState("");
-  const [subId, setSubId] = useState("");
+  // A tela abre na área da pessoa. O setor vai junto do subsetor de propósito:
+  // sem ele o campo Subsetor abriria com a lista da empresa inteira, porque
+  // `subOpts` cascateia pelo setor escolhido.
+  const [deptId, setDeptId] = useState(deptPadrao);
+  const [subId, setSubId] = useState(subPadrao);
+  // guarda se o usuário ainda não mexeu, só para saber se mostra o aviso do padrão
+  const [padraoIntocado, setPadraoIntocado] = useState(!!(deptPadrao || subPadrao));
   const [ownerId, setOwnerId] = useState("");
   const [mode, setMode] = useState<"mes" | "ano">("mes");
   const [month, setMonth] = useState(mesAnterior());
@@ -170,13 +179,22 @@ export function AreaGoalsFarol({
   // para saber se o número dele ajuda ou atrapalha o conjunto.
   //
   // Ver não é mexer. Lançar continua preso ao `canEnter` (admin ou responsável) e,
-  // no banco, à policy `area_goal_entries_write`. E ler o farol da área nunca foi
-  // restrito: a policy `area_goals_select` já libera para qualquer membro da
-  // empresa — a tela é que recortava.
+  // no banco, à policy `area_goal_entries_write`.
+  //
+  // ESTE RECORTE É DE CONVENIÊNCIA, NÃO DE SEGURANÇA. A tela hoje ABRE no setor
+  // (ou subsetor) da pessoa para ela não ter de caçar a própria área no meio da
+  // empresa, mas a regra do banco continua "todo mundo lê tudo": `area_goals_select`
+  // e `area_goal_entries_select` são `is_tenant_member`, e a chave pública está no
+  // bundle do navegador. Limpar o filtro devolve a empresa inteira, e é para ser
+  // assim. Se um dia isso tiver de virar restrição de verdade, é policy, não tela.
+  //
+  // Meta sem setor é meta da EMPRESA e passa em qualquer recorte, exatamente como
+  // `unitId` nulo já passa em qualquer recorte de unidade. Escolher "Comercial"
+  // nunca quis dizer "esconda a meta da empresa".
   const filtered = useMemo(
     () => goals.filter((g) =>
-      (!deptId || g.departmentId === deptId) &&
-      (!subId || g.subdepartmentId === subId) &&
+      (!deptId || g.departmentId === null || g.departmentId === deptId) &&
+      (!subId || g.subdepartmentId === null || g.subdepartmentId === subId) &&
       (!ownerId || g.ownerId === ownerId) &&
       (unitSel === GROUP || g.unitId === null || g.unitId === unitSel)),
     [goals, deptId, subId, ownerId, unitSel],
@@ -352,17 +370,22 @@ export function AreaGoalsFarol({
       </div>
 
       {filtrosAbertos && (
-        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setDeptId(""); setSubId(""); setOwnerId(""); }}>
+        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setDeptId(""); setSubId(""); setOwnerId(""); setPadraoIntocado(false); }}>
           <div>
             <label className="label">Setor</label>
-            <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
+            <select
+              className="select"
+              value={deptId}
+              onChange={(e) => { setDeptId(e.target.value); setSubId(""); setPadraoIntocado(false); }}
+              title="A sua área abre selecionada. Limpe o filtro para ver a empresa inteira."
+            >
               <option value="">Todos</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div>
             <label className="label">Subsetor</label>
-            <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
+            <select className="select" value={subId} onChange={(e) => { setSubId(e.target.value); setPadraoIntocado(false); }}>
               <option value="">Todos</option>
               {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -375,6 +398,24 @@ export function AreaGoalsFarol({
             </select>
           </div>
         </PainelDeFiltros>
+      )}
+
+      {/* O selo do funil não basta: é um filtro que o usuário não ligou, e sem dizer
+          isso ele acha que as metas das outras áreas sumiram. */}
+      {padraoIntocado && (
+        <p className="muted" style={{ margin: "0 0 0.7rem", fontSize: "0.82rem" }}>
+          Mostrando a sua área
+          {deptId && <> · setor <strong>{departments.find((d) => d.id === deptId)?.name ?? "—"}</strong></>}
+          {subId && <> · subsetor <strong>{subdepartments.find((s) => s.id === subId)?.name ?? "—"}</strong></>}
+          .{" "}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setDeptId(""); setSubId(""); setPadraoIntocado(false); }}
+          >
+            Ver todos os setores
+          </button>
+        </p>
       )}
 
       {/* Controlados por estado e fora do menu, para sobreviverem ao fechamento dele */}

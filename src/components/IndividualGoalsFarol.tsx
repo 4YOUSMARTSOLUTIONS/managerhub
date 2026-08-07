@@ -96,14 +96,36 @@ const MAX_AVISO = 5;
 
 type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: number | null; actual: number | null; weight: number; partial: number | null; rvShare: number | null; rvPay: number; entryStatus: Enums<"goal_entry_status"> | null; reprovalNote: string | null };
 
+/**
+ * De quem são as metas em tela. É o MODO DE EXIBIÇÃO, não permissão: quem amplia
+ * passa a ver gente que continua não podendo editar.
+ */
+export type EscopoMetas = "diretos" | "cadeia" | "empresa";
+
+const ESCOPO_LABEL: Record<EscopoMetas, string> = {
+  diretos: "Eu e minha equipe direta",
+  cadeia: "Minha equipe inteira",
+  empresa: "Toda a empresa",
+};
+const ESCOPO_HINT: Record<EscopoMetas, string> = {
+  diretos: "Suas metas e as de quem responde diretamente a você",
+  cadeia: "Inclui os níveis abaixo dos seus gestores diretos",
+  empresa: "Todas as metas individuais da empresa. Fora da sua equipe, somente leitura.",
+};
+
 export function IndividualGoalsFarol({
-  goals, canManageOthers, canCreateGoals, isAdmin, reportIds, currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [],
+  goals, canManageOthers, canCreateGoals, isAdmin, reportIds, escopoPadraoIds, escoposDisponiveis,
+  currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [],
 }: {
   goals: GoalRow[];
   canManageOthers: boolean;
   canCreateGoals: boolean;
   isAdmin: boolean;
+  /** cadeia inteira abaixo: quem eu posso editar, fechar e apurar */
   reportIds: string[];
+  /** eu + subordinados DIRETOS: com quem a tela abre */
+  escopoPadraoIds: string[];
+  escoposDisponiveis: EscopoMetas[];
   currentUserId: string;
   members: Member[];
   departments: Opt[];
@@ -133,6 +155,19 @@ export function IndividualGoalsFarol({
   const [closeMonthOpen, setCloseMonthOpen] = useState(false);
   const [copyPrevOpen, setCopyPrevOpen] = useState(false);
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [escopo, setEscopo] = useState<EscopoMetas>("diretos");
+
+  // O escopo recorta o CONJUNTO; os filtros do painel recortam dentro dele. Por isso
+  // ele fica fora do painel, fora da contagem do funil e fora do "Limpar filtros".
+  const escopoSet = useMemo(() => {
+    if (escopo === "empresa") return null; // sem recorte
+    const base = escopo === "cadeia" ? [currentUserId, ...reportIds] : escopoPadraoIds;
+    return new Set(base);
+  }, [escopo, currentUserId, reportIds, escopoPadraoIds]);
+  const noEscopo = useMemo(
+    () => (escopoSet ? goals.filter((g) => escopoSet.has(g.ownerId)) : goals),
+    [goals, escopoSet],
+  );
 
   const subOpts = useMemo(
     () => (deptId ? subdepartments.filter((s) => s.departmentId === deptId) : subdepartments),
@@ -140,14 +175,18 @@ export function IndividualGoalsFarol({
   );
   const ownerOpts = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const g of goals) if (!seen.has(g.ownerId)) seen.set(g.ownerId, g.ownerName);
+    for (const g of noEscopo) if (!seen.has(g.ownerId)) seen.set(g.ownerId, g.ownerName);
     return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [goals]);
+  }, [noEscopo]);
+
+  // derivado em vez de efeito: estreitar o escopo pode deixar o colaborador
+  // escolhido de fora, e aí o filtro voltaria vazio sem explicar por quê
+  const ownerIdEfetivo = ownerOpts.some((o) => o.id === ownerId) ? ownerId : "";
 
   const filtered = useMemo(
-    () => goals.filter((g) =>
-      (!deptId || g.deptId === deptId) && (!subId || g.subdeptId === subId) && (!ownerId || g.ownerId === ownerId)),
-    [goals, deptId, subId, ownerId],
+    () => noEscopo.filter((g) =>
+      (!deptId || g.deptId === deptId) && (!subId || g.subdeptId === subId) && (!ownerIdEfetivo || g.ownerId === ownerIdEfetivo)),
+    [noEscopo, deptId, subId, ownerIdEfetivo],
   );
 
   const period = periodOf(month);
@@ -335,7 +374,7 @@ export function IndividualGoalsFarol({
 
   // quantos filtros estao ligados: e o selo no botao, para o funil nao esconder
   // que a tela esta recortada. Sem ele, filtro fechado vira filtro esquecido.
-  const filtrosAtivos = [deptId, subId, ownerId].filter(Boolean).length;
+  const filtrosAtivos = [deptId, subId, ownerIdEfetivo].filter(Boolean).length;
   const hasRv = view.rvHasPool;
   const canWeights = mode === "mes" && view.rows.length > 0 && owners.size === 1;
   const showOwner = canManageOthers && owners.size > 1;
@@ -364,7 +403,7 @@ export function IndividualGoalsFarol({
     () => filtered.filter((g) => !g.entries.some((e) => e.period === period)),
     [filtered, period],
   );
-  const defaultOwner = owners.size === 1 ? [...owners][0] : ownerId || "";
+  const defaultOwner = owners.size === 1 ? [...owners][0] : ownerIdEfetivo || "";
 
   return (
     <div>
@@ -387,6 +426,27 @@ export function IndividualGoalsFarol({
             )}
           </div>
         </div>
+        {/* Escopo fica FORA do painel de filtros de propósito: ele define o
+            conjunto, e o filtro Colaborador recorta dentro dele. Lado a lado no
+            mesmo painel viram a mesma coisa aos olhos de quem usa. */}
+        {escoposDisponiveis.length > 1 && (
+          <div>
+            <label className="label">Escopo</label>
+            <select
+              className="select"
+              value={escopo}
+              onChange={(e) => setEscopo(e.target.value as EscopoMetas)}
+              style={{ width: "auto", maxWidth: 240 }}
+              title={ESCOPO_HINT[escopo]}
+            >
+              {escoposDisponiveis.map((e) => (
+                <option key={e} value={e}>
+                  {e === "diretos" && escopoPadraoIds.length <= 1 ? "Só as minhas metas" : ESCOPO_LABEL[e]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {canManageOthers && (
           <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} />
         )}
@@ -447,7 +507,7 @@ export function IndividualGoalsFarol({
           </div>
           <div>
             <label className="label">Colaborador</label>
-            <select className="select" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+            <select className="select" value={ownerIdEfetivo} onChange={(e) => setOwnerId(e.target.value)}>
               <option value="">Todos</option>
               {ownerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
@@ -539,10 +599,28 @@ export function IndividualGoalsFarol({
         </div>
       )}
 
+      {/* Fora da equipe a pessoa acompanha mas não mexe. Dizer isso antes da tabela
+          evita a leitura de que a tela quebrou. */}
+      {escopo !== "diretos" && view.rows.length > 0 && (
+        <p className="muted" style={{ margin: "0 0 0.7rem", fontSize: "0.82rem" }}>
+          Mostrando <strong>{view.rows.length}</strong> {view.rows.length === 1 ? "meta" : "metas"} · escopo{" "}
+          <strong>{ESCOPO_LABEL[escopo]}</strong> · fora da sua equipe você acompanha, mas não edita.{" "}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEscopo("diretos")}>
+            Voltar à minha equipe
+          </button>
+        </p>
+      )}
+
       {view.rows.length === 0 ? (
         <EmptyState
           title={mode === "ano" ? "Nenhum registro no ano" : "Nenhuma meta neste mês"}
-          description={mode === "ano" ? "Não há registros de metas para o ano selecionado." : "Use “+ Adicionar meta” para incluir as metas desta competência."}
+          description={
+            escoposDisponiveis.length > 1 && escopo !== "empresa"
+              ? "Nenhuma meta no seu escopo nesta competência. Amplie o escopo para acompanhar as demais equipes."
+              : mode === "ano"
+                ? "Não há registros de metas para o ano selecionado."
+                : "Use “+ Adicionar meta” para incluir as metas desta competência."
+          }
         />
       ) : (
         <>
@@ -702,7 +780,7 @@ export function IndividualGoalsFarol({
           period={period}
           monthLabel={monthLabel(month)}
           existing={addableExisting}
-          isAdmin={canManageOthers}
+          isAdmin={canCreateGoals && canManageOthers}
           members={members}
           defaultOwner={defaultOwner}
           onClose={() => setAddOpen(false)}
