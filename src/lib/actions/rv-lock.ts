@@ -17,9 +17,14 @@ import type { ActionState } from "./types";
  * exatamente os que um lançamento retroativo mexe: o pote vigente, a proporção
  * de dias trabalhados e o corte por conduta.
  *
- * O atingimento das metas NÃO entra aqui: ele já tem o próprio fechamento, por
- * lançamento (`approveMonth` / `reopenGoalEntry`). Aqui se trava o dinheiro; lá
- * se trava o desempenho.
+ * O atingimento vai junto: fechar a competência aprova todo lançamento que ainda
+ * estava `aberta` naquele mês, e a partir daí o realizado também não muda mais
+ * (`upsertGoalEntry` já recusa mexer em lançamento aprovado). Travar só o
+ * dinheiro deixava a porta aberta pelo outro lado: bastava mudar o realizado
+ * depois do mês fechado e o valor mudava com ele.
+ *
+ * `reopenGoalEntry` passa a recusar enquanto a competência estiver fechada, ou o
+ * cadeado seria contornável um lançamento de cada vez.
  *
  * O retrato é tirado no servidor, com os MESMOS módulos puros que a tela usa. O
  * navegador não manda valor nenhum: quem fecha escolhe a competência, e só. Se
@@ -156,10 +161,44 @@ export async function lockRvPeriod(period: string): Promise<ActionState> {
       if (error) return { error: error.message };
     }
 
+    // Os lançamentos vão junto. Sem isto o cadeado travava só o dinheiro e o
+    // desempenho continuava aberto: dava para mudar o realizado de julho depois
+    // de julho estar fechado, e o valor mudava com ele.
+    //
+    // Só o que está `aberta`. `reprovada` não é tocada: uma meta recusada não
+    // vira aprovada por o mês ter fechado.
+    //
+    // Aqui NÃO entra o service client, ao contrário da leitura do retrato:
+    // `guard_goal_entry_closure` confere `auth.uid()` para decidir quem pode
+    // fechar uma meta, e com a chave de serviço não há `auth.uid()` nenhum — a
+    // gravação seria recusada pelo próprio trigger. Com o cliente do usuário o
+    // guard reconhece o administrador e ainda vale como segunda camada, que é o
+    // que se quer numa escrita em massa.
+    const { data: abertas } = await supabase
+      .from("individual_goal_entries")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("period", period)
+      .eq("approval_status", "aberta");
+    const idsFechados = (abertas ?? []).map((e) => e.id);
+    if (idsFechados.length) {
+      const { error: eFechar } = await supabase
+        .from("individual_goal_entries")
+        .update({
+          approval_status: "aprovada",
+          approved_by: userId,
+          approved_at: new Date().toISOString(),
+          reproval_note: null,
+        })
+        .in("id", idsFechados);
+      if (eFechar) return { error: eFechar.message };
+    }
+
     // o cadeado por último: se a gravação do retrato falhar, a competência
     // continua aberta em vez de ficar fechada em cima de nada
     const { error } = await supabase
-      .from("rv_period_locks").insert({ tenant_id: tenantId, period, locked_by: userId });
+      .from("rv_period_locks")
+      .insert({ tenant_id: tenantId, period, locked_by: userId, closed_entry_ids: idsFechados });
     if (error) return { error: error.message };
 
     revalidatePath("/metas");
@@ -185,6 +224,27 @@ export async function reopenRvPeriod(period: string, password: string): Promise<
     const { supabase, tenantId } = await adminActionContext();
     if (!PERIODO.test(period)) return { error: "Competência inválida." };
     if (!(await verifyOwnPassword(password))) return { error: "Senha incorreta." };
+
+    const { data: cadeado } = await supabase
+      .from("rv_period_locks")
+      .select("id, closed_entry_ids")
+      .eq("tenant_id", tenantId).eq("period", period).maybeSingle();
+    if (!cadeado) return { error: "Esta competência não está fechada." };
+
+    // Devolve EXATAMENTE os lançamentos que o fechamento aprovou, e só eles. O
+    // que o gestor já tinha aprovado à mão antes continua aprovado: aquilo foi
+    // decisão dele, não do cadeado, e reabrir a competência não a desfaz.
+    // cliente do usuário pelo mesmo motivo do fechamento: `guard_goal_entry_closure`
+    // exige adm/owner para uma meta voltar a `aberta`, e lê isso do `auth.uid()`
+    const ids = cadeado.closed_entry_ids ?? [];
+    if (ids.length) {
+      const { error: eAbrir } = await supabase
+        .from("individual_goal_entries")
+        .update({ approval_status: "aberta", approved_by: null, approved_at: null })
+        .eq("tenant_id", tenantId)
+        .in("id", ids);
+      if (eAbrir) return { error: eAbrir.message };
+    }
 
     const { error } = await supabase
       .from("rv_period_locks").delete().eq("tenant_id", tenantId).eq("period", period);

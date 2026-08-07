@@ -743,9 +743,9 @@ export type Database = {
       // `rv_period_locks` guarda SÓ as competências fechadas: reabrir apaga a
       // linha, e quem fechou/reabriu fica em `audit_logs`.
       rv_period_locks: {
-        Row: { id: string; tenant_id: string; period: string; locked_at: string; locked_by: string | null; note: string | null }
-        Insert: { id?: string; tenant_id: string; period: string; locked_at?: string; locked_by?: string | null; note?: string | null }
-        Update: { id?: string; tenant_id?: string; period?: string; locked_at?: string; locked_by?: string | null; note?: string | null }
+        Row: { id: string; tenant_id: string; period: string; locked_at: string; locked_by: string | null; note: string | null; closed_entry_ids: string[] }
+        Insert: { id?: string; tenant_id: string; period: string; locked_at?: string; locked_by?: string | null; note?: string | null; closed_entry_ids?: string[] }
+        Update: { id?: string; tenant_id?: string; period?: string; locked_at?: string; locked_by?: string | null; note?: string | null; closed_entry_ids?: string[] }
         Relationships: []
       }
       // O retrato dos três números que vêm de fora do lançamento da meta, um por

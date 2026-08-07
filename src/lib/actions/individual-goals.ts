@@ -454,6 +454,19 @@ export async function reopenGoalEntry(input: { goal_id: string; period: string; 
     if (!(await verifyOwnPassword(input.password))) {
       return { error: "Senha inválida." };
     }
+    // Competência fechada não abre uma meta por vez. Sem esta recusa, o cadeado
+    // do mês seria contornável um lançamento de cada vez: reabrir a meta, mudar
+    // o realizado e o valor pago do mês fechado mudava junto. Para mexer aqui,
+    // reabre-se a competência inteira, que é o ato que fica no log.
+    const { data: fechada } = await ctx.supabase
+      .from("rv_period_locks")
+      .select("id")
+      .eq("tenant_id", ctx.tenantId)
+      .eq("period", input.period)
+      .maybeSingle();
+    if (fechada) {
+      return { error: "A competência está fechada. Reabra o mês em Metas antes de reabrir esta meta." };
+    }
     const { error } = await ctx.supabase
       .from("individual_goal_entries")
       .update({

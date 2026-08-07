@@ -662,8 +662,9 @@ export function IndividualGoalsFarol({
           Existe porque o valor pago era recalculado a cada abertura da tela: uma
           punição lançada em outubro mudava a RV de julho, e mudava calada.
           Fechado, o pote, o proporcional e o corte vêm do retrato tirado no
-          fechamento; o atingimento continua vivo, porque ele tem o próprio
-          fechamento, por lançamento. */}
+          fechamento, e os lançamentos do mês vão junto: travar só o dinheiro
+          deixava a porta aberta pelo outro lado, bastando mudar o realizado
+          depois do mês fechado. */}
       {mode === "mes" && hasRv && (
         <div
           className="card"
@@ -682,7 +683,7 @@ export function IndividualGoalsFarol({
                 <strong>Competência {monthLabel(month)} fechada.</strong>{" "}
                 <span className="muted">
                   O valor não muda mais: férias, atestado, punição ou vigência de RV lançados
-                  agora não alcançam este mês.
+                  agora não alcançam este mês, e os lançamentos foram aprovados junto.
                 </span>
               </>
             ) : (
@@ -1002,6 +1003,10 @@ export function IndividualGoalsFarol({
             Reaberta, a remuneração variável de {monthLabel(month)} volta a ser recalculada a cada
             abertura da tela, e um lançamento retroativo de férias, atestado, punição ou vigência
             de RV passa a alterar o valor deste mês outra vez.
+          </p>
+          <p style={{ margin: "0 0 0.9rem", fontSize: "0.88rem", lineHeight: 1.55 }}>
+            As metas aprovadas <strong>pelo fechamento</strong> voltam para aberta. O que o gestor
+            já tinha aprovado antes continua aprovado: aquilo foi decisão dele, não do cadeado.
           </p>
           <label className="label">Sua senha</label>
           <input

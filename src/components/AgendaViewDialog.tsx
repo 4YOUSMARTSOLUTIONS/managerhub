@@ -44,6 +44,25 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
   if (!agenda) return null;
 
   const ativas = agenda.tasks.filter((t) => t.active).length;
+
+  /**
+   * Do começo do dia para o fim, que é a ordem em que o dia acontece.
+   *
+   * A lista chegava na ordem de cadastro, e quem abre a ficha quer conferir a
+   * rotina, não o histórico de quem digitou primeiro. As sem horário fixo vão
+   * para o fim de propósito: elas não disputam lugar com hora nenhuma, e
+   * espalhadas no meio quebrariam a leitura da linha do tempo.
+   *
+   * `scheduledTime` é texto `HH:MM:SS`, que ordena igual à hora.
+   */
+  const tarefas = [...agenda.tasks].sort((a, b) => {
+    const ha = a.flexible ? null : a.scheduledTime;
+    const hb = b.flexible ? null : b.scheduledTime;
+    if (ha && hb) return ha.localeCompare(hb) || a.title.localeCompare(b.title, "pt-BR");
+    if (ha) return -1;
+    if (hb) return 1;
+    return a.title.localeCompare(b.title, "pt-BR");
+  });
   // carga só das diárias: é a única frequência que vale para TODO dia útil, e
   // somar semanal com mensal daria um número que não acontece em dia nenhum
   const cargaDiaria = agenda.tasks
@@ -111,7 +130,7 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
                     </tr>
                   </thead>
                   <tbody>
-                    {agenda.tasks.map((t) => (
+                    {tarefas.map((t) => (
                       <tr key={t.id} style={{ opacity: t.active ? 1 : 0.5 }}>
                         <td>
                           <span style={{ fontWeight: 600 }}>{t.title}</span>
