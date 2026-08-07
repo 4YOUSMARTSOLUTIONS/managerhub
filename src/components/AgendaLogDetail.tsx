@@ -13,6 +13,9 @@ import {
   getLogThread, getAgendaAttachmentUrl, type LogThread,
 } from "@/lib/actions/agenda";
 
+/** Ordem de leitura, do melhor para o pior. `pendente` é o "ainda não". */
+const STATUS_OPCOES: Enums<"agenda_log_status">[] = ["feito", "parcial", "nao_feito", "pendente"];
+
 export type LogDetailCtx = {
   agendaId: string;
   taskId: string;
@@ -36,6 +39,14 @@ export function AgendaLogDetail({
   const [pending, start] = useTransition();
   const [logId, setLogId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  /**
+   * Status vive aqui e não em `ctx`, que é um retrato tirado no clique.
+   *
+   * A lista virou um liga/desliga (fiz / não fiz ainda), e os dois meio-termos
+   * moraram aqui: quem marca "parcial" ou "não realizada" quase sempre precisa
+   * escrever por quê, e a justificativa está logo abaixo.
+   */
+  const [status, setStatus] = useState<Enums<"agenda_log_status">>("pendente");
   const [thread, setThread] = useState<LogThread>({ comments: [], attachments: [] });
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,6 +55,7 @@ export function AgendaLogDetail({
   useEffect(() => {
     if (!ctx) return;
     setNote(ctx.note ?? "");
+    setStatus(ctx.status);
     setComment("");
     setLoading(true);
     (async () => {
@@ -62,8 +74,16 @@ export function AgendaLogDetail({
 
   const reload = async () => { if (logId) setThread(await getLogThread(logId)); };
 
+  const mudarStatus = (novo: Enums<"agenda_log_status">) => start(async () => {
+    const r = await setLogStatus({ agenda_id: ctx.agendaId, task_id: ctx.taskId, log_date: ctx.logDate, status: novo, note });
+    if (r.error) { toast.error(r.error); return; }
+    if (r.logId) setLogId(r.logId);
+    setStatus(novo);
+    router.refresh();
+  });
+
   const saveNote = () => start(async () => {
-    const r = await setLogStatus({ agenda_id: ctx.agendaId, task_id: ctx.taskId, log_date: ctx.logDate, status: ctx.status, note });
+    const r = await setLogStatus({ agenda_id: ctx.agendaId, task_id: ctx.taskId, log_date: ctx.logDate, status, note });
     if (r.error) { toast.error(r.error); return; }
     if (r.logId) setLogId(r.logId);
     toast.success("Observação salva.");
@@ -110,12 +130,35 @@ export function AgendaLogDetail({
             <div className="soft" style={{ fontSize: "0.78rem", marginTop: 2 }}>{ctx.agendaName}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <Badge tone={AGENDA_STATUS_TONE[ctx.status]}>{AGENDA_STATUS_LABEL[ctx.status]}</Badge>
+            <Badge tone={AGENDA_STATUS_TONE[status]}>{AGENDA_STATUS_LABEL[status]}</Badge>
             <button type="button" onClick={onClose} className="icon-btn" aria-label="Fechar"><X size={16} /></button>
           </div>
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+          {canFill && (
+            <div>
+              <label className="label">Status</label>
+              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                {STATUS_OPCOES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`btn btn-sm ${status === s ? "btn-primary" : "btn-ghost"}`}
+                    disabled={pending}
+                    onClick={() => mudarStatus(s)}
+                  >
+                    {AGENDA_STATUS_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+              <p className="soft" style={{ fontSize: "0.76rem", margin: "0.4rem 0 0" }}>
+                Na lista o botão do horário cobre realizada e ainda não realizada. Os meios-termos ficam aqui,
+                onde dá para explicar logo abaixo.
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="label">Observação / justificativa</label>
             <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} disabled={!canFill} placeholder="Ex.: não realizada por indisponibilidade do sistema…" />

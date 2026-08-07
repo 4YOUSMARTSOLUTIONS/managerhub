@@ -1,21 +1,15 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, AlertTriangle, ExternalLink, MessageSquare, Check, Contrast, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, AlertTriangle, ExternalLink, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { AGENDA_STATUS_LABEL, AGENDA_STATUS_TONE, AGENDA_WORKDAY_MINUTES, WEEKDAYS_PT } from "@/lib/constants";
+import { AGENDA_WORKDAY_MINUTES, WEEKDAYS_PT } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { dateFromYMD, fmtMinutes, pct } from "@/lib/agenda-schedule";
 import type { DayItem } from "@/lib/agenda-types";
 import type { Enums } from "@/types/database";
-
-const STATUSES = ["feito", "parcial", "nao_feito"] as const;
-const STATUS_ICON: Record<(typeof STATUSES)[number], React.ReactNode> = {
-  feito: <Check size={15} />,
-  parcial: <Contrast size={14} />,
-  nao_feito: <X size={15} />,
-};
 
 export function AgendaDayView({
   subjectName, dateStr, todayStr, items, nonWorking, reservedMin, canFill, dayAdherence,
@@ -40,6 +34,19 @@ export function AgendaDayView({
   const over = reservedMin > budget;
   const freeMin = budget - reservedMin;
   const barPct = Math.min(100, Math.round((reservedMin / budget) * 100));
+
+  // Hora do relógio, só para decidir o que já está atrasado.
+  //
+  // Começa vazia e só é preenchida depois de montar: ler o relógio durante a
+  // renderização faria o servidor e o navegador desenharem cores diferentes.
+  // Enquanto está vazia nada é considerado atrasado, que é o lado seguro.
+  const [agora, setAgora] = useState("");
+  useEffect(() => {
+    const ler = () => setAgora(new Date().toTimeString().slice(0, 5));
+    ler();
+    const t = setInterval(ler, 60_000); // o vermelho entra sozinho quando a hora chega
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div className="card" style={{ overflow: "hidden" }}>
@@ -88,15 +95,26 @@ export function AgendaDayView({
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {items.map((it) => (
-            <div key={it.key} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.7rem 1.1rem", borderBottom: "1px solid var(--mh-border)", opacity: it.chargeable ? 1 : 0.6 }}>
-              <div style={{ width: 52, flexShrink: 0, fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.85rem" }}>
-                {it.time ? it.time.slice(0, 5) : "—"}
-              </div>
+            <div key={it.key} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.55rem 1.1rem", borderBottom: "1px solid var(--mh-border)", opacity: it.chargeable ? 1 : 0.6 }}>
+              {it.kind === "task" ? (
+                <InterruptorStatus
+                  item={it}
+                  dateStr={dateStr}
+                  todayStr={todayStr}
+                  agora={agora}
+                  canFill={canFill}
+                  onSetStatus={onSetStatus}
+                />
+              ) : (
+                <div style={{ width: 96, flexShrink: 0, fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.85rem" }}>
+                  {it.time ? it.time.slice(0, 5) : "—"}
+                </div>
+              )}
+
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: "0.88rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {it.title}
                   {it.kind === "checklist" && <Badge tone="purple">Checklist</Badge>}
-                  {it.flexible && <Badge tone="blue">Tempo médio</Badge>}
                 </div>
                 {/* o nome da agenda saiu: repetia em toda linha, e a tela toda
                     já é de um responsável só. Fica a duração, que muda por linha. */}
@@ -107,39 +125,8 @@ export function AgendaDayView({
                 )}
               </div>
 
-              {it.kind === "task" && it.flexible ? (
-                <>
-                  <Badge tone="green">Realizada</Badge>
-                  <span className="soft" style={{ fontSize: "0.7rem" }}>automática</span>
-                  <BotaoDetalhe item={it} onOpenDetail={onOpenDetail} />
-                </>
-              ) : it.kind === "task" ? (
-                <>
-                  <div className="status-seg">
-                    {STATUSES.map((s) => {
-                      const active = it.status === s;
-                      const tone = AGENDA_STATUS_TONE[s];
-                      const col = tone === "green" ? "var(--mh-success)" : tone === "amber" ? "var(--mh-warning)" : "var(--mh-danger)";
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          className="status-seg-btn status-seg-icon"
-                          data-active={active}
-                          data-tone={tone}
-                          disabled={!canFill}
-                          title={AGENDA_STATUS_LABEL[s]}
-                          aria-label={AGENDA_STATUS_LABEL[s]}
-                          onClick={() => onSetStatus(it, active ? "pendente" : s)}
-                          style={active ? { background: col } : undefined}
-                        >
-                          {STATUS_ICON[s]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <BotaoDetalhe item={it} onOpenDetail={onOpenDetail} />
-                </>
+              {it.kind === "task" ? (
+                <BotaoDetalhe item={it} onOpenDetail={onOpenDetail} />
               ) : (
                 <>
                   <Badge tone={it.status === "feito" ? "green" : it.overdue ? "red" : "amber"}>
@@ -153,6 +140,99 @@ export function AgendaDayView({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Status da tarefa como um liga/desliga, com o horário DENTRO.
+ *
+ * Antes eram três botões de ícone numa coluna separada da hora. Isto funde as
+ * duas colunas, encurta a linha e troca "qual destes três ícones eu clico" por
+ * uma pergunta só: fiz ou não fiz.
+ *
+ * A cor do desligado é o ponto delicado. Se ele nascesse vermelho, quem abrisse
+ * o diário às 8h veria o dia inteiro em falha antes de ter começado. Então o
+ * desligado é CINZA enquanto a hora não chegou e vira VERMELHO quando passa, que
+ * é exatamente quando a aderência começa a cobrar aquela tarefa.
+ *
+ * `Parcial` e `Não realizada` não cabem num interruptor e foram para o painel de
+ * detalhe, junto da justificativa: quem marca meio-termo quase sempre precisa
+ * explicar. Quando um dos dois está gravado, o interruptor mostra o estado (âmbar
+ * ou vermelho) em vez de sumir com a informação.
+ */
+function InterruptorStatus({
+  item, dateStr, todayStr, agora, canFill, onSetStatus,
+}: {
+  item: DayItem;
+  dateStr: string;
+  todayStr: string;
+  agora: string;
+  canFill: boolean;
+  onSetStatus: (item: DayItem, status: Enums<"agenda_log_status">) => void;
+}) {
+  const feito = item.status === "feito";
+  const meioTermo = item.status === "parcial" || item.status === "nao_feito";
+  const hora = item.time ? item.time.slice(0, 5) : null;
+  // tempo médio conta como realizada por definição: não há o que ligar ou desligar
+  const automatica = !!item.flexible;
+
+  const passouDaHora = dateStr < todayStr || (dateStr === todayStr && !!hora && !!agora && hora <= agora);
+  const atrasada = !feito && !meioTermo && item.chargeable && passouDaHora;
+
+  const ligado = feito || automatica;
+  const fundo = ligado
+    ? "var(--mh-success)"
+    : item.status === "parcial"
+      ? "var(--mh-warning)"
+      : item.status === "nao_feito" || atrasada
+        ? "var(--mh-danger)"
+        : "var(--mh-surface-3, var(--mh-surface-2))";
+  const neutro = fundo.startsWith("var(--mh-surface");
+
+  const rotulo = hora ?? (automatica ? "média" : "—");
+  const titulo = automatica
+    ? "Tempo médio: conta como realizada automaticamente."
+    : feito
+      ? "Realizada. Clique para desmarcar."
+      : item.status === "parcial"
+        ? "Parcialmente realizada. Ajuste em Detalhes."
+        : item.status === "nao_feito"
+          ? "Não realizada. Ajuste em Detalhes."
+          : atrasada
+            ? "Passou do horário e não foi marcada. Clique para marcar como realizada."
+            : "Clique para marcar como realizada.";
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ligado}
+      aria-label={`${item.title}: ${titulo}`}
+      title={titulo}
+      disabled={!canFill || automatica}
+      onClick={() => onSetStatus(item, feito ? "pendente" : "feito")}
+      style={{
+        width: 96, height: 30, flexShrink: 0,
+        display: "inline-flex", alignItems: "center",
+        // a pastilha anda: à esquerda desligado, à direita ligado
+        flexDirection: ligado ? "row-reverse" : "row",
+        padding: 3, border: "none", borderRadius: "var(--mh-radius-sm)",
+        background: fundo,
+        color: neutro ? "var(--mh-text-2)" : "#fff",
+        font: "inherit", fontSize: "0.78rem", fontWeight: 600,
+        fontVariantNumeric: "tabular-nums",
+        cursor: !canFill || automatica ? "default" : "pointer",
+        transition: "background var(--mh-dur-fast) var(--mh-ease)",
+      }}
+    >
+      <span
+        style={{
+          width: 16, height: 22, borderRadius: 4, flexShrink: 0,
+          background: neutro ? "var(--mh-text-3)" : "rgba(255,255,255,0.92)",
+        }}
+      />
+      <span style={{ flex: 1, textAlign: "center" }}>{rotulo}</span>
+    </button>
   );
 }
 
