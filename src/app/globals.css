@@ -822,6 +822,14 @@ a {
   color: var(--mh-warning);
   border-color: color-mix(in srgb, var(--mh-warning) 32%, transparent);
 }
+/* Completa a família: as outras três pintam de vermelho, âmbar e verde no hover,
+   e faltava a da cor da marca. Serve para o ícone que LIGA alguma coisa, e não
+   para o que destrói — o interruptor de "sem horário fixo" na agenda é o caso. */
+.icon-btn-primary:hover:not(:disabled) {
+  background: var(--mh-primary-soft);
+  color: var(--mh-primary-500);
+  border-color: color-mix(in srgb, var(--mh-primary-500) 32%, transparent);
+}
 .icon-btn-green:hover:not(:disabled) {
   background: var(--mh-success-soft);
   color: var(--mh-success);

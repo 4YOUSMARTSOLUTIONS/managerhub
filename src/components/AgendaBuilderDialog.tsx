@@ -203,7 +203,9 @@ export function AgendaBuilderDialog({
                 <span>Tarefa</span>
                 <span>Horário</span>
                 <span>Duração (min)</span>
-                <span>Frequência</span>
+                {/* "/Dia" porque na frequência Mensal o dia do mês fica na mesma
+                    célula, colado no seletor */}
+                <span>Frequência/Dia</span>
                 <span />
                 <span />
               </div>
@@ -248,7 +250,7 @@ export function AgendaBuilderDialog({
                           duração passa a ser média diária. */}
                       <button
                         type="button"
-                        className="icon-btn"
+                        className="icon-btn icon-btn-primary"
                         aria-pressed={t.flexible ?? false}
                         title="Sem horário fixo (tempo médio). A duração vira uma média diária e continua contando na carga do dia."
                         style={{
