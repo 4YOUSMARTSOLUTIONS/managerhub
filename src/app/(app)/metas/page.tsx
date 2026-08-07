@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
-import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type EscopoMetas } from "@/components/IndividualGoalsFarol";
+import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow } from "@/components/IndividualGoalsFarol";
 import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 
@@ -250,21 +250,6 @@ export default async function GoalsPage() {
     members = isAdmin ? todos : todos.filter((m) => naCadeia.has(m.id));
   }
 
-  // ---------- escopo de exibição ----------
-  // Diretos = manager_id apontando para mim E dentro da cadeia que a RLS entrega.
-  // A interseção devolve a trava de papel de my_managed_memberships: um `member`
-  // com gente pendurada nele não vira gestor por acidente (ver src/lib/team.ts:12).
-  const cadeiaSet = new Set(reportIds);
-  const diretosIds = (mems ?? [])
-    .filter((m) => m.manager_id === user.id && cadeiaSet.has(m.user_id))
-    .map((m) => m.user_id);
-  // `escopoPadraoIds` é EXIBIÇÃO; `reportIds` é PERMISSÃO. Não podem ser a mesma
-  // lista: quem amplia o escopo passa a ver gente que não pode editar.
-  const escopoPadraoIds = [user.id, ...diretosIds];
-  const escoposDisponiveis: EscopoMetas[] = ["diretos"];
-  if (reportIds.length > diretosIds.length) escoposDisponiveis.push("cadeia");
-  if (podeAmpliar) escoposDisponiveis.push("empresa");
-
   // setor/subsetor do próprio usuário: é o recorte com que a aba de metas da área
   // abre. Subsetor quando tem; setor quando não tem.
   const minhaLinha = (mems ?? []).find((m) => m.user_id === user.id);
@@ -354,8 +339,6 @@ export default async function GoalsPage() {
           canCreateGoals={canCreateGoals}
           isAdmin={isAdmin}
           reportIds={reportIds}
-          escopoPadraoIds={escopoPadraoIds}
-          escoposDisponiveis={escoposDisponiveis}
           currentUserId={user.id}
           members={members}
           departments={departments}

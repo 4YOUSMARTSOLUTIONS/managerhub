@@ -5,8 +5,30 @@ import { Check, ChevronDown, X } from "lucide-react";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-/** `legacy` marca valores que ainda aparecem nos dados mas saíram do cadastro. */
-export type MultiOption = { value: string; label: string; legacy?: boolean };
+/** Faixa de título dentro da lista: separa grupos e o bloco de legados. */
+function Cabecalho({ children, title }: { children: React.ReactNode; title?: string }) {
+  return (
+    <div
+      title={title}
+      style={{
+        margin: "0.35rem 0.25rem 0.15rem", paddingTop: "0.4rem",
+        borderTop: "1px solid var(--mh-border)", color: "var(--text-muted)",
+        fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.04em",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * `legacy` marca valores que ainda aparecem nos dados mas saíram do cadastro.
+ *
+ * `group` põe a opção sob um cabeçalho na lista. Serve para achar gente numa lista
+ * grande: com o setor e o subsetor escritos por cima, "quem é o Financeiro?" vira
+ * uma pergunta de varrer com o olho em vez de lembrar o nome.
+ */
+export type MultiOption = { value: string; label: string; legacy?: boolean; group?: string };
 
 /**
  * Filtro de múltipla escolha. Mostra um resumo do que está selecionado e, ao abrir,
@@ -73,6 +95,19 @@ export function MultiSelect({
 
   const ativos = useMemo(() => visible.filter((o) => !o.legacy), [visible]);
   const legados = useMemo(() => visible.filter((o) => o.legacy), [visible]);
+
+  // agrupa preservando a ordem em que os grupos aparecem: quem monta as opções
+  // decide a ordem, o componente só não a embaralha
+  const gruposAtivos = useMemo(() => {
+    const m = new Map<string, MultiOption[]>();
+    for (const o of ativos) {
+      const k = o.group ?? "";
+      const arr = m.get(k) ?? [];
+      arr.push(o);
+      m.set(k, arr);
+    }
+    return [...m];
+  }, [ativos]);
 
   const toggle = (value: string) => {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
@@ -171,19 +206,15 @@ export function MultiSelect({
               <div className="soft" style={{ padding: "0.6rem", fontSize: "0.82rem" }}>Nada encontrado.</div>
             ) : (
               <>
-                {ativos.map(renderOption)}
+                {gruposAtivos.map(([titulo, itens]) => (
+                  <div key={titulo || "__sem_grupo__"}>
+                    {titulo && <Cabecalho>{titulo}</Cabecalho>}
+                    {itens.map(renderOption)}
+                  </div>
+                ))}
                 {legados.length > 0 && (
                   <>
-                    <div
-                      title={legacyHint}
-                      style={{
-                        margin: "0.35rem 0.25rem 0.15rem", paddingTop: "0.4rem",
-                        borderTop: "1px solid var(--mh-border)", color: "var(--text-muted)",
-                        fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.04em",
-                      }}
-                    >
-                      {legacyLabel}
-                    </div>
+                    <Cabecalho title={legacyHint}>{legacyLabel}</Cabecalho>
                     {legados.map(renderOption)}
                   </>
                 )}

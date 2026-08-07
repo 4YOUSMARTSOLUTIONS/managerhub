@@ -10,6 +10,7 @@ import { SearchSelect } from "@/components/SearchSelect";
 import { ImportAreaGoalsDialog } from "@/components/ImportAreaGoalsDialog";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { ImportAreaEntriesDialog } from "@/components/ImportAreaEntriesDialog";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { IconImport } from "@/components/ui/ImpExpIcons";
@@ -133,8 +134,8 @@ export function AreaGoalsFarol({
   // A tela abre na área da pessoa. O setor vai junto do subsetor de propósito:
   // sem ele o campo Subsetor abriria com a lista da empresa inteira, porque
   // `subOpts` cascateia pelo setor escolhido.
-  const [deptId, setDeptId] = useState(deptPadrao);
-  const [subId, setSubId] = useState(subPadrao);
+  const [deptIds, setDeptIds] = useState<string[]>(deptPadrao ? [deptPadrao] : []);
+  const [subIds, setSubIds] = useState<string[]>(subPadrao ? [subPadrao] : []);
   // guarda se o usuário ainda não mexeu, só para saber se mostra o aviso do padrão
   const [padraoIntocado, setPadraoIntocado] = useState(!!(deptPadrao || subPadrao));
   const [ownerId, setOwnerId] = useState("");
@@ -161,9 +162,18 @@ export function AreaGoalsFarol({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleCollapse = (name: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n; });
 
-  const subOpts = useMemo(
-    () => (deptId ? subdepartments.filter((s) => s.departmentId === deptId) : subdepartments),
-    [subdepartments, deptId],
+  // subsetor cascateia pelos setores escolhidos; sem setor escolhido, mostra todos
+  // com o nome do setor por cima, senão "Financeiro" de dois setores fica ambíguo
+  const subOpts = useMemo(() => {
+    const nomeDept = new Map(departments.map((d) => [d.id, d.name]));
+    const lista = deptIds.length ? subdepartments.filter((s) => deptIds.includes(s.departmentId)) : subdepartments;
+    return lista
+      .map((s) => ({ value: s.id, label: s.name, group: nomeDept.get(s.departmentId) ?? "Sem setor" }))
+      .sort((a, b) => a.group.localeCompare(b.group, "pt-BR") || a.label.localeCompare(b.label, "pt-BR"));
+  }, [subdepartments, departments, deptIds]);
+  const deptOpts = useMemo(
+    () => departments.map((d) => ({ value: d.id, label: d.name })),
+    [departments],
   );
   const ownerOpts = useMemo(() => {
     const seen = new Map<string, string>();
@@ -193,11 +203,11 @@ export function AreaGoalsFarol({
   // nunca quis dizer "esconda a meta da empresa".
   const filtered = useMemo(
     () => goals.filter((g) =>
-      (!deptId || g.departmentId === null || g.departmentId === deptId) &&
-      (!subId || g.subdepartmentId === null || g.subdepartmentId === subId) &&
+      (deptIds.length === 0 || g.departmentId === null || deptIds.includes(g.departmentId)) &&
+      (subIds.length === 0 || g.subdepartmentId === null || subIds.includes(g.subdepartmentId)) &&
       (!ownerId || g.ownerId === ownerId) &&
       (unitSel === GROUP || g.unitId === null || g.unitId === unitSel)),
-    [goals, deptId, subId, ownerId, unitSel],
+    [goals, deptIds, subIds, ownerId, unitSel],
   );
 
   const goalById = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
@@ -279,7 +289,7 @@ export function AreaGoalsFarol({
   const grouped = unitSel === GROUP;
 
   // selo do botao de filtros: filtro fechado nao pode virar filtro esquecido
-  const filtrosAtivos = [deptId, subId, ownerId].filter(Boolean).length;
+  const filtrosAtivos = (deptIds.length ? 1 : 0) + (subIds.length ? 1 : 0) + (ownerId ? 1 : 0);
   // os dois diálogos de planilha viram itens de menu, entao o menu precisa
   // comandar a abertura deles
   const [importGoalsOpen, setImportGoalsOpen] = useState(false);
@@ -370,25 +380,28 @@ export function AreaGoalsFarol({
       </div>
 
       {filtrosAbertos && (
-        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setDeptId(""); setSubId(""); setOwnerId(""); setPadraoIntocado(false); }}>
-          <div>
-            <label className="label">Setor</label>
-            <select
-              className="select"
-              value={deptId}
-              onChange={(e) => { setDeptId(e.target.value); setSubId(""); setPadraoIntocado(false); }}
-              title="A sua área abre selecionada. Limpe o filtro para ver a empresa inteira."
-            >
-              <option value="">Todos</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setDeptIds([]); setSubIds([]); setOwnerId(""); setPadraoIntocado(false); }}>
+          <div title="A sua área abre selecionada. Limpe o filtro para ver a empresa inteira.">
+            <MultiSelect
+              label="Setor"
+              options={deptOpts}
+              selected={deptIds}
+              onChange={(v) => { setDeptIds(v); setSubIds([]); setPadraoIntocado(false); }}
+              searchable
+              allLabel="Todos"
+              placeholder="Digite o setor…"
+            />
           </div>
           <div>
-            <label className="label">Subsetor</label>
-            <select className="select" value={subId} onChange={(e) => { setSubId(e.target.value); setPadraoIntocado(false); }}>
-              <option value="">Todos</option>
-              {subOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <MultiSelect
+              label="Subsetor"
+              options={subOpts}
+              selected={subIds}
+              onChange={(v) => { setSubIds(v); setPadraoIntocado(false); }}
+              searchable
+              allLabel="Todos"
+              placeholder="Digite o subsetor…"
+            />
           </div>
           <div>
             <label className="label">Responsável</label>
@@ -405,13 +418,13 @@ export function AreaGoalsFarol({
       {padraoIntocado && (
         <p className="muted" style={{ margin: "0 0 0.7rem", fontSize: "0.82rem" }}>
           Mostrando a sua área
-          {deptId && <> · setor <strong>{departments.find((d) => d.id === deptId)?.name ?? "—"}</strong></>}
-          {subId && <> · subsetor <strong>{subdepartments.find((s) => s.id === subId)?.name ?? "—"}</strong></>}
+          {deptIds.length > 0 && <> · setor <strong>{departments.filter((d) => deptIds.includes(d.id)).map((d) => d.name).join(", ")}</strong></>}
+          {subIds.length > 0 && <> · subsetor <strong>{subdepartments.filter((s) => subIds.includes(s.id)).map((s) => s.name).join(", ")}</strong></>}
           .{" "}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => { setDeptId(""); setSubId(""); setPadraoIntocado(false); }}
+            onClick={() => { setDeptIds([]); setSubIds([]); setPadraoIntocado(false); }}
           >
             Ver todos os setores
           </button>
