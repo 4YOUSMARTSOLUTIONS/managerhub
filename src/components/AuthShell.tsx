@@ -1,4 +1,4 @@
-import { BrandLogo, BrandWordmark, BRAND_OWNER, SHOW_BRAND_OWNER } from "./BrandLogo";
+import { BrandLogo, BrandWordmark, BrandOwnerSignature, SHOW_BRAND_OWNER } from "./BrandLogo";
 
 export function AuthShell({
   title,
@@ -50,19 +50,6 @@ export function AuthShell({
           <BrandLogo size={52} radius={14} glow />
           <div style={{ textAlign: "center" }}>
             <BrandWordmark size="1.35rem" />
-            {SHOW_BRAND_OWNER && (
-              <div
-                style={{
-                  fontSize: "0.6rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.16em",
-                  color: "var(--mh-text-3)",
-                  marginTop: 3,
-                }}
-              >
-                {BRAND_OWNER}
-              </div>
-            )}
           </div>
         </div>
 
@@ -89,6 +76,26 @@ export function AuthShell({
           <p className="muted" style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.875rem" }}>
             {footer}
           </p>
+        )}
+
+        {/* Assinatura da dona do produto no RODAPÉ, e não colada no wordmark.
+            Encostada ali embaixo de "MANAGER HUB" ela disputava espaço com a
+            descida das letras e ficava espremida; aqui tem ar em volta, respeita
+            a hierarquia (o produto primeiro, quem o faz depois) e é o lugar onde
+            o olho procura autoria. */}
+        {SHOW_BRAND_OWNER && (
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: footer ? "1.5rem" : "2rem",
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              letterSpacing: "0.2em",
+              color: "var(--mh-text-3)",
+            }}
+          >
+            <BrandOwnerSignature />
+          </div>
         )}
       </div>
     </div>

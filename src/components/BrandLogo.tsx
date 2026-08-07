@@ -1,7 +1,12 @@
 /** Assinatura da empresa dona do produto (login + sidebar).
- *  Oculta provisoriamente — vire para `true` para reexibir. */
-export const SHOW_BRAND_OWNER: boolean = false;
+ *  Vire para `false` para ocultar nos dois lugares de uma vez. */
+export const SHOW_BRAND_OWNER: boolean = true;
 export const BRAND_OWNER = "4YOU SMART SOLUTIONS";
+
+/** Assinatura da dona do produto. Componente para sair igual no login e na barra. */
+export function BrandOwnerSignature() {
+  return <>{BRAND_OWNER}</>;
+}
 
 export function BrandLogo({
   size = 28,

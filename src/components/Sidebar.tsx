@@ -8,7 +8,7 @@ import {
   LayoutDashboard, LayoutGrid, Layers, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
   Boxes, BookMarked,
 } from "lucide-react";
-import { BrandLogo, BrandWordmark, BRAND_OWNER, SHOW_BRAND_OWNER } from "./BrandLogo";
+import { BrandLogo, BrandWordmark, BrandOwnerSignature, SHOW_BRAND_OWNER } from "./BrandLogo";
 import { UserMenu } from "./UserMenu";
 import { NavPending } from "./ui/NavPending";
 import {
@@ -108,7 +108,7 @@ export function Sidebar({
         <BrandLogo size={32} radius={9} />
         <span>
           <BrandWordmark />
-          {SHOW_BRAND_OWNER && <span className="brand-sub">{BRAND_OWNER}</span>}
+          {SHOW_BRAND_OWNER && <span className="brand-sub"><BrandOwnerSignature /></span>}
         </span>
         <NavPending />
       </Link>
