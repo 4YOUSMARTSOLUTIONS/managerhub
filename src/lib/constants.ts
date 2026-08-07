@@ -495,6 +495,7 @@ export const ROLE: Record<Enums<"member_role">, string> = {
   admin: "Administrador",
   manager: "Gerencial",
   team_lead: "Gestor",
+  hr: "RH",
   member: "Membro",
 };
 
@@ -523,11 +524,17 @@ export const UNIT_KIND: Record<Enums<"unit_kind">, string> = {
  *   abre os Logs do sistema.
  * - `team_lead` (Gestor): só a própria equipe, mas a cadeia inteira abaixo dele.
  *   Não é atalho para nada de empresa: sem chamados de terceiros, sem logs.
+ *
+ * `hr` (RH) é de outra natureza: não é um degrau da hierarquia, é um funcionário
+ * comum com alçada num assunto. Ele edita departamento pessoal (cadastro, férias,
+ * punições e remuneração variável) e mais nada; não redefine senha e não muda o
+ * perfil de ninguém. Por isso aparece depois de Gestor e antes de Funcionário.
  */
 export const USER_TYPE: Partial<Record<Enums<"member_role">, string>> = {
   admin: "Administrador",
   manager: "Gerencial",
   team_lead: "Gestor",
+  hr: "RH",
   member: "Funcionário",
 };
 

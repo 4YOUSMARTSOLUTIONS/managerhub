@@ -9,16 +9,20 @@ import { normTexto, parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam 
 /**
  * Férias e afastamentos do colaborador.
  *
- * Só owner/admin, a mesma regra da vigência de remuneração variável: é aqui que
- * se decide quantos dias do mês entram na conta da RV, então mexer nisto é mexer
- * no que a pessoa recebe.
+ * Owner, admin e RH: é aqui que se decide quantos dias do mês entram na conta da
+ * RV, então mexer nisto é mexer no que a pessoa recebe, e é justamente por isso
+ * que faz parte da alçada do departamento pessoal.
  *
  * Os dois `revalidatePath` são obrigatórios: o cadastro vive em Configurações,
  * mas quem consome é a tela de Metas.
  */
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
-const SO_ADMIN = "Apenas proprietário e administrador lançam férias e afastamentos.";
+const SO_ADMIN = "Apenas proprietário, administrador e RH lançam férias e afastamentos.";
+
+/** Espelha o `dpActionContext`: aqui a recusa vira mensagem na tela em vez de
+ *  exceção, porque estas três actions devolvem `ActionState`. */
+const PODE_DP = new Set<Enums<"member_role">>(["owner", "admin", "hr"]);
 
 export type AbsenceInput = {
   /** ausente = criar */
@@ -47,7 +51,7 @@ function mensagem(e: { code?: string; message?: string }): string {
 export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (role !== "owner" && role !== "admin") return { error: SO_ADMIN };
+    if (!PODE_DP.has(role)) return { error: SO_ADMIN };
 
     const start_date = (input.start_date ?? "").trim();
     const end_date = (input.end_date ?? "").trim();
@@ -124,7 +128,7 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
   const vazio: AbsenceImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, overlapping: 0 };
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (role !== "owner" && role !== "admin") return { ...vazio, error: SO_ADMIN };
+    if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
 
     const { data: membros } = await supabase
       .from("memberships")
@@ -220,7 +224,7 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
 export async function deleteAbsence(id: string): Promise<ActionState> {
   try {
     const { supabase, role } = await actionContext();
-    if (role !== "owner" && role !== "admin") return { error: SO_ADMIN };
+    if (!PODE_DP.has(role)) return { error: SO_ADMIN };
     const { error } = await supabase.from("employee_absences").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/configuracoes");

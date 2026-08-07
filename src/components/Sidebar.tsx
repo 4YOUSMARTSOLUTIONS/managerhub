@@ -72,14 +72,19 @@ export function Sidebar({
   // própria equipe, não da empresa: nada de Logs do sistema nem de triagem de
   // chamados. Para efeito de menu ele se comporta como Funcionário; o que ele
   // enxerga a mais vem da RLS, pelo vínculo de chefia, não do papel na tela.
-  const canManage = role === "owner" || role === "admin" || role === "manager";
+  // `hr` (RH) entra junto porque Configurações é a única porta do departamento
+  // pessoal: é lá que moram Colaboradores, Férias e Remuneração variável. Ele
+  // entra e vê SÓ essas abas, o recorte é feito na própria página.
+  const canManage = role === "owner" || role === "admin" || role === "manager" || role === "hr";
   const canAdmin = role === "owner" || role === "admin";
   // super admin de plataforma entra na empresa já como "owner" (requireContext),
   // então não precisa de exceção aqui
   const isOwner = role === "owner";
   // "Gestor ou acima": quem tem alçada sobre uma equipe. Some do menu de quem
   // não lidera ninguém, para "Minha equipe" não virar item morto para ~880 pessoas.
-  const canLeadTeam = canManage || role === "team_lead";
+  // RH fica de fora: a alçada dele é sobre o cadastro de todo mundo, não sobre
+  // uma equipe. Se ele também chefiar alguém, chefia pelo papel `team_lead`.
+  const canLeadTeam = role === "owner" || role === "admin" || role === "manager" || role === "team_lead";
 
   /** papel primeiro (como antes), depois o entitlement da unidade. */
   const visible = (m: ModuleDef) => {

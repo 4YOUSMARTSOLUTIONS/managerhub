@@ -1488,7 +1488,7 @@ export type Database = {
       // `team_lead` é o perfil "Gestor": vê os dados da própria equipe (cadeia
       // inteira abaixo dele), sem os poderes de empresa inteira do "Gerencial"
       // (`manager`). A ordem aqui espelha a hierarquia do enum no banco.
-      member_role: "owner" | "admin" | "manager" | "team_lead" | "member"
+      member_role: "owner" | "admin" | "manager" | "team_lead" | "hr" | "member"
       participant_response: "invited" | "accepted" | "declined" | "tentative"
       priority_level: "low" | "medium" | "high" | "urgent"
       ticket_category:

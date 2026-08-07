@@ -64,8 +64,16 @@ export default async function SettingsPage() {
   // gravar. `canEdit` desce até o último botão, e a recusa de verdade está em
   // três camadas atrás dele: a RLS, o `adminActionContext` das server actions e
   // as guardas dentro das RPCs `admin_*`. A tela é só a primeira.
-  const canView = role === "owner" || role === "admin" || role === "manager";
+  //
+  // O RH entra por um terceiro caminho: ele NÃO lê a tela toda, e edita a parte
+  // dele. Só as abas Colaboradores e Remuneração variável aparecem, e nelas o
+  // `canEditDP` faz o papel do `canEdit`. Duas coisas ficam fora da alçada dele
+  // dentro da própria aba de Colaboradores, e são travadas pelo `canManageAccess`:
+  // redefinir senha e mudar o perfil de acesso.
+  const isHr = role === "hr";
+  const canView = role === "owner" || role === "admin" || role === "manager" || isHr;
   const canEdit = role === "owner" || role === "admin";
+  const canEditDP = canEdit || isHr;
 
   if (!canView) {
     return (
@@ -360,14 +368,15 @@ export default async function SettingsPage() {
               people={people}
               currentUserId={user.id}
               isSuperAdmin={isSuperAdmin}
-              canEdit={canEdit}
+              canEdit={canEditDP}
+              canManageAccess={canEdit}
             />
           ),
         },
         {
           id: "ausencias",
           label: "Férias e afastamentos",
-          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} absences={absenceRows} canEdit={canEdit} />,
+          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} absences={absenceRows} canEdit={canEditDP} />,
         },
         {
           id: "punicoes",
@@ -378,7 +387,7 @@ export default async function SettingsPage() {
               types={sanctionTypeOpts}
               sanctions={sanctionRows}
               cortaRv={punicaoCortaRv}
-              canEdit={canEdit}
+              canEdit={canEditDP}
             />
           ),
         },
@@ -1011,14 +1020,14 @@ export default async function SettingsPage() {
         <Tabs
           variant="sub"
           tabs={[
-            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} canEdit={canEdit} /> },
-            { id: "rv-redutores", label: "Redutores", content: <RvReducerEditor regras={reducerRules} tiposPunicao={sanctionTypeOpts.filter((t) => t.active)} canEdit={canEdit} /> },
+            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} canEdit={canEditDP} /> },
+            { id: "rv-redutores", label: "Redutores", content: <RvReducerEditor regras={reducerRules} tiposPunicao={sanctionTypeOpts.filter((t) => t.active)} canEdit={canEditDP} /> },
             {
               id: "rv-punicoes",
               label: "Tipos de punição",
               content: (
                 <RegistryList
-                  canEdit={canEdit}
+                  canEdit={canEditDP}
                   title="Tipos de punição"
                   description="As sanções previstas nas regras da empresa. O quanto cada uma reduz da RV fica na sub-aba Redutores."
                   items={sanctionTypeOpts.map((t) => ({ id: t.id, name: t.name, active: t.active, canDelete: !sanctionRows.some((s2) => s2.typeId === t.id) }))}
@@ -1061,12 +1070,19 @@ export default async function SettingsPage() {
     { id: "feriados", label: "Calendário e Feriados", content: feriadosTab },
   ];
 
+  // O RH não é um administrador com menos botões: é um funcionário com uma
+  // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
+  // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as duas
+  // abas que SÃO o departamento pessoal.
+  const DP_TABS = new Set(["usuarios", "rv"]);
+  const tabsVisiveis = isHr ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
+
   return (
     <div>
       <PageHeader title="Configurações" subtitle="Empresa, usuários, unidades e estrutura organizacional." />
       {/* Sem este aviso, a tela em consulta parece a tela normal com defeito:
           a pessoa procura o botão de adicionar, não acha, e conclui que quebrou. */}
-      {!canEdit && (
+      {!canEdit && !isHr && (
         <div
           className="card"
           style={{
@@ -1084,7 +1100,7 @@ export default async function SettingsPage() {
           </span>
         </div>
       )}
-      <Tabs tabs={tabs} />
+      <Tabs tabs={tabsVisiveis} />
     </div>
   );
 }

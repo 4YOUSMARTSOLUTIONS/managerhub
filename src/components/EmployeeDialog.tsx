@@ -63,6 +63,7 @@ export function EmployeeDialog({
   hierarchies,
   people,
   canSetOwner = false,
+  canSetRole = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -77,6 +78,16 @@ export function EmployeeDialog({
   people: Option[];
   /** super admin: pode definir/alterar o papel Proprietário (owner) */
   canSetOwner?: boolean;
+  /**
+   * `false` para o RH: ele cadastra e corrige a ficha, mas o perfil de acesso
+   * não é dele. No cadastro novo o campo some e a pessoa entra como Funcionário;
+   * na edição mostra o perfil atual, apenas para leitura.
+   *
+   * O `role` não é enviado nesse caso, e as duas RPCs tratam a ausência como
+   * "mantém o que está" (`coalesce(nullif(...), role)`). Ainda assim o trigger
+   * `memberships_rh_nao_define_papel` recusaria a troca no banco.
+   */
+  canSetRole?: boolean;
 }) {
   const isEdit = !!employee;
   const action = isEdit ? updateEmployee : createEmployee;
@@ -168,8 +179,10 @@ export function EmployeeDialog({
               <Field label="Código do funcionário" req>
                 <input name="employee_code" className="input" required defaultValue={employee?.employeeCode ?? ""} />
               </Field>
-              <Field label="Tipo de usuário" req>
-                {employee?.role === "owner" && !canSetOwner ? (
+              <Field label="Tipo de usuário" req={canSetRole}>
+                {!canSetRole ? (
+                  <input className="input" value={employee ? (ROLE[employee.role as keyof typeof ROLE] ?? employee.role) : ROLE.member} disabled />
+                ) : employee?.role === "owner" && !canSetOwner ? (
                   <>
                     <input type="hidden" name="role" value="owner" />
                     <input className="input" value={ROLE.owner} disabled />

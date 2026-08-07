@@ -77,3 +77,24 @@ export async function adminActionContext() {
   }
   return ctx;
 }
+
+/**
+ * A mesma trava, um degrau mais larga: passa também o RH.
+ *
+ * Vale só no departamento pessoal (cadastro de colaborador, férias e
+ * afastamentos, punições e remuneração variável). Todo o resto de
+ * /configuracoes continua no `adminActionContext`, e a divisão precisa ser feita
+ * action por action: trocar uma pela outra por engano é o tipo de erro que a RLS
+ * não denuncia, porque lá o RH também está autorizado nessas tabelas.
+ *
+ * O que esta função NÃO cobre, de propósito: `setUserPassword` e `removeUser`.
+ * E a troca de perfil de acesso é barrada no banco, pelo trigger
+ * `memberships_rh_nao_define_papel`, não aqui.
+ */
+export async function dpActionContext() {
+  const ctx = await actionContext();
+  if (ctx.role !== "owner" && ctx.role !== "admin" && ctx.role !== "hr") {
+    throw new Error("Apenas proprietário, administrador e RH podem alterar o departamento pessoal.");
+  }
+  return ctx;
+}

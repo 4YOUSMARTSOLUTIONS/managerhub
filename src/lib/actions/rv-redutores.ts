@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { adminActionContext } from "./context";
+import { dpActionContext } from "./context";
 import { wantsActive } from "@/lib/catalogGuard";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
@@ -10,10 +10,10 @@ import type { Enums } from "@/types/database";
  * Redutores da remuneração variável: catálogo de punições, o registro da
  * punição e as regras/faixas de corte.
  *
- * Tudo aqui é `adminActionContext`, pelo mesmo motivo de `absences.ts` e de
- * `rv-config.ts`: mexer nisto é mexer no que a pessoa recebe. A RLS já recusa,
- * mas recusa em silêncio — um update fora da policy afeta zero linha e volta sem
- * erro.
+ * Tudo aqui é `dpActionContext`, pelo mesmo motivo de `absences.ts` e de
+ * `rv-config.ts`: mexer nisto é mexer no que a pessoa recebe, e é o núcleo da
+ * alçada do RH. A RLS já recusa quem não pode, mas recusa em silêncio: um update
+ * fora da policy afeta zero linha e volta sem erro.
  *
  * Os dois `revalidatePath` são obrigatórios em toda função: o cadastro vive em
  * Configurações e quem consome é a tela de Metas.
@@ -48,7 +48,7 @@ function mensagem(e: { code?: string; message?: string }): string {
 
 // ---------------------------------------------------- catálogo de punições
 export async function createSanctionType(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await adminActionContext();
+  const { supabase, tenantId } = await dpActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("sanction_types").insert({ tenant_id: tenantId, name });
@@ -56,13 +56,13 @@ export async function createSanctionType(formData: FormData): Promise<void> {
 }
 
 export async function setSanctionTypeActive(formData: FormData): Promise<void> {
-  const { supabase } = await adminActionContext();
+  const { supabase } = await dpActionContext();
   await supabase.from("sanction_types").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidar();
 }
 
 export async function deleteSanctionType(formData: FormData): Promise<void> {
-  const { supabase } = await adminActionContext();
+  const { supabase } = await dpActionContext();
   const id = String(formData.get("id"));
   // Em uso vira desativação, como nos demais catálogos: apagar levaria junto o
   // histórico disciplinar, e a FK é `on delete restrict` justamente por isso.
@@ -85,7 +85,7 @@ export type SanctionInput = {
 
 export async function upsertSanction(input: SanctionInput): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId } = await adminActionContext();
+    const { supabase, tenantId, userId } = await dpActionContext();
     const occurred_on = (input.occurred_on ?? "").trim();
     if (!input.user_id) return { error: "Escolha o colaborador." };
     if (!input.sanction_type_id) return { error: "Escolha o tipo de punição." };
@@ -118,7 +118,7 @@ export async function upsertSanction(input: SanctionInput): Promise<ActionState>
 
 export async function deleteSanction(id: string): Promise<ActionState> {
   try {
-    const { supabase } = await adminActionContext();
+    const { supabase } = await dpActionContext();
     const { error } = await supabase.from("employee_sanctions").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidar();
@@ -139,7 +139,7 @@ export type RuleInput = {
 
 export async function createReducerRule(input: RuleInput): Promise<ActionState> {
   try {
-    const { supabase, tenantId } = await adminActionContext();
+    const { supabase, tenantId } = await dpActionContext();
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Dê um nome ao motivo." };
     if (input.source === "absence" && !input.absence_kind) {
@@ -161,13 +161,13 @@ export async function createReducerRule(input: RuleInput): Promise<ActionState> 
 }
 
 export async function toggleReducerRule(formData: FormData): Promise<void> {
-  const { supabase } = await adminActionContext();
+  const { supabase } = await dpActionContext();
   await supabase.from("rv_reducer_rules").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidar();
 }
 
 export async function deleteReducerRule(formData: FormData): Promise<void> {
-  const { supabase } = await adminActionContext();
+  const { supabase } = await dpActionContext();
   // as faixas caem junto pela FK em cascata
   await supabase.from("rv_reducer_rules").delete().eq("id", String(formData.get("id")));
   revalidar();
@@ -177,7 +177,7 @@ export async function addReducerBand(input: {
   rule_id: string; min_qtd: number; max_qtd: number | null; reduction_pct: number;
 }): Promise<ActionState> {
   try {
-    const { supabase, tenantId } = await adminActionContext();
+    const { supabase, tenantId } = await dpActionContext();
     if (!Number.isFinite(input.min_qtd) || input.min_qtd < 1) return { error: "O limite inicial começa em 1." };
     if (input.max_qtd != null && input.max_qtd < input.min_qtd) {
       return { error: "O limite final não pode ser menor que o inicial." };
@@ -204,7 +204,7 @@ export async function addReducerBand(input: {
 
 export async function deleteReducerBand(id: string): Promise<ActionState> {
   try {
-    const { supabase } = await adminActionContext();
+    const { supabase } = await dpActionContext();
     const { error } = await supabase.from("rv_reducer_bands").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidar();

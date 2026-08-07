@@ -78,6 +78,7 @@ export function UsersManager({
   currentUserId,
   isSuperAdmin = false,
   canEdit = true,
+  canManageAccess = true,
 }: {
   employees: EmployeeRow[];
   units: UnitOption[];
@@ -96,6 +97,17 @@ export function UsersManager({
    * que some é cadastrar, importar, editar, inativar, redefinir senha e remover.
    */
   canEdit?: boolean;
+  /**
+   * O recorte do RH, um degrau dentro do `canEdit`: ele cadastra e corrige a
+   * ficha, mas não mexe na CONTA. Some a redefinição de senha, a remoção, a
+   * importação em lote (que cria conta com senha padrão) e o seletor de perfil
+   * de acesso na ficha.
+   *
+   * A tela é só a primeira camada: a senha e a remoção param no
+   * `adminActionContext`, e o perfil para no trigger `memberships_rh_nao_define_papel`,
+   * dentro do banco.
+   */
+  canManageAccess?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -193,7 +205,7 @@ export function UsersManager({
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: 280, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}
           />
-          {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>}
+          {canEdit && canManageAccess && <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>}
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
@@ -280,14 +292,16 @@ export function UsersManager({
                           {canAct && (
                             <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
                           )}
-                          <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" triggerTitle="Redefinir senha" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">
-                            <input type="hidden" name="user_id" value={e.userId} />
-                            <div>
-                              <label className="label">Nova senha</label>
-                              <PasswordInput autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
-                            </div>
-                          </FormModal>
-                          {canAct && (
+                          {canManageAccess && (
+                            <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" triggerTitle="Redefinir senha" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">
+                              <input type="hidden" name="user_id" value={e.userId} />
+                              <div>
+                                <label className="label">Nova senha</label>
+                                <PasswordInput autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
+                              </div>
+                            </FormModal>
+                          )}
+                          {canAct && canManageAccess && (
                             <button className="icon-btn icon-btn-danger" type="button" title="Remover" onClick={() => remove(e.userId, e.fullName)}><Ico d={ICON.trash} /></button>
                           )}
                         </>
@@ -331,9 +345,10 @@ export function UsersManager({
             hierarchies={hierarchies}
             people={people}
             canSetOwner={isSuperAdmin}
+            canSetRole={canManageAccess}
           />
 
-          <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />
+          {canManageAccess && <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />}
         </>
       )}
 

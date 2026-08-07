@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
+import type { Enums } from "@/types/database";
+
+/** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
+ *  recusa precisa virar mensagem na tela em vez de exceção. */
+const PODE_DP = new Set<Enums<"member_role">>(["owner", "admin", "hr"]);
+const SO_DP = "Apenas proprietário, administrador e RH configuram a remuneração variável.";
 
 const normTxt = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
@@ -28,7 +34,7 @@ export type RvConfigInput = {
 export async function upsertRvConfig(input: RvConfigInput): Promise<ActionState> {
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (role !== "owner" && role !== "admin") return { error: "Apenas owner/admin podem configurar a remuneração variável." };
+    if (!PODE_DP.has(role)) return { error: SO_DP };
 
     const m = (input.effective_from ?? "").trim().match(/^(\d{4})-(\d{2})$/);
     if (!m) return { error: "Informe a competência de início da vigência (MM/AAAA)." };
@@ -80,7 +86,7 @@ export async function importRvConfig(
 ): Promise<{ imported: number; invalid: number; notFound: number; error?: string }> {
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (role !== "owner" && role !== "admin") return { imported: 0, invalid: 0, notFound: 0, error: "Apenas owner/admin podem configurar a remuneração variável." };
+    if (!PODE_DP.has(role)) return { imported: 0, invalid: 0, notFound: 0, error: SO_DP };
 
     // nome → id (função ou colaborador ativo)
     const idByName = new Map<string, string>();
@@ -159,7 +165,7 @@ export async function importRvConfig(
 export async function deleteRvConfig(id: string): Promise<ActionState> {
   try {
     const { supabase, role } = await actionContext();
-    if (role !== "owner" && role !== "admin") return { error: "Apenas owner/admin podem configurar a remuneração variável." };
+    if (!PODE_DP.has(role)) return { error: SO_DP };
     const { error } = await supabase.from("individual_rv_config").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/configuracoes");

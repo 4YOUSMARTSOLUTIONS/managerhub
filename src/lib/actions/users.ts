@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { adminActionContext } from "./context";
+import { adminActionContext, dpActionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
@@ -57,9 +57,17 @@ export async function setUserPassword(
   }
 }
 
+/**
+ * Ativar e inativar colaborador é departamento pessoal, então o RH também faz.
+ *
+ * As vizinhas continuam em `adminActionContext` de propósito: `setUserPassword`
+ * e `removeUser` são as duas coisas que ele expressamente não pode, e
+ * `updateUserRole` é barrada no banco pelo trigger `memberships_rh_nao_define_papel`
+ * mesmo que alguém a chame direto.
+ */
 export async function setMemberActive(formData: FormData): Promise<{ error?: string }> {
   try {
-    const { supabase, tenantId } = await adminActionContext();
+    const { supabase, tenantId } = await dpActionContext();
     const userId = String(formData.get("user_id"));
     const active = String(formData.get("active")) === "true";
     const { error } = await supabase
