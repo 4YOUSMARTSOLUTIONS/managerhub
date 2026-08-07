@@ -316,12 +316,31 @@ export function AreaGoalsFarol({
   const canEnter = (g: AreaGoalRow) => isAdmin || g.ownerId === currentUserId;
   const grouped = unitSel === GROUP;
 
-  // selo do botao de filtros: filtro fechado nao pode virar filtro esquecido
-  // setor nao entra na conta: ele nao e opcional, e mora na barra de cima
-  const filtrosAtivos = (subIdsEfetivos.length ? 1 : 0) + (ownerIds.length ? 1 : 0);
-  // vai escrito no botão Filtros: com o painel fechado, o selo numérico diria que
-  // há um recorte, mas não qual, e olhar o setor errado sem perceber é o erro caro
+  /**
+   * O recorte inteiro escrito no botão Filtros, sem selo numérico.
+   *
+   * Aqui NÃO se usa o contador. Com o nome do setor ao lado, um "1" é lido como
+   * sendo o setor, e aí o subsetor selecionado parece não ter sido contado. Dois
+   * mecanismos para dizer a mesma coisa, e um deles pela metade, confunde mais do
+   * que informa: melhor uma frase que se lê inteira.
+   *
+   * Setor sempre aparece porque é obrigatório; subsetor e responsável só quando
+   * recortam de fato.
+   */
   const nomeDoSetor = departments.find((d) => d.id === deptEfetivo)?.name;
+  // quantos filtros dá para LIMPAR. O setor não entra: é obrigatório, não se
+  // limpa. Serve só para o PainelDeFiltros decidir se mostra "Limpar filtros";
+  // não vira selo, porque quem informa o recorte é o `resumoFiltros`.
+  const filtrosLimpaveis = (subIdsEfetivos.length ? 1 : 0) + (ownerIds.length ? 1 : 0);
+  const resumoFiltros = useMemo(() => {
+    const nomeSub = (id: string) => subdepartments.find((s) => s.id === id)?.name ?? "";
+    let txt = nomeDoSetor ?? "Sem setor";
+    if (subIdsEfetivos.length === 1) txt += ` › ${nomeSub(subIdsEfetivos[0])}`;
+    else if (subIdsEfetivos.length > 1) txt += ` › ${subIdsEfetivos.length} subsetores`;
+    if (ownerIds.length === 1) txt += " · 1 responsável";
+    else if (ownerIds.length > 1) txt += ` · ${ownerIds.length} responsáveis`;
+    return txt;
+  }, [nomeDoSetor, subIdsEfetivos, subdepartments, ownerIds]);
   // os dois diálogos de planilha viram itens de menu, entao o menu precisa
   // comandar a abertura deles
   const [importGoalsOpen, setImportGoalsOpen] = useState(false);
@@ -366,7 +385,7 @@ export function AreaGoalsFarol({
             </select>
           </div>
         )}
-        <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} contador={filtrosAtivos} resumo={nomeDoSetor} />
+        <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} resumo={resumoFiltros} />
         {isAdmin && (
           // O que a pessoa OLHA fica à esquerda; o que ela FAZ, à direita. O
           // painel do menu alinha pela direita para não vazar da tela.
@@ -412,7 +431,7 @@ export function AreaGoalsFarol({
       </div>
 
       {filtrosAbertos && (
-        <PainelDeFiltros contador={filtrosAtivos} onLimpar={() => { setSubIds([]); setOwnerIds([]); }}>
+        <PainelDeFiltros contador={filtrosLimpaveis} onLimpar={() => { setSubIds([]); setOwnerIds([]); }}>
           {/* Setor é escolha única e obrigatória: o farol de área é sempre o de UM
               setor, e não existe "Todos". Fica junto dos demais para a barra de
               cima ficar limpa, e o nome aparece no próprio botão Filtros. */}
