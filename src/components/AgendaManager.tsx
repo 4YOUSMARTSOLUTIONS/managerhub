@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Power, Users } from "lucide-react";
+import { Eye, Pencil, Power, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -17,6 +17,7 @@ import { AgendaDayCalendar } from "./AgendaDayCalendar";
 import { AgendaWeekView } from "./AgendaWeekView";
 import { AgendaMonthView } from "./AgendaMonthView";
 import { AgendaBuilderDialog } from "./AgendaBuilderDialog";
+import { AgendaViewDialog } from "./AgendaViewDialog";
 import { AgendaLogDetail, type LogDetailCtx } from "./AgendaLogDetail";
 import { AGENDA_STATUS_LABEL, AGENDA_STATUS_TONE } from "@/lib/constants";
 import { formatDate, shortName } from "@/lib/format";
@@ -68,6 +69,7 @@ export function AgendaManager(props: {
 
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AgendaFull | null>(null);
+  const [viewing, setViewing] = useState<AgendaFull | null>(null);
   const [detail, setDetail] = useState<LogDetailCtx | null>(null);
   const [detailCanFill, setDetailCanFill] = useState(true);
 
@@ -296,6 +298,10 @@ export function AgendaManager(props: {
                   <td><Badge tone={a.active ? "green" : "gray"}>{a.active ? "Ativa" : "Inativa"}</Badge></td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
+                      {/* sem trava de papel: quem enxerga a linha (a RLS decidiu)
+                          pode ver o que a agenda cobra. É a única ação que sobra
+                          para quem é apenas responsável, e não dono, da agenda. */}
+                      <button className="icon-btn" title="Visualizar agenda" aria-label="Visualizar agenda" onClick={() => setViewing(a)}><Eye size={14} /></button>
                       {canEditAgenda(a) && <button className="icon-btn" title="Editar" onClick={() => { setEditing(a); setBuilderOpen(true); }}><Pencil size={14} /></button>}
                       {canEditAgenda(a) && (
                         <button className="icon-btn" title={a.active ? "Inativar" : "Reativar"} onClick={() => start(async () => { const r = await toggleAgendaActive({ id: a.id, active: !a.active }); if (r.error) toast.error(r.error); else router.refresh(); })}><Power size={14} /></button>
@@ -532,6 +538,7 @@ export function AgendaManager(props: {
       {section === "equipe" && teamTab}
       {section === "historico" && historyTab}
 
+      <AgendaViewDialog agenda={viewing} onClose={() => setViewing(null)} />
       <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} currentUserId={currentUserId} />
       <AgendaLogDetail ctx={detail} onClose={() => setDetail(null)} canFill={detailCanFill} nameById={nameById} />
     </div>
