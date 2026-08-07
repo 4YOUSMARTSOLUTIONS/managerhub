@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, TimerOff, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { SearchSelect } from "./SearchSelect";
 import { AGENDA_FREQUENCY_LABEL, WEEKDAYS_PT } from "@/lib/constants";
@@ -16,6 +16,19 @@ type TaskDraft = AgendaTaskInput & { key: string };
 const FREQS: Enums<"agenda_frequency">[] = ["diaria", "semanal", "mensal", "unica"];
 let seq = 0;
 const newKey = () => `t${seq++}`;
+
+/**
+ * Uma grade só para o cabeçalho e para todas as linhas de tarefa.
+ *
+ * Antes cada tarefa era um cartão com borda própria e os campos flutuavam num
+ * `flex-wrap`, então nada se alinhava entre uma linha e outra e não havia onde
+ * pendurar o rótulo das colunas: quem abria a agenda via "08:30", "10" e
+ * "Diária" sem saber qual caixa era qual.
+ */
+const COLUNAS = "minmax(0, 1fr) 96px 92px 118px 32px 32px";
+/** Campos mais baixos que o padrão: são treze linhas na mesma tela. */
+const CAMPO: React.CSSProperties = { padding: "0.42rem 0.55rem", fontSize: "0.82rem" };
+const BOTAO_LINHA: React.CSSProperties = { width: 32, height: 32 };
 
 function emptyTask(): TaskDraft {
   return { key: newKey(), title: "", description: "", scheduled_time: "", duration_minutes: 30, frequency: "diaria", weekdays: [], day_of_month: 1, fixed_date: "", active: true, flexible: false };
@@ -148,7 +161,9 @@ export function AgendaBuilderDialog({
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(3,6,14,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 50, overflowY: "auto" }}>
-      <div className="card" style={{ width: "100%", maxWidth: 680, boxShadow: "var(--mh-shadow-e3)" }}>
+      {/* 720 e não 680: as tarefas viraram uma grade de colunas fixas, e o resto
+          da largura é o campo de título. Com 680 ele ficava com 230px. */}
+      <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--mh-border)" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{agenda ? "Editar agenda" : "Nova agenda"}</h2>
           <button type="button" onClick={onClose} className="icon-btn" aria-label="Fechar"><X size={16} /></button>
@@ -183,50 +198,100 @@ export function AgendaBuilderDialog({
               <label className="label" style={{ margin: 0 }}>Tarefas da rotina</label>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTasks((ts) => [emptyTask(), ...ts])}><Plus size={14} /> Tarefa</button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {tasks.map((t) => (
-                <div key={t.key} style={{ border: "1px solid var(--mh-border)", borderRadius: "var(--mh-radius-md)", padding: "0.5rem 0.6rem" }}>
-                  <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-                    <input className="input" style={{ flex: "3 1 170px", minWidth: 150 }} value={t.title} onChange={(e) => patch(t.key, { title: e.target.value })} placeholder="Título da tarefa" />
-                    {t.flexible ? (
-                      <div title="Sem horário fixo" style={{ flex: "0 0 112px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "var(--mh-text-3)", border: "1px dashed var(--mh-border)", borderRadius: "var(--mh-radius-sm)", height: 38 }}>sem horário</div>
-                    ) : (
-                      <input type="time" className="input" title="Horário" style={{ flex: "0 0 112px" }} value={t.scheduled_time ?? ""} onChange={(e) => patch(t.key, { scheduled_time: e.target.value })} />
+            {tasks.length > 0 && (
+              <div className="soft" style={{ display: "grid", gridTemplateColumns: COLUNAS, gap: "0.5rem", padding: "0 0 0.35rem", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                <span>Tarefa</span>
+                <span>Horário</span>
+                <span>Duração (min)</span>
+                <span>Frequência</span>
+                <span />
+                <span />
+              </div>
+            )}
+            <div style={{ borderTop: tasks.length > 0 ? "1px solid var(--mh-border)" : undefined }}>
+              {tasks.map((t) => {
+                // segunda linha só quando a frequência tem parâmetro que não cabe
+                // ao lado do seletor. O dia do mês tem dois dígitos e cabe; o
+                // seletor de data, não.
+                const temSegundaLinha = t.frequency === "semanal" || t.frequency === "unica";
+                return (
+                  <div key={t.key} style={{ borderBottom: "1px solid var(--mh-border)", padding: "0.4rem 0" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: COLUNAS, gap: "0.5rem", alignItems: "center" }}>
+                      <input className="input" style={CAMPO} value={t.title} onChange={(e) => patch(t.key, { title: e.target.value })} placeholder="Título da tarefa" />
+                      {t.flexible ? (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 32, fontSize: "0.7rem", color: "var(--mh-text-3)", border: "1px dashed var(--mh-border)", borderRadius: "var(--mh-radius-sm)" }}>
+                          sem horário
+                        </div>
+                      ) : (
+                        <input type="time" className="input" style={CAMPO} value={t.scheduled_time ?? ""} onChange={(e) => patch(t.key, { scheduled_time: e.target.value })} />
+                      )}
+                      <input
+                        type="number" min={0} step={5} className="input"
+                        style={CAMPO}
+                        title={t.flexible ? "Duração média por dia" : "Duração"}
+                        value={t.duration_minutes ?? 0}
+                        onChange={(e) => patch(t.key, { duration_minutes: Number(e.target.value) })}
+                      />
+                      {/* o dia do mês anda colado no seletor para a coluna não
+                          mudar de largura conforme a frequência escolhida */}
+                      <div style={{ display: "flex", gap: "0.25rem", minWidth: 0 }}>
+                        <select className="select" style={{ ...CAMPO, flex: 1, minWidth: 0 }} value={t.frequency} onChange={(e) => patch(t.key, { frequency: e.target.value as Enums<"agenda_frequency"> })}>
+                          {FREQS.map((f) => <option key={f} value={f}>{AGENDA_FREQUENCY_LABEL[f]}</option>)}
+                        </select>
+                        {t.frequency === "mensal" && (
+                          <input type="number" min={1} max={31} className="input" title="Dia do mês" style={{ ...CAMPO, width: 42, flexShrink: 0, textAlign: "center", padding: "0.42rem 0.2rem" }} value={t.day_of_month ?? 1} onChange={(e) => patch(t.key, { day_of_month: Number(e.target.value) })} />
+                        )}
+                      </div>
+                      {/* era um checkbox com rótulo de 32 caracteres, repetido em
+                          TODA tarefa. Como ele governa o campo de horário, virou
+                          um interruptor de ícone: ligado, o horário some e a
+                          duração passa a ser média diária. */}
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-pressed={t.flexible ?? false}
+                        title="Sem horário fixo (tempo médio). A duração vira uma média diária e continua contando na carga do dia."
+                        style={{
+                          ...BOTAO_LINHA,
+                          ...(t.flexible
+                            ? { background: "var(--mh-primary-soft)", color: "var(--mh-primary-500)", borderColor: "color-mix(in srgb, var(--mh-primary-500) 40%, transparent)" }
+                            : null),
+                        }}
+                        onClick={() => patch(t.key, { flexible: !t.flexible, ...(!t.flexible ? { scheduled_time: "" } : {}) })}
+                      >
+                        <TimerOff size={14} />
+                      </button>
+                      <button type="button" className="icon-btn icon-btn-danger" title="Remover tarefa" aria-label="Remover tarefa" style={BOTAO_LINHA} onClick={() => setTasks((ts) => ts.filter((x) => x.key !== t.key))}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    {temSegundaLinha && (
+                      <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center", marginTop: "0.4rem" }}>
+                        {t.frequency === "semanal" ? (
+                          <>
+                            <span className="soft" style={{ fontSize: "0.7rem", marginRight: "0.15rem" }}>Dias</span>
+                            {WEEKDAYS_PT.map((w, i) => {
+                              const on = (t.weekdays ?? []).includes(i);
+                              return (
+                                <button key={i} type="button" onClick={() => toggleWeekday(t.key, i)}
+                                  className={`btn btn-sm ${on ? "btn-primary" : "btn-ghost"}`} style={{ padding: "0.2rem 0.45rem", fontSize: "0.72rem" }}>
+                                  {w.slice(0, 3)}
+                                </button>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          <>
+                            <span className="soft" style={{ fontSize: "0.7rem", marginRight: "0.15rem" }}>Data</span>
+                            <input type="date" className="input" style={{ ...CAMPO, width: 150 }} value={t.fixed_date ?? ""} onChange={(e) => patch(t.key, { fixed_date: e.target.value })} />
+                          </>
+                        )}
+                      </div>
                     )}
-                    <input type="number" min={0} step={5} className="input" title={t.flexible ? "Duração média (min)" : "Duração (min)"} placeholder={t.flexible ? "média" : "min"} style={{ flex: "0 0 76px" }} value={t.duration_minutes ?? 0} onChange={(e) => patch(t.key, { duration_minutes: Number(e.target.value) })} />
-                    <select className="select" title="Frequência" style={{ flex: "0 0 130px" }} value={t.frequency} onChange={(e) => patch(t.key, { frequency: e.target.value as Enums<"agenda_frequency"> })}>
-                      {FREQS.map((f) => <option key={f} value={f}>{AGENDA_FREQUENCY_LABEL[f]}</option>)}
-                    </select>
-                    {t.frequency === "mensal" && (
-                      <input type="number" min={1} max={31} className="input" title="Dia do mês" placeholder="dia" style={{ flex: "0 0 68px" }} value={t.day_of_month ?? 1} onChange={(e) => patch(t.key, { day_of_month: Number(e.target.value) })} />
-                    )}
-                    {t.frequency === "unica" && (
-                      <input type="date" className="input" title="Data" style={{ flex: "0 0 148px" }} value={t.fixed_date ?? ""} onChange={(e) => patch(t.key, { fixed_date: e.target.value })} />
-                    )}
-                    <button type="button" className="icon-btn icon-btn-danger" title="Remover" style={{ marginLeft: "auto" }} onClick={() => setTasks((ts) => ts.filter((x) => x.key !== t.key))}><Trash2 size={14} /></button>
                   </div>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginTop: "0.45rem" }}>
-                    <label className="soft" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem" }} title="Tarefa rotineira sem horário definido; a duração é uma média diária e conta na carga do dia">
-                      <input type="checkbox" checked={t.flexible ?? false} onChange={(e) => patch(t.key, { flexible: e.target.checked, ...(e.target.checked ? { scheduled_time: "" } : {}) })} />
-                      Sem horário fixo (tempo médio)
-                    </label>
-                    {t.frequency === "semanal" && (
-                      <>
-                        <span className="soft" style={{ fontSize: "0.7rem", marginLeft: "0.4rem" }}>Dias:</span>
-                        {WEEKDAYS_PT.map((w, i) => {
-                          const on = (t.weekdays ?? []).includes(i);
-                          return (
-                            <button key={i} type="button" onClick={() => toggleWeekday(t.key, i)}
-                              className={`btn btn-sm ${on ? "btn-primary" : "btn-ghost"}`} style={{ padding: "0.2rem 0.45rem", fontSize: "0.72rem" }}>
-                              {w.slice(0, 3)}
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
