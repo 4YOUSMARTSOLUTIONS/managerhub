@@ -176,10 +176,6 @@ export function AgendaLogDetail({
                   );
                 })}
               </div>
-              <p className="soft" style={{ fontSize: "0.76rem", margin: "0.4rem 0 0" }}>
-                Na lista o botão do horário cobre realizada e ainda não realizada. Os meios-termos ficam aqui,
-                onde dá para explicar logo abaixo.
-              </p>
             </div>
           )}
 
