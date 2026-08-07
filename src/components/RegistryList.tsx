@@ -20,6 +20,7 @@ export function RegistryList({
   placeholder = "Nome",
   emptyText = "Nenhum item cadastrado.",
   metaLabel = "Detalhe",
+  canEdit = true,
 }: {
   title: string;
   description?: string;
@@ -40,6 +41,12 @@ export function RegistryList({
   placeholder?: string;
   emptyText?: string;
   metaLabel?: string;
+  /**
+   * `false` deixa a lista em consulta: some o formulário de cadastro e a coluna
+   * Ações inteira. O selo Ativo/Inativo FICA — é informação do catálogo, não
+   * botão. Padrão `true` para os chamadores que não precisam se importar.
+   */
+  canEdit?: boolean;
 }) {
   const hasMeta = items.some((i) => i.meta);
   const hasStatus = !!toggleAction;
@@ -54,13 +61,15 @@ export function RegistryList({
         {description && <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.82rem" }}>{description}</p>}
       </div>
 
-      <div style={{ padding: "0.9rem 1.1rem" }}>
-        <form action={createAction} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-          <input name="name" className="input" placeholder={placeholder} required style={{ flex: "1 1 220px", maxWidth: 380 }} />
-          {extraFields}
-          <button className="btn btn-primary btn-sm" type="submit">Adicionar</button>
-        </form>
-      </div>
+      {canEdit && (
+        <div style={{ padding: "0.9rem 1.1rem" }}>
+          <form action={createAction} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <input name="name" className="input" placeholder={placeholder} required style={{ flex: "1 1 220px", maxWidth: 380 }} />
+            {extraFields}
+            <button className="btn btn-primary btn-sm" type="submit">Adicionar</button>
+          </form>
+        </div>
+      )}
 
       {items.length > 0 ? (
         <div style={{ maxHeight: 380, overflowY: "auto", borderTop: "1px solid var(--border)" }}>
@@ -70,7 +79,7 @@ export function RegistryList({
                 <th>Nome</th>
                 {hasMeta && <th>{metaLabel}</th>}
                 {hasStatus && <th>Status</th>}
-                <th style={{ textAlign: "right" }}>Ações</th>
+                {canEdit && <th style={{ textAlign: "right" }}>Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -86,6 +95,7 @@ export function RegistryList({
                         <Badge tone={inactive ? "gray" : "green"}>{inactive ? "Inativo" : "Ativo"}</Badge>
                       </td>
                     )}
+                    {canEdit && (
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                         {rowActions?.(it)}
@@ -112,6 +122,7 @@ export function RegistryList({
                         )}
                       </div>
                     </td>
+                    )}
                   </tr>
                 );
               })}

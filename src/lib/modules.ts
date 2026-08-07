@@ -97,7 +97,10 @@ export const MODULES: ModuleDef[] = [
   // empresa, inclusive salário, CPF e remuneração variável de quem o leitor não
   // gerencia. Enquanto não houver recorte por escopo dentro da tela, fica fechado.
   { key: "auditoria", label: "Logs do sistema", href: "/auditoria", group: null, core: true, minRole: "owner" },
-  { key: "configuracoes", label: "Configurações", href: "/configuracoes", group: null, core: true, minRole: "admin" },
+  // Gerencial entra, mas só para LER: a tela inteira sai em modo consulta para
+  // ele (ver `canEdit` em src/app/(app)/configuracoes/page.tsx). O menu não
+  // distingue ver de mexer, então o corte de escrita não mora aqui.
+  { key: "configuracoes", label: "Configurações", href: "/configuracoes", group: null, core: true, minRole: "manager" },
   { key: "admin", label: "Painel ADM", href: "/admin", group: null, core: true, minRole: "super" },
 ];
 

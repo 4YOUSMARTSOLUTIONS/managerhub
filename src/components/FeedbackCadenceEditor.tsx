@@ -8,8 +8,10 @@ import { upsertCadenceRule, deleteCadenceRule } from "@/lib/actions/feedbacks";
 type Opt = { id: string; name: string };
 export type CadenceRule = { id: string; departmentId: string; positionId: string; cadenceDays: number };
 
-export function FeedbackCadenceEditor({ departments, positions, rules }: {
+export function FeedbackCadenceEditor({ departments, positions, rules, canEdit = true }: {
   departments: Opt[]; positions: Opt[]; rules: CadenceRule[];
+  /** `false` deixa em consulta: as regras vigentes ficam; criar e excluir somem. */
+  canEdit?: boolean;
 }) {
   const [dept, setDept] = useState("");
   const [pos, setPos] = useState("");
@@ -38,6 +40,7 @@ export function FeedbackCadenceEditor({ departments, positions, rules }: {
         <h2 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Periodicidade por setor e função</h2>
         <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.82rem" }}>A cada quantos dias cada colaborador deve receber feedback, conforme o setor e a função. <strong>0 = essa função nesse setor não tem feedback</strong>. Sem regra = não acompanha (sem cobrança).</p>
       </div>
+      {canEdit && (
       <div style={{ padding: "0.9rem 1.1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
         <div>
           <label className="label">Setor</label>
@@ -54,17 +57,18 @@ export function FeedbackCadenceEditor({ departments, positions, rules }: {
         <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={add}>Salvar regra</button>
         {error && <span style={{ color: "var(--mh-danger)", fontSize: "0.82rem" }}>{error}</span>}
       </div>
+      )}
       {rules.length > 0 && (
         <div style={{ borderTop: "1px solid var(--border)", maxHeight: 380, overflowY: "auto" }}>
           <table className="table">
-            <thead><tr><th>Setor</th><th>Função</th><th style={{ textAlign: "right" }}>Periodicidade</th><th style={{ textAlign: "right" }}>Ações</th></tr></thead>
+            <thead><tr><th>Setor</th><th>Função</th><th style={{ textAlign: "right" }}>Periodicidade</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr></thead>
             <tbody>
               {rules.map((r) => (
                 <tr key={r.id}>
                   <td>{deptName(r.departmentId)}</td>
                   <td>{posName(r.positionId)}</td>
                   <td style={{ textAlign: "right" }}>{r.cadenceDays === 0 ? "Sem feedback" : `${r.cadenceDays} dias`}</td>
-                  <td style={{ textAlign: "right" }}><button type="button" className="icon-btn icon-btn-danger" disabled={pending} onClick={() => remove(r.id)} title="Excluir" aria-label="Excluir"><Trash2 size={16} /></button></td>
+                  {canEdit && <td style={{ textAlign: "right" }}><button type="button" className="icon-btn icon-btn-danger" disabled={pending} onClick={() => remove(r.id)} title="Excluir" aria-label="Excluir"><Trash2 size={16} /></button></td>}
                 </tr>
               ))}
             </tbody>

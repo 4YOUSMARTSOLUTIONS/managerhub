@@ -32,9 +32,12 @@ function Ico({ d }: { d: string }) {
 export function UnitsManager({
   units,
   unitLimit,
+  canEdit = true,
 }: {
   units: UnitRow[];
   unitLimit: number | null;
+  /** `false` deixa em consulta: sem formulário de cadastro e sem coluna Ações. */
+  canEdit?: boolean;
 }) {
   const [createState, createAction] = useActionState(createUnit, initialActionState);
   const atLimit = unitLimit !== null && units.length >= unitLimit;
@@ -63,7 +66,7 @@ export function UnitsManager({
         )}
       </div>
 
-      {!atLimit ? (
+      {!canEdit ? null : !atLimit ? (
         <div style={{ padding: "0.9rem 1.1rem", borderBottom: units.length > 0 ? "1px solid var(--border)" : undefined }}>
           <form action={createAction} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <input name="name" className="input" placeholder="Nome da unidade" required style={{ flex: "1 1 160px", maxWidth: 220 }} />
@@ -101,7 +104,7 @@ export function UnitsManager({
                 <th>Nome</th>
                 <th>Tipo</th>
                 <th>CNPJ</th>
-                <th style={{ textAlign: "right" }}>Ações</th>
+                {canEdit && <th style={{ textAlign: "right" }}>Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -114,6 +117,7 @@ export function UnitsManager({
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>
                     {u.cnpj ? formatCnpj(u.cnpj) : <span className="soft">—</span>}
                   </td>
+                  {canEdit && (
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                       <FormModal
@@ -159,13 +163,14 @@ export function UnitsManager({
                       </form>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : (
-        <EmptyState title="Nenhuma unidade" description="Cadastre a primeira unidade acima." />
+        <EmptyState title="Nenhuma unidade" description={canEdit ? "Cadastre a primeira unidade acima." : undefined} />
       )}
     </div>
   );

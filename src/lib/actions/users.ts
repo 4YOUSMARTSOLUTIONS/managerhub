@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { adminActionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
@@ -10,7 +10,7 @@ export async function createUser(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase } = await adminActionContext();
 
     const email = String(formData.get("email") ?? "").trim();
     const full_name = String(formData.get("full_name") ?? "").trim();
@@ -40,7 +40,7 @@ export async function setUserPassword(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase } = await adminActionContext();
     const password = String(formData.get("password") ?? "");
     if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
@@ -59,7 +59,7 @@ export async function setUserPassword(
 
 export async function setMemberActive(formData: FormData): Promise<{ error?: string }> {
   try {
-    const { supabase, tenantId } = await actionContext();
+    const { supabase, tenantId } = await adminActionContext();
     const userId = String(formData.get("user_id"));
     const active = String(formData.get("active")) === "true";
     const { error } = await supabase
@@ -77,7 +77,7 @@ export async function setMemberActive(formData: FormData): Promise<{ error?: str
 
 export async function removeUser(formData: FormData): Promise<{ error?: string }> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase } = await adminActionContext();
     const { error } = await supabase.rpc("admin_delete_user", { p_user: String(formData.get("user_id")) });
     if (error) return { error: error.message };
     revalidatePath("/configuracoes");
@@ -88,7 +88,7 @@ export async function removeUser(formData: FormData): Promise<{ error?: string }
 }
 
 export async function updateUserRole(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const userId = String(formData.get("id"));
   const role = String(formData.get("role")) as Enums<"member_role">;
   await supabase
@@ -104,7 +104,7 @@ export async function updateCompany(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase, tenantId } = await actionContext();
+    const { supabase, tenantId } = await adminActionContext();
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { error: "Informe o nome da empresa." };
 

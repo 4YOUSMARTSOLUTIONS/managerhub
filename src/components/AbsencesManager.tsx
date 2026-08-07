@@ -59,7 +59,12 @@ const novo = (): Rascunho => ({
   note: "",
 });
 
-export function AbsencesManager({ members, absences }: { members: { id: string; name: string }[]; absences: AbsenceRow[] }) {
+export function AbsencesManager({ members, absences, canEdit = true }: {
+  members: { id: string; name: string }[];
+  absences: AbsenceRow[];
+  /** `false` deixa em consulta: busca, filtro, lista e exportação ficam; lançar, editar e excluir somem. */
+  canEdit?: boolean;
+}) {
   const [busca, setBusca] = useState("");
   const [ano, setAno] = useState("");
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
@@ -148,7 +153,7 @@ export function AbsencesManager({ members, absences }: { members: { id: string; 
           {anos.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
-          <ImportAbsencesDialog members={members} />
+          {canEdit && <ImportAbsencesDialog members={members} />}
           {/* exporta o que está EM VISTA, e no mesmo formato que a importação lê:
               dá para exportar, corrigir na planilha e reimportar por cima */}
           <ExportButton
@@ -164,9 +169,11 @@ export function AbsencesManager({ members, absences }: { members: { id: string; 
               a.note ?? "",
             ])}
           />
-          <button type="button" className="btn btn-primary btn-sm" onClick={abrirNovo}>
-            + Lançar período
-          </button>
+          {canEdit && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={abrirNovo}>
+              + Lançar período
+            </button>
+          )}
         </div>
       </div>
 
@@ -225,13 +232,13 @@ export function AbsencesManager({ members, absences }: { members: { id: string; 
             <th>Período</th>
             <th style={{ textAlign: "right" }}>Dias</th>
             <th>Remuneração variável</th>
-            <th style={{ textAlign: "right" }}></th>
+            {canEdit && <th style={{ textAlign: "right" }}></th>}
           </tr>
         </thead>
         <tbody>
           {lista.length === 0 ? (
             <tr>
-              <td colSpan={6} className="soft" style={{ textAlign: "center", padding: "1rem" }}>
+              <td colSpan={canEdit ? 6 : 5} className="soft" style={{ textAlign: "center", padding: "1rem" }}>
                 {absences.length === 0 ? "Nenhum período lançado ainda." : "Nenhum período com esse filtro."}
               </td>
             </tr>
@@ -249,14 +256,16 @@ export function AbsencesManager({ members, absences }: { members: { id: string; 
                   ? <span style={{ fontSize: "0.8rem" }}>Proporcional aos dias trabalhados</span>
                   : <span className="soft" style={{ fontSize: "0.8rem" }}>Valor cheio, sem desconto</span>}
               </td>
-              <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                <button type="button" className="icon-btn" title="Editar" disabled={pendente} onClick={() => abrirEdicao(a)}>
-                  <Pencil size={14} />
-                </button>
-                <button type="button" className="icon-btn icon-btn-danger" title="Excluir" disabled={pendente} onClick={() => remover(a)}>
-                  <Trash2 size={14} />
-                </button>
-              </td>
+              {canEdit && (
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button type="button" className="icon-btn" title="Editar" disabled={pendente} onClick={() => abrirEdicao(a)}>
+                    <Pencil size={14} />
+                  </button>
+                  <button type="button" className="icon-btn icon-btn-danger" title="Excluir" disabled={pendente} onClick={() => remover(a)}>
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

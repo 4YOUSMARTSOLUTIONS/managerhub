@@ -10,7 +10,12 @@ type Sector = { id: string; name: string };
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
-export function TicketManagersEditor({ members, sectors }: { members: Member[]; sectors: Sector[] }) {
+export function TicketManagersEditor({ members, sectors, canEdit = true }: {
+  members: Member[];
+  sectors: Sector[];
+  /** `false` deixa em consulta: quem é gestor de quais setores continua visível; definir some. */
+  canEdit?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Member | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -62,17 +67,17 @@ export function TicketManagersEditor({ members, sectors }: { members: Member[]; 
       ) : (
         <>
           <div style={{ padding: "0.8rem 1.1rem 0" }}>
-            <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar colaborador para tornar gestor…" />
+            <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={canEdit ? "Buscar colaborador para tornar gestor…" : "Buscar colaborador…"} />
           </div>
           <div style={{ maxHeight: 420, overflowY: "auto", marginTop: "0.6rem" }}>
             {filtered.length === 0 ? (
               <p className="soft" style={{ margin: 0, padding: "0.4rem 1.1rem 1.1rem", fontSize: "0.85rem" }}>
-                {searching ? "Nenhum colaborador encontrado." : "Nenhum gestor definido. Busque um colaborador acima para torná-lo gestor."}
+                {searching ? "Nenhum colaborador encontrado." : canEdit ? "Nenhum gestor definido. Busque um colaborador acima para torná-lo gestor." : "Nenhum gestor definido."}
               </p>
             ) : (
               <table className="table">
                 <thead>
-                  <tr><th>Usuário</th><th>Setores que gerencia</th><th style={{ textAlign: "right" }}>Ações</th></tr>
+                  <tr><th>Usuário</th><th>Setores que gerencia</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
                 </thead>
                 <tbody>
                   {filtered.map((m) => (
@@ -85,9 +90,11 @@ export function TicketManagersEditor({ members, sectors }: { members: Member[]; 
                           </span>
                         )}
                       </td>
-                      <td style={{ textAlign: "right" }}>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEdit(m)}>Definir setores</button>
-                      </td>
+                      {canEdit && (
+                        <td style={{ textAlign: "right" }}>
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEdit(m)}>Definir setores</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -97,7 +104,7 @@ export function TicketManagersEditor({ members, sectors }: { members: Member[]; 
         </>
       )}
 
-      {editing && (
+      {canEdit && editing && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 1rem", zIndex: 80, overflowY: "auto" }}>
           <div className="card" style={{ width: "100%", maxWidth: 460, boxShadow: "var(--mh-shadow-e3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>

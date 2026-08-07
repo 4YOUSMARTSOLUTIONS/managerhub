@@ -77,6 +77,7 @@ export function UsersManager({
   people,
   currentUserId,
   isSuperAdmin = false,
+  canEdit = true,
 }: {
   employees: EmployeeRow[];
   units: UnitOption[];
@@ -89,6 +90,12 @@ export function UsersManager({
   currentUserId: string;
   /** dono do SaaS: pode gerir o papel Proprietário e agir sobre owners */
   isSuperAdmin?: boolean;
+  /**
+   * `false` deixa a ficha em consulta. A busca, os filtros, a tabela, a ficha
+   * completa e a exportação continuam: quem só lê precisa exatamente disso. O
+   * que some é cadastrar, importar, editar, inativar, redefinir senha e remover.
+   */
+  canEdit?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -186,7 +193,7 @@ export function UsersManager({
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: 280, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}
           />
-          <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>
+          {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>}
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
@@ -201,7 +208,7 @@ export function UsersManager({
               return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerCode ?? "", roleLabel(e.role), e.hierarchyName ?? ""];
             })}
           />
-          <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>
+          {canEdit && <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>}
         </div>
       </div>
 
@@ -267,19 +274,23 @@ export function UsersManager({
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                       <button className="icon-btn" type="button" title="Ver ficha completa" onClick={() => setViewing(e)}><Ico d={ICON.eye} /></button>
-                      <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
-                      {canAct && (
-                        <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
-                      )}
-                      <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" triggerTitle="Redefinir senha" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">
-                        <input type="hidden" name="user_id" value={e.userId} />
-                        <div>
-                          <label className="label">Nova senha</label>
-                          <PasswordInput autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
-                        </div>
-                      </FormModal>
-                      {canAct && (
-                        <button className="icon-btn icon-btn-danger" type="button" title="Remover" onClick={() => remove(e.userId, e.fullName)}><Ico d={ICON.trash} /></button>
+                      {canEdit && (
+                        <>
+                          <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
+                          {canAct && (
+                            <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
+                          )}
+                          <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" triggerTitle="Redefinir senha" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">
+                            <input type="hidden" name="user_id" value={e.userId} />
+                            <div>
+                              <label className="label">Nova senha</label>
+                              <PasswordInput autoComplete="new-password" minLength={8} placeholder="Mínimo 8 caracteres" />
+                            </div>
+                          </FormModal>
+                          {canAct && (
+                            <button className="icon-btn icon-btn-danger" type="button" title="Remover" onClick={() => remove(e.userId, e.fullName)}><Ico d={ICON.trash} /></button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -306,21 +317,25 @@ export function UsersManager({
         </div>
       )}
 
-      <EmployeeDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        employee={editing}
-        units={units}
-        departments={departments}
-        subdepartments={subdepartments}
-        positions={positions}
-        levels={levels}
-        hierarchies={hierarchies}
-        people={people}
-        canSetOwner={isSuperAdmin}
-      />
+      {canEdit && (
+        <>
+          <EmployeeDialog
+            open={open}
+            onClose={() => setOpen(false)}
+            employee={editing}
+            units={units}
+            departments={departments}
+            subdepartments={subdepartments}
+            positions={positions}
+            levels={levels}
+            hierarchies={hierarchies}
+            people={people}
+            canSetOwner={isSuperAdmin}
+          />
 
-      <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />
+          <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />
+        </>
+      )}
 
       {viewing && (
         <EmployeeViewDialog employee={viewing} onClose={() => setViewing(null)} />

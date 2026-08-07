@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { actionContext, adminActionContext } from "./context";
 import { verifyOwnPassword } from "./verify-password";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isCatalogInUse, wantsActive } from "@/lib/catalogGuard";
@@ -487,7 +487,7 @@ export async function deleteTicket(formData: FormData): Promise<ActionState> {
 
 // ---------- Configuração: Setores ----------
 export async function createTicketSector(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("ticket_sectors").insert({ tenant_id: tenantId, name });
@@ -495,13 +495,13 @@ export async function createTicketSector(formData: FormData): Promise<void> {
   revalidatePath("/chamados");
 }
 export async function setTicketSectorActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("ticket_sectors").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
   revalidatePath("/chamados");
 }
 export async function deleteTicketSector(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   // em uso se algum chamado referencia o setor OU alguma categoria dele já foi usada em chamados
   let used = await isCatalogInUse(supabase, id, [{ table: "tickets", col: "sector_id" }]);
@@ -521,7 +521,7 @@ export async function deleteTicketSector(formData: FormData): Promise<void> {
 
 // ---------- Configuração: Categorias ----------
 export async function createTicketCategory(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   const sector_id = String(formData.get("sector_id") ?? "");
   if (!name || !sector_id) return;
@@ -530,13 +530,13 @@ export async function createTicketCategory(formData: FormData): Promise<void> {
   revalidatePath("/chamados");
 }
 export async function setTicketCategoryActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("ticket_categories").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
   revalidatePath("/chamados");
 }
 export async function deleteTicketCategory(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isCatalogInUse(supabase, id, [{ table: "tickets", col: "category_id" }]);
   if (used) { await setTicketCategoryActive(formData); return; }

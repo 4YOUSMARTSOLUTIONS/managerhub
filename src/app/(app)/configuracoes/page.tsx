@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { CompanyForm } from "@/components/CompanyForm";
-import { Pencil, Power, RotateCcw, Trash2 } from "lucide-react";
+import { Eye, Pencil, Power, RotateCcw, Trash2 } from "lucide-react";
 import { RegistryList } from "@/components/RegistryList";
 import { ImportSdpoDialog } from "@/components/ImportSdpoDialog";
 import { ImportStructureDialog } from "@/components/ImportStructureDialog";
@@ -51,16 +51,28 @@ import {
 
 export default async function SettingsPage() {
   const { tenant, role, user, isSuperAdmin, unitScope } = await requireContext();
-  const canAdmin = role === "owner" || role === "admin";
 
-  if (!canAdmin) {
+  // Duas perguntas separadas, e é a separação que sustenta a tela inteira.
+  //
+  // O Gerencial ENTRA e lê tudo: catálogos, estrutura, colaboradores (dados
+  // pessoais inclusive), remuneração variável, férias, SLA. O que ele não faz é
+  // gravar. `canEdit` desce até o último botão, e a recusa de verdade está em
+  // três camadas atrás dele: a RLS, o `adminActionContext` das server actions e
+  // as guardas dentro das RPCs `admin_*`. A tela é só a primeira.
+  const canView = role === "owner" || role === "admin" || role === "manager";
+  const canEdit = role === "owner" || role === "admin";
+
+  if (!canView) {
     return (
       <div>
         <PageHeader title="Configurações" />
-        <EmptyState title="Acesso restrito" description="Apenas proprietários e administradores podem acessar as configurações." />
+        <EmptyState title="Acesso restrito" description="Apenas proprietários, administradores e o perfil Gerencial podem acessar as configurações." />
       </div>
     );
   }
+
+  /** Importar é escrita; exportar é leitura. Quem só lê fica com a segunda. */
+  const seEdita = (node: React.ReactNode) => (canEdit ? node : null);
 
   const supabase = await createClient();
   // Tudo o que a tela precisa numa rodada só. Antes eram 6 ondas em sequência, e
@@ -279,6 +291,7 @@ export default async function SettingsPage() {
         <CompanyForm name={tenant.name} canEdit={role === "owner"} />
       </Section>
       <UnitsManager
+        canEdit={canEdit}
         units={(units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind, cnpj: u.cnpj }))}
         unitLimit={tenant.units_limit}
       />
@@ -307,13 +320,14 @@ export default async function SettingsPage() {
               people={people}
               currentUserId={user.id}
               isSuperAdmin={isSuperAdmin}
+              canEdit={canEdit}
             />
           ),
         },
         {
           id: "ausencias",
           label: "Férias e afastamentos",
-          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} absences={absenceRows} />,
+          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} absences={absenceRows} canEdit={canEdit} />,
         },
       ]}
     />
@@ -326,13 +340,14 @@ export default async function SettingsPage() {
         {
           id: "setores",
           label: "Setores",
-          content: <RegistryList title="Setores" items={deptOpts.map((d) => ({ ...d, canDelete: !usedDept.has(d.id) }))} createAction={createDepartment} deleteAction={deleteDepartment} toggleAction={setDepartmentActive} placeholder="Nome do setor" headerAction={<><ImportStructureDialog /><ExportButton filename="setores.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={deptOpts.map((d) => [d.name, "", ""])} /></>} />,
+          content: <RegistryList canEdit={canEdit} title="Setores" items={deptOpts.map((d) => ({ ...d, canDelete: !usedDept.has(d.id) }))} createAction={createDepartment} deleteAction={deleteDepartment} toggleAction={setDepartmentActive} placeholder="Nome do setor" headerAction={<>{seEdita(<ImportStructureDialog />)}<ExportButton filename="setores.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={deptOpts.map((d) => [d.name, "", ""])} /></>} />,
         },
         {
           id: "subsetores",
           label: "Subsetores",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Subsetores"
               items={subOpts.map((s) => ({ id: s.id, name: s.name, meta: deptById.get(s.department_id)?.name ?? undefined, active: s.active, canDelete: !usedSubdept.has(s.id) }))}
               createAction={createSubdepartment}
@@ -341,7 +356,7 @@ export default async function SettingsPage() {
               placeholder="Nome do subsetor"
               metaLabel="Setor"
               emptyText="Nenhum subsetor. Cadastre setores primeiro."
-              headerAction={<><ImportStructureDialog /><ExportButton filename="subsetores.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={subOpts.map((s) => [deptById.get(s.department_id)?.name ?? "", s.name, ""])} /></>}
+              headerAction={<>{seEdita(<ImportStructureDialog />)}<ExportButton filename="subsetores.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={subOpts.map((s) => [deptById.get(s.department_id)?.name ?? "", s.name, ""])} /></>}
               extraFields={
                 <select name="department_id" className="select" required style={{ width: "auto" }}>
                   <option value="">Setor…</option>
@@ -354,13 +369,14 @@ export default async function SettingsPage() {
         {
           id: "funcoes",
           label: "Funções",
-          content: <RegistryList title="Funções" items={posOpts.map((p) => ({ ...p, canDelete: !usedPosition.has(p.id) }))} createAction={createPosition} deleteAction={deletePosition} toggleAction={setPositionActive} placeholder="Nome da função" headerAction={<><ImportStructureDialog /><ExportButton filename="funcoes.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={posOpts.map((p) => ["", "", p.name])} /></>} />,
+          content: <RegistryList canEdit={canEdit} title="Funções" items={posOpts.map((p) => ({ ...p, canDelete: !usedPosition.has(p.id) }))} createAction={createPosition} deleteAction={deletePosition} toggleAction={setPositionActive} placeholder="Nome da função" headerAction={<>{seEdita(<ImportStructureDialog />)}<ExportButton filename="funcoes.xlsx" sheetName="Estrutura" headers={["Setor", "Subsetor", "Função"]} rows={posOpts.map((p) => ["", "", p.name])} /></>} />,
         },
         {
           id: "hierarquia",
           label: "Hierarquia",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Hierarquia"
               description="Nível na estrutura da empresa, do topo para a base. Não confundir com Perfis de função (Júnior, Pleno), que é a senioridade dentro do cargo."
               items={hierarchyOpts.map((h) => ({ ...h, canDelete: !usedHierarchy.has(h.id) }))}
@@ -388,7 +404,7 @@ export default async function SettingsPage() {
         {
           id: "perfis",
           label: "Perfis de função",
-          content: <RegistryList title="Perfis de função" description="Ex.: Júnior, Pleno, Sênior." items={levelOpts.map((l) => ({ ...l, canDelete: !usedLevel.has(l.id) }))} createAction={createPositionLevel} deleteAction={deletePositionLevel} toggleAction={setPositionLevelActive} placeholder="Ex.: Júnior, Pleno, Sênior" />,
+          content: <RegistryList canEdit={canEdit} title="Perfis de função" description="Ex.: Júnior, Pleno, Sênior." items={levelOpts.map((l) => ({ ...l, canDelete: !usedLevel.has(l.id) }))} createAction={createPositionLevel} deleteAction={deletePositionLevel} toggleAction={setPositionLevelActive} placeholder="Ex.: Júnior, Pleno, Sênior" />,
         },
       ]}
     />
@@ -399,7 +415,7 @@ export default async function SettingsPage() {
     <Section
       title={`Salas de reunião · ${rooms?.length ?? 0}`}
       padded={false}
-      action={
+      action={seEdita(
         <FormModal triggerLabel="+ Nova sala" title="Nova sala" action={createRoom} submitLabel="Criar sala">
           <div>
             <label className="label">Nome</label>
@@ -424,12 +440,12 @@ export default async function SettingsPage() {
             <input name="color" type="color" defaultValue="var(--mh-primary-500)" className="input" style={{ height: 42, padding: 4 }} />
           </div>
         </FormModal>
-      }
+      )}
     >
       {rooms && rooms.length > 0 ? (
         <table className="table">
           <thead>
-            <tr><th>Sala</th><th>Localização</th><th>Capacidade</th><th>Recursos</th><th>Status</th><th style={{ textAlign: "right" }}>Ações</th></tr>
+            <tr><th>Sala</th><th>Localização</th><th>Capacidade</th><th>Recursos</th><th>Status</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
           </thead>
           <tbody>
             {rooms.map((r) => (
@@ -450,6 +466,7 @@ export default async function SettingsPage() {
                   ) : <span className="soft">—</span>}
                 </td>
                 <td><Badge tone={r.is_active ? "green" : "gray"}>{r.is_active ? "Ativa" : "Inativa"}</Badge></td>
+                {canEdit && (
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <span style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
                     <FormModal
@@ -503,12 +520,13 @@ export default async function SettingsPage() {
                     </ConfirmActionButton>
                   </span>
                 </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
-        <EmptyState title="Nenhuma sala cadastrada" description="Crie a primeira sala para começar a agendar reuniões." />
+        <EmptyState title="Nenhuma sala cadastrada" description={canEdit ? "Crie a primeira sala para começar a agendar reuniões." : undefined} />
       )}
     </Section>
     </div>
@@ -521,18 +539,20 @@ export default async function SettingsPage() {
       padded={false}
       action={
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <ImportHolidaysDialog />
+          {seEdita(<ImportHolidaysDialog />)}
           <ExportButton filename="feriados.xlsx" sheetName="Feriados" headers={["Data", "Nome"]} rows={(holidays ?? []).map((h) => { const [y, m, d] = h.day.split("-"); return [`${d}/${m}/${y}`, h.name]; })} />
-          <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
-            <div>
-              <label className="label">Data</label>
-              <input name="day" type="date" className="input" required />
-            </div>
-            <div>
-              <label className="label">Nome</label>
-              <input name="name" className="input" required placeholder="Ex.: Aniversário da cidade" />
-            </div>
-          </FormModal>
+          {seEdita(
+            <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
+              <div>
+                <label className="label">Data</label>
+                <input name="day" type="date" className="input" required />
+              </div>
+              <div>
+                <label className="label">Nome</label>
+                <input name="name" className="input" required placeholder="Ex.: Aniversário da cidade" />
+              </div>
+            </FormModal>
+          )}
         </div>
       }
     >
@@ -552,13 +572,14 @@ export default async function SettingsPage() {
       {holidays && holidays.length > 0 ? (
         <table className="table">
           <thead>
-            <tr><th>Data</th><th>Feriado</th><th style={{ textAlign: "right" }}>Ações</th></tr>
+            <tr><th>Data</th><th>Feriado</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
           </thead>
           <tbody>
             {holidays.map((h) => (
               <tr key={h.id}>
                 <td className="muted">{formatDate(h.day)}</td>
                 <td style={{ fontWeight: 600 }}>{h.name}</td>
+                {canEdit && (
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <ConfirmActionButton
                     action={deleteHoliday}
@@ -571,6 +592,7 @@ export default async function SettingsPage() {
                     <Trash2 size={16} />
                   </ConfirmActionButton>
                 </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -682,6 +704,7 @@ export default async function SettingsPage() {
           label: "Programas",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Programas"
               items={programaOpts.map((p) => ({ id: p.id, name: p.name, active: p.active, canDelete: canDeletePrograma(p.id) }))}
               createAction={createProgram}
@@ -696,6 +719,7 @@ export default async function SettingsPage() {
           label: "Pilares",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Pilares"
               items={pilarOpts.map((p) => ({ id: p.id, name: p.name, active: p.active, canDelete: canDeletePilar(p.id) }))}
               createAction={createPilar}
@@ -703,7 +727,7 @@ export default async function SettingsPage() {
               toggleAction={setPilarActive}
               placeholder="Nome do pilar"
               emptyText="Nenhum pilar cadastrado."
-              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
+              headerAction={<>{seEdita(<ImportSdpoDialog />)}<ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
             />
           ),
         },
@@ -712,6 +736,7 @@ export default async function SettingsPage() {
           label: "Seções",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Seções"
               items={secaoOpts.map((s) => ({ id: s.id, name: s.name, active: s.active, canDelete: !secaoUsedDeep(s.id) }))}
               createAction={createSecao}
@@ -719,7 +744,7 @@ export default async function SettingsPage() {
               toggleAction={setSecaoActive}
               placeholder="Ex.: Gestão de Processos"
               emptyText="Nenhuma seção cadastrada."
-              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
+              headerAction={<>{seEdita(<ImportSdpoDialog />)}<ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
             />
           ),
         },
@@ -728,6 +753,7 @@ export default async function SettingsPage() {
           label: "Blocos",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Blocos"
               items={blocoOpts.map((b) => ({ id: b.id, name: withCode(b.code, b.name), meta: progPilarSecao(b.programa_id, b.pilar_id, b.secao_id), active: b.active, canDelete: !blocoUsedDeep(b.id) }))}
               createAction={createBloco}
@@ -736,7 +762,7 @@ export default async function SettingsPage() {
               placeholder="Nome do bloco"
               metaLabel="Programa / Pilar / Seção"
               emptyText="Nenhum bloco. Cadastre programas, pilares e seções primeiro."
-              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
+              headerAction={<>{seEdita(<ImportSdpoDialog />)}<ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
               extraFields={
                 <>
                   <input name="code" className="input" placeholder="Código (ex.: 1.0)" style={{ width: 130 }} />
@@ -762,6 +788,7 @@ export default async function SettingsPage() {
           label: "Itens",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Itens"
               items={itemOpts.map((i) => ({ id: i.id, name: withCode(i.code, i.name), meta: progPilarSecao(i.programa_id, i.pilar_id, i.secao_id) + (i.bloco_id ? ` › ${blocoById.get(i.bloco_id) ?? ""}` : ""), active: i.active, canDelete: !usedItem.has(i.id) }))}
               createAction={createItem}
@@ -770,7 +797,7 @@ export default async function SettingsPage() {
               placeholder="Nome do item"
               metaLabel="Programa / Pilar / Seção"
               emptyText="Nenhum item. Cadastre programas, pilares e seções primeiro."
-              headerAction={<><ImportSdpoDialog /><ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
+              headerAction={<>{seEdita(<ImportSdpoDialog />)}<ExportButton filename="programa_excelencia.xlsx" sheetName="Estrutura" headers={SDPO_EXPORT_HEADERS} rows={sdpoExportRows} /></>}
               extraFields={
                 <>
                   <input name="code" className="input" placeholder="Código (ex.: 1.1)" style={{ width: 130 }} />
@@ -798,12 +825,12 @@ export default async function SettingsPage() {
         {
           id: "kpis",
           label: "KPIs",
-          content: <RegistryList title="KPIs" items={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active, canDelete: !usedKpi.has(k.id) }))} createAction={createKpi} deleteAction={deleteKpi} toggleAction={setKpiActive} placeholder="Nome do KPI" headerAction={<><ImportListDialog title="Importar KPIs (.xlsx)" column="KPI" noun="KPI(s)" findKeys={["kpi", "indicador"]} examples={["OTIF", "% Lojas Ideais", "Cobertura da carteira"]} templateFile="modelo_kpis.xlsx" action={importKpis} /><ExportButton filename="kpis.xlsx" sheetName="KPIs" headers={["KPI"]} rows={(kpis ?? []).map((k) => [k.name])} /></>} />,
+          content: <RegistryList canEdit={canEdit} title="KPIs" items={(kpis ?? []).map((k) => ({ id: k.id, name: k.name, active: k.active, canDelete: !usedKpi.has(k.id) }))} createAction={createKpi} deleteAction={deleteKpi} toggleAction={setKpiActive} placeholder="Nome do KPI" headerAction={<>{seEdita(<ImportListDialog title="Importar KPIs (.xlsx)" column="KPI" noun="KPI(s)" findKeys={["kpi", "indicador"]} examples={["OTIF", "% Lojas Ideais", "Cobertura da carteira"]} templateFile="modelo_kpis.xlsx" action={importKpis} />)}<ExportButton filename="kpis.xlsx" sheetName="KPIs" headers={["KPI"]} rows={(kpis ?? []).map((k) => [k.name])} /></>} />,
         },
         {
           id: "ferramentas",
           label: "Ferramentas de gestão",
-          content: <RegistryList title="Ferramentas de gestão" items={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active, canDelete: !usedTool.has(t.id) }))} createAction={createTool} deleteAction={deleteTool} toggleAction={setToolActive} placeholder="Ex.: 5W2H, PDCA, Ishikawa" headerAction={<><ImportListDialog title="Importar Ferramentas de gestão (.xlsx)" column="Ferramenta" noun="ferramenta(s)" findKeys={["ferramenta"]} examples={["PDCA", "5W2H", "Ishikawa"]} templateFile="modelo_ferramentas.xlsx" action={importTools} /><ExportButton filename="ferramentas_gestao.xlsx" sheetName="Ferramentas" headers={["Ferramenta"]} rows={(tools ?? []).map((t) => [t.name])} /></>} />,
+          content: <RegistryList canEdit={canEdit} title="Ferramentas de gestão" items={(tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active, canDelete: !usedTool.has(t.id) }))} createAction={createTool} deleteAction={deleteTool} toggleAction={setToolActive} placeholder="Ex.: 5W2H, PDCA, Ishikawa" headerAction={<>{seEdita(<ImportListDialog title="Importar Ferramentas de gestão (.xlsx)" column="Ferramenta" noun="ferramenta(s)" findKeys={["ferramenta"]} examples={["PDCA", "5W2H", "Ishikawa"]} templateFile="modelo_ferramentas.xlsx" action={importTools} />)}<ExportButton filename="ferramentas_gestao.xlsx" sheetName="Ferramentas" headers={["Ferramenta"]} rows={(tools ?? []).map((t) => [t.name])} /></>} />,
         },
       ]}
     />
@@ -854,6 +881,7 @@ export default async function SettingsPage() {
           label: "Setores",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Setores de chamado"
               description="Áreas que atendem chamados (ex.: TI, Serviços Gerais)."
               items={ticketSectorOpts.map((s) => ({ ...s, canDelete: canDeleteSector(s.id) }))}
@@ -861,7 +889,7 @@ export default async function SettingsPage() {
               deleteAction={deleteTicketSector}
               toggleAction={setTicketSectorActive}
               placeholder="Nome do setor"
-              headerAction={<><ImportTicketStructureDialog /><ExportButton filename="chamados_setores_categorias.xlsx" sheetName="Estrutura" headers={["Setor", "Categoria"]} rows={ticketStructRows} /></>}
+              headerAction={<>{seEdita(<ImportTicketStructureDialog />)}<ExportButton filename="chamados_setores_categorias.xlsx" sheetName="Estrutura" headers={["Setor", "Categoria"]} rows={ticketStructRows} /></>}
             />
           ),
         },
@@ -870,6 +898,7 @@ export default async function SettingsPage() {
           label: "Categorias",
           content: (
             <RegistryList
+              canEdit={canEdit}
               title="Categorias de chamado"
               description="Cada categoria pertence a um setor (ex.: TI → Acesso, Backup, Computador)."
               items={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, meta: ticketSectorById.get(c.sector_id) ?? undefined, active: c.active, canDelete: !usedCategory.has(c.id) }))}
@@ -879,7 +908,7 @@ export default async function SettingsPage() {
               placeholder="Nome da categoria"
               metaLabel="Setor"
               emptyText="Nenhuma categoria. Cadastre setores primeiro."
-              headerAction={<><ImportTicketStructureDialog /><ExportButton filename="chamados_setores_categorias.xlsx" sheetName="Estrutura" headers={["Setor", "Categoria"]} rows={ticketStructRows} /></>}
+              headerAction={<>{seEdita(<ImportTicketStructureDialog />)}<ExportButton filename="chamados_setores_categorias.xlsx" sheetName="Estrutura" headers={["Setor", "Categoria"]} rows={ticketStructRows} /></>}
               extraFields={
                 <select name="sector_id" className="select" required style={{ width: "auto" }}>
                   <option value="">Setor…</option>
@@ -895,13 +924,14 @@ export default async function SettingsPage() {
           content: (
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", maxWidth: 760 }}>
-                <ImportTicketSlaDialog />
+                {seEdita(<ImportTicketSlaDialog />)}
                 <ExportButton filename="chamados_sla.xlsx" sheetName="SLA" headers={["Setor", "Categoria", "Prioridade", "Valor", "Unidade"]} rows={ticketSlaRows} />
               </div>
               <TicketSlaEditor
                 mode={tenant.ticket_sla_mode === "category" ? "category" : "priority"}
                 categories={ticketCategoryOpts.map((c) => ({ id: c.id, name: c.name, sectorName: ticketSectorById.get(c.sector_id) ?? "—" }))}
                 slas={(ticketSlas ?? []).map((s) => ({ category_id: s.category_id, priority: s.priority, sla_value: s.sla_value, sla_unit: s.sla_unit }))}
+                canEdit={canEdit}
               />
             </div>
           ),
@@ -909,7 +939,7 @@ export default async function SettingsPage() {
         {
           id: "ticket-gestores",
           label: "Gestores",
-          content: <TicketManagersEditor members={ticketManagers} sectors={ticketSectorOpts.map((s) => ({ id: s.id, name: s.name }))} />,
+          content: <TicketManagersEditor members={ticketManagers} sectors={ticketSectorOpts.map((s) => ({ id: s.id, name: s.name }))} canEdit={canEdit} />,
         },
       ]}
     />
@@ -921,7 +951,7 @@ export default async function SettingsPage() {
     { id: "usuarios", label: "Colaboradores", content: usuariosTab },
     { id: "sdpo", label: "Programa de Excelência", content: sdpoTab },
     { id: "chamados", label: "Chamados", content: chamadosTab },
-    { id: "rv", label: "Remuneração variável", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} /> },
+    { id: "rv", label: "Remuneração variável", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} canEdit={canEdit} /> },
     {
       id: "feedbacks",
       label: "Feedbacks",
@@ -931,8 +961,10 @@ export default async function SettingsPage() {
             departments={deptOpts}
             positions={posOpts}
             rules={(fbCadenceRules ?? []).map((r) => ({ id: r.id, departmentId: r.department_id, positionId: r.position_id, cadenceDays: r.cadence_days }))}
+            canEdit={canEdit}
           />
           <RegistryList
+              canEdit={canEdit}
             title="Competências / valores"
             description="Competências marcáveis nos feedbacks. Desative as que saíram de uso. O histórico será mantido."
             items={(fbCompsData ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active, canDelete: !usedCompetency.has(c.id) }))}
@@ -951,6 +983,26 @@ export default async function SettingsPage() {
   return (
     <div>
       <PageHeader title="Configurações" subtitle="Empresa, usuários, unidades e estrutura organizacional." />
+      {/* Sem este aviso, a tela em consulta parece a tela normal com defeito:
+          a pessoa procura o botão de adicionar, não acha, e conclui que quebrou. */}
+      {!canEdit && (
+        <div
+          className="card"
+          style={{
+            display: "flex", alignItems: "center", gap: "0.55rem",
+            padding: "0.7rem 0.95rem", marginBottom: "1.1rem",
+            fontSize: "0.85rem", borderLeft: "3px solid var(--mh-primary-500)",
+          }}
+        >
+          <Eye size={16} style={{ color: "var(--mh-primary-500)", flexShrink: 0 }} />
+          <span>
+            <strong>Somente leitura.</strong>{" "}
+            <span className="muted">
+              Você enxerga toda a configuração da empresa, mas alterações são feitas pelo proprietário ou por um administrador.
+            </span>
+          </span>
+        </div>
+      )}
       <Tabs tabs={tabs} />
     </div>
   );

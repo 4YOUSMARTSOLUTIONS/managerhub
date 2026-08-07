@@ -35,7 +35,13 @@ function currentValue(configs: RvConfigRow[], period: string): RvConfigRow | nul
   return best;
 }
 
-export function RvConfigEditor({ positions, members, configs }: { positions: RvPositionRef[]; members: RvMemberRef[]; configs: RvConfigRow[] }) {
+export function RvConfigEditor({ positions, members, configs, canEdit = true }: {
+  positions: RvPositionRef[];
+  members: RvMemberRef[];
+  configs: RvConfigRow[];
+  /** `false` deixa em consulta: valor vigente, histórico de vigências e exportação ficam; nova vigência e exclusão somem. */
+  canEdit?: boolean;
+}) {
   const [tab, setTab] = useState<"position" | "user">("position");
   const period = `${nowMonth()}-01`;
 
@@ -74,6 +80,7 @@ export function RvConfigEditor({ positions, members, configs }: { positions: RvP
           refs={positions.map((p) => ({ id: p.id, name: p.name }))}
           rows={positions.map((p) => ({ key: p.id, title: p.name, subtitle: null, configs: byPosition.get(p.id) ?? [] }))}
           period={period}
+          canEdit={canEdit}
         />
       ) : (
         <RvScopeTable
@@ -89,17 +96,19 @@ export function RvConfigEditor({ positions, members, configs }: { positions: RvP
             };
           })}
           period={period}
+          canEdit={canEdit}
         />
       )}
     </div>
   );
 }
 
-function RvScopeTable({ scope, refs, rows, period }: {
+function RvScopeTable({ scope, refs, rows, period, canEdit }: {
   scope: "position" | "user";
   refs: { id: string; name: string }[];
   rows: { key: string; title: string; subtitle: string | null; configs: RvConfigRow[] }[];
   period: string;
+  canEdit: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -142,7 +151,7 @@ function RvScopeTable({ scope, refs, rows, period }: {
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input className="input" placeholder={scope === "position" ? "Buscar função…" : "Buscar colaborador…"} value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 320 }} />
-        <ImportRvDialog scope={scope} refs={refs} />
+        {canEdit && <ImportRvDialog scope={scope} refs={refs} />}
         <ExportButton
           filename={`rv_${scope === "position" ? "por_funcao" : "por_colaborador"}.xlsx`}
           sheetName="RV"
@@ -155,12 +164,12 @@ function RvScopeTable({ scope, refs, rows, period }: {
           <tr>
             <th>{scope === "position" ? "Função" : "Colaborador"}</th>
             <th style={{ textAlign: "right" }}>RV vigente ({monthLabel(period)})</th>
-            <th style={{ textAlign: "right" }}></th>
+            {canEdit && <th style={{ textAlign: "right" }}></th>}
           </tr>
         </thead>
         <tbody>
           {filtered.length === 0 ? (
-            <tr><td colSpan={3} className="soft" style={{ textAlign: "center", padding: "1rem" }}>Nenhum item.</td></tr>
+            <tr><td colSpan={canEdit ? 3 : 2} className="soft" style={{ textAlign: "center", padding: "1rem" }}>Nenhum item.</td></tr>
           ) : filtered.map((r) => {
             const cur = currentValue(r.configs, period);
             const isOpen = expanded.has(r.key);
@@ -181,13 +190,15 @@ function RvScopeTable({ scope, refs, rows, period }: {
                   <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 700 }}>
                     {cur ? (cur.value > 0 ? fmtBRL(cur.value) : <span className="soft">R$ 0,00 (sem RV)</span>) : <span className="soft">—</span>}
                   </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => openForm(r.key)}>+ Vigência</button>
-                  </td>
+                  {canEdit && (
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => openForm(r.key)}>+ Vigência</button>
+                    </td>
+                  )}
                 </tr>
                 {formFor === r.key && (
                   <tr>
-                    <td colSpan={3} style={{ background: "var(--surface-2)" }}>
+                    <td colSpan={canEdit ? 3 : 2} style={{ background: "var(--surface-2)" }}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "flex-end", padding: "0.2rem 0" }}>
                         <div>
                           <label className="label">A partir de</label>
@@ -211,11 +222,13 @@ function RvScopeTable({ scope, refs, rows, period }: {
                       {cur?.id === c.id && <span className="badge badge-green" style={{ marginLeft: 6, fontSize: "0.62rem" }}>vigente</span>}
                     </td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{fmtBRL(c.value)}</td>
+                    {canEdit && (
                     <td style={{ textAlign: "right" }}>
                       <button type="button" className="icon-btn icon-btn-danger" title="Excluir vigência" disabled={pending} onClick={() => remove(c.id)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                       </button>
                     </td>
+                    )}
                   </tr>
                 ))}
               </RowGroup>

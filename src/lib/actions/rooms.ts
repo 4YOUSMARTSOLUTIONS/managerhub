@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { adminActionContext } from "./context";
 import type { ActionState } from "./types";
 
 export async function createRoom(
@@ -9,7 +9,7 @@ export async function createRoom(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase, tenantId } = await actionContext();
+    const { supabase, tenantId } = await adminActionContext();
 
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { error: "Informe o nome da sala." };
@@ -46,7 +46,7 @@ export async function updateRoom(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase } = await adminActionContext();
 
     const id = String(formData.get("id") ?? "").trim();
     if (!id) return { error: "Sala inválida." };
@@ -77,7 +77,7 @@ export async function updateRoom(
 }
 
 export async function toggleRoom(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const active = String(formData.get("is_active")) === "true";
   await supabase.from("rooms").update({ is_active: !active }).eq("id", id);
@@ -85,7 +85,7 @@ export async function toggleRoom(formData: FormData): Promise<void> {
 }
 
 export async function deleteRoom(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   await supabase.from("rooms").delete().eq("id", id);
   revalidatePath("/configuracoes");

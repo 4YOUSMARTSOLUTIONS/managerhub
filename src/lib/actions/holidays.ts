@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { adminActionContext } from "./context";
 import type { ActionState } from "./types";
 
-// A RLS (holidays_admin_write) garante que só owner/admin/manager gravam.
+// Gravação é de owner/admin, nos dois lugares: `holidays_admin_write` na RLS e
+// `adminActionContext` aqui. O `manager` saiu da policy quando o Gerencial
+// passou a entrar em /configuracoes só para ler.
 export async function createHoliday(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
-    const { supabase, tenantId } = await actionContext();
+    const { supabase, tenantId } = await adminActionContext();
     const day = String(formData.get("day") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
     if (!day) return { error: "Informe a data do feriado." };
@@ -27,7 +29,7 @@ export async function createHoliday(_prev: ActionState, formData: FormData): Pro
 }
 
 export async function deleteHoliday(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("holidays").delete().eq("id", String(formData.get("id")));
   revalidatePath("/configuracoes");
   revalidatePath("/salas");
@@ -41,7 +43,7 @@ export async function importHolidays(
   rows: HolidayImportRow[],
 ): Promise<{ imported: number; skipped: number; error?: string }> {
   try {
-    const { supabase, tenantId } = await actionContext();
+    const { supabase, tenantId } = await adminActionContext();
     const seen = new Set<string>();
     const valid: { tenant_id: string; day: string; name: string }[] = [];
     for (const r of rows ?? []) {

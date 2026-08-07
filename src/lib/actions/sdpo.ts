@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { adminActionContext } from "./context";
 
 const RP = "/configuracoes";
 
-type Db = Awaited<ReturnType<typeof actionContext>>["supabase"];
+type Db = Awaited<ReturnType<typeof adminActionContext>>["supabase"];
 
 /** true se qualquer ação já referencia um dos ids de pilar/seção/bloco/item informados. */
 async function isReferenced(
@@ -34,19 +34,19 @@ const wantsActive = (fd: FormData) => {
 
 // ---------- Programas (ex.: SPO, DPO) ----------
 export async function createProgram(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("sdpo_programas").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setProgramActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("sdpo_programas").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteProgram(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   // programa referenciado por blocos ou itens não é excluído (FK restrict): apenas desativa
   const [{ count: cb }, { count: ci }] = await Promise.all([
@@ -61,7 +61,7 @@ export async function deleteProgram(formData: FormData): Promise<void> {
 // ---------- Pilares (catálogo global, único por nome; compartilhado entre programas) ----------
 const normPilar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 export async function createPilar(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   // pilar é global: se já existe um com o mesmo nome, não duplica
@@ -71,12 +71,12 @@ export async function createPilar(formData: FormData): Promise<void> {
   revalidatePath(RP);
 }
 export async function setPilarActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("sdpo_pilares").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deletePilar(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   // guarda: só exclui se o pilar e sua subárvore (blocos/itens deste pilar) nunca foram usados
   const { data: blocos } = await supabase.from("sdpo_blocos").select("id").eq("pilar_id", id);
@@ -91,19 +91,19 @@ export async function deletePilar(formData: FormData): Promise<void> {
 
 // ---------- Seções (catálogo global, reutilizado por qualquer pilar) ----------
 export async function createSecao(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("sdpo_secoes").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setSecaoActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("sdpo_secoes").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteSecao(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const { data: blocos } = await supabase.from("sdpo_blocos").select("id").eq("secao_id", id);
   const blocoIds = (blocos ?? []).map((b) => b.id);
@@ -117,7 +117,7 @@ export async function deleteSecao(formData: FormData): Promise<void> {
 
 // ---------- Blocos (pertencem a um Pilar + Seção; opcional) ----------
 export async function createBloco(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   const programa_id = String(formData.get("programa_id") ?? "") || null;
   const pilar_id = String(formData.get("pilar_id") ?? "");
@@ -128,12 +128,12 @@ export async function createBloco(formData: FormData): Promise<void> {
   revalidatePath(RP);
 }
 export async function setBlocoActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("sdpo_blocos").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteBloco(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const { data: itens } = await supabase.from("sdpo_itens").select("id").eq("bloco_id", id);
   const itemIds = (itens ?? []).map((i) => i.id);
@@ -145,7 +145,7 @@ export async function deleteBloco(formData: FormData): Promise<void> {
 
 // ---------- Itens (pertencem a um Pilar + Seção; opcionalmente a um Bloco) ----------
 export async function createItem(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   let programa_id = String(formData.get("programa_id") ?? "") || null;
   let pilar_id = String(formData.get("pilar_id") ?? "");
@@ -164,12 +164,12 @@ export async function createItem(formData: FormData): Promise<void> {
   revalidatePath(RP);
 }
 export async function setItemActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("sdpo_itens").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteItem(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isReferenced(supabase, { item: [id] });
   if (used) { await setItemActive(formData); return; }
@@ -179,19 +179,19 @@ export async function deleteItem(formData: FormData): Promise<void> {
 
 // ---------- KPIs ----------
 export async function createKpi(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("action_kpis").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setKpiActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("action_kpis").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteKpi(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const { count } = await supabase.from("actions").select("id", { count: "exact", head: true }).eq("kpi_id", id);
   if ((count ?? 0) > 0) { await setKpiActive(formData); return; } // usado → apenas desativa
@@ -201,19 +201,19 @@ export async function deleteKpi(formData: FormData): Promise<void> {
 
 // ---------- Ferramentas de gestão ----------
 export async function createTool(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("action_tools").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setToolActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("action_tools").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteTool(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const { count } = await supabase.from("actions").select("id", { count: "exact", head: true }).eq("tool_id", id);
   if ((count ?? 0) > 0) { await setToolActive(formData); return; }
@@ -230,7 +230,7 @@ export type SimpleImportResult = { created: number; skipped: number; error?: str
 async function importSimpleCatalog(table: "action_kpis" | "action_tools", names: string[]): Promise<SimpleImportResult> {
   const base: SimpleImportResult = { created: 0, skipped: 0 };
   try {
-    const { supabase, tenantId, role } = await actionContext();
+    const { supabase, tenantId, role } = await adminActionContext();
     if (role !== "owner" && role !== "admin") return { ...base, error: "Apenas proprietário e administrador podem importar." };
     const { data: existing } = await supabase.from(table).select("name").eq("tenant_id", tenantId);
     const seen = new Set((existing ?? []).map((x) => normName(x.name)));
@@ -279,7 +279,7 @@ export type SdpoImportResult = {
 export async function importSdpo(rows: SdpoImportRow[]): Promise<SdpoImportResult> {
   const base: SdpoImportResult = { rows: rows.length, programasCreated: 0, pilaresCreated: 0, secoesCreated: 0, blocosCreated: 0, itensCreated: 0, skipped: 0 };
   try {
-    const { supabase, tenantId, role } = await actionContext();
+    const { supabase, tenantId, role } = await adminActionContext();
     if (role !== "owner" && role !== "admin") return { ...base, error: "Apenas proprietário e administrador podem importar a estrutura." };
 
     const [{ data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }] = await Promise.all([

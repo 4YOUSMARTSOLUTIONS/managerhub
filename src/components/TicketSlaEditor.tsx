@@ -18,7 +18,16 @@ const CAT_KEY = "__cat__"; // coluna única do modo "somente por categoria"
 
 type Cell = { value: string; unit: Unit };
 
-export function TicketSlaEditor({ categories, slas, mode: initialMode }: { categories: Cat[]; slas: Sla[]; mode: SlaMode }) {
+export function TicketSlaEditor({ categories, slas, mode: initialMode, canEdit = true }: {
+  categories: Cat[];
+  slas: Sla[];
+  mode: SlaMode;
+  /**
+   * `false` deixa em consulta. Os campos ficam VISÍVEIS e desabilitados, e não
+   * escondidos: o prazo de cada categoria é justamente o que se vem ver aqui.
+   */
+  canEdit?: boolean;
+}) {
   const [mode, setMode] = useState<SlaMode>(initialMode);
 
   const initial = useMemo(() => {
@@ -110,11 +119,12 @@ export function TicketSlaEditor({ categories, slas, mode: initialMode }: { categ
         role="switch"
         aria-checked={simple}
         aria-label="Alternar SLA simples"
-        disabled={modePending}
+        disabled={modePending || !canEdit}
         onClick={() => askChangeMode(simple ? "priority" : "category")}
         style={{
-          position: "relative", width: 46, height: 26, borderRadius: 999, border: "none", cursor: modePending ? "wait" : "pointer",
+          position: "relative", width: 46, height: 26, borderRadius: 999, border: "none", cursor: !canEdit ? "default" : modePending ? "wait" : "pointer",
           background: simple ? "var(--mh-primary-500)" : "var(--mh-border)", transition: "background 0.15s", flexShrink: 0,
+          opacity: canEdit ? 1 : 0.5,
         }}
       >
         <span style={{ position: "absolute", top: 3, left: simple ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.15s", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }} />
@@ -197,9 +207,11 @@ export function TicketSlaEditor({ categories, slas, mode: initialMode }: { categ
             </h3>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
               <span style={{ fontSize: "0.76rem", color: "var(--mh-success)", opacity: savedId === c.id ? 1 : 0, transition: "opacity 0.2s" }}>✓ Salvo</span>
-              <button type="button" className="btn btn-primary btn-sm" disabled={pending && savingId === c.id} onClick={() => saveCategory(c.id)}>
-                {pending && savingId === c.id ? "Salvando…" : "Salvar SLA"}
-              </button>
+              {canEdit && (
+                <button type="button" className="btn btn-primary btn-sm" disabled={pending && savingId === c.id} onClick={() => saveCategory(c.id)}>
+                  {pending && savingId === c.id ? "Salvando…" : "Salvar SLA"}
+                </button>
+              )}
             </div>
           </div>
           <div style={{ padding: "0.6rem 1.1rem 1rem", display: "grid", gridTemplateColumns: mode === "category" ? "minmax(150px, 280px)" : "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem" }}>
@@ -209,8 +221,8 @@ export function TicketSlaEditor({ categories, slas, mode: initialMode }: { categ
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                   <label className="label" style={{ margin: 0 }}>Prazo</label>
-                  <input type="number" min={0} className="input" placeholder="—" value={cell.value} onChange={(e) => setCell(key, { value: e.target.value })} />
-                  <select className="select" value={cell.unit} onChange={(e) => setCell(key, { unit: e.target.value as Unit })}>
+                  <input type="number" min={0} className="input" placeholder="—" disabled={!canEdit} value={cell.value} onChange={(e) => setCell(key, { value: e.target.value })} />
+                  <select className="select" disabled={!canEdit} value={cell.unit} onChange={(e) => setCell(key, { unit: e.target.value as Unit })}>
                     {UNITS.map((u) => <option key={u} value={u}>{TICKET_SLA_UNIT[u]}</option>)}
                   </select>
                 </div>
@@ -221,8 +233,8 @@ export function TicketSlaEditor({ categories, slas, mode: initialMode }: { categ
               return (
                 <div key={p} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                   <label className="label" style={{ margin: 0 }}>{PRIORITY[p]}</label>
-                  <input type="number" min={0} className="input" placeholder="—" value={cell.value} onChange={(e) => setCell(key, { value: e.target.value })} />
-                  <select className="select" value={cell.unit} onChange={(e) => setCell(key, { unit: e.target.value as Unit })}>
+                  <input type="number" min={0} className="input" placeholder="—" disabled={!canEdit} value={cell.value} onChange={(e) => setCell(key, { value: e.target.value })} />
+                  <select className="select" disabled={!canEdit} value={cell.unit} onChange={(e) => setCell(key, { unit: e.target.value as Unit })}>
                     {UNITS.map((u) => <option key={u} value={u}>{TICKET_SLA_UNIT[u]}</option>)}
                   </select>
                 </div>

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { adminActionContext } from "./context";
 import { isValidCnpj, normalizeCnpj } from "@/lib/cnpj";
 import { isCatalogInUse, wantsActive } from "@/lib/catalogGuard";
 import type { ActionState } from "./types";
@@ -12,7 +12,7 @@ const RP = "/configuracoes";
 // ---------- Unidades ----------
 export async function createUnit(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
-    const { supabase, tenantId } = await actionContext();
+    const { supabase, tenantId } = await adminActionContext();
     const name = String(formData.get("name") ?? "").trim();
     const kind = (String(formData.get("kind") ?? "filial") as Enums<"unit_kind">);
     if (!name) return { error: "Informe o nome da unidade." };
@@ -32,7 +32,7 @@ export async function createUnit(_prev: ActionState, formData: FormData): Promis
 }
 export async function updateUnit(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase } = await adminActionContext();
     const id = String(formData.get("id"));
     const name = String(formData.get("name") ?? "").trim();
     const kind = String(formData.get("kind") ?? "") as Enums<"unit_kind">;
@@ -56,26 +56,26 @@ export async function updateUnit(_prev: ActionState, formData: FormData): Promis
   }
 }
 export async function deleteUnit(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("units").delete().eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 
 // ---------- Setores ----------
 export async function createDepartment(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("departments").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setDepartmentActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("departments").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteDepartment(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isCatalogInUse(supabase, id, [
     { table: "memberships", col: "department_id" },
@@ -90,7 +90,7 @@ export async function deleteDepartment(formData: FormData): Promise<void> {
 
 // ---------- Subsetores ----------
 export async function createSubdepartment(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   const department_id = String(formData.get("department_id") ?? "");
   if (!name || !department_id) return;
@@ -98,12 +98,12 @@ export async function createSubdepartment(formData: FormData): Promise<void> {
   revalidatePath(RP);
 }
 export async function setSubdepartmentActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("subdepartments").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deleteSubdepartment(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isCatalogInUse(supabase, id, [
     { table: "memberships", col: "subdepartment_id" },
@@ -117,19 +117,19 @@ export async function deleteSubdepartment(formData: FormData): Promise<void> {
 
 // ---------- Funções ----------
 export async function createPosition(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("positions").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setPositionActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("positions").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deletePosition(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isCatalogInUse(supabase, id, [
     { table: "memberships", col: "position_id" },
@@ -143,19 +143,19 @@ export async function deletePosition(formData: FormData): Promise<void> {
 
 // ---------- Perfis de função ----------
 export async function createPositionLevel(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   await supabase.from("position_levels").insert({ tenant_id: tenantId, name });
   revalidatePath(RP);
 }
 export async function setPositionLevelActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("position_levels").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 export async function deletePositionLevel(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isCatalogInUse(supabase, id, [{ table: "memberships", col: "position_level_id" }]);
   if (used) { await setPositionLevelActive(formData); return; }
@@ -172,7 +172,7 @@ export async function deletePositionLevel(formData: FormData): Promise<void> {
 const PASSO_HIERARQUIA = 10;
 
 export async function createHierarchyLevel(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   // nasce no fim da ordem; reordenar é uma ação à parte
@@ -186,13 +186,13 @@ export async function createHierarchyLevel(formData: FormData): Promise<void> {
 }
 
 export async function setHierarchyLevelActive(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   await supabase.from("hierarchy_levels").update({ active: wantsActive(formData) }).eq("id", String(formData.get("id")));
   revalidatePath(RP);
 }
 
 export async function deleteHierarchyLevel(formData: FormData): Promise<void> {
-  const { supabase } = await actionContext();
+  const { supabase } = await adminActionContext();
   const id = String(formData.get("id"));
   const used = await isCatalogInUse(supabase, id, [{ table: "memberships", col: "hierarchy_level_id" }]);
   if (used) { await setHierarchyLevelActive(formData); return; }
@@ -208,7 +208,7 @@ export async function deleteHierarchyLevel(formData: FormData): Promise<void> {
  * direção pedida, o nível já está na ponta e nada acontece.
  */
 export async function moveHierarchyLevel(formData: FormData): Promise<void> {
-  const { supabase, tenantId } = await actionContext();
+  const { supabase, tenantId } = await adminActionContext();
   const id = String(formData.get("id"));
   const paraCima = String(formData.get("dir")) === "up";
 
@@ -253,7 +253,7 @@ export type StructureImportResult = {
 export async function importStructure(rows: StructureImportRow[]): Promise<StructureImportResult> {
   const base: StructureImportResult = { rows: rows.length, setoresCreated: 0, subsetoresCreated: 0, funcoesCreated: 0, skipped: 0 };
   try {
-    const { supabase, tenantId, role } = await actionContext();
+    const { supabase, tenantId, role } = await adminActionContext();
     if (role !== "owner" && role !== "admin") return { ...base, error: "Apenas proprietário e administrador podem importar a estrutura." };
 
     const [{ data: depts }, { data: subs }, { data: positions }] = await Promise.all([
