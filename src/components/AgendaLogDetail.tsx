@@ -16,6 +16,15 @@ import {
 /** Ordem de leitura, do melhor para o pior. `pendente` é o "ainda não". */
 const STATUS_OPCOES: Enums<"agenda_log_status">[] = ["feito", "parcial", "nao_feito", "pendente"];
 
+/** As mesmas cores do interruptor da lista: verde, âmbar, vermelho.
+ *  `pendente` não tem cor porque é a ausência de decisão, e não um resultado. */
+const STATUS_COR: Record<Enums<"agenda_log_status">, string | null> = {
+  feito: "var(--mh-success)",
+  parcial: "var(--mh-warning)",
+  nao_feito: "var(--mh-danger)",
+  pendente: null,
+};
+
 export type LogDetailCtx = {
   agendaId: string;
   taskId: string;
@@ -140,17 +149,32 @@ export function AgendaLogDetail({
             <div>
               <label className="label">Status</label>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                {STATUS_OPCOES.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`btn btn-sm ${status === s ? "btn-primary" : "btn-ghost"}`}
-                    disabled={pending}
-                    onClick={() => mudarStatus(s)}
-                  >
-                    {AGENDA_STATUS_LABEL[s]}
-                  </button>
-                ))}
+                {STATUS_OPCOES.map((s) => {
+                  const escolhido = status === s;
+                  const cor = STATUS_COR[s];
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`btn btn-sm ${escolhido ? "" : "btn-ghost"}`}
+                      disabled={pending}
+                      aria-pressed={escolhido}
+                      onClick={() => mudarStatus(s)}
+                      // Só o escolhido ganha cor. Pintar os quatro de uma vez
+                      // encheria o painel de semáforo e a opção marcada deixaria
+                      // de saltar, que é a única coisa que precisa saltar aqui.
+                      style={
+                        !escolhido
+                          ? undefined
+                          : cor
+                            ? { background: cor, color: "#fff", borderColor: cor }
+                            : { background: "var(--mh-surface-2)", color: "var(--mh-text-1)", borderColor: "var(--mh-border-strong)" }
+                      }
+                    >
+                      {AGENDA_STATUS_LABEL[s]}
+                    </button>
+                  );
+                })}
               </div>
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.4rem 0 0" }}>
                 Na lista o botão do horário cobre realizada e ainda não realizada. Os meios-termos ficam aqui,

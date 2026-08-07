@@ -33,7 +33,10 @@ export function AgendaDayView({
   const budget = AGENDA_WORKDAY_MINUTES;
   const over = reservedMin > budget;
   const freeMin = budget - reservedMin;
-  const barPct = Math.min(100, Math.round((reservedMin / budget) * 100));
+  const aderenciaPct = dayAdherence == null ? 0 : Math.round(dayAdherence * 100);
+  // quantas ainda não foram decididas. Sai do mesmo conjunto que a aderência
+  // cobra (`chargeable`), então o número e a barra falam do mesmo universo.
+  const semMarcacao = items.filter((i) => i.kind === "task" && i.chargeable && i.status === "pendente").length;
 
   // Hora do relógio, só para decidir o que já está atrasado.
   //
@@ -61,19 +64,31 @@ export function AgendaDayView({
           <button type="button" className="icon-btn" onClick={() => onChangeDate(1)} aria-label="Próximo dia"><ChevronRight size={16} /></button>
           {dateStr !== todayStr && <button type="button" className="btn btn-ghost btn-sm" onClick={onToday}>Hoje</button>}
         </div>
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.8rem" }}>
-          <span className="soft">Aderência do dia: <strong style={{ color: "var(--mh-text-1)" }}>{pct(dayAdherence)}</strong></span>
+        {/* a carga trocou de lugar com a aderência: ela é um dado de contexto do
+            dia, e quem manda na barra é o resultado */}
+        <div style={{ display: "flex", gap: "0.7rem", alignItems: "center", fontSize: "0.8rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <span className="soft">Carga reservada: <strong style={{ color: over ? "var(--mh-danger)" : "var(--mh-text-1)" }}>{fmtMinutes(reservedMin)}</strong> de {fmtMinutes(budget)}</span>
+          <span className="soft">
+            {over
+              ? <span style={{ color: "var(--mh-danger)", fontWeight: 600 }}>Excede em {fmtMinutes(reservedMin - budget)}</span>
+              : <>Livre: {fmtMinutes(Math.max(0, freeMin))}</>}
+          </span>
         </div>
       </div>
 
-      {/* barra de carga (8h) */}
+      {/* barra da aderência do dia */}
       <div style={{ padding: "0.85rem 1.1rem", borderBottom: "1px solid var(--mh-border)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: "0.35rem" }}>
-          <span className="soft">Carga reservada: <strong style={{ color: over ? "var(--mh-danger)" : "var(--mh-text-1)" }}>{fmtMinutes(reservedMin)}</strong> de {fmtMinutes(budget)}</span>
-          <span className="soft">{over ? <span style={{ color: "var(--mh-danger)", fontWeight: 600 }}>Excede em {fmtMinutes(reservedMin - budget)}</span> : <>Livre: {fmtMinutes(Math.max(0, freeMin))}</>}</span>
+          <span className="soft">Aderência do dia: <strong style={{ color: "var(--mh-text-1)" }}>{pct(dayAdherence)}</strong></span>
+          {semMarcacao > 0 && (
+            <span className="soft">{semMarcacao} {semMarcacao === 1 ? "tarefa sem marcação" : "tarefas sem marcação"}</span>
+          )}
         </div>
+        {/* roxo da marca, e não verde: verde aqui competia com o verde de
+            "realizada" dos interruptores logo abaixo, e a barra ficava parecendo
+            mais um status do que uma medida. */}
         <div style={{ height: 8, borderRadius: 999, background: "var(--mh-surface-3, var(--mh-surface-2))", overflow: "hidden" }}>
-          <div style={{ width: `${barPct}%`, height: "100%", background: over ? "var(--mh-danger)" : "var(--mh-success)", transition: "width 0.2s" }} />
+          <div style={{ width: `${aderenciaPct}%`, height: "100%", background: "var(--mh-primary-500)", transition: "width 0.2s" }} />
         </div>
         {over && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.5rem", color: "var(--mh-danger)", fontSize: "0.8rem", fontWeight: 600 }}>
@@ -216,7 +231,12 @@ function InterruptorStatus({
         display: "inline-flex", alignItems: "center",
         // a pastilha anda: à esquerda desligado, à direita ligado
         flexDirection: ligado ? "row-reverse" : "row",
-        padding: 3, border: "none", borderRadius: "var(--mh-radius-sm)",
+        padding: 3,
+        // contorno sempre presente, transparente quando o fundo é colorido: sem
+        // ele o estado neutro não tinha silhueta e não lia como interruptor.
+        // Manter a borda nos dois casos evita o campo pular 1px ao alternar.
+        border: `1px solid ${neutro ? "var(--mh-border-strong)" : "transparent"}`,
+        borderRadius: "var(--mh-radius-sm)",
         background: fundo,
         color: neutro ? "var(--mh-text-2)" : "#fff",
         font: "inherit", fontSize: "0.78rem", fontWeight: 600,
