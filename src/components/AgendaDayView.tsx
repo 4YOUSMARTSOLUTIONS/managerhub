@@ -98,18 +98,20 @@ export function AgendaDayView({
                   {it.kind === "checklist" && <Badge tone="purple">Checklist</Badge>}
                   {it.flexible && <Badge tone="blue">Tempo médio</Badge>}
                 </div>
-                <div className="soft" style={{ fontSize: "0.74rem" }}>
-                  {it.agendaName}{it.durationMin > 0 ? ` · ${fmtMinutes(it.durationMin)}${it.flexible ? " (média)" : ""}` : ""}
-                </div>
+                {/* o nome da agenda saiu: repetia em toda linha, e a tela toda
+                    já é de um responsável só. Fica a duração, que muda por linha. */}
+                {it.durationMin > 0 && (
+                  <div className="soft" style={{ fontSize: "0.74rem" }}>
+                    {fmtMinutes(it.durationMin)}{it.flexible ? " (média)" : ""}
+                  </div>
+                )}
               </div>
 
               {it.kind === "task" && it.flexible ? (
                 <>
                   <Badge tone="green">Realizada</Badge>
                   <span className="soft" style={{ fontSize: "0.7rem" }}>automática</span>
-                  <button type="button" className="icon-btn" title="Detalhes, observação e anexos" onClick={() => onOpenDetail(it)}>
-                    <MessageSquare size={15} />
-                  </button>
+                  <BotaoDetalhe item={it} onOpenDetail={onOpenDetail} />
                 </>
               ) : it.kind === "task" ? (
                 <>
@@ -124,6 +126,7 @@ export function AgendaDayView({
                           type="button"
                           className="status-seg-btn status-seg-icon"
                           data-active={active}
+                          data-tone={tone}
                           disabled={!canFill}
                           title={AGENDA_STATUS_LABEL[s]}
                           aria-label={AGENDA_STATUS_LABEL[s]}
@@ -135,9 +138,7 @@ export function AgendaDayView({
                       );
                     })}
                   </div>
-                  <button type="button" className="icon-btn" title="Detalhes, observação e anexos" onClick={() => onOpenDetail(it)}>
-                    <MessageSquare size={15} />
-                  </button>
+                  <BotaoDetalhe item={it} onOpenDetail={onOpenDetail} />
                 </>
               ) : (
                 <>
@@ -152,5 +153,25 @@ export function AgendaDayView({
         </div>
       )}
     </div>
+  );
+}
+
+/** Observação, comentários e anexos da tarefa.
+ *
+ *  Acende em azul quando já há conteúdo lá dentro: sem isso, saber se uma tarefa
+ *  tem justificativa exigia abrir uma por uma. */
+function BotaoDetalhe({ item, onOpenDetail }: { item: DayItem; onOpenDetail: (item: DayItem) => void }) {
+  const cheio = !!item.hasDetail;
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      title={cheio ? "Detalhes, observação e anexos (preenchido)" : "Detalhes, observação e anexos"}
+      aria-label="Detalhes, observação e anexos"
+      onClick={() => onOpenDetail(item)}
+      style={cheio ? { background: "var(--mh-info-soft)", color: "var(--mh-info)", borderColor: "color-mix(in srgb, var(--mh-info) 34%, transparent)" } : undefined}
+    >
+      <MessageSquare size={15} />
+    </button>
   );
 }

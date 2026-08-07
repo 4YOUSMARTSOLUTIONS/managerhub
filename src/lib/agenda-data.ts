@@ -16,6 +16,8 @@ export type AgendaData = {
   checklistScheds: ChecklistSchedFull[];
   checklistRuns: ChecklistRunLite[];
   holidays: { day: string; name: string }[];
+  /** logs que já têm comentário ou anexo (a observação sai do próprio log). */
+  logsComAnexoOuComentario: string[];
 };
 
 /** Carrega tudo que as telas de Gestão da rotina precisam (RLS aplicada). */
@@ -34,7 +36,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
   const from = fromD.toLocaleDateString("sv-SE");
   const fromIso = fromD.toISOString();
 
-  const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes] = await Promise.all([
+  const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes, comentRes, anexoRes] = await Promise.all([
     getMembers(tenant.id),
     (() => {
       const q = supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id);
@@ -46,6 +48,10 @@ export async function loadAgendaData(): Promise<AgendaData> {
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
     supabase.from("memberships").select("user_id, position_id, department_id").eq("tenant_id", tenant.id).eq("is_active", true),
     supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id),
+    // Só o `log_id`, e na mesma janela de 90 dias dos logs: é o que o ícone de
+    // detalhe precisa para acender sem abrir a tarefa. A RLS já recorta.
+    supabase.from("agenda_log_comments").select("log_id").gte("created_at", fromIso),
+    supabase.from("agenda_log_attachments").select("log_id").gte("created_at", fromIso),
   ]);
 
   const people = members
@@ -96,5 +102,10 @@ export async function loadAgendaData(): Promise<AgendaData> {
 
   const holidays = (holidayRes.data ?? []).map((h) => ({ day: h.day, name: h.name }));
 
-  return { currentUserId: user.id, isAdmin, today, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, holidays };
+  const logsComAnexoOuComentario = [...new Set([
+    ...(comentRes.data ?? []).map((c) => c.log_id),
+    ...(anexoRes.data ?? []).map((a) => a.log_id),
+  ])];
+
+  return { currentUserId: user.id, isAdmin, today, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, holidays, logsComAnexoOuComentario };
 }

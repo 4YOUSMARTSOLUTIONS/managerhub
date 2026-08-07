@@ -47,6 +47,7 @@ export function AgendaManager(props: {
   checklistScheds: ChecklistSchedFull[];
   checklistRuns: ChecklistRunLite[];
   holidays: { day: string; name: string }[];
+  logsComAnexoOuComentario?: string[];
 }) {
   const section: AgendaSection = props.section ?? "diario";
   const { currentUserId, isAdmin, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, holidays } = props;
@@ -73,12 +74,26 @@ export function AgendaManager(props: {
   const [detail, setDetail] = useState<LogDetailCtx | null>(null);
   const [detailCanFill, setDetailCanFill] = useState(true);
 
+  /**
+   * Status clicado que ainda não voltou do servidor, por `taskId|data`.
+   *
+   * O clique custava a ida ao banco MAIS o `router.refresh()`, que rebusca a
+   * página inteira; até isso terminar o botão não mudava de cor e a pessoa
+   * clicava de novo. Aqui a cor entra na hora, a aderência do dia recalcula
+   * junto (é conta local, em cima desta mesma tabela) e a gravação segue atrás.
+   * Se o servidor recusar, a entrada é removida e a linha volta ao que era.
+   */
+  const [statusOtimista, setStatusOtimista] = useState<Record<string, Enums<"agenda_log_status">>>({});
+  const chaveStatus = (taskId: string, dateStr: string) => `${taskId}|${dateStr}`;
+
   // índices
   const logByTaskDate = useMemo(() => {
     const m = new Map<string, LogRow>();
     for (const l of logs) m.set(`${l.taskId}|${l.logDate}`, l);
     return m;
   }, [logs]);
+
+  const comDetalhe = useMemo(() => new Set(props.logsComAnexoOuComentario ?? []), [props.logsComAnexoOuComentario]);
 
   const doneChkByUser = useMemo(() => {
     const m = new Map<string, Set<string>>();
@@ -108,12 +123,14 @@ export function AgendaManager(props: {
         if (!t.active) continue;
         if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, date)) continue;
         const log = logByTaskDate.get(`${t.id}|${dateStr}`);
+        const otimista = statusOtimista[chaveStatus(t.id, dateStr)];
         reserved += t.durationMinutes;
         items.push({
           kind: "task", key: `t-${t.id}`, date: dateStr, title: t.title, agendaName: a.name,
           time: t.flexible ? null : t.scheduledTime, durationMin: t.durationMinutes,
-          status: t.flexible ? "feito" : (log?.status ?? "pendente"), note: log?.note ?? null,
+          status: t.flexible ? "feito" : (otimista ?? log?.status ?? "pendente"), note: log?.note ?? null,
           chargeable: !nonWorking, flexible: t.flexible, taskId: t.id, agendaId: a.id, logId: log?.id ?? null,
+          hasDetail: !!(log?.note ?? "").trim() || (!!log && comDetalhe.has(log.id)),
         });
       }
     }
@@ -158,8 +175,11 @@ export function AgendaManager(props: {
             if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, cur)) continue;
             if (t.flexible) { feito++; statuses.push("feito"); continue; } // tempo médio: realizada automaticamente
             const log = logByTaskDate.get(`${t.id}|${ds}`);
+            const otimista = statusOtimista[chaveStatus(t.id, ds)];
             let st: Enums<"agenda_log_status">;
-            if (log && log.status !== "pendente") st = log.status;
+            if (otimista && otimista !== "pendente") st = otimista;
+            else if (otimista === "pendente") { if (isPast) st = "nao_feito"; else continue; }
+            else if (log && log.status !== "pendente") st = log.status;
             else if (isPast) st = "nao_feito"; // dia passado sem marcação = não realizada
             else continue; // hoje ainda não marcado: não conta como falha
             if (st === "feito") feito++;
@@ -175,9 +195,15 @@ export function AgendaManager(props: {
   // ----- handlers -----
   const onSetStatus = (item: DayItem, status: Enums<"agenda_log_status">, dateStr: string) => {
     if (!item.taskId || !item.agendaId) return;
+    const chave = chaveStatus(item.taskId, dateStr);
+    setStatusOtimista((m) => ({ ...m, [chave]: status })); // pinta antes de ir ao banco
     start(async () => {
       const r = await setLogStatus({ agenda_id: item.agendaId!, task_id: item.taskId!, log_date: dateStr, status });
-      if (r.error) { toast.error(r.error); return; }
+      if (r.error) {
+        toast.error(r.error);
+        setStatusOtimista((m) => { const n = { ...m }; delete n[chave]; return n; });
+        return;
+      }
       router.refresh();
     });
   };
@@ -496,7 +522,7 @@ export function AgendaManager(props: {
     historico: { title: "Histórico", subtitle: "Execuções registradas das rotinas." },
   };
   const diarioTabs: Tab[] = [
-    { id: "dia", label: isMe ? "Meu dia" : "O dia", content: meTab },
+    { id: "dia", label: "Hoje", content: meTab },
     { id: "calendario", label: "Calendário", content: calTab },
   ];
 

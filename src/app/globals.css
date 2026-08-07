@@ -1057,6 +1057,31 @@ img.avatar {
   background: var(--mh-surface-1);
   color: var(--mh-text-1);
 }
+/* Cada opção já nasce com a cor do que ela significa, em tom claro, e escurece
+   ao ser escolhida. Antes as três eram cinzas idênticas e só a escolhida ganhava
+   cor: para saber qual botão marcava "não realizada" era preciso ler o ícone. */
+.status-seg-btn[data-tone="green"]:not([data-active="true"]) {
+  background: var(--mh-success-soft);
+  color: var(--mh-success);
+}
+.status-seg-btn[data-tone="amber"]:not([data-active="true"]) {
+  background: var(--mh-warning-soft);
+  color: var(--mh-warning);
+}
+.status-seg-btn[data-tone="red"]:not([data-active="true"]) {
+  background: var(--mh-danger-soft);
+  color: var(--mh-danger);
+}
+/* o hover adensa o próprio tom, em vez de virar cinza */
+.status-seg-btn[data-tone="green"]:hover:not(:disabled):not([data-active="true"]) {
+  background: color-mix(in srgb, var(--mh-success) 26%, transparent);
+}
+.status-seg-btn[data-tone="amber"]:hover:not(:disabled):not([data-active="true"]) {
+  background: color-mix(in srgb, var(--mh-warning) 26%, transparent);
+}
+.status-seg-btn[data-tone="red"]:hover:not(:disabled):not([data-active="true"]) {
+  background: color-mix(in srgb, var(--mh-danger) 26%, transparent);
+}
 .status-seg-btn:disabled {
   cursor: default;
   opacity: 0.55;

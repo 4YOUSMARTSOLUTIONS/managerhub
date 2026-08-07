@@ -71,6 +71,8 @@ export type DayItem = {
   taskId?: string;
   agendaId?: string;
   logId?: string | null;
+  /** já tem observação, comentário ou anexo: o ícone de detalhe acende. */
+  hasDetail?: boolean;
   // checklist
   checklistId?: string;
   overdue?: boolean;
