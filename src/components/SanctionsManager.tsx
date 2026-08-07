@@ -6,6 +6,8 @@ import { Pencil, Trash2 } from "lucide-react";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { upsertSanction, deleteSanction } from "@/lib/actions/rv-redutores";
+import { ExportButton } from "@/components/ui/ExportButton";
+import { ImportSanctionsDialog } from "@/components/ImportSanctionsDialog";
 import { formatDate, normalizar } from "@/lib/format";
 
 /**
@@ -122,11 +124,28 @@ export function SanctionsManager({
               <option value="">Todos os anos</option>
               {anos.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
-            {canEdit && (
-              <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }} onClick={abrirNovo}>
-                + Registrar punição
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
+              {canEdit && <ImportSanctionsDialog members={members} types={types} />}
+              {/* exporta o que está EM VISTA, e nas MESMAS colunas que a
+                  importação lê: dá para exportar, corrigir na planilha e
+                  reimportar por cima sem duplicar nada */}
+              <ExportButton
+                filename="punicoes.xlsx"
+                sheetName="Punições"
+                headers={["Colaborador", "Tipo", "Data", "Observação"]}
+                rows={lista.map((s2) => [
+                  nomePorId.get(s2.userId) ?? "",
+                  s2.typeName,
+                  formatDate(s2.occurredOn),
+                  s2.note ?? "",
+                ])}
+              />
+              {canEdit && (
+                <button type="button" className="btn btn-primary btn-sm" onClick={abrirNovo}>
+                  + Registrar punição
+                </button>
+              )}
+            </div>
           </div>
 
           {rascunho && (

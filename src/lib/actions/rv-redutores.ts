@@ -5,6 +5,10 @@ import { dpActionContext } from "./context";
 import { wantsActive } from "@/lib/catalogGuard";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import {
+  normTexto, parseDataPlanilha, acharTipo, chaveDaPunicao,
+  type SanctionImportRow, type SanctionImportResult,
+} from "@/lib/sanctions-import";
 
 /**
  * Redutores da remuneração variável: catálogo de punições, o registro da
@@ -125,6 +129,113 @@ export async function deleteSanction(id: string): Promise<ActionState> {
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Importa punições em lote, casando o nome com o cadastro e o tipo com o
+ * catálogo da empresa.
+ *
+ * **Reimportar a mesma planilha não duplica.** Mesma pessoa, mesmo tipo e mesma
+ * data é considerada a mesma punição, e a observação é reescrita no lugar. Isso
+ * importa mais aqui do que nas férias: com uma faixa por quantidade, uma punição
+ * contada duas vezes muda o valor pago.
+ *
+ * A trava é de aplicação, e não um índice único no banco, de propósito: o
+ * formulário manual precisa continuar podendo registrar duas ocorrências do
+ * mesmo tipo no mesmo dia, que é raro mas existe. Quem digita uma a uma está
+ * afirmando que são duas; quem reimporta uma planilha não está.
+ *
+ * Tipo fora do catálogo é RECUSADO e contado à parte, nunca criado na hora.
+ */
+export async function importSanctions(rows: SanctionImportRow[]): Promise<SanctionImportResult> {
+  const vazio: SanctionImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, unknownType: 0 };
+  try {
+    const { supabase, tenantId, userId } = await dpActionContext();
+
+    const [{ data: membros }, { data: tipos }, { data: existentes }] = await Promise.all([
+      supabase
+        .from("memberships")
+        .select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)")
+        .eq("tenant_id", tenantId),
+      supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenantId),
+      supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
+    ]);
+
+    const idPorNome = new Map<string, string>();
+    for (const m of membros ?? []) {
+      if (!m.is_active) continue;
+      const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
+      if (nm) idPorNome.set(normTexto(nm), m.user_id);
+    }
+
+    // o que já está no banco, mais o que esta planilha já aceitou: sem a segunda
+    // parte, duas linhas iguais da MESMA planilha entrariam como duas punições
+    const jaExiste = new Map<string, string>();
+    for (const s of existentes ?? []) {
+      jaExiste.set(chaveDaPunicao(s.user_id, s.sanction_type_id, s.occurred_on), s.id);
+    }
+
+    const inserts: Record<string, unknown>[] = [];
+    const updates: { id: string; note: string | null }[] = [];
+    const r: SanctionImportResult = { ...vazio };
+
+    for (const linha of rows ?? []) {
+      const nome = (linha.name ?? "").trim();
+      const data = parseDataPlanilha(linha.occurredOn ?? "");
+      if (!nome || !data) { r.invalid += 1; continue; }
+
+      const alvo = idPorNome.get(normTexto(nome));
+      if (!alvo) { r.notFound += 1; continue; }
+
+      const tipo = acharTipo(linha.type ?? "", tipos ?? []);
+      if (!tipo) { r.unknownType += 1; continue; }
+
+      const note = (linha.note ?? "").trim() || null;
+      const chave = chaveDaPunicao(alvo, tipo.id, data);
+      const id = jaExiste.get(chave);
+      if (id) { updates.push({ id, note }); continue; }
+
+      inserts.push({
+        tenant_id: tenantId,
+        user_id: alvo,
+        sanction_type_id: tipo.id,
+        occurred_on: data,
+        note,
+        created_by: userId,
+      });
+      // marca com id vazio: a próxima linha igual desta planilha cai no update,
+      // que não acha id nenhum e não faz nada, em vez de inserir a segunda
+      jaExiste.set(chave, "");
+    }
+
+    if (inserts.length) {
+      const { error } = await supabase.from("employee_sanctions").insert(inserts as never);
+      if (error) return { ...r, error: mensagem(error) };
+      r.imported = inserts.length;
+    }
+    for (const u of updates) {
+      if (!u.id) continue;
+      const { error } = await supabase.from("employee_sanctions").update({ note: u.note }).eq("id", u.id);
+      if (error) return { ...r, error: mensagem(error) };
+      r.updated += 1;
+    }
+
+    if (r.imported === 0 && r.updated === 0) {
+      return {
+        ...r,
+        error: r.notFound > 0
+          ? "Nenhuma punição importada, colaborador não encontrado (confira o nome exato do cadastro)."
+          : r.unknownType > 0
+            ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Remuneração variável › Tipos de punição."
+            : "Nenhuma linha válida, confira o colaborador e a data.",
+      };
+    }
+
+    revalidar();
+    return r;
+  } catch (e) {
+    return { ...vazio, error: (e as Error).message };
   }
 }
 
