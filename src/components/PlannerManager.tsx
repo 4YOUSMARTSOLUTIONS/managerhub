@@ -9,6 +9,8 @@ import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { BoardView, type BoardBucket, type BoardTask } from "@/components/planner/BoardView";
+import { ActionsBoard, type AcaoCard } from "@/components/planner/ActionsBoard";
+import { Section } from "@/components/ui/Section";
 import {
   createBoard, updateBoard, deleteBoard, setBoardMembers,
   createBucket, renameBucket, deleteBucket, moveBucket,
@@ -41,8 +43,11 @@ export type BoardListItem = {
 
 type Pessoa = { id: string; name: string };
 
+export type Visao = "atividades" | "acoes" | "ambas";
+
 export function PlannerManager({
   boards, selectedBoardId, buckets, tasks, participantes, people, currentUserId, teamOptions, equipe,
+  visao, acoesCards, isAdmin,
 }: {
   boards: BoardListItem[];
   selectedBoardId: string | null;
@@ -56,6 +61,10 @@ export function PlannerManager({
   /** subordinados do usuário; vazio para quem não é gestor */
   teamOptions: Pessoa[];
   equipe: string;
+  /** o que a tela mostra: quadros de atividades, minhas ações, ou os dois */
+  visao: Visao;
+  acoesCards: AcaoCard[];
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
@@ -63,6 +72,8 @@ export function PlannerManager({
   const quadro = boards.find((b) => b.id === selectedBoardId) ?? null;
   const souDono = quadro?.createdBy === currentUserId;
   const canEdit = !!quadro?.participo;
+  const mostraAtividades = visao !== "acoes";
+  const mostraAcoes = visao !== "atividades";
 
   // ---------- estado otimista do quadro ----------
   const [tasksLocal, setTasksLocal] = useState<BoardTask[]>(tasks);
@@ -81,12 +92,14 @@ export function PlannerManager({
   }>(null);
   const [erroDialog, setErroDialog] = useState("");
 
-  const irPara = (params: { quadro?: string | null; equipe?: string | null }) => {
+  const irPara = (params: { quadro?: string | null; equipe?: string | null; visao?: Visao }) => {
     const q = new URLSearchParams();
     const quadroAlvo = params.quadro === undefined ? selectedBoardId : params.quadro;
     const equipeAlvo = params.equipe === undefined ? equipe : params.equipe;
+    const visaoAlvo = params.visao === undefined ? visao : params.visao;
     if (quadroAlvo) q.set("quadro", quadroAlvo);
     if (equipeAlvo) q.set("equipe", equipeAlvo);
+    if (visaoAlvo !== "atividades") q.set("visao", visaoAlvo);
     router.push(`/planner${q.size ? `?${q}` : ""}`);
   };
 
@@ -250,9 +263,20 @@ export function PlannerManager({
 
   return (
     <div style={{ opacity: pendente ? 0.85 : 1 }}>
-      {/* barra de controle: quadro, gestão do quadro, filtro do gestor */}
+      {/* barra de controle: visão, quadro, gestão do quadro, filtro do gestor */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-        <Dropdown
+        {/* a visão vive na URL, como os filtros de Ações: dá para mandar o link
+            "minhas ações em kanban" para alguém e ele abre igual */}
+        <div style={{ display: "inline-flex", gap: "0.25rem", padding: "0.2rem", background: "var(--mh-surface-2)", borderRadius: "var(--mh-radius-full)", border: "1px solid var(--border)" }}>
+          {([["atividades", "Atividades"], ["acoes", "Ações"], ["ambas", "Ambas"]] as [Visao, string][]).map(([v, rotulo]) => (
+            <button key={v} type="button" aria-pressed={visao === v}
+              className={`btn btn-xs ${visao === v ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { if (visao !== v) irPara({ visao: v }); }}>
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        {mostraAtividades && <Dropdown
           rotulo={quadro ? quadro.name : "Escolher quadro"}
           icone={<ChevronDown size={14} />}
           largura={300}
@@ -276,9 +300,9 @@ export function PlannerManager({
               {boards.length === 0 && <div className="soft" style={{ padding: "0.5rem 0.6rem", fontSize: "0.84rem" }}>Nenhum quadro ainda.</div>}
             </>
           )}
-        </Dropdown>
+        </Dropdown>}
 
-        {souDono && quadro && (
+        {mostraAtividades && souDono && quadro && (
           <>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setMembrosDraft(quadro.memberIds); setMembrosOpen(true); }}>
               <Users size={14} /> Participantes{quadro.memberIds.length > 0 ? ` (${quadro.memberIds.length + 1})` : ""}
@@ -291,7 +315,7 @@ export function PlannerManager({
             </button>
           </>
         )}
-        {canEdit && quadro && (
+        {mostraAtividades && canEdit && quadro && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setBucketDialog({ name: "" }); }}>
             <Plus size={14} /> Nova coluna
           </button>
@@ -310,47 +334,66 @@ export function PlannerManager({
               {teamOptions.map((p) => <option key={p.id} value={p.id}>Quadros de: {p.name}</option>)}
             </select>
           )}
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ name: "", description: "", memberIds: [] }); }}>
-            + Novo quadro
-          </button>
+          {mostraAtividades && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ name: "", description: "", memberIds: [] }); }}>
+              + Novo quadro
+            </button>
+          )}
         </div>
       </div>
 
       {/* quem chegou pelo filtro do gestor está em consulta, e a tela diz isso
           em vez de parecer um quadro quebrado sem botões */}
-      {quadro && !canEdit && (
+      {mostraAtividades && quadro && !canEdit && (
         <div className="card" style={{ padding: "0.6rem 0.95rem", marginBottom: "0.9rem", fontSize: "0.84rem", borderLeft: "3px solid var(--mh-primary-500)" }}>
           <strong>Somente consulta.</strong>{" "}
           <span className="muted">Quadro de {quadro.creatorName}. Você o vê como gestor; para editar, peça para ser incluído como participante.</span>
         </div>
       )}
 
-      {!quadro ? (
-        <EmptyState
-          title="Nenhum quadro por aqui"
-          description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
-          action={!equipe ? <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button> : undefined}
-        />
-      ) : (
-        <BoardView
-          buckets={bucketsLocal}
-          tasks={tasksLocal}
-          canEdit={canEdit}
-          onMoveTask={moverCartao}
-          onOpenTask={(t) => {
-            if (!canEdit) return;
-            setErroDialog("");
-            setTaskDialog({
-              id: t.id, bucketId: t.bucketId, title: t.title, description: t.description ?? "",
-              dueDate: t.dueDate ?? "", priority: t.priority ?? "", assigneeIds: t.assignees.map((a) => a.id),
-            });
-          }}
-          onToggleComplete={alternarConclusao}
-          onAddTask={(bucketId) => { setErroDialog(""); setTaskDialog({ bucketId, title: "", description: "", dueDate: "", priority: "", assigneeIds: [] }); }}
-          onRenameBucket={(b) => { setErroDialog(""); setBucketDialog({ id: b.id, name: b.name }); }}
-          onDeleteBucket={excluirColuna}
-          onMoveBucket={moverColuna}
-        />
+      {mostraAtividades && (
+        !quadro ? (
+          <EmptyState
+            title="Nenhum quadro por aqui"
+            description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
+            action={!equipe ? <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button> : undefined}
+          />
+        ) : (
+          <BoardView
+            buckets={bucketsLocal}
+            tasks={tasksLocal}
+            canEdit={canEdit}
+            onMoveTask={moverCartao}
+            onOpenTask={(t) => {
+              if (!canEdit) return;
+              setErroDialog("");
+              setTaskDialog({
+                id: t.id, bucketId: t.bucketId, title: t.title, description: t.description ?? "",
+                dueDate: t.dueDate ?? "", priority: t.priority ?? "", assigneeIds: t.assignees.map((a) => a.id),
+              });
+            }}
+            onToggleComplete={alternarConclusao}
+            onAddTask={(bucketId) => { setErroDialog(""); setTaskDialog({ bucketId, title: "", description: "", dueDate: "", priority: "", assigneeIds: [] }); }}
+            onRenameBucket={(b) => { setErroDialog(""); setBucketDialog({ id: b.id, name: b.name }); }}
+            onDeleteBucket={excluirColuna}
+            onMoveBucket={moverColuna}
+          />
+        )
+      )}
+
+      {/* na visão "ambas" cada natureza fica na sua seção: misturar cartão de
+          quadro com cartão de ação nas mesmas colunas confundiria o que o
+          arraste significa */}
+      {mostraAcoes && (
+        visao === "ambas" ? (
+          <div style={{ marginTop: "1.4rem" }}>
+            <Section title="Minhas ações" padded={false} bodyStyle={{ padding: "0.9rem" }}>
+              <ActionsBoard cards={acoesCards} currentUserId={currentUserId} isAdmin={isAdmin} people={people} />
+            </Section>
+          </div>
+        ) : (
+          <ActionsBoard cards={acoesCards} currentUserId={currentUserId} isAdmin={isAdmin} people={people} />
+        )
       )}
 
       {/* ---------------- diálogos ---------------- */}
