@@ -15,7 +15,7 @@ export type ModuleKey =
   | "dashboard" | "auditoria" | "configuracoes" | "admin" | "minha_equipe"
   // vendáveis
   | "reunioes" | "acoes" | "salas"
-  | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos"
+  | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
   | "chamados"
   | "metas" | "feedbacks" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
@@ -59,6 +59,8 @@ export const MODULES: ModuleDef[] = [
   { key: "agenda_equipe", label: "Equipe", href: "/agenda-equipe", group: "g_rotina" },
   { key: "agenda_historico", label: "Histórico", href: "/agenda-historico", group: "g_rotina" },
   { key: "tempos_movimentos", label: "Tempos e movimentos", href: "/tempos-movimentos", group: "g_rotina" },
+  // kanban de atividades (quadros livres) + visão kanban das Ações
+  { key: "planner", label: "Planner", href: "/planner", group: "g_rotina" },
 
   { key: "chamados", label: "Chamados", href: "/chamados", group: null },
 
