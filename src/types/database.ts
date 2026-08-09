@@ -757,6 +757,42 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; period?: string; user_id?: string; rv_full?: number; prop_factor?: number; reducer_pct?: number; pool?: number; detail?: Json; created_at?: string }
         Relationships: []
       }
+      // ---- Planner (kanban) ----
+      // Três círculos de acesso, resolvidos pelas funções my_*_planner_board_ids:
+      // dono (created_by), participante (dono ∪ membros) e visível (participante
+      // ∪ gestor de qualquer participante, leitura). `board_id` é denormalizado
+      // em tasks/assignees para a RLS resolver em um salto. `position` é inteiro
+      // esparso (passo 1024); a ordenação é decisão de aplicação.
+      planner_boards: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; created_by: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; created_by?: string; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      planner_board_members: {
+        Row: { id: string; board_id: string; user_id: string; tenant_id: string; added_by: string | null; created_at: string }
+        Insert: { id?: string; board_id: string; user_id: string; tenant_id: string; added_by?: string | null; created_at?: string }
+        Update: { id?: string; board_id?: string; user_id?: string; tenant_id?: string; added_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      planner_buckets: {
+        Row: { id: string; tenant_id: string; board_id: string; name: string; position: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; name: string; position: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; name?: string; position?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      planner_tasks: {
+        Row: { id: string; tenant_id: string; board_id: string; bucket_id: string; title: string; description: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"] | null; completed_at: string | null; position: number; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; bucket_id: string; title: string; description?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"] | null; completed_at?: string | null; position: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; bucket_id?: string; title?: string; description?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"] | null; completed_at?: string | null; position?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      planner_task_assignees: {
+        Row: { task_id: string; user_id: string; tenant_id: string; board_id: string; created_at: string }
+        Insert: { task_id: string; user_id: string; tenant_id: string; board_id: string; created_at?: string }
+        Update: { task_id?: string; user_id?: string; tenant_id?: string; board_id?: string; created_at?: string }
+        Relationships: []
+      }
       area_goals: {
         Row: { id: string; tenant_id: string; department_id: string | null; subdepartment_id: string | null; unit_id: string | null; parent_id: string | null; name: string; description: string | null; unit: string; kind: Database["public"]["Enums"]["area_goal_kind"]; direction: Database["public"]["Enums"]["goal_direction"]; consolidation: Database["public"]["Enums"]["area_consolidation"]; owner_id: string | null; sort: number; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; department_id?: string | null; subdepartment_id?: string | null; unit_id?: string | null; parent_id?: string | null; name: string; description?: string | null; unit?: string; kind?: Database["public"]["Enums"]["area_goal_kind"]; direction?: Database["public"]["Enums"]["goal_direction"]; consolidation?: Database["public"]["Enums"]["area_consolidation"]; owner_id?: string | null; sort?: number; created_by?: string | null; created_at?: string; updated_at?: string }
@@ -1286,6 +1322,9 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: { user_id: string; tenant_id: string }[]
       }
+      my_owned_planner_board_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      my_planner_board_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      my_visible_planner_board_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
       manages_user: {
         Args: { p_owner: string; p_tenant: string }
         Returns: boolean
