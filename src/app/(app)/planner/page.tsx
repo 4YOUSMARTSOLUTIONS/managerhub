@@ -83,7 +83,9 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
     .map((id) => ({ id, name: nomeDe.get(id) ?? "" }))
     .filter((p) => p.name)
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  const equipe = sp.equipe && subordinados.has(sp.equipe) ? sp.equipe : "";
+  // o próprio usuário também é alvo válido: "Meus quadros" é o filtro de quem
+  // quer isolar o que É dele no meio do que ele enxerga da equipe
+  const equipe = sp.equipe && (subordinados.has(sp.equipe) || sp.equipe === user.id) ? sp.equipe : "";
 
   const listados = equipe
     ? boards.filter((b) => b.createdBy === equipe || b.memberIds.includes(equipe))

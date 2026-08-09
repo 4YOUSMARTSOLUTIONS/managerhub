@@ -331,6 +331,9 @@ export function PlannerManager({
               title="Quadros em que este colaborador participa"
             >
               <option value="">Todos os quadros que vejo</option>
+              {/* o gestor também é gente: sem esta opção ele filtra qualquer
+                  subordinado, mas não consegue isolar os próprios quadros */}
+              <option value={currentUserId}>Meus quadros</option>
               {teamOptions.map((p) => <option key={p.id} value={p.id}>Quadros de: {p.name}</option>)}
             </select>
           )}
