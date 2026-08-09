@@ -22,7 +22,8 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
   const gate = await moduleGate("planner");
   if (gate) return gate;
 
-  const { tenant, user } = await requireContext();
+  const { tenant, user, role } = await requireContext();
+  const isAdmin = role === "owner" || role === "admin";
   const supabase = await createClient();
   const sp = await searchParams;
 
@@ -53,8 +54,15 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
     membrosPorQuadro.set(m.board_id, arr);
   }
 
+  // o recorte do gestor: só subordinados podem ser alvo do filtro, e a lista de
+  // opções sai da cadeia real, não de um campo livre
+  const subordinados = new Set(
+    (managedRaw ?? []).filter((m) => m.tenant_id === tenant.id).map((m) => m.user_id),
+  );
+
   const boards: BoardListItem[] = (boardsRaw ?? []).map((b) => {
     const memberIds = membrosPorQuadro.get(b.id) ?? [];
+    const participo = b.created_by === user.id || memberIds.includes(user.id);
     return {
       id: b.id,
       name: b.name,
@@ -62,15 +70,13 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
       createdBy: b.created_by,
       creatorName: nomeDe.get(b.created_by) ?? "",
       memberIds,
-      participo: b.created_by === user.id || memberIds.includes(user.id),
+      participo,
+      // espelha o círculo de escrita da RLS: participante, admin/owner, ou
+      // gestor de alguém que participa
+      podeEditar: participo || isAdmin
+        || subordinados.has(b.created_by) || memberIds.some((id) => subordinados.has(id)),
     };
   });
-
-  // o recorte do gestor: só subordinados podem ser alvo do filtro, e a lista de
-  // opções sai da cadeia real, não de um campo livre
-  const subordinados = new Set(
-    (managedRaw ?? []).filter((m) => m.tenant_id === tenant.id).map((m) => m.user_id),
-  );
   const teamOptions = [...subordinados]
     .map((id) => ({ id, name: nomeDe.get(id) ?? "" }))
     .filter((p) => p.name)
@@ -141,6 +147,7 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
         currentUserId={user.id}
         teamOptions={teamOptions}
         equipe={equipe}
+        isAdmin={isAdmin}
       />
     </div>
   );

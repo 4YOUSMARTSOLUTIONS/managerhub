@@ -37,12 +37,14 @@ export type BoardListItem = {
   creatorName: string;
   memberIds: string[];
   participo: boolean;
+  /** espelho do círculo de escrita da RLS: participante, admin/owner ou gestor de participante */
+  podeEditar: boolean;
 };
 
 type Pessoa = { id: string; name: string };
 
 export function PlannerManager({
-  boards, selectedBoardId, buckets, tasks, participantes, people, currentUserId, teamOptions, equipe,
+  boards, selectedBoardId, buckets, tasks, participantes, people, currentUserId, teamOptions, equipe, isAdmin,
 }: {
   boards: BoardListItem[];
   selectedBoardId: string | null;
@@ -56,13 +58,16 @@ export function PlannerManager({
   /** subordinados do usuário; vazio para quem não é gestor */
   teamOptions: Pessoa[];
   equipe: string;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
 
   const quadro = boards.find((b) => b.id === selectedBoardId) ?? null;
-  const souDono = quadro?.createdBy === currentUserId;
-  const canEdit = !!quadro?.participo;
+  // gerir o QUADRO (renomear, excluir, convidar): dono ou admin/owner. O gestor
+  // edita o conteúdo do quadro do subordinado, mas não o quadro em si.
+  const possoGerir = !!quadro && (quadro.createdBy === currentUserId || isAdmin);
+  const canEdit = !!quadro?.podeEditar;
 
   // ---------- estado otimista do quadro ----------
   const [tasksLocal, setTasksLocal] = useState<BoardTask[]>(tasks);
@@ -266,7 +271,7 @@ export function PlannerManager({
                   <span style={{ fontWeight: b.id === selectedBoardId ? 700 : 400 }}>{b.name}</span>
                 </ItemDeMenu>
               ))}
-              {daEquipe.length > 0 && <Grupo titulo="Da equipe (consulta)" />}
+              {daEquipe.length > 0 && <Grupo titulo="Da equipe" />}
               {daEquipe.map((b) => (
                 <ItemDeMenu key={b.id} onClick={() => { fechar(); irPara({ quadro: b.id }); }}>
                   <span style={{ fontWeight: b.id === selectedBoardId ? 700 : 400 }}>{b.name}</span>
@@ -278,7 +283,7 @@ export function PlannerManager({
           )}
         </Dropdown>
 
-        {souDono && quadro && (
+        {possoGerir && quadro && (
           <>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setMembrosDraft(quadro.memberIds); setMembrosOpen(true); }}>
               <Users size={14} /> Participantes{quadro.memberIds.length > 0 ? ` (${quadro.memberIds.length + 1})` : ""}
@@ -318,15 +323,6 @@ export function PlannerManager({
           </button>
         </div>
       </div>
-
-      {/* quem chegou pelo filtro do gestor está em consulta, e a tela diz isso
-          em vez de parecer um quadro quebrado sem botões */}
-      {quadro && !canEdit && (
-        <div className="card" style={{ padding: "0.6rem 0.95rem", marginBottom: "0.9rem", fontSize: "0.84rem", borderLeft: "3px solid var(--mh-primary-500)" }}>
-          <strong>Somente consulta.</strong>{" "}
-          <span className="muted">Quadro de {quadro.creatorName}. Você o vê como gestor; para editar, peça para ser incluído como participante.</span>
-        </div>
-      )}
 
       {!quadro ? (
           <EmptyState

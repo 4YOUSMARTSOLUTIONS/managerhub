@@ -27,7 +27,15 @@ const RP = "/planner";
 
 type Ctx = Awaited<ReturnType<typeof actionContext>>;
 
-/** O quadro com a resposta às duas perguntas de alçada. Erro nomeado se não existe/não vejo. */
+/**
+ * O quadro com a resposta às duas perguntas de alçada.
+ *
+ * `dono` = gere o quadro (renomear, excluir, convidar): o criador ou um
+ * admin/owner da empresa. `participante` = edita o conteúdo: além dos de cima,
+ * os convidados e o GESTOR de qualquer participante. A pergunta do gestor é
+ * respondida pela MESMA função que a RLS usa (`my_planner_board_ids`), para a
+ * tela e o banco nunca discordarem sobre quem pode.
+ */
 async function quadroDe(ctx: Ctx, boardId: string) {
   const { data: board } = await ctx.supabase
     .from("planner_boards")
@@ -35,20 +43,16 @@ async function quadroDe(ctx: Ctx, boardId: string) {
     .eq("id", boardId)
     .maybeSingle();
   if (!board) return { board: null, dono: false, participante: false };
-  const dono = board.created_by === ctx.userId;
+  const dono = board.created_by === ctx.userId || ctx.role === "owner" || ctx.role === "admin";
   if (dono) return { board, dono, participante: true };
-  const { data: m } = await ctx.supabase
-    .from("planner_board_members")
-    .select("user_id")
-    .eq("board_id", boardId)
-    .eq("user_id", ctx.userId)
-    .maybeSingle();
-  return { board, dono, participante: !!m };
+  const { data: escrita } = await ctx.supabase.rpc("my_planner_board_ids");
+  const participante = ((escrita as unknown as string[] | null) ?? []).includes(boardId);
+  return { board, dono, participante };
 }
 
 const SEM_QUADRO = "Quadro não encontrado.";
-const SO_DONO = "Apenas quem criou o quadro pode fazer isso.";
-const SO_PARTICIPANTE = "Você está vendo este quadro como gestor, em modo consulta. Peça ao dono para ser incluído.";
+const SO_DONO = "Apenas o dono do quadro ou um administrador pode fazer isso.";
+const SO_PARTICIPANTE = "Você não participa deste quadro nem gerencia alguém que participe.";
 
 // ------------------------------------------------------------------ quadros
 
