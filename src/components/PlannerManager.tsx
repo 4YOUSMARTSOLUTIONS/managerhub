@@ -389,7 +389,7 @@ export function PlannerManager({
           </Dropdown>
         )}
 
-        {(visao === "quadro" || visao === "calendario") && quadro && (
+        {(visao === "quadro" || visao === "calendario") && (quadro || equipe) && (
           <BotaoFiltros
             aberto={filtrosAbertos}
             onToggle={() => setFiltrosAbertos((v) => !v)}
@@ -406,7 +406,7 @@ export function PlannerManager({
         </div>
       </div>
 
-      {filtrosAbertos && quadro && (visao === "quadro" || visao === "calendario") && (
+      {filtrosAbertos && (quadro || equipe) && (visao === "quadro" || visao === "calendario") && (
         <PainelFiltrosPlanner
           filtro={filtro}
           onFiltro={setFiltro}
@@ -428,7 +428,11 @@ export function PlannerManager({
         <EmptyState
           title="Nenhum quadro por aqui"
           description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
-          action={!equipe ? <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button> : undefined}
+          action={equipe
+            // a saída do recorte mora na própria mensagem: quem filtrou um
+            // colaborador sem quadro não pode depender de reabrir o painel
+            ? <button type="button" className="btn btn-primary" onClick={() => irPara({ equipe: null, quadro: null })}>Ver todos os quadros</button>
+            : <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button>}
         />
       ) : visao === "graficos" ? (
         <ChartsView tasks={tasksLocal} />
