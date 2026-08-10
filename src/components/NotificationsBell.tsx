@@ -30,7 +30,9 @@ export function NotificationsBell() {
   const onItem = async (n: NotificationRow) => {
     if (!n.isRead) { await markNotificationsRead([n.id]); setUnread((u) => Math.max(0, u - 1)); setItems((xs) => xs.map((x) => (x.id === n.id ? { ...x, isRead: true } : x))); }
     setOpen(false);
-    if (n.demandaId) router.push("/acoes");
+    // a notificação sabe para onde aponta: quadro do Planner ou lista de Ações
+    if (n.plannerBoardId) router.push(`/planner?quadro=${n.plannerBoardId}`);
+    else if (n.demandaId) router.push("/acoes");
   };
 
   return (

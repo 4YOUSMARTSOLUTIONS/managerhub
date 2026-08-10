@@ -27,6 +27,26 @@ import { proximaData } from "@/lib/planner-recur";
 
 const RP = "/planner";
 
+/**
+ * Avisa quem acabou de ser atribuído. Só os NOVOS e nunca o próprio ator:
+ * ninguém precisa de um sino para o que acabou de fazer. Best-effort: a
+ * notificação nunca é motivo de um salvamento falhar.
+ */
+async function notificarAtribuidos(ctx: Ctx, boardId: string, titulo: string, novos: string[]) {
+  const alvo = novos.filter((id) => id !== ctx.userId);
+  if (!alvo.length) return;
+  const { error } = await ctx.supabase.rpc("notify_users", {
+    p_tenant: ctx.tenantId,
+    p_users: alvo,
+    p_type: "planner_assigned",
+    p_title: "Você foi atribuído a uma tarefa",
+    p_body: titulo,
+    p_demanda: null,
+    p_planner_board: boardId,
+  });
+  if (error) console.error("planner notificacao:", error.message);
+}
+
 // ------------------------------------------------------------------ quadros
 
 export async function createBoard(input: { name: string; description?: string; memberIds?: string[] }): Promise<ActionState & { boardId?: string }> {
@@ -321,6 +341,7 @@ export async function createTask(bucketId: string, input: TaskInput): Promise<Ac
       if (eA) return { error: eA.message };
     }
     await registrarEvento(ctx, { id: task.id, board_id: bucket.board_id }, "created");
+    if (assignees.length) await notificarAtribuidos(ctx, bucket.board_id, campos.title, assignees);
     revalidatePath(RP);
     return { ok: true };
   } catch (e) {
@@ -372,7 +393,7 @@ export async function updateTask(taskId: string, input: TaskInput): Promise<Acti
       }
       if (entraram.length) await registrarEvento(ctx, task, "assigned", { usuarios: entraram });
       if (sairam.length) await registrarEvento(ctx, task, "unassigned", { usuarios: sairam });
-      // a notificação de atribuição entra na leva 5 (notify_users com quadro)
+      if (entraram.length) await notificarAtribuidos(ctx, task.board_id, campos.title, entraram);
     }
     revalidatePath(RP);
     return { ok: true };

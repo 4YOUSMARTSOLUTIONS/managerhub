@@ -623,9 +623,9 @@ export type Database = {
         Relationships: []
       }
       notifications: {
-        Row: { id: string; tenant_id: string; user_id: string; type: string; title: string; body: string | null; demanda_id: string | null; is_read: boolean; created_at: string }
-        Insert: { id?: string; tenant_id: string; user_id: string; type: string; title: string; body?: string | null; demanda_id?: string | null; is_read?: boolean; created_at?: string }
-        Update: { id?: string; tenant_id?: string; user_id?: string; type?: string; title?: string; body?: string | null; demanda_id?: string | null; is_read?: boolean; created_at?: string }
+        Row: { id: string; tenant_id: string; user_id: string; type: string; title: string; body: string | null; demanda_id: string | null; planner_board_id: string | null; is_read: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; type: string; title: string; body?: string | null; demanda_id?: string | null; planner_board_id?: string | null; is_read?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; type?: string; title?: string; body?: string | null; demanda_id?: string | null; planner_board_id?: string | null; is_read?: boolean; created_at?: string }
         Relationships: []
       }
       action_demanda_assignees: {
@@ -1549,7 +1549,7 @@ export type Database = {
       platform_grant_admin: { Args: { p_email: string }; Returns: undefined }
       platform_revoke_admin: { Args: { p_user: string }; Returns: undefined }
       platform_admins_list: { Args: Record<PropertyKey, never>; Returns: { user_id: string; email: string; full_name: string | null; created_at: string }[] }
-      notify_users: { Args: { p_tenant: string; p_users: string[]; p_type: string; p_title: string; p_body: string; p_demanda: string | null }; Returns: undefined }
+      notify_users: { Args: { p_tenant: string; p_users: string[]; p_type: string; p_title: string; p_body: string; p_demanda: string | null; p_planner_board?: string | null }; Returns: undefined }
       set_resend_key: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
       platform_set_openai: { Args: { p_key: string; p_model: string; p_transcribe_model: string; p_clear?: boolean }; Returns: undefined }
       platform_set_resend: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
