@@ -4,14 +4,13 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 /** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
  *  recusa precisa virar mensagem na tela em vez de exceção. */
 const PODE_DP = new Set<Enums<"member_role">>(["owner", "admin", "hr"]);
 const SO_DP = "Apenas proprietário, administrador e RH configuram a remuneração variável.";
 
-const normTxt = (s: string) =>
-  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 const parseNum = (v: unknown): number | null => {
   if (v == null || v === "") return null;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
@@ -77,30 +76,37 @@ export async function upsertRvConfig(input: RvConfigInput): Promise<ActionState>
 }
 
 // ---------- Importação em lote (.xlsx) ----------
-export type RvConfigImportRow = { name: string; period: string; value: string };
+export type RvConfigImportRow = {
+  name: string;
+  period: string;
+  value: string;
+  /** ID da função/colaborador (aba de apoio do modelo); quando presente, decide */
+  id?: string;
+};
 
 /** Importa vigências de RV (por função ou por colaborador), casando o nome com o cadastro. */
 export async function importRvConfig(
   scope: "position" | "user",
   rows: RvConfigImportRow[],
-): Promise<{ imported: number; invalid: number; notFound: number; error?: string }> {
+): Promise<{ imported: number; invalid: number; notFound: number; mismatch: number; error?: string }> {
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { imported: 0, invalid: 0, notFound: 0, error: SO_DP };
+    if (!PODE_DP.has(role)) return { imported: 0, invalid: 0, notFound: 0, mismatch: 0, error: SO_DP };
 
-    // nome → id (função ou colaborador ativo)
-    const idByName = new Map<string, string>();
+    // catálogo de alvos (função ou colaborador ativo): o ID decide, o nome confere
+    const refs: { id: string; name: string }[] = [];
     if (scope === "position") {
       const { data } = await supabase.from("positions").select("id, name").eq("tenant_id", tenantId);
-      for (const p of data ?? []) idByName.set(normTxt(p.name), p.id);
+      for (const p of data ?? []) refs.push({ id: p.id, name: p.name });
     } else {
       const { data } = await supabase.from("memberships").select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId);
       for (const m of data ?? []) {
         if (!m.is_active) continue;
         const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-        if (nm) idByName.set(normTxt(nm), m.user_id);
+        refs.push({ id: m.user_id, name: nm ?? "" });
       }
     }
+    const idx = indiceDeAlvos(refs);
 
     const { data: existing } = await supabase
       .from("individual_rv_config")
@@ -117,12 +123,15 @@ export async function importRvConfig(
     const queuedUpdate = new Map<string, number>();
     let invalid = 0;
     let notFound = 0;
+    let mismatch = 0;
     for (const r of rows ?? []) {
       const name = (r.name ?? "").trim();
       const pm = (r.period ?? "").trim().match(/^(\d{4})-(\d{2})$/);
       const value = parseNum(r.value);
-      if (!name || !pm || value == null) { invalid++; continue; }
-      const targetId = idByName.get(normTxt(name));
+      if ((!name && !(r.id ?? "").trim()) || !pm || value == null) { invalid++; continue; }
+      const alvo = resolverAlvo(r.id ?? "", name, idx);
+      if (alvo.divergente) { mismatch++; continue; }
+      const targetId = alvo.alvoId;
       if (!targetId) { notFound++; continue; }
       const ef = `${r.period}-01`;
       const payload = {
@@ -152,27 +161,29 @@ export async function importRvConfig(
     let imported = 0;
     if (inserts.length) {
       const { error } = await supabase.from("individual_rv_config").insert(inserts as never);
-      if (error) return { imported: 0, invalid, notFound, error: error.message };
+      if (error) return { imported: 0, invalid, notFound, mismatch, error: error.message };
       imported += inserts.length;
     }
     for (const u of updates) {
       const { error } = await supabase.from("individual_rv_config").update(u.payload as never).eq("id", u.id);
-      if (error) return { imported, invalid, notFound, error: error.message };
+      if (error) return { imported, invalid, notFound, mismatch, error: error.message };
       imported += 1;
     }
     if (imported === 0) {
       return {
-        imported: 0, invalid, notFound,
-        error: notFound > 0
-          ? `Nenhum item importado — ${scope === "position" ? "função" : "colaborador"} não encontrado (confira o nome exato).`
-          : "Nenhuma linha válida — confira Competência (MM/AAAA) e Valor.",
+        imported: 0, invalid, notFound, mismatch,
+        error: mismatch > 0
+          ? "Nenhum item importado: há linhas em que o ID e o nome apontam para cadastros diferentes."
+          : notFound > 0
+            ? `Nenhum item importado, ${scope === "position" ? "função" : "colaborador"} não encontrado (confira o ID ou o nome exato).`
+            : "Nenhuma linha válida, confira Competência (MM/AAAA) e Valor.",
       };
     }
     revalidatePath("/configuracoes");
     revalidatePath("/metas");
-    return { imported, invalid, notFound };
+    return { imported, invalid, notFound, mismatch };
   } catch (e) {
-    return { imported: 0, invalid: 0, notFound: 0, error: (e as Error).message };
+    return { imported: 0, invalid: 0, notFound: 0, mismatch: 0, error: (e as Error).message };
   }
 }
 

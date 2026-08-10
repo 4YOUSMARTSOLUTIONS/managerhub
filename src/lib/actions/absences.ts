@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
-import { normTexto, parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam } from "@/lib/absences-import";
+import { parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam } from "@/lib/absences-import";
+import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 /**
  * Férias e afastamentos do colaborador.
@@ -98,6 +99,8 @@ export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
 
 export type AbsenceImportRow = {
   name: string;
+  /** ID do colaborador (aba Colaboradores do modelo); quando presente, decide */
+  id?: string;
   kind: string;
   start: string;
   end: string;
@@ -111,6 +114,8 @@ export type AbsenceImportResult = {
   updated: number;
   invalid: number;
   notFound: number;
+  /** ID e nome apontam para pessoas diferentes */
+  mismatch: number;
   /** recusadas por cruzar com um período já lançado */
   overlapping: number;
   error?: string;
@@ -125,7 +130,7 @@ export type AbsenceImportResult = {
  * na constraint do banco. A constraint continua lá como rede de segurança.
  */
 export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceImportResult> {
-  const vazio: AbsenceImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, overlapping: 0 };
+  const vazio: AbsenceImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, mismatch: 0, overlapping: 0 };
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
@@ -134,12 +139,13 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       .from("memberships")
       .select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)")
       .eq("tenant_id", tenantId);
-    const idPorNome = new Map<string, string>();
+    const refs: { id: string; name: string }[] = [];
     for (const m of membros ?? []) {
       if (!m.is_active) continue;
       const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-      if (nm) idPorNome.set(normTexto(nm), m.user_id);
+      refs.push({ id: m.user_id, name: nm ?? "" });
     }
+    const idx = indiceDeAlvos(refs);
 
     const { data: existentes } = await supabase
       .from("employee_absences")
@@ -165,9 +171,11 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       const inicio = parseDataPlanilha(linha.start ?? "");
       const fim = parseDataPlanilha(linha.end ?? "");
       const kind = parseTipo(linha.kind ?? "");
-      if (!nome || !inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
+      if ((!nome && !(linha.id ?? "").trim()) || !inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
 
-      const userIdAlvo = idPorNome.get(normTexto(nome));
+      const alvo = resolverAlvo(linha.id ?? "", nome, idx);
+      if (alvo.divergente) { r.mismatch += 1; continue; }
+      const userIdAlvo = alvo.alvoId;
       if (!userIdAlvo) { r.notFound += 1; continue; }
 
       const payload = {
@@ -205,11 +213,13 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
     if (r.imported === 0 && r.updated === 0) {
       return {
         ...r,
-        error: r.notFound > 0
-          ? "Nenhum período importado, colaborador não encontrado (confira o nome exato do cadastro)."
-          : r.overlapping > 0
-            ? "Nenhum período importado: todos cruzam com períodos já lançados."
-            : "Nenhuma linha válida, confira o colaborador e as datas de início e fim.",
+        error: r.mismatch > 0
+          ? "Nenhum período importado: há linhas em que o ID e o nome apontam para pessoas diferentes."
+          : r.notFound > 0
+            ? "Nenhum período importado, colaborador não encontrado (confira o ID ou o nome exato do cadastro)."
+            : r.overlapping > 0
+              ? "Nenhum período importado: todos cruzam com períodos já lançados."
+              : "Nenhuma linha válida, confira o colaborador e as datas de início e fim.",
       };
     }
 

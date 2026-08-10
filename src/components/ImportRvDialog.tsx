@@ -7,6 +7,7 @@ import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importRvConfig, type RvConfigImportRow } from "@/lib/actions/rv-config";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
+import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
@@ -42,25 +43,27 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
 
   const analysis = useMemo(() => {
-    const byName = new Set(refs.map((r) => norm(r.name)));
-    // mesma linha (nome + competência) repetida: o servidor grava a última
+    const idx = indiceDeAlvos(refs);
+    // mesma linha (alvo + competência) repetida: o servidor grava a última
     const vistos = new Set<string>();
     return rows.map((r) => {
-      const found = byName.has(norm(r.name ?? ""));
+      const alvo = resolverAlvo(r.id ?? "", r.name ?? "", idx);
       const badPeriod = !/^\d{4}-\d{2}$/.test((r.period ?? "").trim());
       const badValue = (r.value ?? "").trim() === "";
-      const notFound = !!r.name?.trim() && !found;
-      const invalid = !r.name?.trim() || badPeriod || badValue;
-      const importable = found && !badPeriod && !badValue;
-      const k = `${norm(r.name ?? "")}|${(r.period ?? "").trim()}`;
+      const invalid = (!r.name?.trim() && !r.id?.trim()) || badPeriod || badValue;
+      const importable = !!alvo.alvoId && !badPeriod && !badValue;
+      // a chave de repetição é o alvo RESOLVIDO: com ID, duas grafias do mesmo
+      // nome continuam sendo a mesma pessoa
+      const k = `${alvo.alvoId ?? ""}|${(r.period ?? "").trim()}`;
       const duplicate = importable && vistos.has(k);
       if (importable) vistos.add(k);
-      return { row: r, notFound, invalid, duplicate, importable };
+      return { row: r, notFound: alvo.naoEncontrado, mismatch: alvo.divergente, invalid, duplicate, importable };
     });
   }, [rows, refs]);
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable && !a.duplicate).length,
     notFound: analysis.filter((a) => a.notFound).length,
+    mismatch: analysis.filter((a) => a.mismatch).length,
     invalid: analysis.filter((a) => a.invalid && !a.notFound).length,
     duplicate: analysis.filter((a) => a.duplicate).length,
   }), [analysis]);
@@ -68,21 +71,26 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
     const example = refs[0]?.name ?? (scope === "position" ? "Analista" : "Fulano de Tal");
+    const exampleId = refs[0]?.id ?? "";
     const ws = XLSX.utils.aoa_to_sheet([
-      [label, "Competência", "Valor"],
-      [example, "07/2026", 300],
-      [example, "08/2026", 350],
+      [label, "ID", "Competência", "Valor"],
+      [example, exampleId, "07/2026", 300],
+      [example, exampleId, "08/2026", 350],
     ]);
-    ws["!cols"] = [{ wch: 28 }, { wch: 14 }, { wch: 12 }];
+    ws["!cols"] = [{ wch: 28 }, { wch: 38 }, { wch: 14 }, { wch: 12 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      [label, "Sim", `Nome ${scope === "position" ? "da função" : "do colaborador"} exatamente como cadastrado`],
+      [label, "Sim", `Nome ${scope === "position" ? "da função" : "do colaborador"} como cadastrado. Com a coluna ID preenchida, vira só conferência.`],
+      ["ID", "Não", `Copie da aba ${scope === "position" ? "Funções" : "Colaboradores"}. Quando preenchido, é ele que identifica; se ID e nome apontarem para cadastros diferentes, a linha é recusada.`],
       ["Competência", "Sim", "Início da vigência, no formato MM/AAAA (ex.: 07/2026)"],
       ["Valor", "Sim", "Teto da RV em R$ (ex.: 300 ou 300,00). Use 0 para excluir da RV (só por colaborador)"],
     ]);
     wsI["!cols"] = [{ wch: 16 }, { wch: 12 }, { wch: 80 }];
+    const wsC = XLSX.utils.aoa_to_sheet([[label, "ID"], ...refs.map((r) => [r.name, r.id])]);
+    wsC["!cols"] = [{ wch: 34 }, { wch: 38 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "RV");
+    XLSX.utils.book_append_sheet(wb, wsC, scope === "position" ? "Funções" : "Colaboradores");
     XLSX.utils.book_append_sheet(wb, wsI, "Instruções");
     XLSX.writeFile(wb, `modelo_rv_${scope === "position" ? "funcao" : "colaborador"}.xlsx`);
   }
@@ -99,6 +107,8 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
       const headers = (aoa[0] as unknown[]).map((h) => norm(String(h ?? "")));
       const find = (...keys: string[]) => headers.findIndex((h) => keys.some((k) => h.includes(k)));
       let nameIdx = scope === "position" ? find("funcao", "cargo") : find("colaborador", "nome", "responsavel");
+      // "ID" casa por igualdade, não por trecho: "saida" contém "id"
+      const idIdx = headers.findIndex((h) => h === "id" || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
       const periodIdx = find("competencia", "compet", "vigencia", "mes", "periodo");
       const valueIdx = find("valor", "rv", "teto");
       if (nameIdx === -1) nameIdx = 0;
@@ -108,8 +118,9 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
       for (let i = 1; i < aoa.length; i++) {
         const r = aoa[i] as unknown[];
         const name = get(r, nameIdx);
-        if (!name) { ign++; continue; }
-        parsed.push({ name, period: toMonth(periodIdx >= 0 ? r[periodIdx] : ""), value: get(r, valueIdx) });
+        const id = get(r, idIdx);
+        if (!name && !id) { ign++; continue; }
+        parsed.push({ name, id, period: toMonth(periodIdx >= 0 ? r[periodIdx] : ""), value: get(r, valueIdx) });
       }
       setRows(parsed); setIgnored(ign); setFileName(file.name);
     } catch (e) {
@@ -124,6 +135,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
     if (res.error) { setSummary(res); return; }
     // sucesso fecha sozinho; o resultado vai no toast para o retorno não sumir
     const avisos = [
+      res.mismatch > 0 ? `${res.mismatch} com ID e nome divergentes` : "",
       res.notFound > 0 ? `${res.notFound} não encontrado(s)` : "",
       res.invalid > 0 ? `${res.invalid} inválida(s)` : "",
     ].filter(Boolean).join(", ");
@@ -161,6 +173,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
                     {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} {scope === "position" ? "função" : "colaborador"} não encontrado</span>}
+                    {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} ID e nome divergem</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (competência/valor)</span>}
                     {counts.duplicate > 0 && <span className="badge badge-amber">{counts.duplicate} repetida(s), vale a última</span>}
                   </div>
@@ -168,8 +181,9 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
                     <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 150, overflow: "auto" }}>
                       {analysis.slice(0, 14).map((a, i) => (
                         <li key={i} style={{ color: a.importable ? undefined : "var(--text-soft)" }}>
-                          {a.row.name}{a.row.period ? ` · ${a.row.period}` : ""}{a.row.value ? ` · R$ ${a.row.value}` : ""}
+                          {a.row.name || a.row.id}{a.row.period ? ` · ${a.row.period}` : ""}{a.row.value ? ` · R$ ${a.row.value}` : ""}
                           {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}
+                          {a.mismatch && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>ID e nome divergem</span>}
                           {!a.notFound && a.invalid && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>inválida</span>}
                           {a.duplicate && <span className="badge badge-amber" style={{ marginLeft: 6, fontSize: "0.62rem" }}>repetida</span>}
                         </li>

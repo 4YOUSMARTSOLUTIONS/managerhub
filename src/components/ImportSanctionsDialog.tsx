@@ -11,6 +11,7 @@ import {
   normTexto as norm, parseDataPlanilha, acharTipo,
   type SanctionImportRow, type SanctionImportResult,
 } from "@/lib/sanctions-import";
+import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 /**
  * Importação de punições em lote.
@@ -43,20 +44,20 @@ export function ImportSanctionsDialog({
   function close() { setOpen(false); reset(); }
 
   const analysis = useMemo(() => {
-    const nomes = new Set(members.map((m) => norm(m.name)));
+    const idx = indiceDeAlvos(members);
     return rows.map((r) => {
-      const found = nomes.has(norm(r.name ?? ""));
-      const notFound = !!r.name?.trim() && !found;
+      const alvo = resolverAlvo(r.id ?? "", r.name ?? "", idx);
       const badDate = !r.occurredOn;
       const badType = acharTipo(r.type ?? "", types) === null;
-      const invalid = !r.name?.trim() || badDate;
-      return { row: r, notFound, invalid, badDate, badType, importable: found && !badDate && !badType };
+      const invalid = (!r.name?.trim() && !r.id?.trim()) || badDate;
+      return { row: r, notFound: alvo.naoEncontrado, mismatch: alvo.divergente, invalid, badDate, badType, importable: !!alvo.alvoId && !badDate && !badType };
     });
   }, [rows, members, types]);
 
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable).length,
     notFound: analysis.filter((a) => a.notFound).length,
+    mismatch: analysis.filter((a) => a.mismatch).length,
     badType: analysis.filter((a) => a.badType && !a.notFound && !a.invalid).length,
     invalid: analysis.filter((a) => a.invalid && !a.notFound).length,
   }), [analysis]);
@@ -64,18 +65,20 @@ export function ImportSanctionsDialog({
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
     const exemplo = members[0]?.name ?? "Fulano de Tal";
+    const exemploId = members[0]?.id ?? "";
     const ativos = types.filter((t) => t.active);
     const tipo1 = ativos[0]?.name ?? "Advertência escrita";
     const tipo2 = ativos[1]?.name ?? tipo1;
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Colaborador", "Tipo", "Data", "Observação"],
-      [exemplo, tipo1, "12/03/2026", "Atraso reiterado"],
-      [exemplo, tipo2, "28/05/2026", ""],
+      ["Colaborador", "ID", "Tipo", "Data", "Observação"],
+      [exemplo, exemploId, tipo1, "12/03/2026", "Atraso reiterado"],
+      [exemplo, exemploId, tipo2, "28/05/2026", ""],
     ]);
-    ws["!cols"] = [{ wch: 34 }, { wch: 24 }, { wch: 12 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 34 }, { wch: 38 }, { wch: 24 }, { wch: 12 }, { wch: 40 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      ["Colaborador", "Sim", "Nome exatamente como está no cadastro. Acento e maiúscula não importam."],
+      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
+      ["ID", "Não", "Copie da aba Colaboradores. Quando preenchido, é ele que identifica a pessoa (evita erro de digitação e homônimos). Se ID e nome apontarem para pessoas diferentes, a linha é recusada."],
       ["Tipo", "Sim", "Um dos tipos cadastrados em Remuneração variável › Tipos de punição. O nome tem de bater; tipo desconhecido não é criado automaticamente."],
       ["Data", "Sim", "Data da punição, no formato DD/MM/AAAA. É o mês desta data que sofre o redutor."],
       ["Observação", "Não", "Texto livre."],
@@ -86,8 +89,11 @@ export function ImportSanctionsDialog({
       ["O que a punição corta", "", "Nada por si só. Quem decide é o motivo cadastrado em Remuneração variável › Redutores, apontando para punição."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
+    const wsC = XLSX.utils.aoa_to_sheet([["Colaborador", "ID"], ...members.map((m) => [m.name, m.id])]);
+    wsC["!cols"] = [{ wch: 34 }, { wch: 38 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Punições");
+    XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
     XLSX.utils.book_append_sheet(wb, wsI, "Instruções");
     XLSX.writeFile(wb, "modelo_punicoes.xlsx");
   }
@@ -104,6 +110,8 @@ export function ImportSanctionsDialog({
       const headers = (aoa[0] as unknown[]).map((h) => norm(String(h ?? "")));
       const find = (...keys: string[]) => headers.findIndex((h) => keys.some((k) => h.includes(k)));
       let nameIdx = find("colaborador", "nome", "funcionario");
+      // "ID" casa por igualdade, não por trecho: "saida" contém "id"
+      const idIdx = headers.findIndex((h) => h === "id" || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
       const typeIdx = find("tipo", "punicao", "sancao", "medida");
       const dateIdx = find("data", "ocorrencia", "aplicacao");
       const noteIdx = find("observacao", "obs", "motivo", "nota");
@@ -114,9 +122,11 @@ export function ImportSanctionsDialog({
       for (let i = 1; i < aoa.length; i++) {
         const r = aoa[i] as unknown[];
         const name = get(r, nameIdx);
-        if (!name) { ign++; continue; }
+        const id = get(r, idIdx);
+        if (!name && !id) { ign++; continue; }
         parsed.push({
           name,
+          id,
           type: get(r, typeIdx),
           occurredOn: parseDataPlanilha(dateIdx >= 0 ? r[dateIdx] : ""),
           note: get(r, noteIdx),
@@ -164,6 +174,7 @@ export function ImportSanctionsDialog({
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
                     {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} colaborador não encontrado</span>}
+                    {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} ID e nome divergem</span>}
                     {counts.badType > 0 && <span className="badge badge-red">{counts.badType} tipo fora do catálogo</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (data)</span>}
                   </div>
@@ -171,10 +182,11 @@ export function ImportSanctionsDialog({
                     <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 170, overflow: "auto" }}>
                       {analysis.slice(0, 14).map((a, i) => (
                         <li key={i} style={{ color: a.importable ? undefined : "var(--text-soft)" }}>
-                          {a.row.name}
+                          {a.row.name || a.row.id}
                           {a.row.type ? ` · ${a.row.type}` : ""}
                           {a.row.occurredOn ? ` · ${fmtBR(a.row.occurredOn)}` : ""}
                           {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}
+                          {a.mismatch && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>ID e nome divergem</span>}
                           {!a.notFound && a.badDate && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>data inválida</span>}
                           {!a.notFound && !a.badDate && a.badType && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo fora do catálogo</span>}
                         </li>
@@ -195,6 +207,7 @@ export function ImportSanctionsDialog({
                       {summary.updated > 0 && <span className="badge badge-blue">{summary.updated} atualizada(s)</span>}
                       {summary.unknownType > 0 && <span className="badge badge-amber">{summary.unknownType} tipo desconhecido</span>}
                       {summary.notFound > 0 && <span className="badge badge-red">{summary.notFound} não encontrado(s)</span>}
+                      {summary.mismatch > 0 && <span className="badge badge-red">{summary.mismatch} ID e nome divergem</span>}
                       {summary.invalid > 0 && <span className="badge badge-amber">{summary.invalid} inválida(s)</span>}
                     </div>
                   )}

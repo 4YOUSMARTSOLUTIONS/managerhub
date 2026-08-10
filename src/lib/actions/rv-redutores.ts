@@ -6,9 +6,10 @@ import { wantsActive } from "@/lib/catalogGuard";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import {
-  normTexto, parseDataPlanilha, acharTipo, chaveDaPunicao,
+  parseDataPlanilha, acharTipo, chaveDaPunicao,
   type SanctionImportRow, type SanctionImportResult,
 } from "@/lib/sanctions-import";
+import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 /**
  * Redutores da remuneração variável: catálogo de punições, o registro da
@@ -149,7 +150,7 @@ export async function deleteSanction(id: string): Promise<ActionState> {
  * Tipo fora do catálogo é RECUSADO e contado à parte, nunca criado na hora.
  */
 export async function importSanctions(rows: SanctionImportRow[]): Promise<SanctionImportResult> {
-  const vazio: SanctionImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, unknownType: 0 };
+  const vazio: SanctionImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, mismatch: 0, unknownType: 0 };
   try {
     const { supabase, tenantId, userId } = await dpActionContext();
 
@@ -162,12 +163,13 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
       supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
     ]);
 
-    const idPorNome = new Map<string, string>();
+    const refs: { id: string; name: string }[] = [];
     for (const m of membros ?? []) {
       if (!m.is_active) continue;
       const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-      if (nm) idPorNome.set(normTexto(nm), m.user_id);
+      refs.push({ id: m.user_id, name: nm ?? "" });
     }
+    const idx = indiceDeAlvos(refs);
 
     // o que já está no banco, mais o que esta planilha já aceitou: sem a segunda
     // parte, duas linhas iguais da MESMA planilha entrariam como duas punições
@@ -183,9 +185,11 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     for (const linha of rows ?? []) {
       const nome = (linha.name ?? "").trim();
       const data = parseDataPlanilha(linha.occurredOn ?? "");
-      if (!nome || !data) { r.invalid += 1; continue; }
+      if ((!nome && !(linha.id ?? "").trim()) || !data) { r.invalid += 1; continue; }
 
-      const alvo = idPorNome.get(normTexto(nome));
+      const resolvido = resolverAlvo(linha.id ?? "", nome, idx);
+      if (resolvido.divergente) { r.mismatch += 1; continue; }
+      const alvo = resolvido.alvoId;
       if (!alvo) { r.notFound += 1; continue; }
 
       const tipo = acharTipo(linha.type ?? "", tipos ?? []);
@@ -224,11 +228,13 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     if (r.imported === 0 && r.updated === 0) {
       return {
         ...r,
-        error: r.notFound > 0
-          ? "Nenhuma punição importada, colaborador não encontrado (confira o nome exato do cadastro)."
-          : r.unknownType > 0
-            ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Remuneração variável › Tipos de punição."
-            : "Nenhuma linha válida, confira o colaborador e a data.",
+        error: r.mismatch > 0
+          ? "Nenhuma punição importada: há linhas em que o ID e o nome apontam para pessoas diferentes."
+          : r.notFound > 0
+            ? "Nenhuma punição importada, colaborador não encontrado (confira o ID ou o nome exato do cadastro)."
+            : r.unknownType > 0
+              ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Remuneração variável › Tipos de punição."
+              : "Nenhuma linha válida, confira o colaborador e a data.",
       };
     }
 
