@@ -133,7 +133,9 @@ export function PlannerManager({
     const equipeAlvo = params.equipe === undefined ? equipe : params.equipe;
     const visaoAlvo = params.visao === undefined ? visao : params.visao;
     if (quadroAlvo) q.set("quadro", quadroAlvo);
-    if (equipeAlvo) q.set("equipe", equipeAlvo);
+    // ausência de ?equipe= significa o padrão (Meus quadros); "ver todos" tem
+    // de viajar explícito, senão qualquer navegação voltaria ao padrão
+    q.set("equipe", equipeAlvo || "todos");
     if (visaoAlvo !== "quadro") q.set("visao", visaoAlvo);
     router.push(`/planner${q.size ? `?${q}` : ""}`);
   };
@@ -396,7 +398,7 @@ export function PlannerManager({
           <BotaoFiltros
             aberto={filtrosAbertos}
             onToggle={() => setFiltrosAbertos((v) => !v)}
-            contador={contarFiltros(filtro, equipe)}
+            contador={contarFiltros(filtro, equipe !== "" && equipe !== currentUserId ? equipe : "")}
           />
         )}
 
@@ -430,8 +432,10 @@ export function PlannerManager({
       ) : !quadro ? (
         <EmptyState
           title="Nenhum quadro por aqui"
-          description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
-          action={equipe
+          description={equipe && equipe !== currentUserId
+            ? "Este colaborador ainda não participa de nenhum quadro."
+            : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
+          action={equipe && equipe !== currentUserId
             // a saída do recorte mora na própria mensagem: quem filtrou um
             // colaborador sem quadro não pode depender de reabrir o painel
             ? <button type="button" className="btn btn-primary" onClick={() => irPara({ equipe: null, quadro: null })}>Ver todos os quadros</button>

@@ -51,13 +51,14 @@ export function PainelFiltrosPlanner({
   /** o agrupamento só faz sentido na visão Quadro */
   mostraAgrupamento: boolean;
 }) {
-  const contador = contarFiltros(filtro, equipe);
+  const contador = contarFiltros(filtro, equipe !== "" && equipe !== currentUserId ? equipe : "");
   return (
     <PainelDeFiltros
       contador={contador}
       onLimpar={() => {
         onFiltro({ texto: "", assigneeId: "", prioridade: "", labelId: "", prazo: "" });
-        if (equipe) onEquipe("");
+        // limpar volta ao padrão da tela (Meus quadros), não a "todos"
+        if (equipe !== currentUserId) onEquipe(currentUserId);
       }}
     >
       <div>
@@ -99,9 +100,12 @@ export function PainelFiltrosPlanner({
       {teamOptions.length > 0 ? (
         <div>
           <label className="label">Quadros de</label>
-          <select className="select" value={equipe} onChange={(e) => onEquipe(e.target.value)}>
-            <option value="">Todos que vejo</option>
+          {/* o padrão da tela é "Meus quadros"; "Todos que vejo" é escolha
+              explícita e viaja como ?equipe=todos */}
+          <select className="select" value={equipe === "" ? "todos" : equipe}
+            onChange={(e) => onEquipe(e.target.value === "todos" ? "" : e.target.value)}>
             <option value={currentUserId}>Meus quadros</option>
+            <option value="todos">Todos que vejo</option>
             {teamOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
