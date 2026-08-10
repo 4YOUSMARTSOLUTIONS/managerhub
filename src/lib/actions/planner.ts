@@ -587,3 +587,71 @@ async function posicionar(
   }
   return { position: pos };
 }
+
+
+// ------------------------------------------- copiar quadro / mover de quadro
+
+/**
+ * Duplica um quadro que eu VEJO: colunas e etiquetas sempre; tarefas
+ * opcionalmente, com progresso zerado e checklist desmarcado. Membros,
+ * responsáveis, anexos, conversa e histórico não vêm: cópia é estrutura, não
+ * gente nem passado. Tudo dentro de uma RPC atômica.
+ */
+export async function duplicateBoard(boardId: string, name: string, withTasks: boolean): Promise<ActionState & { boardId?: string }> {
+  try {
+    const ctx = await actionContext();
+    const { data, error } = await ctx.supabase.rpc("planner_duplicate_board", {
+      p_board: boardId, p_name: name, p_with_tasks: withTasks,
+    });
+    if (error) return { error: error.message };
+    revalidatePath(RP);
+    return { ok: true, boardId: data as string };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Move a tarefa para OUTRO quadro. RPC atômica obrigatória: `board_id` é
+ * denormalizado em seis tabelas filhas, e updates soltos deixariam, no primeiro
+ * erro, um cartão com checklist num quadro e comentários no outro. Etiquetas
+ * ficam (são do quadro de origem); responsável que não participa do destino
+ * sai; checklist, conversa, anexos e histórico acompanham.
+ */
+export async function moveTaskToBoard(taskId: string, toBoardId: string, toBucketId: string): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    const { error } = await ctx.supabase.rpc("planner_move_task_to_board", {
+      p_task: taskId, p_to_board: toBoardId, p_to_bucket: toBucketId,
+    });
+    if (error) return { error: error.message };
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type MoveTarget = { id: string; name: string; buckets: { id: string; name: string }[] };
+
+/** os quadros em que eu ESCREVO, com as colunas, para o seletor de "mover para outro quadro" */
+export async function getMoveTargets(): Promise<{ boards: MoveTarget[] } | { error: string }> {
+  try {
+    const ctx = await actionContext();
+    const { data: ids } = await ctx.supabase.rpc("my_planner_board_ids");
+    const lista = (ids as unknown as string[] | null) ?? [];
+    if (!lista.length) return { boards: [] };
+    const [{ data: boards }, { data: buckets }] = await Promise.all([
+      ctx.supabase.from("planner_boards").select("id, name").in("id", lista).order("name"),
+      ctx.supabase.from("planner_buckets").select("id, name, board_id, position").in("board_id", lista).order("position"),
+    ]);
+    return {
+      boards: (boards ?? []).map((b) => ({
+        id: b.id, name: b.name,
+        buckets: (buckets ?? []).filter((k) => k.board_id === b.id).map((k) => ({ id: k.id, name: k.name })),
+      })),
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

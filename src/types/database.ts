@@ -1364,6 +1364,8 @@ export type Database = {
         Returns: { user_id: string; tenant_id: string }[]
       }
       my_owned_planner_board_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      planner_move_task_to_board: { Args: { p_task: string; p_to_board: string; p_to_bucket: string }; Returns: undefined }
+      planner_duplicate_board: { Args: { p_board: string; p_name: string; p_with_tasks: boolean }; Returns: string }
       my_planner_board_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
       my_visible_planner_board_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
       manages_user: {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, Users, Pencil, Trash2, Plus } from "lucide-react";
+import { ChevronDown, Users, Pencil, Trash2, Plus, Copy } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { PeoplePicker } from "@/components/PeoplePicker";
@@ -25,7 +25,7 @@ import { formatDate } from "@/lib/format";
 import {
   createBoard, updateBoard, deleteBoard, setBoardMembers,
   createBucket, renameBucket, deleteBucket, moveBucket,
-  toggleTaskComplete, moveTask,
+  toggleTaskComplete, moveTask, duplicateBoard,
 } from "@/lib/actions/planner";
 import { posicaoEntre, posicaoNoFim } from "@/lib/planner-position";
 
@@ -105,6 +105,7 @@ export function PlannerManager({
   const [membrosOpen, setMembrosOpen] = useState(false);
   const [membrosDraft, setMembrosDraft] = useState<string[]>([]);
   const [bucketDialog, setBucketDialog] = useState<null | { id?: string; name: string }>(null);
+  const [copiaDialog, setCopiaDialog] = useState<null | { name: string; withTasks: boolean }>(null);
   const [taskDialog, setTaskDialog] = useState<TaskSeed | null>(null);
   const [erroDialog, setErroDialog] = useState("");
 
@@ -245,6 +246,18 @@ export function PlannerManager({
     });
   }
 
+  function copiarQuadro() {
+    if (!copiaDialog || !quadro) return;
+    setErroDialog("");
+    iniciar(async () => {
+      const res = await duplicateBoard(quadro.id, copiaDialog.name, copiaDialog.withTasks);
+      if (res?.error) { setErroDialog(res.error); return; }
+      setCopiaDialog(null);
+      if (res.boardId) irPara({ quadro: res.boardId });
+      router.refresh();
+    });
+  }
+
   async function excluirQuadro() {
     if (!quadro) return;
     const ok = await confirmDialog({
@@ -331,6 +344,12 @@ export function PlannerManager({
         {visao === "quadro" && canEdit && quadro && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setBucketDialog({ name: "" }); }}>
             <Plus size={14} /> Nova coluna
+          </button>
+        )}
+        {visao === "quadro" && quadro && (
+          <button type="button" className="btn btn-ghost btn-sm" title="Criar um quadro novo a partir deste"
+            onClick={() => { setErroDialog(""); setCopiaDialog({ name: quadro.name + " (copia)", withTasks: false }); }}>
+            <Copy size={14} /> Duplicar
           </button>
         )}
 
@@ -488,6 +507,26 @@ export function PlannerManager({
             onChange={setMembrosDraft}
             placeholder="Convidar colegas…"
           />
+          {erroDialog && <ErroLinha msg={erroDialog} />}
+        </Modal>
+      )}
+
+      {copiaDialog && quadro && (
+        <Modal titulo={"Duplicar: " + quadro.name} onClose={() => setCopiaDialog(null)}
+          footer={<>
+            <button type="button" className="btn btn-ghost" onClick={() => setCopiaDialog(null)}>Cancelar</button>
+            <button type="button" className="btn btn-primary" disabled={pendente || !copiaDialog.name.trim()} onClick={copiarQuadro}>{pendente ? "Duplicando" : "Duplicar"}</button>
+          </>}
+        >
+          <label className="label">Nome do novo quadro</label>
+          <input className="input" autoFocus value={copiaDialog.name} onChange={(e) => setCopiaDialog((d) => (d ? { ...d, name: e.target.value } : d))} />
+          <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", marginTop: "0.8rem", fontSize: "0.87rem", cursor: "pointer" }}>
+            <input type="checkbox" checked={copiaDialog.withTasks} onChange={(e) => setCopiaDialog((d) => (d ? { ...d, withTasks: e.target.checked } : d))} />
+            Copiar também as tarefas (progresso zerado, checklist desmarcado)
+          </label>
+          <p className="muted" style={{ fontSize: "0.78rem", margin: "0.5rem 0 0" }}>
+            Colunas e etiquetas vêm sempre. Participantes, responsáveis, anexos e comentários não: o quadro novo é seu, e nasce sem convidados.
+          </p>
           {erroDialog && <ErroLinha msg={erroDialog} />}
         </Modal>
       )}

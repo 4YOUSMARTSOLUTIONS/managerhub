@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
-import { createTask, updateTask, deleteTask, setTaskProgress, type TaskInput } from "@/lib/actions/planner";
+import { createTask, updateTask, deleteTask, setTaskProgress, moveTaskToBoard, getMoveTargets, type TaskInput, type MoveTarget } from "@/lib/actions/planner";
 import {
   createLabel, deleteLabel, setTaskLabels,
   addChecklistItem, toggleChecklistItem, deleteChecklistItem,
@@ -102,6 +102,8 @@ export function TaskDialog({
   const [novoComentario, setNovoComentario] = useState("");
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // mover para outro quadro: alvos carregados só quando a pessoa pede
+  const [mover, setMover] = useState<null | { boards: MoveTarget[]; boardId: string; bucketId: string }>(null);
 
   useEffect(() => {
     if (!seed.id) return;
@@ -213,6 +215,27 @@ export function TaskDialog({
   }
 
   const feitos = itens.filter((i) => i.done).length;
+
+  function abrirMover() {
+    iniciar(async () => {
+      const res = await getMoveTargets();
+      if ("error" in res) { toast.error(res.error); return; }
+      const outros = res.boards.filter((b) => b.id !== boardId && b.buckets.length > 0);
+      if (!outros.length) { toast.error("Não há outro quadro seu para receber a tarefa."); return; }
+      setMover({ boards: outros, boardId: outros[0].id, bucketId: outros[0].buckets[0].id });
+    });
+  }
+
+  function confirmarMover() {
+    if (!mover || !seed.id) return;
+    iniciar(async () => {
+      const res = await moveTaskToBoard(seed.id!, mover.boardId, mover.bucketId);
+      if (res?.error) { toast.error(res.error); return; }
+      toast.success("Tarefa movida. As etiquetas ficaram no quadro de origem.");
+      onClose();
+      router.refresh();
+    });
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(3,6,14,0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
@@ -428,6 +451,33 @@ export function TaskDialog({
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ------------------------------------------------ mover de quadro */}
+          {editando && (
+            <div>
+              {mover ? (
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                  <select className="select" style={{ width: 190, padding: "0.3rem 0.55rem", fontSize: "0.83rem" }} value={mover.boardId}
+                    onChange={(e) => {
+                      const b = mover.boards.find((x) => x.id === e.target.value);
+                      if (b) setMover({ ...mover, boardId: b.id, bucketId: b.buckets[0].id });
+                    }}>
+                    {mover.boards.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                  <select className="select" style={{ width: 160, padding: "0.3rem 0.55rem", fontSize: "0.83rem" }} value={mover.bucketId}
+                    onChange={(e) => setMover({ ...mover, bucketId: e.target.value })}>
+                    {(mover.boards.find((b) => b.id === mover.boardId)?.buckets ?? []).map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+                  </select>
+                  <button type="button" className="btn btn-primary btn-xs" disabled={pendente} onClick={confirmarMover}>Mover</button>
+                  <button type="button" className="btn btn-ghost btn-xs" onClick={() => setMover(null)}>Cancelar</button>
+                </div>
+              ) : (
+                <button type="button" className="btn btn-ghost btn-xs" disabled={pendente} onClick={abrirMover}>
+                  Mover para outro quadro
+                </button>
+              )}
             </div>
           )}
 
