@@ -5,6 +5,7 @@ import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { posicaoNoFim, posicaoEntre, renormalizar } from "@/lib/planner-position";
+import { quadroDe, SEM_QUADRO, SO_DONO, SO_PARTICIPANTE, type Ctx } from "./planner-shared";
 
 /**
  * Planner: quadros, colunas e cartões.
@@ -24,35 +25,6 @@ import { posicaoNoFim, posicaoEntre, renormalizar } from "@/lib/planner-position
  */
 
 const RP = "/planner";
-
-type Ctx = Awaited<ReturnType<typeof actionContext>>;
-
-/**
- * O quadro com a resposta às duas perguntas de alçada.
- *
- * `dono` = gere o quadro (renomear, excluir, convidar): o criador ou um
- * admin/owner da empresa. `participante` = edita o conteúdo: além dos de cima,
- * os convidados e o GESTOR de qualquer participante. A pergunta do gestor é
- * respondida pela MESMA função que a RLS usa (`my_planner_board_ids`), para a
- * tela e o banco nunca discordarem sobre quem pode.
- */
-async function quadroDe(ctx: Ctx, boardId: string) {
-  const { data: board } = await ctx.supabase
-    .from("planner_boards")
-    .select("id, tenant_id, created_by")
-    .eq("id", boardId)
-    .maybeSingle();
-  if (!board) return { board: null, dono: false, participante: false };
-  const dono = board.created_by === ctx.userId || ctx.role === "owner" || ctx.role === "admin";
-  if (dono) return { board, dono, participante: true };
-  const { data: escrita } = await ctx.supabase.rpc("my_planner_board_ids");
-  const participante = ((escrita as unknown as string[] | null) ?? []).includes(boardId);
-  return { board, dono, participante };
-}
-
-const SEM_QUADRO = "Quadro não encontrado.";
-const SO_DONO = "Apenas o dono do quadro ou um administrador pode fazer isso.";
-const SO_PARTICIPANTE = "Você não participa deste quadro nem gerencia alguém que participe.";
 
 // ------------------------------------------------------------------ quadros
 

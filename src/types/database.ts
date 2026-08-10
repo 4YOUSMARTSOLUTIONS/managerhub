@@ -781,10 +781,51 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; board_id?: string; name?: string; position?: number; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // v2: `progress` é a fonte de verdade do estado (completed_at virou
+      // carimbo de quando concluiu); `recurrence` clona a tarefa ao concluir;
+      // `due_notified_at` é o dedupe do cron de prazos.
       planner_tasks: {
-        Row: { id: string; tenant_id: string; board_id: string; bucket_id: string; title: string; description: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"] | null; completed_at: string | null; position: number; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; board_id: string; bucket_id: string; title: string; description?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"] | null; completed_at?: string | null; position: number; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; board_id?: string; bucket_id?: string; title?: string; description?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"] | null; completed_at?: string | null; position?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; board_id: string; bucket_id: string; title: string; description: string | null; start_date: string | null; due_date: string | null; priority: Database["public"]["Enums"]["priority_level"] | null; progress: Database["public"]["Enums"]["planner_progress"]; recurrence: Database["public"]["Enums"]["planner_recurrence"]; completed_at: string | null; due_notified_at: string | null; position: number; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; bucket_id: string; title: string; description?: string | null; start_date?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"] | null; progress?: Database["public"]["Enums"]["planner_progress"]; recurrence?: Database["public"]["Enums"]["planner_recurrence"]; completed_at?: string | null; due_notified_at?: string | null; position: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; bucket_id?: string; title?: string; description?: string | null; start_date?: string | null; due_date?: string | null; priority?: Database["public"]["Enums"]["priority_level"] | null; progress?: Database["public"]["Enums"]["planner_progress"]; recurrence?: Database["public"]["Enums"]["planner_recurrence"]; completed_at?: string | null; due_notified_at?: string | null; position?: number; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      planner_labels: {
+        Row: { id: string; tenant_id: string; board_id: string; name: string; color: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; name: string; color: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; name?: string; color?: string; created_at?: string }
+        Relationships: []
+      }
+      planner_task_labels: {
+        Row: { task_id: string; label_id: string; tenant_id: string; board_id: string }
+        Insert: { task_id: string; label_id: string; tenant_id: string; board_id: string }
+        Update: { task_id?: string; label_id?: string; tenant_id?: string; board_id?: string }
+        Relationships: []
+      }
+      planner_checklist_items: {
+        Row: { id: string; tenant_id: string; board_id: string; task_id: string; title: string; done: boolean; position: number; created_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; task_id: string; title: string; done?: boolean; position: number; created_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; task_id?: string; title?: string; done?: boolean; position?: number; created_at?: string }
+        Relationships: []
+      }
+      // comentário: só o autor apaga; histórico (events): append-only, sem
+      // policy de update/delete — uma linha de histórico editável não é histórico
+      planner_task_comments: {
+        Row: { id: string; tenant_id: string; board_id: string; task_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; task_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; task_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: []
+      }
+      planner_task_attachments: {
+        Row: { id: string; tenant_id: string; board_id: string; task_id: string; file_path: string; file_name: string; mime_type: string | null; size_bytes: number | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; task_id: string; file_path: string; file_name: string; mime_type?: string | null; size_bytes?: number | null; uploaded_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; task_id?: string; file_path?: string; file_name?: string; mime_type?: string | null; size_bytes?: number | null; uploaded_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      planner_task_events: {
+        Row: { id: string; tenant_id: string; board_id: string; task_id: string; actor_id: string | null; type: string; meta: Json; created_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; task_id: string; actor_id?: string | null; type: string; meta?: Json; created_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; task_id?: string; actor_id?: string | null; type?: string; meta?: Json; created_at?: string }
         Relationships: []
       }
       planner_task_assignees: {
@@ -1546,6 +1587,8 @@ export type Database = {
       // inteira abaixo dele), sem os poderes de empresa inteira do "Gerencial"
       // (`manager`). A ordem aqui espelha a hierarquia do enum no banco.
       member_role: "owner" | "admin" | "manager" | "team_lead" | "hr" | "member"
+      planner_progress: "not_started" | "in_progress" | "done"
+      planner_recurrence: "none" | "daily" | "weekly" | "monthly"
       participant_response: "invited" | "accepted" | "declined" | "tentative"
       priority_level: "low" | "medium" | "high" | "urgent"
       ticket_category:
