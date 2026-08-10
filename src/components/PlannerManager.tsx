@@ -3,19 +3,20 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, Users, Pencil, Trash2, Plus, Copy } from "lucide-react";
+import { ChevronDown, Users, Pencil, Trash2, Plus, Copy, Download, Settings2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { BoardView, type BoardBucket, type BoardTask } from "@/components/planner/BoardView";
 import { TaskDialog, type TaskSeed, type BoardLabel, type ChecklistItem } from "@/components/planner/TaskDialog";
-import { FilterBar } from "@/components/planner/FilterBar";
+import { PainelFiltrosPlanner, contarFiltros } from "@/components/planner/FilterBar";
+import { BotaoFiltros } from "@/components/ui/Filtros";
 import { GroupedView } from "@/components/planner/GroupedView";
 import { CalendarView } from "@/components/planner/CalendarView";
 import { ChartsView } from "@/components/planner/ChartsView";
 import { MyTasksView, type MinhaTarefa } from "@/components/planner/MyTasksView";
-import { ExportButton } from "@/components/ui/ExportButton";
+import { downloadSheet } from "@/lib/export-xlsx";
 import {
   filtrarTarefas, agruparTarefas, FILTRO_VAZIO, PROGRESS_LABEL,
   type Agrupamento, type FiltroPlanner,
@@ -106,6 +107,7 @@ export function PlannerManager({
   const [membrosDraft, setMembrosDraft] = useState<string[]>([]);
   const [bucketDialog, setBucketDialog] = useState<null | { id?: string; name: string }>(null);
   const [copiaDialog, setCopiaDialog] = useState<null | { name: string; withTasks: boolean }>(null);
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [taskDialog, setTaskDialog] = useState<TaskSeed | null>(null);
   const [erroDialog, setErroDialog] = useState("");
 
@@ -246,6 +248,26 @@ export function PlannerManager({
     });
   }
 
+  function exportar() {
+    if (!quadro) return;
+    void downloadSheet(
+      `planner_${quadro.name.replace(/[^\w.\-]+/g, "_")}.xlsx`,
+      "Tarefas",
+      ["Coluna", "Título", "Responsáveis", "Prioridade", "Progresso", "Início", "Prazo", "Etiquetas", "Concluída em"],
+      visiveis.map((t) => [
+        bucketsLocal.find((b) => b.id === t.bucketId)?.name ?? "",
+        t.title,
+        t.assignees.map((a) => a.name).join("; "),
+        t.priority ? PRIORITY[t.priority] : "",
+        PROGRESS_LABEL[t.progress],
+        t.startDate ? formatDate(t.startDate) : "",
+        t.dueDate ? formatDate(t.dueDate) : "",
+        t.labels.map((l) => l.name).join("; "),
+        t.completedAt ? formatDate(t.completedAt.slice(0, 10)) : "",
+      ]),
+    );
+  }
+
   function copiarQuadro() {
     if (!copiaDialog || !quadro) return;
     setErroDialog("");
@@ -328,65 +350,54 @@ export function PlannerManager({
           )}
         </Dropdown>}
 
-        {visao === "quadro" && possoGerir && quadro && (
-          <>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setMembrosDraft(quadro.memberIds); setMembrosOpen(true); }}>
-              <Users size={14} /> Participantes{quadro.memberIds.length > 0 ? ` (${quadro.memberIds.length + 1})` : ""}
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ id: quadro.id, name: quadro.name, description: quadro.description ?? "", memberIds: [] }); }}>
-              <Pencil size={14} /> Renomear
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={excluirQuadro}>
-              <Trash2 size={14} /> Excluir
-            </button>
-          </>
-        )}
-        {visao === "quadro" && canEdit && quadro && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setBucketDialog({ name: "" }); }}>
-            <Plus size={14} /> Nova coluna
-          </button>
-        )}
+        {/* TUDO que mexe no quadro mora num menu só: a fileira de botões
+            (Participantes, Renomear, Excluir, Nova coluna, Duplicar, Exportar)
+            era o que pesava na barra. O menu mostra apenas o que a alçada de
+            quem olha permite. */}
         {visao === "quadro" && quadro && (
-          <button type="button" className="btn btn-ghost btn-sm" title="Criar um quadro novo a partir deste"
-            onClick={() => { setErroDialog(""); setCopiaDialog({ name: quadro.name + " (copia)", withTasks: false }); }}>
-            <Copy size={14} /> Duplicar
-          </button>
+          <Dropdown rotulo="Ações" icone={<Settings2 size={14} />} largura={240} titulo={quadro.name}>
+            {(fechar) => (
+              <>
+                {canEdit && (
+                  <ItemDeMenu onClick={() => { fechar(); setErroDialog(""); setBucketDialog({ name: "" }); }}>
+                    <Plus size={14} style={{ marginRight: 8 }} /> Nova coluna
+                  </ItemDeMenu>
+                )}
+                {possoGerir && (
+                  <>
+                    <ItemDeMenu onClick={() => { fechar(); setErroDialog(""); setMembrosDraft(quadro.memberIds); setMembrosOpen(true); }}>
+                      <Users size={14} style={{ marginRight: 8 }} /> Participantes{quadro.memberIds.length > 0 ? ` (${quadro.memberIds.length + 1})` : ""}
+                    </ItemDeMenu>
+                    <ItemDeMenu onClick={() => { fechar(); setErroDialog(""); setBoardDialog({ id: quadro.id, name: quadro.name, description: quadro.description ?? "", memberIds: [] }); }}>
+                      <Pencil size={14} style={{ marginRight: 8 }} /> Renomear quadro
+                    </ItemDeMenu>
+                  </>
+                )}
+                <ItemDeMenu onClick={() => { fechar(); setErroDialog(""); setCopiaDialog({ name: quadro.name + " (copia)", withTasks: false }); }}>
+                  <Copy size={14} style={{ marginRight: 8 }} /> Duplicar quadro
+                </ItemDeMenu>
+                <ItemDeMenu onClick={() => { fechar(); exportar(); }} disabled={visiveis.length === 0} titulo={visiveis.length === 0 ? "Nada para exportar" : undefined}>
+                  <Download size={14} style={{ marginRight: 8 }} /> Exportar planilha
+                </ItemDeMenu>
+                {possoGerir && (
+                  <ItemDeMenu onClick={() => { fechar(); void excluirQuadro(); }}>
+                    <Trash2 size={14} style={{ marginRight: 8, color: "var(--mh-danger)" }} /> <span style={{ color: "var(--mh-danger)" }}>Excluir quadro</span>
+                  </ItemDeMenu>
+                )}
+              </>
+            )}
+          </Dropdown>
+        )}
+
+        {(visao === "quadro" || visao === "calendario") && quadro && (
+          <BotaoFiltros
+            aberto={filtrosAbertos}
+            onToggle={() => setFiltrosAbertos((v) => !v)}
+            contador={contarFiltros(filtro, equipe)}
+          />
         )}
 
         <div style={{ marginLeft: "auto", display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-          {teamOptions.length > 0 && (
-            <select
-              className="select"
-              value={equipe}
-              onChange={(e) => irPara({ equipe: e.target.value || null, quadro: null })}
-              style={{ width: 220, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}
-              title="Quadros em que este colaborador participa"
-            >
-              <option value="">Todos os quadros que vejo</option>
-              {/* o gestor também é gente: sem esta opção ele filtra qualquer
-                  subordinado, mas não consegue isolar os próprios quadros */}
-              <option value={currentUserId}>Meus quadros</option>
-              {teamOptions.map((p) => <option key={p.id} value={p.id}>Quadros de: {p.name}</option>)}
-            </select>
-          )}
-          {visao === "quadro" && quadro && (
-            <ExportButton
-              filename={`planner_${quadro.name.replace(/[^\w.\-]+/g, "_")}.xlsx`}
-              sheetName="Tarefas"
-              headers={["Coluna", "Título", "Responsáveis", "Prioridade", "Progresso", "Início", "Prazo", "Etiquetas", "Concluída em"]}
-              rows={visiveis.map((t) => [
-                bucketsLocal.find((b) => b.id === t.bucketId)?.name ?? "",
-                t.title,
-                t.assignees.map((a) => a.name).join("; "),
-                t.priority ? PRIORITY[t.priority] : "",
-                PROGRESS_LABEL[t.progress],
-                t.startDate ? formatDate(t.startDate) : "",
-                t.dueDate ? formatDate(t.dueDate) : "",
-                t.labels.map((l) => l.name).join("; "),
-                t.completedAt ? formatDate(t.completedAt.slice(0, 10)) : "",
-              ])}
-            />
-          )}
           {visao !== "minhas" && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ name: "", description: "", memberIds: [] }); }}>
               + Novo quadro
@@ -394,6 +405,22 @@ export function PlannerManager({
           )}
         </div>
       </div>
+
+      {filtrosAbertos && quadro && (visao === "quadro" || visao === "calendario") && (
+        <PainelFiltrosPlanner
+          filtro={filtro}
+          onFiltro={setFiltro}
+          agrupamento={agrupamento}
+          onAgrupamento={setAgrupamento}
+          pessoas={participantes}
+          labels={boardLabels}
+          teamOptions={teamOptions}
+          equipe={equipe}
+          onEquipe={(id) => irPara({ equipe: id || null, quadro: null })}
+          currentUserId={currentUserId}
+          mostraAgrupamento={visao === "quadro"}
+        />
+      )}
 
       {visao === "minhas" ? (
         <MyTasksView tarefas={minhasTarefas} hoje={hoje} />
@@ -406,27 +433,9 @@ export function PlannerManager({
       ) : visao === "graficos" ? (
         <ChartsView tasks={tasksLocal} />
       ) : visao === "calendario" ? (
-        <>
-          <FilterBar
-            filtro={filtro}
-            onFiltro={setFiltro}
-            agrupamento={agrupamento}
-            onAgrupamento={setAgrupamento}
-            pessoas={participantes}
-            labels={boardLabels}
-          />
-          <CalendarView tasks={visiveis} hoje={hoje} onOpenTask={abrirTarefa} />
-        </>
+        <CalendarView tasks={visiveis} hoje={hoje} onOpenTask={abrirTarefa} />
       ) : (
         <>
-          <FilterBar
-            filtro={filtro}
-            onFiltro={setFiltro}
-            agrupamento={agrupamento}
-            onAgrupamento={setAgrupamento}
-            pessoas={participantes}
-            labels={boardLabels}
-          />
           {agrupamento === "coluna" ? (
             <BoardView
               buckets={bucketsLocal}
