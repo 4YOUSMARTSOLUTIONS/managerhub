@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importRvConfig, type RvConfigImportRow } from "@/lib/actions/rv-config";
 import { IconImport } from "@/components/ui/ImpExpIcons";
@@ -119,8 +120,16 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
   async function doImport() {
     setImporting(true);
     const res = await importRvConfig(scope, rows);
-    setImporting(false); setSummary(res);
-    if (!res.error) router.refresh();
+    setImporting(false);
+    if (res.error) { setSummary(res); return; }
+    // sucesso fecha sozinho; o resultado vai no toast para o retorno não sumir
+    const avisos = [
+      res.notFound > 0 ? `${res.notFound} não encontrado(s)` : "",
+      res.invalid > 0 ? `${res.invalid} inválida(s)` : "",
+    ].filter(Boolean).join(", ");
+    toast.success(`${res.imported} vigência(s) importada(s)${avisos ? ` (${avisos})` : ""}`);
+    router.refresh();
+    close();
   }
 
   return (
