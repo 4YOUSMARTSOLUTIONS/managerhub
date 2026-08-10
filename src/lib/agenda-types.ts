@@ -54,9 +54,20 @@ export type ChecklistSchedFull = {
 
 export type ChecklistRunLite = { checklistId: string; executorId: string; periodKey: string };
 
-/** Item renderizado no dia: tarefa de agenda ou checklist periódico. */
+/** Tarefa do Planner com prazo, para o dia consolidar (informativo). */
+export type PlannerTaskLite = {
+  id: string;
+  title: string;
+  dueDate: string; // YYYY-MM-DD
+  done: boolean;
+  boardId: string;
+  boardName: string;
+  assigneeIds: string[];
+};
+
+/** Item renderizado no dia: tarefa de agenda, checklist periódico ou tarefa do Planner. */
 export type DayItem = {
-  kind: "task" | "checklist";
+  kind: "task" | "checklist" | "planner";
   key: string;
   date: string; // YYYY-MM-DD a que o item pertence
   title: string;
@@ -76,6 +87,8 @@ export type DayItem = {
   // checklist
   checklistId?: string;
   overdue?: boolean;
+  // planner
+  plannerBoardId?: string;
 };
 
 export type OrgInfo = { positionId: string | null; departmentId: string | null };

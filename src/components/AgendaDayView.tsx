@@ -130,6 +130,7 @@ export function AgendaDayView({
                 <div style={{ fontWeight: 600, fontSize: "0.88rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {it.title}
                   {it.kind === "checklist" && <Badge tone="purple">Checklist</Badge>}
+                  {it.kind === "planner" && <Badge tone="blue">Planner</Badge>}
                 </div>
                 {/* o nome da agenda saiu: repetia em toda linha, e a tela toda
                     já é de um responsável só. Fica a duração, que muda por linha. */}
@@ -147,7 +148,13 @@ export function AgendaDayView({
                   <Badge tone={it.status === "feito" ? "green" : it.overdue ? "red" : "amber"}>
                     {it.status === "feito" ? "Concluído" : it.overdue ? "Atrasado" : "Pendente"}
                   </Badge>
-                  <Link href="/checklists" className="icon-btn" title="Abrir checklists"><ExternalLink size={15} /></Link>
+                  {it.kind === "planner" ? (
+                    <Link href={it.plannerBoardId ? `/planner?quadro=${it.plannerBoardId}` : "/planner"} className="icon-btn" title={`Abrir no Planner (${it.agendaName})`}>
+                      <ExternalLink size={15} />
+                    </Link>
+                  ) : (
+                    <Link href="/checklists" className="icon-btn" title="Abrir checklists"><ExternalLink size={15} /></Link>
+                  )}
                 </>
               )}
             </div>

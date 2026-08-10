@@ -1,6 +1,6 @@
 import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
-import type { AgendaFull, LogRow, ChecklistSchedFull, ChecklistRunLite, OrgInfo } from "@/lib/agenda-types";
+import type { AgendaFull, LogRow, ChecklistSchedFull, ChecklistRunLite, OrgInfo, PlannerTaskLite } from "@/lib/agenda-types";
 import type { Tables } from "@/types/database";
 
 export type AgendaData = {
@@ -15,6 +15,8 @@ export type AgendaData = {
   logs: LogRow[];
   checklistScheds: ChecklistSchedFull[];
   checklistRuns: ChecklistRunLite[];
+  /** tarefas do Planner com prazo, para o dia consolidar (fora da aderência) */
+  plannerTasks: PlannerTaskLite[];
   holidays: { day: string; name: string }[];
   /** logs que já têm comentário ou anexo (a observação sai do próprio log). */
   logsComAnexoOuComentario: string[];
@@ -36,7 +38,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
   const from = fromD.toLocaleDateString("sv-SE");
   const fromIso = fromD.toISOString();
 
-  const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes, comentRes, anexoRes] = await Promise.all([
+  const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes, comentRes, anexoRes, plTaskRes, plAssigneeRes, plBoardRes] = await Promise.all([
     getMembers(tenant.id),
     (() => {
       const q = supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id);
@@ -52,6 +54,13 @@ export async function loadAgendaData(): Promise<AgendaData> {
     // detalhe precisa para acender sem abrir a tarefa. A RLS já recorta.
     supabase.from("agenda_log_comments").select("log_id").gte("created_at", fromIso),
     supabase.from("agenda_log_attachments").select("log_id").gte("created_at", fromIso),
+    // Planner no diário: só tarefas COM prazo, na mesma janela de 90 dias dos
+    // logs. A RLS já recorta para os quadros que este usuário enxerga (os
+    // dele + os da cadeia, se gestor), então o gestor vê o dia do subordinado
+    // com as tarefas do subordinado, sem query especial.
+    supabase.from("planner_tasks").select("id, title, due_date, progress, board_id").not("due_date", "is", null).gte("due_date", from),
+    supabase.from("planner_task_assignees").select("task_id, user_id"),
+    supabase.from("planner_boards").select("id, name"),
   ]);
 
   const people = members
@@ -107,5 +116,24 @@ export async function loadAgendaData(): Promise<AgendaData> {
     ...(anexoRes.data ?? []).map((a) => a.log_id),
   ])];
 
-  return { currentUserId: user.id, isAdmin, today, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, holidays, logsComAnexoOuComentario };
+  const assigneesPorTask = new Map<string, string[]>();
+  for (const a of plAssigneeRes.data ?? []) {
+    const arr = assigneesPorTask.get(a.task_id) ?? [];
+    arr.push(a.user_id);
+    assigneesPorTask.set(a.task_id, arr);
+  }
+  const boardNome = new Map((plBoardRes.data ?? []).map((b) => [b.id, b.name]));
+  const plannerTasks: PlannerTaskLite[] = (plTaskRes.data ?? [])
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      dueDate: t.due_date as string,
+      done: t.progress === "done",
+      boardId: t.board_id,
+      boardName: boardNome.get(t.board_id) ?? "Planner",
+      assigneeIds: assigneesPorTask.get(t.id) ?? [],
+    }))
+    .filter((t) => t.assigneeIds.length > 0);
+
+  return { currentUserId: user.id, isAdmin, today, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, plannerTasks, holidays, logsComAnexoOuComentario };
 }

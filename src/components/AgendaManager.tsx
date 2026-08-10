@@ -26,7 +26,7 @@ import {
   adherenceFromStatuses, pct, dateFromYMD, ymd,
 } from "@/lib/agenda-schedule";
 import { setLogStatus, toggleAgendaActive, deleteAgenda } from "@/lib/actions/agenda";
-import type { AgendaFull, LogRow, ChecklistSchedFull, ChecklistRunLite, DayItem, OrgInfo } from "@/lib/agenda-types";
+import type { AgendaFull, LogRow, ChecklistSchedFull, ChecklistRunLite, DayItem, OrgInfo, PlannerTaskLite } from "@/lib/agenda-types";
 import type { Enums } from "@/types/database";
 
 type Opt = { id: string; name: string };
@@ -45,12 +45,13 @@ export function AgendaManager(props: {
   agendas: AgendaFull[];
   logs: LogRow[];
   checklistScheds: ChecklistSchedFull[];
+  plannerTasks: PlannerTaskLite[];
   checklistRuns: ChecklistRunLite[];
   holidays: { day: string; name: string }[];
   logsComAnexoOuComentario?: string[];
 }) {
   const section: AgendaSection = props.section ?? "diario";
-  const { currentUserId, isAdmin, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, holidays } = props;
+  const { currentUserId, isAdmin, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, plannerTasks, holidays } = props;
   const router = useRouter();
   const [, start] = useTransition();
 
@@ -145,6 +146,23 @@ export function AgendaManager(props: {
         kind: "checklist", key: `c-${cs.scheduleId}-${occ.periodKey}`, date: dateStr, title: cs.checklistName, agendaName: "Checklist periódico",
         time: cs.runTime, durationMin: 0, status: isDone ? "feito" : "pendente", note: null,
         chargeable: !nonWorking, checklistId: cs.checklistId, overdue: !isDone && occ.overdue,
+      });
+    }
+    // Tarefas do Planner: INFORMATIVAS. Entram no dia do prazo (e, se
+    // vencidas e abertas, no dia de hoje, como cobrança viva), mas com
+    // `chargeable: false`, então ficam FORA da aderência de propósito: a
+    // aderência mede a rotina pactuada; o Planner é trabalho auto-organizado,
+    // e misturar os dois faria o indicador oscilar por fora do pacto.
+    for (const pt of plannerTasks) {
+      if (!pt.assigneeIds.includes(subjectUserId)) continue;
+      const noPrazo = pt.dueDate === dateStr;
+      const vencidaHoje = !pt.done && pt.dueDate < dateStr && dateStr === todayStr;
+      if (!noPrazo && !vencidaHoje) continue;
+      items.push({
+        kind: "planner", key: `p-${pt.id}`, date: dateStr, title: pt.title,
+        agendaName: pt.boardName, time: null, durationMin: 0,
+        status: pt.done ? "feito" : "pendente", note: null,
+        chargeable: false, plannerBoardId: pt.boardId, overdue: vencidaHoje,
       });
     }
     items.sort((x, y) => (x.time ?? "99") < (y.time ?? "99") ? -1 : (x.time ?? "99") > (y.time ?? "99") ? 1 : 0);
@@ -271,6 +289,7 @@ export function AgendaManager(props: {
   );
 
   const openItem = (item: DayItem) => {
+    if (item.kind === "planner") { router.push(item.plannerBoardId ? `/planner?quadro=${item.plannerBoardId}` : "/planner"); return; }
     if (item.kind === "checklist") { router.push("/checklists"); return; }
     openDetail(item, item.date, subjectCanFill);
   };
