@@ -157,17 +157,17 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     const [{ data: membros }, { data: tipos }, { data: existentes }] = await Promise.all([
       supabase
         .from("memberships")
-        .select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)")
+        .select("user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)")
         .eq("tenant_id", tenantId),
       supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenantId),
       supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
     ]);
 
-    const refs: { id: string; name: string }[] = [];
+    const refs: { id: string; name: string; code?: string | null }[] = [];
     for (const m of membros ?? []) {
       if (!m.is_active) continue;
       const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-      refs.push({ id: m.user_id, name: nm ?? "" });
+      refs.push({ id: m.user_id, name: nm ?? "", code: m.employee_code });
     }
     const idx = indiceDeAlvos(refs);
 
@@ -185,9 +185,9 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     for (const linha of rows ?? []) {
       const nome = (linha.name ?? "").trim();
       const data = parseDataPlanilha(linha.occurredOn ?? "");
-      if ((!nome && !(linha.id ?? "").trim()) || !data) { r.invalid += 1; continue; }
+      if ((!nome && !(linha.code ?? "").trim()) || !data) { r.invalid += 1; continue; }
 
-      const resolvido = resolverAlvo(linha.id ?? "", nome, idx);
+      const resolvido = resolverAlvo(linha.code ?? "", nome, idx);
       if (resolvido.divergente) { r.mismatch += 1; continue; }
       const alvo = resolvido.alvoId;
       if (!alvo) { r.notFound += 1; continue; }
@@ -229,9 +229,9 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
       return {
         ...r,
         error: r.mismatch > 0
-          ? "Nenhuma punição importada: há linhas em que o ID e o nome apontam para pessoas diferentes."
+          ? "Nenhuma punição importada: há linhas em que a matrícula e o nome apontam para pessoas diferentes."
           : r.notFound > 0
-            ? "Nenhuma punição importada, colaborador não encontrado (confira o ID ou o nome exato do cadastro)."
+            ? "Nenhuma punição importada, colaborador não encontrado (confira a matrícula ou o nome exato do cadastro)."
             : r.unknownType > 0
               ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Remuneração variável › Tipos de punição."
               : "Nenhuma linha válida, confira o colaborador e a data.",

@@ -80,8 +80,8 @@ export type RvConfigImportRow = {
   name: string;
   period: string;
   value: string;
-  /** ID da função/colaborador (aba de apoio do modelo); quando presente, decide */
-  id?: string;
+  /** matrícula do colaborador (coluna ID; só no escopo por colaborador) */
+  code?: string;
 };
 
 /** Importa vigências de RV (por função ou por colaborador), casando o nome com o cadastro. */
@@ -93,17 +93,17 @@ export async function importRvConfig(
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!PODE_DP.has(role)) return { imported: 0, invalid: 0, notFound: 0, mismatch: 0, error: SO_DP };
 
-    // catálogo de alvos (função ou colaborador ativo): o ID decide, o nome confere
-    const refs: { id: string; name: string }[] = [];
+    // catálogo de alvos: colaborador tem matrícula (que decide); função só nome
+    const refs: { id: string; name: string; code?: string | null }[] = [];
     if (scope === "position") {
       const { data } = await supabase.from("positions").select("id, name").eq("tenant_id", tenantId);
       for (const p of data ?? []) refs.push({ id: p.id, name: p.name });
     } else {
-      const { data } = await supabase.from("memberships").select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId);
+      const { data } = await supabase.from("memberships").select("user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId);
       for (const m of data ?? []) {
         if (!m.is_active) continue;
         const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-        refs.push({ id: m.user_id, name: nm ?? "" });
+        refs.push({ id: m.user_id, name: nm ?? "", code: m.employee_code });
       }
     }
     const idx = indiceDeAlvos(refs);
@@ -128,8 +128,8 @@ export async function importRvConfig(
       const name = (r.name ?? "").trim();
       const pm = (r.period ?? "").trim().match(/^(\d{4})-(\d{2})$/);
       const value = parseNum(r.value);
-      if ((!name && !(r.id ?? "").trim()) || !pm || value == null) { invalid++; continue; }
-      const alvo = resolverAlvo(r.id ?? "", name, idx);
+      if ((!name && !(r.code ?? "").trim()) || !pm || value == null) { invalid++; continue; }
+      const alvo = resolverAlvo(r.code ?? "", name, idx);
       if (alvo.divergente) { mismatch++; continue; }
       const targetId = alvo.alvoId;
       if (!targetId) { notFound++; continue; }
@@ -173,9 +173,9 @@ export async function importRvConfig(
       return {
         imported: 0, invalid, notFound, mismatch,
         error: mismatch > 0
-          ? "Nenhum item importado: há linhas em que o ID e o nome apontam para cadastros diferentes."
+          ? "Nenhum item importado: há linhas em que a matrícula e o nome apontam para pessoas diferentes."
           : notFound > 0
-            ? `Nenhum item importado, ${scope === "position" ? "função" : "colaborador"} não encontrado (confira o ID ou o nome exato).`
+            ? `Nenhum item importado, ${scope === "position" ? "função" : "colaborador"} não encontrado (confira a matrícula ou o nome exato).`
             : "Nenhuma linha válida, confira Competência (MM/AAAA) e Valor.",
       };
     }

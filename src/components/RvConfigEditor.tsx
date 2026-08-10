@@ -24,7 +24,7 @@ export type RvConfigRow = {
   value: number;
 };
 export type RvPositionRef = { id: string; name: string };
-export type RvMemberRef = { userId: string; name: string; positionId: string | null; positionName: string | null };
+export type RvMemberRef = { userId: string; name: string; code: string | null; positionId: string | null; positionName: string | null };
 
 /** valor vigente para um conjunto de vigências numa competência (YYYY-MM-01) */
 function currentValue(configs: RvConfigRow[], period: string): RvConfigRow | null {
@@ -85,7 +85,7 @@ export function RvConfigEditor({ positions, members, configs, canEdit = true }: 
       ) : (
         <RvScopeTable
           scope="user"
-          refs={members.map((m) => ({ id: m.userId, name: m.name }))}
+          refs={members.map((m) => ({ id: m.userId, name: m.name, code: m.code }))}
           rows={members.map((m) => {
             const inherited = m.positionId ? currentValue(byPosition.get(m.positionId) ?? [], period) : null;
             return {

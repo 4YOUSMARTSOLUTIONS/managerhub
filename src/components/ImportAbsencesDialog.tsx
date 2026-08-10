@@ -21,7 +21,7 @@ import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 const fmtBR = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 
-export function ImportAbsencesDialog({ members }: { members: { id: string; name: string }[] }) {
+export function ImportAbsencesDialog({ members }: { members: { id: string; name: string; code?: string | null }[] }) {
   const [open, setOpen] = useState(false);
   const { lendo, ler } = useLeituraDePlanilha();
   const [rows, setRows] = useState<AbsenceImportRow[]>([]);
@@ -38,10 +38,10 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
   const analysis = useMemo(() => {
     const idx = indiceDeAlvos(members);
     return rows.map((r) => {
-      const alvo = resolverAlvo(r.id ?? "", r.name ?? "", idx);
+      const alvo = resolverAlvo(r.code ?? "", r.name ?? "", idx);
       const badDates = !r.start || !r.end || r.end < r.start;
       const badKind = parseTipo(r.kind ?? "") === null;
-      const invalid = (!r.name?.trim() && !r.id?.trim()) || badDates || badKind;
+      const invalid = (!r.name?.trim() && !r.code?.trim()) || badDates || badKind;
       return { row: r, notFound: alvo.naoEncontrado, mismatch: alvo.divergente, invalid, badKind, importable: !!alvo.alvoId && !badDates && !badKind };
     });
   }, [rows, members]);
@@ -56,17 +56,17 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
     const exemplo = members[0]?.name ?? "Fulano de Tal";
-    const exemploId = members[0]?.id ?? "";
+    const exemploId = members[0]?.code ?? "";
     const ws = XLSX.utils.aoa_to_sheet([
       ["Colaborador", "ID", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
       [exemplo, exemploId, "Férias", "16/07/2026", "04/08/2026", "Sim", "1º período aquisitivo"],
       [exemplo, exemploId, "Atestado", "10/09/2026", "11/09/2026", "Não", ""],
     ]);
-    ws["!cols"] = [{ wch: 34 }, { wch: 38 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
+    ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
       ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
-      ["ID", "Não", "Copie da aba Colaboradores. Quando preenchido, é ele que identifica a pessoa (evita erro de digitação e homônimos). Se ID e nome apontarem para pessoas diferentes, a linha é recusada."],
+      ["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica a pessoa (evita erro de nome e homônimos); se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."],
       ["Tipo", "Não", "Férias, Licença, Afastamento ou Atestado. Em branco vale Férias."],
       ["Início", "Sim", "Primeiro dia de ausência, no formato DD/MM/AAAA. Este dia conta como ausência."],
       ["Fim", "Sim", "Último dia de ausência, no formato DD/MM/AAAA. Este dia também conta."],
@@ -78,8 +78,8 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
       ["Períodos que se cruzam", "", "Uma pessoa não pode ter dois períodos sobrepostos. Linhas que cruzam com um período já lançado são recusadas e aparecem no resumo."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
-    const wsC = XLSX.utils.aoa_to_sheet([["Colaborador", "ID"], ...members.map((m) => [m.name, m.id])]);
-    wsC["!cols"] = [{ wch: 34 }, { wch: 38 }];
+    const wsC = XLSX.utils.aoa_to_sheet([["Colaborador", "ID"], ...members.map((m) => [m.name, m.code ?? ""])]);
+    wsC["!cols"] = [{ wch: 34 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ausências");
     XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
@@ -100,7 +100,7 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
       const find = (...keys: string[]) => headers.findIndex((h) => keys.some((k) => h.includes(k)));
       let nameIdx = find("colaborador", "nome", "funcionario");
       // "ID" casa por igualdade, não por trecho: "saida" contém "id"
-      const idIdx = headers.findIndex((h) => h === "id" || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
+      const idIdx = headers.findIndex((h) => h === "id" || h.includes("matricula") || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
       const kindIdx = find("tipo", "motivo");
       const startIdx = find("inicio", "de", "saida");
       const endIdx = find("fim", "termino", "ate", "retorno");
@@ -113,11 +113,11 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
       for (let i = 1; i < aoa.length; i++) {
         const r = aoa[i] as unknown[];
         const name = get(r, nameIdx);
-        const id = get(r, idIdx);
-        if (!name && !id) { ign++; continue; }
+        const code = get(r, idIdx);
+        if (!name && !code) { ign++; continue; }
         parsed.push({
           name,
-          id,
+          code,
           kind: get(r, kindIdx),
           start: parseDataPlanilha(startIdx >= 0 ? r[startIdx] : ""),
           end: parseDataPlanilha(endIdx >= 0 ? r[endIdx] : ""),
@@ -174,7 +174,7 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
                     <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 170, overflow: "auto" }}>
                       {analysis.slice(0, 14).map((a, i) => (
                         <li key={i} style={{ color: a.importable ? undefined : "var(--text-soft)" }}>
-                          {a.row.name || a.row.id}
+                          {a.row.name || a.row.code}
                           {a.row.kind ? ` · ${a.row.kind}` : ""}
                           {a.row.start ? ` · ${fmtBR(a.row.start)} a ${fmtBR(a.row.end) || "?"}` : ""}
                           {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}

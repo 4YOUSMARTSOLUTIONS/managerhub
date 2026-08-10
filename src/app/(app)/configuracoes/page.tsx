@@ -293,6 +293,7 @@ export default async function SettingsPage() {
     .map((m) => ({
       userId: m.user_id,
       name: profById.get(m.user_id)?.full_name ?? profById.get(m.user_id)?.email ?? "—",
+      code: m.employee_code,
       positionId: m.position_id,
       positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
     }))
@@ -376,14 +377,14 @@ export default async function SettingsPage() {
         {
           id: "ausencias",
           label: "Férias e afastamentos",
-          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} absences={absenceRows} canEdit={canEditDP} />,
+          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code }))} absences={absenceRows} canEdit={canEditDP} />,
         },
         {
           id: "punicoes",
           label: "Punições",
           content: (
             <SanctionsManager
-              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+              members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code }))}
               types={sanctionTypeOpts}
               sanctions={sanctionRows}
               cortaRv={punicaoCortaRv}

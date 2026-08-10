@@ -23,7 +23,7 @@ function toMonth(v: unknown): string {
   return "";
 }
 
-type Ref = { id: string; name: string };
+type Ref = { id: string; name: string; code?: string | null };
 
 export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigger }: { scope: "position" | "user"; refs: Ref[]; open?: boolean; onClose?: () => void; hideTrigger?: boolean }) {
   const label = scope === "position" ? "Função" : "Colaborador";
@@ -47,10 +47,10 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
     // mesma linha (alvo + competência) repetida: o servidor grava a última
     const vistos = new Set<string>();
     return rows.map((r) => {
-      const alvo = resolverAlvo(r.id ?? "", r.name ?? "", idx);
+      const alvo = resolverAlvo(r.code ?? "", r.name ?? "", idx);
       const badPeriod = !/^\d{4}-\d{2}$/.test((r.period ?? "").trim());
       const badValue = (r.value ?? "").trim() === "";
-      const invalid = (!r.name?.trim() && !r.id?.trim()) || badPeriod || badValue;
+      const invalid = (!r.name?.trim() && !r.code?.trim()) || badPeriod || badValue;
       const importable = !!alvo.alvoId && !badPeriod && !badValue;
       // a chave de repetição é o alvo RESOLVIDO: com ID, duas grafias do mesmo
       // nome continuam sendo a mesma pessoa
@@ -71,26 +71,38 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
     const example = refs[0]?.name ?? (scope === "position" ? "Analista" : "Fulano de Tal");
-    const exampleId = refs[0]?.id ?? "";
-    const ws = XLSX.utils.aoa_to_sheet([
+    // ID (matrícula) só existe para colaborador; função é identificada pelo nome
+    const comId = scope === "user";
+    const exampleId = refs[0]?.code ?? "";
+    const ws = XLSX.utils.aoa_to_sheet(comId ? [
       [label, "ID", "Competência", "Valor"],
       [example, exampleId, "07/2026", 300],
       [example, exampleId, "08/2026", 350],
+    ] : [
+      [label, "Competência", "Valor"],
+      [example, "07/2026", 300],
+      [example, "08/2026", 350],
     ]);
-    ws["!cols"] = [{ wch: 28 }, { wch: 38 }, { wch: 14 }, { wch: 12 }];
+    ws["!cols"] = comId
+      ? [{ wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 12 }]
+      : [{ wch: 28 }, { wch: 14 }, { wch: 12 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      [label, "Sim", `Nome ${scope === "position" ? "da função" : "do colaborador"} como cadastrado. Com a coluna ID preenchida, vira só conferência.`],
-      ["ID", "Não", `Copie da aba ${scope === "position" ? "Funções" : "Colaboradores"}. Quando preenchido, é ele que identifica; se ID e nome apontarem para cadastros diferentes, a linha é recusada.`],
+      comId
+        ? [label, "Sim", "Nome do colaborador como cadastrado. Com a coluna ID (matrícula) preenchida, vira só conferência."]
+        : [label, "Sim", "Nome da função exatamente como cadastrado"],
+      ...(comId ? [["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica; se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."]] : []),
       ["Competência", "Sim", "Início da vigência, no formato MM/AAAA (ex.: 07/2026)"],
       ["Valor", "Sim", "Teto da RV em R$ (ex.: 300 ou 300,00). Use 0 para excluir da RV (só por colaborador)"],
     ]);
     wsI["!cols"] = [{ wch: 16 }, { wch: 12 }, { wch: 80 }];
-    const wsC = XLSX.utils.aoa_to_sheet([[label, "ID"], ...refs.map((r) => [r.name, r.id])]);
-    wsC["!cols"] = [{ wch: 34 }, { wch: 38 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "RV");
-    XLSX.utils.book_append_sheet(wb, wsC, scope === "position" ? "Funções" : "Colaboradores");
+    if (comId) {
+      const wsC = XLSX.utils.aoa_to_sheet([[label, "ID"], ...refs.map((r) => [r.name, r.code ?? ""])]);
+      wsC["!cols"] = [{ wch: 34 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
+    }
     XLSX.utils.book_append_sheet(wb, wsI, "Instruções");
     XLSX.writeFile(wb, `modelo_rv_${scope === "position" ? "funcao" : "colaborador"}.xlsx`);
   }
@@ -108,7 +120,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
       const find = (...keys: string[]) => headers.findIndex((h) => keys.some((k) => h.includes(k)));
       let nameIdx = scope === "position" ? find("funcao", "cargo") : find("colaborador", "nome", "responsavel");
       // "ID" casa por igualdade, não por trecho: "saida" contém "id"
-      const idIdx = headers.findIndex((h) => h === "id" || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
+      const idIdx = scope === "user" ? headers.findIndex((h) => h === "id" || h.includes("matricula") || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador")) : -1;
       const periodIdx = find("competencia", "compet", "vigencia", "mes", "periodo");
       const valueIdx = find("valor", "rv", "teto");
       if (nameIdx === -1) nameIdx = 0;
@@ -118,9 +130,9 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
       for (let i = 1; i < aoa.length; i++) {
         const r = aoa[i] as unknown[];
         const name = get(r, nameIdx);
-        const id = get(r, idIdx);
-        if (!name && !id) { ign++; continue; }
-        parsed.push({ name, id, period: toMonth(periodIdx >= 0 ? r[periodIdx] : ""), value: get(r, valueIdx) });
+        const code = get(r, idIdx);
+        if (!name && !code) { ign++; continue; }
+        parsed.push({ name, code, period: toMonth(periodIdx >= 0 ? r[periodIdx] : ""), value: get(r, valueIdx) });
       }
       setRows(parsed); setIgnored(ign); setFileName(file.name);
     } catch (e) {
@@ -181,7 +193,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
                     <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 150, overflow: "auto" }}>
                       {analysis.slice(0, 14).map((a, i) => (
                         <li key={i} style={{ color: a.importable ? undefined : "var(--text-soft)" }}>
-                          {a.row.name || a.row.id}{a.row.period ? ` · ${a.row.period}` : ""}{a.row.value ? ` · R$ ${a.row.value}` : ""}
+                          {a.row.name || a.row.code}{a.row.period ? ` · ${a.row.period}` : ""}{a.row.value ? ` · R$ ${a.row.value}` : ""}
                           {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}
                           {a.mismatch && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>ID e nome divergem</span>}
                           {!a.notFound && a.invalid && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>inválida</span>}

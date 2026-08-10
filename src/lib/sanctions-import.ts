@@ -17,8 +17,8 @@ export { normTexto, parseDataPlanilha };
 /** uma linha da planilha, já lida e antes de qualquer validação de cadastro */
 export type SanctionImportRow = {
   name: string;
-  /** ID do colaborador (aba Colaboradores do modelo); quando presente, decide */
-  id?: string;
+  /** matrícula do colaborador (coluna ID do modelo); quando presente, decide */
+  code?: string;
   /** o nome do tipo como veio escrito, para o erro poder citá-lo */
   type: string;
   /** `YYYY-MM-DD`, ou "" se a célula não deu para entender */
@@ -33,7 +33,7 @@ export type SanctionImportResult = {
   /** sem nome, sem data, ou data ilegível */
   invalid: number;
   notFound: number;
-  /** ID e nome apontam para pessoas diferentes */
+  /** matrícula e nome apontam para pessoas diferentes */
   mismatch: number;
   /** o tipo escrito não existe no catálogo da empresa */
   unknownType: number;

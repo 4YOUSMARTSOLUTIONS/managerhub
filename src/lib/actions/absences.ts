@@ -99,8 +99,8 @@ export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
 
 export type AbsenceImportRow = {
   name: string;
-  /** ID do colaborador (aba Colaboradores do modelo); quando presente, decide */
-  id?: string;
+  /** matrícula do colaborador (coluna ID do modelo); quando presente, decide */
+  code?: string;
   kind: string;
   start: string;
   end: string;
@@ -114,7 +114,7 @@ export type AbsenceImportResult = {
   updated: number;
   invalid: number;
   notFound: number;
-  /** ID e nome apontam para pessoas diferentes */
+  /** matrícula e nome apontam para pessoas diferentes */
   mismatch: number;
   /** recusadas por cruzar com um período já lançado */
   overlapping: number;
@@ -137,13 +137,13 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
 
     const { data: membros } = await supabase
       .from("memberships")
-      .select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)")
+      .select("user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)")
       .eq("tenant_id", tenantId);
-    const refs: { id: string; name: string }[] = [];
+    const refs: { id: string; name: string; code?: string | null }[] = [];
     for (const m of membros ?? []) {
       if (!m.is_active) continue;
       const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-      refs.push({ id: m.user_id, name: nm ?? "" });
+      refs.push({ id: m.user_id, name: nm ?? "", code: m.employee_code });
     }
     const idx = indiceDeAlvos(refs);
 
@@ -171,9 +171,9 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       const inicio = parseDataPlanilha(linha.start ?? "");
       const fim = parseDataPlanilha(linha.end ?? "");
       const kind = parseTipo(linha.kind ?? "");
-      if ((!nome && !(linha.id ?? "").trim()) || !inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
+      if ((!nome && !(linha.code ?? "").trim()) || !inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
 
-      const alvo = resolverAlvo(linha.id ?? "", nome, idx);
+      const alvo = resolverAlvo(linha.code ?? "", nome, idx);
       if (alvo.divergente) { r.mismatch += 1; continue; }
       const userIdAlvo = alvo.alvoId;
       if (!userIdAlvo) { r.notFound += 1; continue; }
@@ -214,9 +214,9 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       return {
         ...r,
         error: r.mismatch > 0
-          ? "Nenhum período importado: há linhas em que o ID e o nome apontam para pessoas diferentes."
+          ? "Nenhum período importado: há linhas em que a matrícula e o nome apontam para pessoas diferentes."
           : r.notFound > 0
-            ? "Nenhum período importado, colaborador não encontrado (confira o ID ou o nome exato do cadastro)."
+            ? "Nenhum período importado, colaborador não encontrado (confira a matrícula ou o nome exato do cadastro)."
             : r.overlapping > 0
               ? "Nenhum período importado: todos cruzam com períodos já lançados."
               : "Nenhuma linha válida, confira o colaborador e as datas de início e fim.",
