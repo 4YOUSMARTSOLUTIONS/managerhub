@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PlannerManager, type BoardListItem } from "@/components/PlannerManager";
 import type { BoardBucket, BoardTask } from "@/components/planner/BoardView";
 import type { BoardLabel, ChecklistItem } from "@/components/planner/TaskDialog";
+import type { MinhaTarefa } from "@/components/planner/MyTasksView";
 
 /**
  * Planner: kanban de atividades por quadro.
@@ -17,7 +18,7 @@ import type { BoardLabel, ChecklistItem } from "@/components/planner/TaskDialog"
  * quadros em que aquele subordinado participa (o recorte do gestor).
  */
 
-type SP = { quadro?: string; equipe?: string };
+type SP = { quadro?: string; equipe?: string; visao?: string };
 
 export default async function PlannerPage({ searchParams }: { searchParams: Promise<SP> }) {
   const gate = await moduleGate("planner");
@@ -163,6 +164,41 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
     : [];
 
+  const visao = sp.visao === "calendario" || sp.visao === "graficos" || sp.visao === "minhas" ? sp.visao : "quadro";
+
+  // ------------------------------------------------- Minhas tarefas (cross-board)
+  // Tudo em que sou responsável, em qualquer quadro que a RLS me deixe ver. Os
+  // nomes dos quadros já estão na lista carregada acima; só os buckets faltam.
+  let minhasTarefas: MinhaTarefa[] = [];
+  if (visao === "minhas") {
+    const { data: meus } = await supabase
+      .from("planner_task_assignees").select("task_id").eq("user_id", user.id);
+    const ids = [...new Set((meus ?? []).map((m) => m.task_id))];
+    if (ids.length) {
+      const { data: ts } = await supabase
+        .from("planner_tasks")
+        .select("id, title, due_date, priority, progress, board_id, bucket_id")
+        .in("id", ids)
+        .order("due_date", { ascending: true, nullsFirst: false });
+      const bucketIds = [...new Set((ts ?? []).map((t) => t.bucket_id))];
+      const { data: bks } = bucketIds.length
+        ? await supabase.from("planner_buckets").select("id, name").in("id", bucketIds)
+        : { data: [] as { id: string; name: string }[] };
+      const bucketNome = new Map((bks ?? []).map((b) => [b.id, b.name]));
+      const boardNome = new Map(boards.map((b) => [b.id, b.name]));
+      minhasTarefas = (ts ?? []).map((t) => ({
+        id: t.id,
+        title: t.title,
+        dueDate: t.due_date,
+        priority: t.priority,
+        progress: t.progress,
+        boardId: t.board_id,
+        boardName: boardNome.get(t.board_id) ?? "",
+        bucketName: bucketNome.get(t.bucket_id) ?? "",
+      }));
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Planner" subtitle="Quadros de atividades da sua equipe, no formato kanban." />
@@ -179,6 +215,8 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
         isAdmin={isAdmin}
         boardLabels={boardLabels}
         checklistPorTarefa={checklistPorTarefa}
+        visao={visao}
+        minhasTarefas={minhasTarefas}
       />
     </div>
   );

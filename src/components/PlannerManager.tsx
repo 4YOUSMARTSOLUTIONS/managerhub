@@ -12,6 +12,9 @@ import { BoardView, type BoardBucket, type BoardTask } from "@/components/planne
 import { TaskDialog, type TaskSeed, type BoardLabel, type ChecklistItem } from "@/components/planner/TaskDialog";
 import { FilterBar } from "@/components/planner/FilterBar";
 import { GroupedView } from "@/components/planner/GroupedView";
+import { CalendarView } from "@/components/planner/CalendarView";
+import { ChartsView } from "@/components/planner/ChartsView";
+import { MyTasksView, type MinhaTarefa } from "@/components/planner/MyTasksView";
 import { ExportButton } from "@/components/ui/ExportButton";
 import {
   filtrarTarefas, agruparTarefas, FILTRO_VAZIO, PROGRESS_LABEL,
@@ -51,9 +54,18 @@ export type BoardListItem = {
 
 type Pessoa = { id: string; name: string };
 
+export type VisaoPlanner = "quadro" | "calendario" | "graficos" | "minhas";
+
+const VISOES: { key: VisaoPlanner; label: string }[] = [
+  { key: "quadro", label: "Quadro" },
+  { key: "calendario", label: "Calendário" },
+  { key: "graficos", label: "Gráficos" },
+  { key: "minhas", label: "Minhas tarefas" },
+];
+
 export function PlannerManager({
   boards, selectedBoardId, buckets, tasks, participantes, people, currentUserId, teamOptions, equipe, isAdmin,
-  boardLabels, checklistPorTarefa,
+  boardLabels, checklistPorTarefa, visao, minhasTarefas,
 }: {
   boards: BoardListItem[];
   selectedBoardId: string | null;
@@ -70,6 +82,8 @@ export function PlannerManager({
   isAdmin: boolean;
   boardLabels: BoardLabel[];
   checklistPorTarefa: Record<string, ChecklistItem[]>;
+  visao: VisaoPlanner;
+  minhasTarefas: MinhaTarefa[];
 }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
@@ -110,12 +124,14 @@ export function PlannerManager({
     [agrupamento, visiveis, bucketsLocal, hoje],
   );
 
-  const irPara = (params: { quadro?: string | null; equipe?: string | null }) => {
+  const irPara = (params: { quadro?: string | null; equipe?: string | null; visao?: VisaoPlanner }) => {
     const q = new URLSearchParams();
     const quadroAlvo = params.quadro === undefined ? selectedBoardId : params.quadro;
     const equipeAlvo = params.equipe === undefined ? equipe : params.equipe;
+    const visaoAlvo = params.visao === undefined ? visao : params.visao;
     if (quadroAlvo) q.set("quadro", quadroAlvo);
     if (equipeAlvo) q.set("equipe", equipeAlvo);
+    if (visaoAlvo !== "quadro") q.set("visao", visaoAlvo);
     router.push(`/planner${q.size ? `?${q}` : ""}`);
   };
 
@@ -262,9 +278,18 @@ export function PlannerManager({
 
   return (
     <div style={{ opacity: pendente ? 0.85 : 1 }}>
-      {/* barra de controle: quadro, gestão do quadro, filtro do gestor */}
+      {/* barra de controle: visão, quadro, gestão do quadro, filtro do gestor */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-        <Dropdown
+        <div style={{ display: "inline-flex", gap: "0.25rem", padding: "0.2rem", background: "var(--mh-surface-2)", borderRadius: "var(--mh-radius-full)", border: "1px solid var(--border)" }}>
+          {VISOES.map((v) => (
+            <button key={v.key} type="button" aria-pressed={visao === v.key}
+              className={`btn btn-xs ${visao === v.key ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => { if (visao !== v.key) irPara({ visao: v.key }); }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {visao !== "minhas" && <Dropdown
           rotulo={quadro ? quadro.name : "Escolher quadro"}
           icone={<ChevronDown size={14} />}
           largura={300}
@@ -288,9 +313,9 @@ export function PlannerManager({
               {boards.length === 0 && <div className="soft" style={{ padding: "0.5rem 0.6rem", fontSize: "0.84rem" }}>Nenhum quadro ainda.</div>}
             </>
           )}
-        </Dropdown>
+        </Dropdown>}
 
-        {possoGerir && quadro && (
+        {visao === "quadro" && possoGerir && quadro && (
           <>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setMembrosDraft(quadro.memberIds); setMembrosOpen(true); }}>
               <Users size={14} /> Participantes{quadro.memberIds.length > 0 ? ` (${quadro.memberIds.length + 1})` : ""}
@@ -303,7 +328,7 @@ export function PlannerManager({
             </button>
           </>
         )}
-        {canEdit && quadro && (
+        {visao === "quadro" && canEdit && quadro && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErroDialog(""); setBucketDialog({ name: "" }); }}>
             <Plus size={14} /> Nova coluna
           </button>
@@ -325,7 +350,7 @@ export function PlannerManager({
               {teamOptions.map((p) => <option key={p.id} value={p.id}>Quadros de: {p.name}</option>)}
             </select>
           )}
-          {quadro && (
+          {visao === "quadro" && quadro && (
             <ExportButton
               filename={`planner_${quadro.name.replace(/[^\w.\-]+/g, "_")}.xlsx`}
               sheetName="Tarefas"
@@ -343,18 +368,36 @@ export function PlannerManager({
               ])}
             />
           )}
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ name: "", description: "", memberIds: [] }); }}>
-            + Novo quadro
-          </button>
+          {visao !== "minhas" && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ name: "", description: "", memberIds: [] }); }}>
+              + Novo quadro
+            </button>
+          )}
         </div>
       </div>
 
-      {!quadro ? (
+      {visao === "minhas" ? (
+        <MyTasksView tarefas={minhasTarefas} hoje={hoje} />
+      ) : !quadro ? (
         <EmptyState
           title="Nenhum quadro por aqui"
           description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
           action={!equipe ? <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button> : undefined}
         />
+      ) : visao === "graficos" ? (
+        <ChartsView tasks={tasksLocal} />
+      ) : visao === "calendario" ? (
+        <>
+          <FilterBar
+            filtro={filtro}
+            onFiltro={setFiltro}
+            agrupamento={agrupamento}
+            onAgrupamento={setAgrupamento}
+            pessoas={participantes}
+            labels={boardLabels}
+          />
+          <CalendarView tasks={visiveis} hoje={hoje} onOpenTask={abrirTarefa} />
+        </>
       ) : (
         <>
           <FilterBar
