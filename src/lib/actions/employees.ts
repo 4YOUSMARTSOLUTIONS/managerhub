@@ -34,6 +34,7 @@ export async function createEmployee(
     const { supabase } = await actionContext();
     const cpf = onlyDigits(String(formData.get("cpf") ?? ""));
     if (!isValidCpf(cpf)) return { error: "CPF inválido. Confira os números." };
+    if (!String(formData.get("employee_code") ?? "").trim()) return { error: "Informe a matrícula do colaborador." };
     const password = String(formData.get("password") ?? "");
     if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
@@ -110,6 +111,7 @@ export async function updateEmployee(
     if (!userId) return { error: "Usuário inválido." };
     const cpf = onlyDigits(String(formData.get("cpf") ?? ""));
     if (!isValidCpf(cpf)) return { error: "CPF inválido. Confira os números." };
+    if (!String(formData.get("employee_code") ?? "").trim()) return { error: "Informe a matrícula do colaborador." };
 
     const { error } = await supabase.rpc("admin_update_employee", {
       p_user: userId,
