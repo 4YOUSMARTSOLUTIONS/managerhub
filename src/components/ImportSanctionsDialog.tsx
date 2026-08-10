@@ -70,15 +70,15 @@ export function ImportSanctionsDialog({
     const tipo1 = ativos[0]?.name ?? "Advertência escrita";
     const tipo2 = ativos[1]?.name ?? tipo1;
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Colaborador", "ID", "Tipo", "Data", "Observação"],
-      [exemplo, exemploId, tipo1, "12/03/2026", "Atraso reiterado"],
-      [exemplo, exemploId, tipo2, "28/05/2026", ""],
+      ["ID", "Colaborador", "Tipo", "Data", "Observação"],
+      [exemploId, exemplo, tipo1, "12/03/2026", "Atraso reiterado"],
+      [exemploId, exemplo, tipo2, "28/05/2026", ""],
     ]);
-    ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 34 }, { wch: 24 }, { wch: 12 }, { wch: 40 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
       ["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica a pessoa (evita erro de nome e homônimos); se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."],
+      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
       ["Tipo", "Sim", "Um dos tipos cadastrados em Remuneração variável › Tipos de punição. O nome tem de bater; tipo desconhecido não é criado automaticamente."],
       ["Data", "Sim", "Data da punição, no formato DD/MM/AAAA. É o mês desta data que sofre o redutor."],
       ["Observação", "Não", "Texto livre."],

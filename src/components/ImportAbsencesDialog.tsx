@@ -58,15 +58,15 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
     const exemplo = members[0]?.name ?? "Fulano de Tal";
     const exemploId = members[0]?.code ?? "";
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Colaborador", "ID", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
-      [exemplo, exemploId, "Férias", "16/07/2026", "04/08/2026", "Sim", "1º período aquisitivo"],
-      [exemplo, exemploId, "Atestado", "10/09/2026", "11/09/2026", "Não", ""],
+      ["ID", "Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
+      [exemploId, exemplo, "Férias", "16/07/2026", "04/08/2026", "Sim", "1º período aquisitivo"],
+      [exemploId, exemplo, "Atestado", "10/09/2026", "11/09/2026", "Não", ""],
     ]);
-    ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 34 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
       ["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica a pessoa (evita erro de nome e homônimos); se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."],
+      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
       ["Tipo", "Não", "Férias, Licença, Afastamento ou Atestado. Em branco vale Férias."],
       ["Início", "Sim", "Primeiro dia de ausência, no formato DD/MM/AAAA. Este dia conta como ausência."],
       ["Fim", "Sim", "Último dia de ausência, no formato DD/MM/AAAA. Este dia também conta."],

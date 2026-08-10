@@ -75,23 +75,23 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
     const comId = scope === "user";
     const exampleId = refs[0]?.code ?? "";
     const ws = XLSX.utils.aoa_to_sheet(comId ? [
-      [label, "ID", "Competência", "Valor"],
-      [example, exampleId, "07/2026", 300],
-      [example, exampleId, "08/2026", 350],
+      ["ID", label, "Competência", "Valor"],
+      [exampleId, example, "07/2026", 300],
+      [exampleId, example, "08/2026", 350],
     ] : [
       [label, "Competência", "Valor"],
       [example, "07/2026", 300],
       [example, "08/2026", 350],
     ]);
     ws["!cols"] = comId
-      ? [{ wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 12 }]
+      ? [{ wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 12 }]
       : [{ wch: 28 }, { wch: 14 }, { wch: 12 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
+      ...(comId ? [["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica; se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."]] : []),
       comId
         ? [label, "Sim", "Nome do colaborador como cadastrado. Com a coluna ID (matrícula) preenchida, vira só conferência."]
         : [label, "Sim", "Nome da função exatamente como cadastrado"],
-      ...(comId ? [["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica; se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."]] : []),
       ["Competência", "Sim", "Início da vigência, no formato MM/AAAA (ex.: 07/2026)"],
       ["Valor", "Sim", "Teto da RV em R$ (ex.: 300 ou 300,00). Use 0 para excluir da RV (só por colaborador)"],
     ]);
