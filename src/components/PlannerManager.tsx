@@ -26,7 +26,7 @@ import { formatDate } from "@/lib/format";
 import {
   createBoard, updateBoard, deleteBoard, setBoardMembers,
   createBucket, renameBucket, deleteBucket, moveBucket,
-  toggleTaskComplete, moveTask, duplicateBoard,
+  toggleTaskComplete, moveTask, duplicateBoard, setBucketColor,
 } from "@/lib/actions/planner";
 import { posicaoEntre, posicaoNoFim } from "@/lib/planner-position";
 
@@ -181,6 +181,12 @@ export function PlannerManager({
       ? { ...t, progress: done ? "done" : "not_started", completedAt: done ? new Date().toISOString() : null }
       : t)));
     rodar(() => toggleTaskComplete(task.id, done), () => setTasksLocal(antes));
+  }
+
+  function colorirColuna(bucket: BoardBucket, color: string | null) {
+    const antes = bucketsLocal;
+    setBucketsLocal((atual) => atual.map((b) => (b.id === bucket.id ? { ...b, color } : b)));
+    rodar(() => setBucketColor(bucket.id, color), () => setBucketsLocal(antes));
   }
 
   function moverColuna(bucket: BoardBucket, direcao: -1 | 1) {
@@ -465,6 +471,7 @@ export function PlannerManager({
               onRenameBucket={(b) => { setErroDialog(""); setBucketDialog({ id: b.id, name: b.name }); }}
               onDeleteBucket={excluirColuna}
               onMoveBucket={moverColuna}
+              onColorBucket={colorirColuna}
             />
           ) : (
             <GroupedView

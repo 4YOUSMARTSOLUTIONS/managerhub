@@ -40,7 +40,24 @@ export type BoardTask = {
   checklistTotal: number;
 };
 
-export type BoardBucket = { id: string; name: string; position: number };
+export type BoardBucket = { id: string; name: string; position: number; color: string | null };
+
+/**
+ * O tom vira cor sólida pelos MESMOS tokens dos badges: a coluna verde e a
+ * etiqueta verde são o mesmo verde, no claro e no escuro.
+ */
+export const TOM_COR: Record<string, string> = {
+  blue: "var(--mh-info)",
+  green: "var(--mh-success)",
+  amber: "var(--mh-warning)",
+  red: "var(--mh-danger)",
+  purple: "var(--mh-primary-500)",
+  pink: "#ec4899",
+  gray: "var(--mh-text-2)",
+  dark: "var(--mh-text-1)",
+};
+
+const TONS: string[] = ["blue", "green", "amber", "red", "purple", "pink", "gray", "dark"];
 
 const hojeIso = () => {
   const d = new Date();
@@ -50,7 +67,7 @@ const hojeIso = () => {
 export function BoardView({
   buckets, tasks, canEdit,
   onMoveTask, onOpenTask, onToggleComplete, onAddTask,
-  onRenameBucket, onDeleteBucket, onMoveBucket,
+  onRenameBucket, onDeleteBucket, onMoveBucket, onColorBucket,
 }: {
   buckets: BoardBucket[];
   tasks: BoardTask[];
@@ -64,6 +81,8 @@ export function BoardView({
   onDeleteBucket: (bucket: BoardBucket) => void;
   /** direcao -1 = uma posição à esquerda, +1 à direita */
   onMoveBucket: (bucket: BoardBucket, direcao: -1 | 1) => void;
+  /** null = volta ao neutro */
+  onColorBucket: (bucket: BoardBucket, color: string | null) => void;
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   // onde a linha de inserção aparece: coluna + índice do vão
@@ -117,13 +136,19 @@ export function BoardView({
     <div style={{ display: "flex", gap: "0.9rem", alignItems: "flex-start", overflowX: "auto", paddingBottom: "0.75rem" }}>
       {ordenadas.map((b, bi) => {
         const doBucket = porColuna.get(b.id) ?? [];
+        // a cor pinta a IDENTIDADE (borda de cima + cabeçalho), nunca o corpo:
+        // os cartões carregam etiquetas e prazos coloridos, e sobre um fundo
+        // pintado tudo isso viraria ruído
+        const cor = b.color ? TOM_COR[b.color] : null;
         return (
           <div
             key={b.id}
             style={{
               minWidth: 292, width: 292, flexShrink: 0,
               background: "var(--mh-surface-2)", borderRadius: "var(--mh-radius-lg)",
-              border: "1px solid var(--border)", padding: "0.6rem",
+              border: "1px solid var(--border)",
+              borderTop: cor ? `3px solid ${cor}` : "1px solid var(--border)",
+              padding: "0.6rem",
               display: "flex", flexDirection: "column", gap: "0.5rem",
             }}
             onDragOver={(e) => {
@@ -138,7 +163,7 @@ export function BoardView({
             onDrop={(e) => { e.preventDefault(); soltar(b.id); }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0 0.2rem" }}>
-              <strong style={{ fontSize: "0.88rem", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</strong>
+              <strong style={{ fontSize: "0.88rem", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: cor ?? undefined }}>{b.name}</strong>
               <span className="soft" style={{ fontSize: "0.75rem" }}>{doBucket.length}</span>
               {canEdit && (
                 <Dropdown rotulo="" icone={<MoreHorizontal size={15} />} largura={210} alinharDireita>
@@ -147,6 +172,37 @@ export function BoardView({
                       <ItemDeMenu onClick={() => { fechar(); onRenameBucket(b); }}><Pencil size={14} style={{ marginRight: 8 }} /> Renomear coluna</ItemDeMenu>
                       <ItemDeMenu disabled={bi === 0} onClick={() => { fechar(); onMoveBucket(b, -1); }}><ArrowLeftRight size={14} style={{ marginRight: 8 }} /> Mover à esquerda</ItemDeMenu>
                       <ItemDeMenu disabled={bi === ordenadas.length - 1} onClick={() => { fechar(); onMoveBucket(b, 1); }}><ArrowLeftRight size={14} style={{ marginRight: 8 }} /> Mover à direita</ItemDeMenu>
+                      {/* a fileira de tons: um clique troca, o × volta ao neutro */}
+                      <div style={{ padding: "0.35rem 0.6rem" }}>
+                        <div className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Cor da coluna</div>
+                        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+                          {TONS.map((t2) => (
+                            <button
+                              key={t2}
+                              type="button"
+                              title={t2}
+                              onClick={() => { fechar(); onColorBucket(b, t2); }}
+                              style={{
+                                width: 18, height: 18, borderRadius: 6, cursor: "pointer",
+                                background: TOM_COR[t2],
+                                border: b.color === t2 ? "2px solid var(--text)" : "2px solid transparent",
+                                padding: 0,
+                              }}
+                            />
+                          ))}
+                          <button
+                            type="button"
+                            title="Sem cor"
+                            onClick={() => { fechar(); onColorBucket(b, null); }}
+                            style={{
+                              width: 18, height: 18, borderRadius: 6, cursor: "pointer",
+                              background: "transparent", color: "var(--text-muted)",
+                              border: !b.color ? "2px solid var(--text)" : "1px solid var(--border)",
+                              padding: 0, fontSize: 10, lineHeight: 1,
+                            }}
+                          >×</button>
+                        </div>
+                      </div>
                       <ItemDeMenu disabled={doBucket.length > 0} titulo={doBucket.length > 0 ? "Mova os cartões antes" : undefined} onClick={() => { fechar(); onDeleteBucket(b); }}>
                         <Trash2 size={14} style={{ marginRight: 8 }} /> Excluir coluna
                       </ItemDeMenu>

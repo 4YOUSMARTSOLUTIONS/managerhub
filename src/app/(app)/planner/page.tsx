@@ -110,7 +110,7 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
   const checklistPorTarefa: Record<string, ChecklistItem[]> = {};
   if (selecionado) {
     const [{ data: bucketsRaw }, { data: tasksRaw }, { data: assigneesRaw }, { data: labelsRaw }, { data: taskLabelsRaw }, { data: checklistRaw }] = await Promise.all([
-      supabase.from("planner_buckets").select("id, name, position").eq("board_id", selecionado.id).order("position"),
+      supabase.from("planner_buckets").select("id, name, position, color").eq("board_id", selecionado.id).order("position"),
       supabase.from("planner_tasks")
         .select("id, bucket_id, title, description, start_date, due_date, priority, progress, recurrence, completed_at, position")
         .eq("board_id", selecionado.id).order("position"),
@@ -139,7 +139,7 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
       const arr = checklistPorTarefa[i.task_id] ?? (checklistPorTarefa[i.task_id] = []);
       arr.push({ id: i.id, title: i.title, done: i.done, position: i.position });
     }
-    buckets = (bucketsRaw ?? []).map((b) => ({ id: b.id, name: b.name, position: b.position }));
+    buckets = (bucketsRaw ?? []).map((b) => ({ id: b.id, name: b.name, position: b.position, color: b.color }));
     tasks = (tasksRaw ?? []).map((t) => {
       const check = checklistPorTarefa[t.id] ?? [];
       return {

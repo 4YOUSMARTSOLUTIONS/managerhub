@@ -231,6 +231,27 @@ export async function deleteBucket(bucketId: string): Promise<ActionState> {
   }
 }
 
+const CORES_COLUNA = new Set(["blue", "green", "amber", "red", "purple", "pink", "gray", "dark"]);
+
+/** a cor é identidade visual da coluna; null volta ao neutro */
+export async function setBucketColor(bucketId: string, color: string | null): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    if (color !== null && !CORES_COLUNA.has(color)) return { error: "Cor inválida." };
+    const { data: bucket } = await ctx.supabase
+      .from("planner_buckets").select("id, board_id").eq("id", bucketId).maybeSingle();
+    if (!bucket) return { error: "Coluna não encontrada." };
+    const { participante } = await quadroDe(ctx, bucket.board_id);
+    if (!participante) return { error: SO_PARTICIPANTE };
+    const { error } = await ctx.supabase.from("planner_buckets").update({ color }).eq("id", bucketId);
+    if (error) return { error: error.message };
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function moveBucket(bucketId: string, afterBucketId: string | null): Promise<ActionState> {
   try {
     const ctx = await actionContext();

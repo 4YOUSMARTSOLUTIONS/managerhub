@@ -776,9 +776,9 @@ export type Database = {
         Relationships: []
       }
       planner_buckets: {
-        Row: { id: string; tenant_id: string; board_id: string; name: string; position: number; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; board_id: string; name: string; position: number; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; board_id?: string; name?: string; position?: number; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; board_id: string; name: string; position: number; color: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; board_id: string; name: string; position: number; color?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; board_id?: string; name?: string; position?: number; color?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       // v2: `progress` é a fonte de verdade do estado (completed_at virou
