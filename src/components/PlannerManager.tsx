@@ -389,7 +389,10 @@ export function PlannerManager({
           </Dropdown>
         )}
 
-        {(visao === "quadro" || visao === "calendario") && (quadro || equipe) && (
+        {/* o botão aparece com quadro aberto, com filtro ativo, OU para quem tem
+            equipe: é dentro dele que mora o "Quadros de", e um gestor sem quadro
+            na tela (acabou de excluir o seu) ainda precisa alcançar o recorte */}
+        {(visao === "quadro" || visao === "calendario") && (quadro || equipe || teamOptions.length > 0) && (
           <BotaoFiltros
             aberto={filtrosAbertos}
             onToggle={() => setFiltrosAbertos((v) => !v)}
@@ -406,7 +409,7 @@ export function PlannerManager({
         </div>
       </div>
 
-      {filtrosAbertos && (quadro || equipe) && (visao === "quadro" || visao === "calendario") && (
+      {filtrosAbertos && (quadro || equipe || teamOptions.length > 0) && (visao === "quadro" || visao === "calendario") && (
         <PainelFiltrosPlanner
           filtro={filtro}
           onFiltro={setFiltro}
