@@ -10,14 +10,21 @@ import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { BoardView, type BoardBucket, type BoardTask } from "@/components/planner/BoardView";
 import { TaskDialog, type TaskSeed, type BoardLabel, type ChecklistItem } from "@/components/planner/TaskDialog";
+import { FilterBar } from "@/components/planner/FilterBar";
+import { GroupedView } from "@/components/planner/GroupedView";
+import { ExportButton } from "@/components/ui/ExportButton";
+import {
+  filtrarTarefas, agruparTarefas, FILTRO_VAZIO, PROGRESS_LABEL,
+  type Agrupamento, type FiltroPlanner,
+} from "@/lib/planner-group";
+import { PRIORITY } from "@/lib/constants";
+import { formatDate } from "@/lib/format";
 import {
   createBoard, updateBoard, deleteBoard, setBoardMembers,
   createBucket, renameBucket, deleteBucket, moveBucket,
   toggleTaskComplete, moveTask,
 } from "@/lib/actions/planner";
 import { posicaoEntre, posicaoNoFim } from "@/lib/planner-position";
-import { PRIORITY } from "@/lib/constants";
-import type { Enums } from "@/types/database";
 
 /**
  * A casca do Planner: seleção de quadro, filtro do gestor, diálogos e o estado
@@ -86,6 +93,22 @@ export function PlannerManager({
   const [bucketDialog, setBucketDialog] = useState<null | { id?: string; name: string }>(null);
   const [taskDialog, setTaskDialog] = useState<TaskSeed | null>(null);
   const [erroDialog, setErroDialog] = useState("");
+
+  // ---------- filtro e agrupamento (client-side: os cartões já estão aqui) ----------
+  const [filtro, setFiltro] = useState<FiltroPlanner>(FILTRO_VAZIO);
+  const [agrupamento, setAgrupamento] = useState<Agrupamento>("coluna");
+  const hoje = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+  const visiveis = useMemo(
+    () => filtrarTarefas(tasksLocal.map((t) => ({ ...t, labelIds: t.labels.map((l) => l.id) })), filtro, hoje),
+    [tasksLocal, filtro, hoje],
+  );
+  const grupos = useMemo(
+    () => (agrupamento === "coluna" ? [] : agruparTarefas(visiveis, agrupamento, { buckets: bucketsLocal, hoje })),
+    [agrupamento, visiveis, bucketsLocal, hoje],
+  );
 
   const irPara = (params: { quadro?: string | null; equipe?: string | null }) => {
     const q = new URLSearchParams();
@@ -195,6 +218,17 @@ export function PlannerManager({
     });
   }
 
+  function abrirTarefa(t: BoardTask) {
+    if (!canEdit) return;
+    setErroDialog("");
+    setTaskDialog({
+      id: t.id, bucketId: t.bucketId, title: t.title, description: t.description ?? "",
+      startDate: t.startDate ?? "", dueDate: t.dueDate ?? "", priority: t.priority ?? "",
+      progress: t.progress, recurrence: t.recurrence,
+      assigneeIds: t.assignees.map((a) => a.id), labelIds: t.labels.map((l) => l.id),
+    });
+  }
+
   async function excluirQuadro() {
     if (!quadro) return;
     const ok = await confirmDialog({
@@ -291,6 +325,24 @@ export function PlannerManager({
               {teamOptions.map((p) => <option key={p.id} value={p.id}>Quadros de: {p.name}</option>)}
             </select>
           )}
+          {quadro && (
+            <ExportButton
+              filename={`planner_${quadro.name.replace(/[^\w.\-]+/g, "_")}.xlsx`}
+              sheetName="Tarefas"
+              headers={["Coluna", "Título", "Responsáveis", "Prioridade", "Progresso", "Início", "Prazo", "Etiquetas", "Concluída em"]}
+              rows={visiveis.map((t) => [
+                bucketsLocal.find((b) => b.id === t.bucketId)?.name ?? "",
+                t.title,
+                t.assignees.map((a) => a.name).join("; "),
+                t.priority ? PRIORITY[t.priority] : "",
+                PROGRESS_LABEL[t.progress],
+                t.startDate ? formatDate(t.startDate) : "",
+                t.dueDate ? formatDate(t.dueDate) : "",
+                t.labels.map((l) => l.name).join("; "),
+                t.completedAt ? formatDate(t.completedAt.slice(0, 10)) : "",
+              ])}
+            />
+          )}
           <button type="button" className="btn btn-primary btn-sm" onClick={() => { setErroDialog(""); setBoardDialog({ name: "", description: "", memberIds: [] }); }}>
             + Novo quadro
           </button>
@@ -298,39 +350,55 @@ export function PlannerManager({
       </div>
 
       {!quadro ? (
-          <EmptyState
-            title="Nenhum quadro por aqui"
-            description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
-            action={!equipe ? <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button> : undefined}
+        <EmptyState
+          title="Nenhum quadro por aqui"
+          description={equipe ? "Este colaborador ainda não participa de nenhum quadro." : "Crie o primeiro quadro para organizar as atividades da sua equipe."}
+          action={!equipe ? <button type="button" className="btn btn-primary" onClick={() => setBoardDialog({ name: "", description: "", memberIds: [] })}>+ Novo quadro</button> : undefined}
+        />
+      ) : (
+        <>
+          <FilterBar
+            filtro={filtro}
+            onFiltro={setFiltro}
+            agrupamento={agrupamento}
+            onAgrupamento={setAgrupamento}
+            pessoas={participantes}
+            labels={boardLabels}
           />
-        ) : (
-          <BoardView
-            buckets={bucketsLocal}
-            tasks={tasksLocal}
-            canEdit={canEdit}
-            onMoveTask={moverCartao}
-            onOpenTask={(t) => {
-              if (!canEdit) return;
-              setErroDialog("");
-              setTaskDialog({
-                id: t.id, bucketId: t.bucketId, title: t.title, description: t.description ?? "",
-                startDate: t.startDate ?? "", dueDate: t.dueDate ?? "", priority: t.priority ?? "",
-                progress: t.progress, recurrence: t.recurrence,
-                assigneeIds: t.assignees.map((a) => a.id), labelIds: t.labels.map((l) => l.id),
-              });
-            }}
-            onToggleComplete={alternarConclusao}
-            onAddTask={(bucketId) => {
-              setErroDialog("");
-              setTaskDialog({
-                bucketId, title: "", description: "", startDate: "", dueDate: "", priority: "",
-                progress: "not_started", recurrence: "none", assigneeIds: [], labelIds: [],
-              });
-            }}
-            onRenameBucket={(b) => { setErroDialog(""); setBucketDialog({ id: b.id, name: b.name }); }}
-            onDeleteBucket={excluirColuna}
-            onMoveBucket={moverColuna}
-          />
+          {agrupamento === "coluna" ? (
+            <BoardView
+              buckets={bucketsLocal}
+              tasks={visiveis}
+              canEdit={canEdit}
+              onMoveTask={moverCartao}
+              onOpenTask={abrirTarefa}
+              onToggleComplete={alternarConclusao}
+              onAddTask={(bucketId) => {
+                setErroDialog("");
+                setTaskDialog({
+                  bucketId, title: "", description: "", startDate: "", dueDate: "", priority: "",
+                  progress: "not_started", recurrence: "none", assigneeIds: [], labelIds: [],
+                });
+              }}
+              onRenameBucket={(b) => { setErroDialog(""); setBucketDialog({ id: b.id, name: b.name }); }}
+              onDeleteBucket={excluirColuna}
+              onMoveBucket={moverColuna}
+            />
+          ) : (
+            <GroupedView
+              grupos={grupos}
+              buckets={bucketsLocal}
+              canEdit={canEdit}
+              onOpenTask={abrirTarefa}
+              onToggleComplete={alternarConclusao}
+              onMoveTo={(taskId, bucketId) => {
+                const destino = tasksLocal.filter((x) => x.bucketId === bucketId && x.id !== taskId)
+                  .sort((a, b) => a.position - b.position);
+                moverCartao(taskId, bucketId, destino[destino.length - 1]?.id ?? null);
+              }}
+            />
+          )}
+        </>
       )}
 
       {/* ---------------- diálogos ---------------- */}

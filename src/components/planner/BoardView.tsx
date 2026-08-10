@@ -160,7 +160,7 @@ export function BoardView({
               {doBucket.map((t, i) => (
                 <div key={t.id}>
                   {alvo?.bucketId === b.id && alvo.index === i && dragId !== t.id && <LinhaDeInsercao />}
-                  <Cartao
+                  <PlannerCard
                     task={t}
                     canEdit={canEdit}
                     arrastando={dragId === t.id}
@@ -199,16 +199,19 @@ function LinhaDeInsercao() {
   return <div style={{ height: 3, borderRadius: 2, background: "var(--mh-primary-500)", margin: "0.1rem 0.2rem 0.35rem" }} />;
 }
 
-function Cartao({
-  task, canEdit, arrastando, buckets,
+/** exportado para a visão agrupada reusar o MESMO cartão, sem arraste */
+export function PlannerCard({
+  task, canEdit, arrastando = false, arrastavel = true, buckets,
   onDragStart, onDragEnd, onOpen, onToggle, onMoveTo,
 }: {
   task: BoardTask;
   canEdit: boolean;
-  arrastando: boolean;
+  arrastando?: boolean;
+  /** false nas visões agrupadas: mover um cartão duplicado seria ambíguo */
+  arrastavel?: boolean;
   buckets: BoardBucket[];
-  onDragStart: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
   onOpen: () => void;
   onToggle: () => void;
   onMoveTo: (bucketId: string) => void;
@@ -218,7 +221,7 @@ function Cartao({
   return (
     <div
       data-card-id={task.id}
-      draggable={canEdit}
+      draggable={canEdit && arrastavel}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className="card"
