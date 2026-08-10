@@ -66,7 +66,7 @@ const hojeIso = () => {
 
 export function BoardView({
   buckets, tasks, canEdit,
-  onMoveTask, onOpenTask, onToggleComplete, onAddTask,
+  onMoveTask, onOpenTask, onToggleComplete, onAddTask, onDeleteTask,
   onRenameBucket, onDeleteBucket, onMoveBucket, onColorBucket,
 }: {
   buckets: BoardBucket[];
@@ -76,6 +76,7 @@ export function BoardView({
   onMoveTask: (taskId: string, toBucketId: string, afterTaskId: string | null) => void;
   onOpenTask: (task: BoardTask) => void;
   onToggleComplete: (task: BoardTask) => void;
+  onDeleteTask: (task: BoardTask) => void;
   onAddTask: (bucketId: string) => void;
   onRenameBucket: (bucket: BoardBucket) => void;
   onDeleteBucket: (bucket: BoardBucket) => void;
@@ -227,6 +228,7 @@ export function BoardView({
                     onDragEnd={() => { setDragId(null); setAlvoSePreciso(null); }}
                     onOpen={() => onOpenTask(t)}
                     onToggle={() => onToggleComplete(t)}
+                    onDelete={() => onDeleteTask(t)}
                     onMoveTo={(bucketId) => {
                       const destino = porColuna.get(bucketId) ?? [];
                       onMoveTask(t.id, bucketId, destino[destino.length - 1]?.id ?? null);
@@ -256,7 +258,7 @@ function LinhaDeInsercao() {
 /** exportado para a visão agrupada reusar o MESMO cartão, sem arraste */
 export function PlannerCard({
   task, canEdit, arrastando = false, arrastavel = true, buckets,
-  onDragStart, onDragEnd, onOpen, onToggle, onMoveTo,
+  onDragStart, onDragEnd, onOpen, onToggle, onMoveTo, onDelete,
 }: {
   task: BoardTask;
   canEdit: boolean;
@@ -269,6 +271,7 @@ export function PlannerCard({
   onOpen: () => void;
   onToggle: () => void;
   onMoveTo: (bucketId: string) => void;
+  onDelete?: () => void;
 }) {
   const feita = task.progress === "done";
   const atrasada = !feita && !!task.dueDate && task.dueDate < hojeIso();
@@ -310,6 +313,12 @@ export function PlannerCard({
                   {buckets.filter((b) => b.id !== task.bucketId).map((b) => (
                     <ItemDeMenu key={b.id} onClick={() => { fechar(); onMoveTo(b.id); }}>{b.name}</ItemDeMenu>
                   ))}
+                  {onDelete && (
+                    <ItemDeMenu onClick={() => { fechar(); onDelete(); }}>
+                      <Trash2 size={14} style={{ marginRight: 8, color: "var(--mh-danger)" }} />
+                      <span style={{ color: "var(--mh-danger)" }}>Excluir tarefa</span>
+                    </ItemDeMenu>
+                  )}
                 </>
               )}
             </Dropdown>

@@ -12,7 +12,7 @@ import type { Grupo } from "@/lib/planner-group";
  * pelo menu do cartão, que muda a COLUNA — o eixo do agrupamento é só leitura.
  */
 export function GroupedView({
-  grupos, buckets, canEdit, onOpenTask, onToggleComplete, onMoveTo,
+  grupos, buckets, canEdit, onOpenTask, onToggleComplete, onMoveTo, onDeleteTask,
 }: {
   grupos: Grupo<BoardTask>[];
   buckets: BoardBucket[];
@@ -20,6 +20,7 @@ export function GroupedView({
   onOpenTask: (task: BoardTask) => void;
   onToggleComplete: (task: BoardTask) => void;
   onMoveTo: (taskId: string, bucketId: string) => void;
+  onDeleteTask: (task: BoardTask) => void;
 }) {
   return (
     <div style={{ display: "flex", gap: "0.9rem", alignItems: "flex-start", overflowX: "auto", paddingBottom: "0.75rem" }}>
@@ -49,6 +50,7 @@ export function GroupedView({
                 buckets={buckets}
                 onOpen={() => onOpenTask(t)}
                 onToggle={() => onToggleComplete(t)}
+                onDelete={() => onDeleteTask(t)}
                 onMoveTo={(bucketId) => onMoveTo(t.id, bucketId)}
               />
             ))}

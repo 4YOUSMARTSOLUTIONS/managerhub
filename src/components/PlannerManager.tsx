@@ -26,7 +26,7 @@ import { formatDate } from "@/lib/format";
 import {
   createBoard, updateBoard, deleteBoard, setBoardMembers,
   createBucket, renameBucket, deleteBucket, moveBucket,
-  toggleTaskComplete, moveTask, duplicateBoard, setBucketColor,
+  toggleTaskComplete, moveTask, duplicateBoard, setBucketColor, deleteTask,
 } from "@/lib/actions/planner";
 import { posicaoEntre, posicaoNoFim } from "@/lib/planner-position";
 
@@ -181,6 +181,19 @@ export function PlannerManager({
       ? { ...t, progress: done ? "done" : "not_started", completedAt: done ? new Date().toISOString() : null }
       : t)));
     rodar(() => toggleTaskComplete(task.id, done), () => setTasksLocal(antes));
+  }
+
+  async function excluirTarefa(task: BoardTask) {
+    const ok = await confirmDialog({
+      title: "Excluir tarefa",
+      message: `Excluir "${task.title}"? Checklist, comentários e anexos vão junto.`,
+      confirmLabel: "Excluir",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const antes = tasksLocal;
+    setTasksLocal((atual) => atual.filter((t) => t.id !== task.id));
+    rodar(() => deleteTask(task.id), () => setTasksLocal(antes));
   }
 
   function colorirColuna(bucket: BoardBucket, color: string | null) {
@@ -461,6 +474,7 @@ export function PlannerManager({
               onMoveTask={moverCartao}
               onOpenTask={abrirTarefa}
               onToggleComplete={alternarConclusao}
+              onDeleteTask={excluirTarefa}
               onAddTask={(bucketId) => {
                 setErroDialog("");
                 setTaskDialog({
@@ -480,6 +494,7 @@ export function PlannerManager({
               canEdit={canEdit}
               onOpenTask={abrirTarefa}
               onToggleComplete={alternarConclusao}
+              onDeleteTask={excluirTarefa}
               onMoveTo={(taskId, bucketId) => {
                 const destino = tasksLocal.filter((x) => x.bucketId === bucketId && x.id !== taskId)
                   .sort((a, b) => a.position - b.position);
