@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { PRIORITY_TONE } from "@/lib/constants";
+import { Pencil } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -85,6 +87,19 @@ export function TaskDialog({
   const [draft, setDraft] = useState<TaskSeed>(seed);
   const [erro, setErro] = useState("");
   const editando = !!seed.id;
+  /**
+   * Três modos, dois contratos:
+   *
+   *   criar       formulário completo (o cartão ainda não existe)
+   *   acompanhar  o PADRÃO ao clicar num cartão: a definição vira ficha de
+   *               leitura, e o que fica editável é a EXECUÇÃO — progresso,
+   *               checklist, anexos, comentários. Mesmo desenho do painel de
+   *               tratamento das Ações: executar não é redigir.
+   *   editar      o formulário completo de volta, por ato deliberado (botão
+   *               "Editar tarefa").
+   */
+  const [modo, setModo] = useState<"criar" | "acompanhar" | "editar">(seed.id ? "acompanhar" : "criar");
+  const acompanhando = modo === "acompanhar";
 
   // listas vivas (edição): estado local + refresh reconcilia
   const [itens, setItens] = useState<ChecklistItem[]>(checklist);
@@ -247,6 +262,61 @@ export function TaskDialog({
 
         <div style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
           {/* ------------------------------------------------ campos principais */}
+          {acompanhando ? (
+            /* A FICHA: a definição em leitura. Executar não é redigir — quem
+               abriu o cartão quer marcar itens e registrar andamento, não
+               esbarrar num campo de título editável. */
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+              <div style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.3 }}>{draft.title}</div>
+              {draft.description && (
+                <p className="muted" style={{ margin: 0, fontSize: "0.88rem", whiteSpace: "pre-wrap" }}>{draft.description}</p>
+              )}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center", fontSize: "0.82rem" }}>
+                {draft.priority && <Badge tone={PRIORITY_TONE[draft.priority]}>{PRIORITY[draft.priority]}</Badge>}
+                {(draft.startDate || draft.dueDate) && (
+                  <span className="muted">
+                    {draft.startDate ? formatDate(draft.startDate) : "…"} → {draft.dueDate ? formatDate(draft.dueDate) : "sem prazo"}
+                  </span>
+                )}
+                {draft.recurrence !== "none" && <Badge tone="gray">{RECURRENCE_LABEL[draft.recurrence]}</Badge>}
+                {draft.labelIds.map((id) => {
+                  const l = labels.find((x) => x.id === id);
+                  return l ? <Badge key={id} tone={l.color as never}>{l.name}</Badge> : null;
+                })}
+              </div>
+              {draft.assigneeIds.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+                  {draft.assigneeIds.map((id) => {
+                    const pes = participantes.find((x) => x.id === id);
+                    return pes ? (
+                      <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.8rem" }}>
+                        <Avatar name={pes.name} userId={pes.id} size={20} /> {pes.name}
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
+              <div style={{ maxWidth: 220 }}>
+                <label className="label">Progresso</label>
+                {/* o único campo da definição que continua vivo aqui: progresso
+                    É execução, e grava na hora */}
+                <select
+                  className="select"
+                  value={draft.progress}
+                  onChange={(e) => {
+                    const p = e.target.value as Enums<"planner_progress">;
+                    setDraft((d) => ({ ...d, progress: p }));
+                    if (seed.id) rodar(() => setTaskProgress(seed.id!, p));
+                  }}
+                >
+                  {(Object.keys(PROGRESS_LABEL) as Enums<"planner_progress">[]).map((p) => (
+                    <option key={p} value={p}>{PROGRESS_LABEL[p]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+          <>
           <div>
             <label className="label">Título</label>
             <input className="input" autoFocus={!editando} value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="O que precisa ser feito?" />
@@ -304,9 +374,11 @@ export function TaskDialog({
             <label className="label">Responsáveis</label>
             <PeoplePicker people={participantes} selected={draft.assigneeIds} onChange={(ids) => setDraft((d) => ({ ...d, assigneeIds: ids }))} placeholder="Participantes do quadro…" />
           </div>
+          </>
+          )}
 
           {/* ------------------------------------------------------ etiquetas */}
-          {editando && (
+          {editando && modo === "editar" && (
             <div>
               <label className="label">Etiquetas</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
@@ -509,15 +581,28 @@ export function TaskDialog({
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "0.9rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-          {editando && (
-            <button type="button" className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--mh-danger)" }} onClick={() => void excluir()}>
-              Excluir
-            </button>
+          {acompanhando ? (
+            <>
+              {/* checklist, anexos e comentários já gravaram na hora: aqui não
+                  existe "Salvar", só a porta de saída e a de edição */}
+              <button type="button" className="btn btn-ghost" style={{ marginRight: "auto" }} onClick={() => setModo("editar")}>
+                <Pencil size={14} /> Editar tarefa
+              </button>
+              <button type="button" className="btn btn-primary" onClick={onClose}>Fechar</button>
+            </>
+          ) : (
+            <>
+              {editando && (
+                <button type="button" className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--mh-danger)" }} onClick={() => void excluir()}>
+                  Excluir
+                </button>
+              )}
+              <button type="button" className="btn btn-ghost" onClick={editando ? () => { setDraft(seed); setModo("acompanhar"); } : onClose}>Cancelar</button>
+              <button type="button" className="btn btn-primary" disabled={pendente || !draft.title.trim()} onClick={salvar}>
+                {pendente ? "Salvando…" : "Salvar"}
+              </button>
+            </>
           )}
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-          <button type="button" className="btn btn-primary" disabled={pendente || !draft.title.trim()} onClick={salvar}>
-            {pendente ? "Salvando…" : "Salvar"}
-          </button>
         </div>
       </div>
     </div>
