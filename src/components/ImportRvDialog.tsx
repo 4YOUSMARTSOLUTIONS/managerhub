@@ -42,19 +42,26 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
 
   const analysis = useMemo(() => {
     const byName = new Set(refs.map((r) => norm(r.name)));
+    // mesma linha (nome + competência) repetida: o servidor grava a última
+    const vistos = new Set<string>();
     return rows.map((r) => {
       const found = byName.has(norm(r.name ?? ""));
       const badPeriod = !/^\d{4}-\d{2}$/.test((r.period ?? "").trim());
       const badValue = (r.value ?? "").trim() === "";
       const notFound = !!r.name?.trim() && !found;
       const invalid = !r.name?.trim() || badPeriod || badValue;
-      return { row: r, notFound, invalid, importable: found && !badPeriod && !badValue };
+      const importable = found && !badPeriod && !badValue;
+      const k = `${norm(r.name ?? "")}|${(r.period ?? "").trim()}`;
+      const duplicate = importable && vistos.has(k);
+      if (importable) vistos.add(k);
+      return { row: r, notFound, invalid, duplicate, importable };
     });
   }, [rows, refs]);
   const counts = useMemo(() => ({
-    ok: analysis.filter((a) => a.importable).length,
+    ok: analysis.filter((a) => a.importable && !a.duplicate).length,
     notFound: analysis.filter((a) => a.notFound).length,
     invalid: analysis.filter((a) => a.invalid && !a.notFound).length,
+    duplicate: analysis.filter((a) => a.duplicate).length,
   }), [analysis]);
 
   async function downloadTemplate() {
@@ -146,6 +153,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
                     {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} {scope === "position" ? "função" : "colaborador"} não encontrado</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (competência/valor)</span>}
+                    {counts.duplicate > 0 && <span className="badge badge-amber">{counts.duplicate} repetida(s), vale a última</span>}
                   </div>
                   {rows.length > 0 && (
                     <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 150, overflow: "auto" }}>
@@ -154,6 +162,7 @@ export function ImportRvDialog({ scope, refs, open: openProp, onClose, hideTrigg
                           {a.row.name}{a.row.period ? ` · ${a.row.period}` : ""}{a.row.value ? ` · R$ ${a.row.value}` : ""}
                           {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}
                           {!a.notFound && a.invalid && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>inválida</span>}
+                          {a.duplicate && <span className="badge badge-amber" style={{ marginLeft: 6, fontSize: "0.62rem" }}>repetida</span>}
                         </li>
                       ))}
                       {rows.length > 14 && <li>… e mais {rows.length - 14}</li>}

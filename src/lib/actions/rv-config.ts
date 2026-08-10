@@ -112,6 +112,9 @@ export async function importRvConfig(
 
     const inserts: Record<string, unknown>[] = [];
     const updates: { id: string; payload: Record<string, unknown> }[] = [];
+    // chave → posição já enfileirada, para linha repetida sobrescrever em vez de duplicar
+    const queuedInsert = new Map<string, number>();
+    const queuedUpdate = new Map<string, number>();
     let invalid = 0;
     let notFound = 0;
     for (const r of rows ?? []) {
@@ -130,8 +133,20 @@ export async function importRvConfig(
       };
       const k = key(targetId, ef);
       const id = existingMap.get(k);
-      if (id && id !== "pending") updates.push({ id, payload });
-      else { inserts.push(payload); existingMap.set(k, "pending"); }
+      // Linha repetida na planilha (mesmo alvo, mesma competência): vale a
+      // ÚLTIMA. Empilhar dois inserts da mesma chave faria o índice único
+      // derrubar o lote inteiro com "duplicate key value".
+      if (id && id !== "pending") {
+        const j = queuedUpdate.get(k);
+        if (j != null) updates[j].payload = payload;
+        else { queuedUpdate.set(k, updates.length); updates.push({ id, payload }); }
+      } else if (id === "pending") {
+        inserts[queuedInsert.get(k)!] = payload;
+      } else {
+        queuedInsert.set(k, inserts.length);
+        inserts.push(payload);
+        existingMap.set(k, "pending");
+      }
     }
 
     let imported = 0;
