@@ -5,7 +5,8 @@ import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { posicaoNoFim, posicaoEntre, renormalizar } from "@/lib/planner-position";
-import { quadroDe, SEM_QUADRO, SO_DONO, SO_PARTICIPANTE, type Ctx } from "./planner-shared";
+import { quadroDe, registrarEvento, SEM_QUADRO, SO_DONO, SO_PARTICIPANTE, type Ctx } from "./planner-shared";
+import { proximaData } from "@/lib/planner-recur";
 
 /**
  * Planner: quadros, colunas e cartões.
@@ -239,24 +240,37 @@ export async function moveBucket(bucketId: string, afterBucketId: string | null)
 export type TaskInput = {
   title: string;
   description?: string | null;
+  start_date?: string | null;
   due_date?: string | null;
   priority?: Enums<"priority_level"> | null;
+  recurrence?: Enums<"planner_recurrence">;
   assigneeIds?: string[];
 };
 
 /** valida e normaliza os campos do cartão; devolve erro de tela quando não dá */
 function camposDoCartao(input: TaskInput): { error: string } | {
-  title: string; description: string | null; due_date: string | null; priority: Enums<"priority_level"> | null;
+  title: string; description: string | null; start_date: string | null; due_date: string | null;
+  priority: Enums<"priority_level"> | null; recurrence: Enums<"planner_recurrence">;
 } {
   const title = (input.title ?? "").trim();
   if (!title) return { error: "Dê um título à tarefa." };
+  const DATA = /^\d{4}-\d{2}-\d{2}$/;
   const due = (input.due_date ?? "")?.trim() || null;
-  if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) return { error: "Prazo inválido." };
+  if (due && !DATA.test(due)) return { error: "Prazo inválido." };
+  const inicio = (input.start_date ?? "")?.trim() || null;
+  if (inicio && !DATA.test(inicio)) return { error: "Data de início inválida." };
+  if (inicio && due && inicio > due) return { error: "O início não pode ser depois do prazo." };
+  // recorrência sem prazo não tem o que repetir: a próxima ocorrência nasce do prazo
+  if (input.recurrence && input.recurrence !== "none" && !due) {
+    return { error: "Tarefa recorrente precisa de um prazo." };
+  }
   return {
     title,
     description: (input.description ?? "")?.trim() || null,
+    start_date: inicio,
     due_date: due,
     priority: input.priority ?? null,
+    recurrence: input.recurrence ?? "none",
   };
 }
 
@@ -306,6 +320,7 @@ export async function createTask(bucketId: string, input: TaskInput): Promise<Ac
       );
       if (eA) return { error: eA.message };
     }
+    await registrarEvento(ctx, { id: task.id, board_id: bucket.board_id }, "created");
     revalidatePath(RP);
     return { ok: true };
   } catch (e) {
@@ -317,7 +332,7 @@ export async function updateTask(taskId: string, input: TaskInput): Promise<Acti
   try {
     const ctx = await actionContext();
     const { data: task } = await ctx.supabase
-      .from("planner_tasks").select("id, board_id").eq("id", taskId).maybeSingle();
+      .from("planner_tasks").select("id, board_id, due_date").eq("id", taskId).maybeSingle();
     if (!task) return { error: "Tarefa não encontrada." };
     const { board, participante } = await quadroDe(ctx, task.board_id);
     if (!board) return { error: SEM_QUADRO };
@@ -326,14 +341,27 @@ export async function updateTask(taskId: string, input: TaskInput): Promise<Acti
     const campos = camposDoCartao(input);
     if ("error" in campos) return campos;
 
-    const { error } = await ctx.supabase.from("planner_tasks").update(campos).eq("id", taskId);
+    // prazo novo re-arma a notificação do cron: o carimbo era daquele prazo
+    const prazoMudou = campos.due_date !== task.due_date;
+    const { error } = await ctx.supabase.from("planner_tasks")
+      .update(prazoMudou ? { ...campos, due_notified_at: null } : campos)
+      .eq("id", taskId);
     if (error) return { error: error.message };
+    if (prazoMudou) {
+      await registrarEvento(ctx, task, "due_changed", { de: task.due_date, para: campos.due_date });
+    }
 
     // a lista de responsáveis vira exatamente a enviada, quando enviada
     if (input.assigneeIds) {
       const assignees = [...new Set(input.assigneeIds)];
       const erroA = await conferirAssignees(ctx, board.id, board.created_by, assignees);
       if (erroA) return { error: erroA };
+      const { data: atuais } = await ctx.supabase
+        .from("planner_task_assignees").select("user_id").eq("task_id", taskId);
+      const antes = new Set((atuais ?? []).map((a) => a.user_id));
+      const entraram = assignees.filter((id) => !antes.has(id));
+      const sairam = [...antes].filter((id) => !assignees.includes(id));
+
       const { error: eDel } = await ctx.supabase.from("planner_task_assignees").delete().eq("task_id", taskId);
       if (eDel) return { error: eDel.message };
       if (assignees.length) {
@@ -342,6 +370,9 @@ export async function updateTask(taskId: string, input: TaskInput): Promise<Acti
         );
         if (eIns) return { error: eIns.message };
       }
+      if (entraram.length) await registrarEvento(ctx, task, "assigned", { usuarios: entraram });
+      if (sairam.length) await registrarEvento(ctx, task, "unassigned", { usuarios: sairam });
+      // a notificação de atribuição entra na leva 5 (notify_users com quadro)
     }
     revalidatePath(RP);
     return { ok: true };
@@ -367,25 +398,99 @@ export async function deleteTask(taskId: string): Promise<ActionState> {
   }
 }
 
-/** o risco no cartão: feito/não feito, independente da coluna em que ele está */
+/** o risco no cartão: atalho de dois estados sobre o progresso */
 export async function toggleTaskComplete(taskId: string, done: boolean): Promise<ActionState> {
+  return setTaskProgress(taskId, done ? "done" : "not_started");
+}
+
+/**
+ * O progresso é a fonte de verdade do estado; `completed_at` é o carimbo de
+ * quando concluiu. E é AQUI que a recorrência acontece: na transição para
+ * `done` (e só nela — reconcluir não duplica), a tarefa recorrente gera a
+ * próxima ocorrência no mesmo bucket, com datas avançadas, checklist zerado e
+ * os mesmos responsáveis e etiquetas. Anexos e conversa ficam na concluída:
+ * são história daquela execução, não da próxima.
+ */
+export async function setTaskProgress(taskId: string, progress: Enums<"planner_progress">): Promise<ActionState> {
   try {
     const ctx = await actionContext();
     const { data: task } = await ctx.supabase
-      .from("planner_tasks").select("id, board_id").eq("id", taskId).maybeSingle();
+      .from("planner_tasks")
+      .select("id, board_id, bucket_id, title, description, start_date, due_date, priority, progress, recurrence")
+      .eq("id", taskId).maybeSingle();
     if (!task) return { error: "Tarefa não encontrada." };
     const { participante } = await quadroDe(ctx, task.board_id);
     if (!participante) return { error: SO_PARTICIPANTE };
+    if (task.progress === progress) return { ok: true };
+
     const { error } = await ctx.supabase
       .from("planner_tasks")
-      .update({ completed_at: done ? new Date().toISOString() : null })
+      .update({ progress, completed_at: progress === "done" ? new Date().toISOString() : null })
       .eq("id", taskId);
     if (error) return { error: error.message };
+    await registrarEvento(ctx, task, "progress_changed", { de: task.progress, para: progress });
+
+    if (progress === "done" && task.recurrence !== "none" && task.due_date) {
+      const erroClone = await clonarRecorrente(ctx, task);
+      if (erroClone) return { error: erroClone };
+    }
     revalidatePath(RP);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+/** a próxima ocorrência de uma tarefa recorrente; devolve mensagem de erro ou null */
+async function clonarRecorrente(ctx: Ctx, task: {
+  id: string; board_id: string; bucket_id: string; title: string; description: string | null;
+  start_date: string | null; due_date: string | null; priority: Enums<"priority_level"> | null;
+  recurrence: Enums<"planner_recurrence">;
+}): Promise<string | null> {
+  const novoPrazo = proximaData(task.due_date as string, task.recurrence);
+  if (!novoPrazo) return null;
+  const novoInicio = task.start_date ? proximaData(task.start_date, task.recurrence) : null;
+
+  const { data: irmas } = await ctx.supabase
+    .from("planner_tasks").select("position").eq("bucket_id", task.bucket_id);
+  const { data: nova, error } = await ctx.supabase
+    .from("planner_tasks")
+    .insert({
+      tenant_id: ctx.tenantId, board_id: task.board_id, bucket_id: task.bucket_id,
+      title: task.title, description: task.description,
+      start_date: novoInicio, due_date: novoPrazo,
+      priority: task.priority, recurrence: task.recurrence,
+      position: posicaoNoFim((irmas ?? []).map((t) => t.position)), created_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (error) return error.message;
+
+  const [{ data: assignees }, { data: labels }, { data: itens }] = await Promise.all([
+    ctx.supabase.from("planner_task_assignees").select("user_id").eq("task_id", task.id),
+    ctx.supabase.from("planner_task_labels").select("label_id").eq("task_id", task.id),
+    ctx.supabase.from("planner_checklist_items").select("title, position").eq("task_id", task.id),
+  ]);
+  if (assignees?.length) {
+    const { error: e } = await ctx.supabase.from("planner_task_assignees").insert(
+      assignees.map((a) => ({ task_id: nova.id, user_id: a.user_id, tenant_id: ctx.tenantId, board_id: task.board_id })),
+    );
+    if (e) return e.message;
+  }
+  if (labels?.length) {
+    const { error: e } = await ctx.supabase.from("planner_task_labels").insert(
+      labels.map((l) => ({ task_id: nova.id, label_id: l.label_id, tenant_id: ctx.tenantId, board_id: task.board_id })),
+    );
+    if (e) return e.message;
+  }
+  if (itens?.length) {
+    const { error: e } = await ctx.supabase.from("planner_checklist_items").insert(
+      itens.map((i) => ({ tenant_id: ctx.tenantId, board_id: task.board_id, task_id: nova.id, title: i.title, done: false, position: i.position })),
+    );
+    if (e) return e.message;
+  }
+  await registrarEvento(ctx, { id: nova.id, board_id: task.board_id }, "created", { recorrencia_de: task.id });
+  return null;
 }
 
 /**

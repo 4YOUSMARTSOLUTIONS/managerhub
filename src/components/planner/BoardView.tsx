@@ -27,11 +27,17 @@ export type BoardTask = {
   bucketId: string;
   title: string;
   description: string | null;
+  startDate: string | null;
   dueDate: string | null;
   priority: Enums<"priority_level"> | null;
+  progress: Enums<"planner_progress">;
+  recurrence: Enums<"planner_recurrence">;
   completedAt: string | null;
   position: number;
   assignees: { id: string; name: string }[];
+  labels: { id: string; name: string; color: string }[];
+  checklistDone: number;
+  checklistTotal: number;
 };
 
 export type BoardBucket = { id: string; name: string; position: number };
@@ -207,7 +213,7 @@ function Cartao({
   onToggle: () => void;
   onMoveTo: (bucketId: string) => void;
 }) {
-  const feita = !!task.completedAt;
+  const feita = task.progress === "done";
   const atrasada = !feita && !!task.dueDate && task.dueDate < hojeIso();
   return (
     <div
@@ -253,9 +259,19 @@ function Cartao({
           </span>
         )}
       </div>
-      {(task.priority || task.dueDate || task.assignees.length > 0) && (
+      {task.labels.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
+          {task.labels.map((l) => <Badge key={l.id} tone={l.color as never}>{l.name}</Badge>)}
+        </div>
+      )}
+      {(task.priority || task.dueDate || task.assignees.length > 0 || task.checklistTotal > 0) && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
           {task.priority && <Badge tone={PRIORITY_TONE[task.priority]}>{PRIORITY[task.priority]}</Badge>}
+          {task.checklistTotal > 0 && (
+            <span className="soft" style={{ fontSize: "0.74rem" }} title="Itens do checklist concluídos">
+              ☑ {task.checklistDone}/{task.checklistTotal}
+            </span>
+          )}
           {task.dueDate && (
             <span className={atrasada ? undefined : "muted"} style={{ fontSize: "0.75rem", color: atrasada ? "var(--mh-danger)" : undefined, fontWeight: atrasada ? 600 : undefined }}>
               {formatDate(task.dueDate)}

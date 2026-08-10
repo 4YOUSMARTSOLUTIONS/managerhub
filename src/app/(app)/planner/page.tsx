@@ -4,6 +4,7 @@ import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PlannerManager, type BoardListItem } from "@/components/PlannerManager";
 import type { BoardBucket, BoardTask } from "@/components/planner/BoardView";
+import type { BoardLabel, ChecklistItem } from "@/components/planner/TaskDialog";
 
 /**
  * Planner: kanban de atividades por quadro.
@@ -98,13 +99,18 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
 
   let buckets: BoardBucket[] = [];
   let tasks: BoardTask[] = [];
+  let boardLabels: BoardLabel[] = [];
+  const checklistPorTarefa: Record<string, ChecklistItem[]> = {};
   if (selecionado) {
-    const [{ data: bucketsRaw }, { data: tasksRaw }, { data: assigneesRaw }] = await Promise.all([
+    const [{ data: bucketsRaw }, { data: tasksRaw }, { data: assigneesRaw }, { data: labelsRaw }, { data: taskLabelsRaw }, { data: checklistRaw }] = await Promise.all([
       supabase.from("planner_buckets").select("id, name, position").eq("board_id", selecionado.id).order("position"),
       supabase.from("planner_tasks")
-        .select("id, bucket_id, title, description, due_date, priority, completed_at, position")
+        .select("id, bucket_id, title, description, start_date, due_date, priority, progress, recurrence, completed_at, position")
         .eq("board_id", selecionado.id).order("position"),
       supabase.from("planner_task_assignees").select("task_id, user_id").eq("board_id", selecionado.id),
+      supabase.from("planner_labels").select("id, name, color").eq("board_id", selecionado.id).order("name"),
+      supabase.from("planner_task_labels").select("task_id, label_id").eq("board_id", selecionado.id),
+      supabase.from("planner_checklist_items").select("id, task_id, title, done, position").eq("board_id", selecionado.id).order("position"),
     ]);
     const assigneesPorTask = new Map<string, { id: string; name: string }[]>();
     for (const a of assigneesRaw ?? []) {
@@ -112,18 +118,41 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
       arr.push({ id: a.user_id, name: nomeDe.get(a.user_id) ?? "" });
       assigneesPorTask.set(a.task_id, arr);
     }
+    boardLabels = (labelsRaw ?? []).map((l) => ({ id: l.id, name: l.name, color: l.color }));
+    const labelDe = new Map(boardLabels.map((l) => [l.id, l]));
+    const labelsPorTask = new Map<string, BoardLabel[]>();
+    for (const tl of taskLabelsRaw ?? []) {
+      const l = labelDe.get(tl.label_id);
+      if (!l) continue;
+      const arr = labelsPorTask.get(tl.task_id) ?? [];
+      arr.push(l);
+      labelsPorTask.set(tl.task_id, arr);
+    }
+    for (const i of checklistRaw ?? []) {
+      const arr = checklistPorTarefa[i.task_id] ?? (checklistPorTarefa[i.task_id] = []);
+      arr.push({ id: i.id, title: i.title, done: i.done, position: i.position });
+    }
     buckets = (bucketsRaw ?? []).map((b) => ({ id: b.id, name: b.name, position: b.position }));
-    tasks = (tasksRaw ?? []).map((t) => ({
-      id: t.id,
-      bucketId: t.bucket_id,
-      title: t.title,
-      description: t.description,
-      dueDate: t.due_date,
-      priority: t.priority,
-      completedAt: t.completed_at,
-      position: t.position,
-      assignees: assigneesPorTask.get(t.id) ?? [],
-    }));
+    tasks = (tasksRaw ?? []).map((t) => {
+      const check = checklistPorTarefa[t.id] ?? [];
+      return {
+        id: t.id,
+        bucketId: t.bucket_id,
+        title: t.title,
+        description: t.description,
+        startDate: t.start_date,
+        dueDate: t.due_date,
+        priority: t.priority,
+        progress: t.progress,
+        recurrence: t.recurrence,
+        completedAt: t.completed_at,
+        position: t.position,
+        assignees: assigneesPorTask.get(t.id) ?? [],
+        labels: labelsPorTask.get(t.id) ?? [],
+        checklistDone: check.filter((c) => c.done).length,
+        checklistTotal: check.length,
+      };
+    });
   }
 
   // participantes do quadro aberto: são os únicos que podem ser responsáveis
@@ -148,6 +177,8 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
         teamOptions={teamOptions}
         equipe={equipe}
         isAdmin={isAdmin}
+        boardLabels={boardLabels}
+        checklistPorTarefa={checklistPorTarefa}
       />
     </div>
   );

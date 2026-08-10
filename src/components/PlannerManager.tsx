@@ -9,10 +9,11 @@ import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { BoardView, type BoardBucket, type BoardTask } from "@/components/planner/BoardView";
+import { TaskDialog, type TaskSeed, type BoardLabel, type ChecklistItem } from "@/components/planner/TaskDialog";
 import {
   createBoard, updateBoard, deleteBoard, setBoardMembers,
   createBucket, renameBucket, deleteBucket, moveBucket,
-  createTask, updateTask, deleteTask, toggleTaskComplete, moveTask,
+  toggleTaskComplete, moveTask,
 } from "@/lib/actions/planner";
 import { posicaoEntre, posicaoNoFim } from "@/lib/planner-position";
 import { PRIORITY } from "@/lib/constants";
@@ -45,6 +46,7 @@ type Pessoa = { id: string; name: string };
 
 export function PlannerManager({
   boards, selectedBoardId, buckets, tasks, participantes, people, currentUserId, teamOptions, equipe, isAdmin,
+  boardLabels, checklistPorTarefa,
 }: {
   boards: BoardListItem[];
   selectedBoardId: string | null;
@@ -59,6 +61,8 @@ export function PlannerManager({
   teamOptions: Pessoa[];
   equipe: string;
   isAdmin: boolean;
+  boardLabels: BoardLabel[];
+  checklistPorTarefa: Record<string, ChecklistItem[]>;
 }) {
   const router = useRouter();
   const [pendente, iniciar] = useTransition();
@@ -80,10 +84,7 @@ export function PlannerManager({
   const [membrosOpen, setMembrosOpen] = useState(false);
   const [membrosDraft, setMembrosDraft] = useState<string[]>([]);
   const [bucketDialog, setBucketDialog] = useState<null | { id?: string; name: string }>(null);
-  const [taskDialog, setTaskDialog] = useState<null | {
-    id?: string; bucketId: string; title: string; description: string;
-    dueDate: string; priority: Enums<"priority_level"> | ""; assigneeIds: string[];
-  }>(null);
+  const [taskDialog, setTaskDialog] = useState<TaskSeed | null>(null);
   const [erroDialog, setErroDialog] = useState("");
 
   const irPara = (params: { quadro?: string | null; equipe?: string | null }) => {
@@ -131,8 +132,10 @@ export function PlannerManager({
 
   function alternarConclusao(task: BoardTask) {
     const antes = tasksLocal;
-    const done = !task.completedAt;
-    setTasksLocal((atual) => atual.map((t) => (t.id === task.id ? { ...t, completedAt: done ? new Date().toISOString() : null } : t)));
+    const done = task.progress !== "done";
+    setTasksLocal((atual) => atual.map((t) => (t.id === task.id
+      ? { ...t, progress: done ? "done" : "not_started", completedAt: done ? new Date().toISOString() : null }
+      : t)));
     rodar(() => toggleTaskComplete(task.id, done), () => setTasksLocal(antes));
   }
 
@@ -192,24 +195,6 @@ export function PlannerManager({
     });
   }
 
-  function salvarTarefa() {
-    if (!taskDialog) return;
-    setErroDialog("");
-    iniciar(async () => {
-      const input = {
-        title: taskDialog.title,
-        description: taskDialog.description,
-        due_date: taskDialog.dueDate || null,
-        priority: taskDialog.priority || null,
-        assigneeIds: taskDialog.assigneeIds,
-      };
-      const res = taskDialog.id ? await updateTask(taskDialog.id, input) : await createTask(taskDialog.bucketId, input);
-      if (res?.error) { setErroDialog(res.error); return; }
-      setTaskDialog(null);
-      router.refresh();
-    });
-  }
-
   async function excluirQuadro() {
     if (!quadro) return;
     const ok = await confirmDialog({
@@ -236,18 +221,6 @@ export function PlannerManager({
     });
     if (!ok) return;
     rodar(() => deleteBucket(bucket.id));
-  }
-
-  async function excluirTarefa(taskId: string, titulo: string) {
-    const ok = await confirmDialog({
-      title: "Excluir tarefa",
-      message: `Excluir "${titulo}"?`,
-      confirmLabel: "Excluir",
-      tone: "danger",
-    });
-    if (!ok) return;
-    setTaskDialog(null);
-    rodar(() => deleteTask(taskId));
   }
 
   const meusQuadros = useMemo(() => boards.filter((b) => b.participo), [boards]);
@@ -341,11 +314,19 @@ export function PlannerManager({
               setErroDialog("");
               setTaskDialog({
                 id: t.id, bucketId: t.bucketId, title: t.title, description: t.description ?? "",
-                dueDate: t.dueDate ?? "", priority: t.priority ?? "", assigneeIds: t.assignees.map((a) => a.id),
+                startDate: t.startDate ?? "", dueDate: t.dueDate ?? "", priority: t.priority ?? "",
+                progress: t.progress, recurrence: t.recurrence,
+                assigneeIds: t.assignees.map((a) => a.id), labelIds: t.labels.map((l) => l.id),
               });
             }}
             onToggleComplete={alternarConclusao}
-            onAddTask={(bucketId) => { setErroDialog(""); setTaskDialog({ bucketId, title: "", description: "", dueDate: "", priority: "", assigneeIds: [] }); }}
+            onAddTask={(bucketId) => {
+              setErroDialog("");
+              setTaskDialog({
+                bucketId, title: "", description: "", startDate: "", dueDate: "", priority: "",
+                progress: "not_started", recurrence: "none", assigneeIds: [], labelIds: [],
+              });
+            }}
             onRenameBucket={(b) => { setErroDialog(""); setBucketDialog({ id: b.id, name: b.name }); }}
             onDeleteBucket={excluirColuna}
             onMoveBucket={moverColuna}
@@ -416,47 +397,16 @@ export function PlannerManager({
         </Modal>
       )}
 
-      {taskDialog && (
-        <Modal titulo={taskDialog.id ? "Editar tarefa" : "Nova tarefa"} onClose={() => setTaskDialog(null)}
-          footer={<>
-            {taskDialog.id && (
-              <button type="button" className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--mh-danger)" }}
-                onClick={() => excluirTarefa(taskDialog.id!, taskDialog.title)}>
-                Excluir
-              </button>
-            )}
-            <button type="button" className="btn btn-ghost" onClick={() => setTaskDialog(null)}>Cancelar</button>
-            <button type="button" className="btn btn-primary" disabled={pendente || !taskDialog.title.trim()} onClick={salvarTarefa}>{pendente ? "Salvando…" : "Salvar"}</button>
-          </>}
-        >
-          <label className="label">Título</label>
-          <input className="input" autoFocus value={taskDialog.title} onChange={(e) => setTaskDialog((d) => (d ? { ...d, title: e.target.value } : d))} placeholder="O que precisa ser feito?" />
-          <label className="label" style={{ marginTop: "0.8rem" }}>Descrição (opcional)</label>
-          <textarea className="input" rows={3} value={taskDialog.description} onChange={(e) => setTaskDialog((d) => (d ? { ...d, description: e.target.value } : d))} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem", marginTop: "0.8rem" }}>
-            <div>
-              <label className="label">Prazo</label>
-              <input type="date" className="input" value={taskDialog.dueDate} onChange={(e) => setTaskDialog((d) => (d ? { ...d, dueDate: e.target.value } : d))} />
-            </div>
-            <div>
-              <label className="label">Prioridade</label>
-              <select className="select" value={taskDialog.priority} onChange={(e) => setTaskDialog((d) => (d ? { ...d, priority: e.target.value as Enums<"priority_level"> | "" } : d))}>
-                <option value="">Sem prioridade</option>
-                {(Object.keys(PRIORITY) as Enums<"priority_level">[]).map((p) => <option key={p} value={p}>{PRIORITY[p]}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ marginTop: "0.8rem" }}>
-            <label className="label">Responsáveis</label>
-            <PeoplePicker
-              people={participantes}
-              selected={taskDialog.assigneeIds}
-              onChange={(ids) => setTaskDialog((d) => (d ? { ...d, assigneeIds: ids } : d))}
-              placeholder="Participantes do quadro…"
-            />
-          </div>
-          {erroDialog && <ErroLinha msg={erroDialog} />}
-        </Modal>
+      {taskDialog && quadro && (
+        <TaskDialog
+          seed={taskDialog}
+          boardId={quadro.id}
+          checklist={taskDialog.id ? checklistPorTarefa[taskDialog.id] ?? [] : []}
+          boardLabels={boardLabels}
+          participantes={participantes}
+          currentUserId={currentUserId}
+          onClose={() => setTaskDialog(null)}
+        />
       )}
     </div>
   );
