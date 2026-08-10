@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Circle, GripVertical, MoreHorizontal, Pencil, Trash2, ArrowLeftRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -165,6 +165,7 @@ export function BoardView({
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0 0.2rem" }}>
               <strong style={{ fontSize: "0.88rem", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: cor ?? undefined }}>{b.name}</strong>
               <span className="soft" style={{ fontSize: "0.75rem" }}>{doBucket.length}</span>
+              {canEdit && <SeletorDeCor atual={b.color} onEscolher={(c) => onColorBucket(b, c)} />}
               {canEdit && (
                 <Dropdown rotulo="" icone={<MoreHorizontal size={15} />} largura={210} alinharDireita>
                   {(fechar) => (
@@ -172,37 +173,6 @@ export function BoardView({
                       <ItemDeMenu onClick={() => { fechar(); onRenameBucket(b); }}><Pencil size={14} style={{ marginRight: 8 }} /> Renomear coluna</ItemDeMenu>
                       <ItemDeMenu disabled={bi === 0} onClick={() => { fechar(); onMoveBucket(b, -1); }}><ArrowLeftRight size={14} style={{ marginRight: 8 }} /> Mover à esquerda</ItemDeMenu>
                       <ItemDeMenu disabled={bi === ordenadas.length - 1} onClick={() => { fechar(); onMoveBucket(b, 1); }}><ArrowLeftRight size={14} style={{ marginRight: 8 }} /> Mover à direita</ItemDeMenu>
-                      {/* a fileira de tons: um clique troca, o × volta ao neutro */}
-                      <div style={{ padding: "0.35rem 0.6rem" }}>
-                        <div className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Cor da coluna</div>
-                        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
-                          {TONS.map((t2) => (
-                            <button
-                              key={t2}
-                              type="button"
-                              title={t2}
-                              onClick={() => { fechar(); onColorBucket(b, t2); }}
-                              style={{
-                                width: 18, height: 18, borderRadius: 6, cursor: "pointer",
-                                background: TOM_COR[t2],
-                                border: b.color === t2 ? "2px solid var(--text)" : "2px solid transparent",
-                                padding: 0,
-                              }}
-                            />
-                          ))}
-                          <button
-                            type="button"
-                            title="Sem cor"
-                            onClick={() => { fechar(); onColorBucket(b, null); }}
-                            style={{
-                              width: 18, height: 18, borderRadius: 6, cursor: "pointer",
-                              background: "transparent", color: "var(--text-muted)",
-                              border: !b.color ? "2px solid var(--text)" : "1px solid var(--border)",
-                              padding: 0, fontSize: 10, lineHeight: 1,
-                            }}
-                          >×</button>
-                        </div>
-                      </div>
                       <ItemDeMenu disabled={doBucket.length > 0} titulo={doBucket.length > 0 ? "Mova os cartões antes" : undefined} onClick={() => { fechar(); onDeleteBucket(b); }}>
                         <Trash2 size={14} style={{ marginRight: 8 }} /> Excluir coluna
                       </ItemDeMenu>
@@ -342,6 +312,83 @@ export function PlannerCard({
               {task.assignees.length > 3 && <span className="soft" style={{ fontSize: "0.72rem", alignSelf: "center" }}>+{task.assignees.length - 3}</span>}
             </span>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/**
+ * A bolinha de cor no cabeçalho da coluna: mostra a cor ATUAL e abre a paleta
+ * num popover baixinho. Vive fora do menu "⋯" de propósito — lá dentro a
+ * fileira caía na parte rolável e ninguém a via. Cor é identidade; identidade
+ * fica à vista.
+ */
+function SeletorDeCor({ atual, onEscolher }: { atual: string | null; onEscolher: (c: string | null) => void }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAberto(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [aberto]);
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        type="button"
+        title="Cor da coluna"
+        aria-expanded={aberto}
+        onClick={() => setAberto((v) => !v)}
+        style={{
+          width: 16, height: 16, borderRadius: 999, cursor: "pointer", padding: 0,
+          background: atual ? TOM_COR[atual] : "transparent",
+          border: atual ? "2px solid transparent" : "2px dashed var(--mh-border-strong)",
+        }}
+      />
+      {aberto && (
+        <div
+          className="card"
+          style={{
+            position: "absolute", top: "calc(100% + 0.35rem)", right: 0, zIndex: 40,
+            padding: "0.45rem", boxShadow: "var(--mh-shadow-e3)",
+            display: "flex", gap: 5, alignItems: "center",
+          }}
+        >
+          {Object.keys(TOM_COR).map((t) => (
+            <button
+              key={t}
+              type="button"
+              title={t}
+              onClick={() => { setAberto(false); onEscolher(t); }}
+              style={{
+                width: 18, height: 18, borderRadius: 999, cursor: "pointer", padding: 0,
+                background: TOM_COR[t],
+                border: atual === t ? "2px solid var(--text)" : "2px solid transparent",
+              }}
+            />
+          ))}
+          <button
+            type="button"
+            title="Sem cor"
+            onClick={() => { setAberto(false); onEscolher(null); }}
+            style={{
+              width: 18, height: 18, borderRadius: 999, cursor: "pointer", padding: 0,
+              background: "transparent", color: "var(--text-muted)",
+              border: !atual ? "2px solid var(--text)" : "1px solid var(--border)",
+              fontSize: 10, lineHeight: 1,
+            }}
+          >×</button>
         </div>
       )}
     </div>
