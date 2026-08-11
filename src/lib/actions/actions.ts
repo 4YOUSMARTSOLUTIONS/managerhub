@@ -346,10 +346,17 @@ export async function demandaComment(demandaId: string, body: string): Promise<A
   } catch (e) { return { error: (e as Error).message }; }
 }
 
-export async function demandaRequest(demandaId: string, type: "prazo" | "conclusao", newDue: string, note: string): Promise<ActionState> {
+export async function demandaRequest(
+  demandaId: string,
+  type: "prazo" | "conclusao" | "reatribuicao",
+  newDue: string,
+  note: string,
+  /** só em `reatribuicao`: para quem o responsável pede que passe */
+  assignees: string[] = [],
+): Promise<ActionState> {
   try {
     const { supabase } = await actionContext();
-    const { error } = await supabase.rpc("demanda_request", { p_demanda: demandaId, p_type: type, p_new_due: newDue || null, p_note: note });
+    const { error } = await supabase.rpc("demanda_request", { p_demanda: demandaId, p_type: type, p_new_due: newDue || null, p_note: note, p_assignees: assignees });
     if (error) return { error: error.message };
     rv();
     return { ok: true };
@@ -463,6 +470,68 @@ export async function getDemandaTimeline(demandaId: string): Promise<{ events: T
     status: (dem?.status ?? "open") as Enums<"action_status">,
     dueDate: dem?.due_date ?? null,
   };
+}
+
+/**
+ * Edita uma ação já criada. Quem gere (criador/owner/admin) e só enquanto ela
+ * não estiver concluída: as duas regras vivem na RPC, aqui é só o transporte.
+ * A data de criação não viaja no payload, e um trigger a protege no banco.
+ */
+export async function updateAction(actionId: string, payload: unknown): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    if (!actionId) return { error: "Ação inválida." };
+    const { error } = await supabase.rpc("update_action", { p_id: actionId, p_data: payload as never });
+    if (error) return { error: error.message };
+    revalidatePath("/acoes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+/**
+ * Carrega uma ação no formato que o formulário entende, para editá-la.
+ *
+ * Sob demanda, e não junto da lista: a tela de Ações traz centenas de linhas e
+ * os IDS de classificação (pilar, item, KPI, ferramenta, reunião) só interessam
+ * a quem clicou em Editar. Mesmo raciocínio de `getActionFormOptions`.
+ */
+export async function getActionForEdit(actionId: string): Promise<
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok?: false; error: string }
+> {
+  try {
+    const { supabase } = await actionContext();
+    const [{ data: a }, { data: dems }, { data: ccs }] = await Promise.all([
+      supabase.from("actions").select("*").eq("id", actionId).maybeSingle(),
+      supabase.from("action_demandas").select("id, description").eq("action_id", actionId).order("created_at"),
+      supabase.from("action_cc").select("user_id").eq("action_id", actionId),
+    ]);
+    if (!a) return { error: "Ação não encontrada." };
+    const demIds = (dems ?? []).map((d) => d.id);
+    const { data: asg } = demIds.length
+      ? await supabase.from("action_demanda_assignees").select("demanda_id, user_id").in("demanda_id", demIds)
+      : { data: [] as { demanda_id: string; user_id: string }[] };
+    const porDemanda = new Map<string, string[]>();
+    for (const r of asg ?? []) {
+      const arr = porDemanda.get(r.demanda_id) ?? [];
+      arr.push(r.user_id);
+      porDemanda.set(r.demanda_id, arr);
+    }
+    return {
+      ok: true,
+      payload: {
+        is_sdpo: a.is_sdpo,
+        pilar_id: a.pilar_id ?? "", secao_id: a.secao_id ?? "", bloco_id: a.bloco_id ?? "", item_id: a.item_id ?? "",
+        meeting_series_id: a.meeting_series_id ?? "", occurrence_id: a.occurrence_id ?? "",
+        kpi_id: a.kpi_id ?? "", tool_id: a.tool_id ?? "", unit_id: a.unit_id ?? "",
+        requester_id: a.requester_id ?? "", problem_statement: a.problem_statement ?? "",
+        due_date: a.due_date ?? "", priority: a.priority,
+        cc: (ccs ?? []).map((c) => c.user_id),
+        demandas: (dems ?? []).map((d) => ({ id: d.id, description: d.description, assignees: porDemanda.get(d.id) ?? [] })),
+      },
+    };
+  } catch (e) { return { error: (e as Error).message }; }
 }
 
 export async function deleteAction(formData: FormData): Promise<ActionState> {

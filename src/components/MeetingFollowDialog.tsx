@@ -258,6 +258,7 @@ export function MeetingFollowDialog({
         onClose={() => { setSelected(null); refetch(); }}
         demanda={selected?.demanda ?? null}
         requesterId={selected?.requesterId ?? null}
+        createdById={selected?.createdById ?? null}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
         people={people}

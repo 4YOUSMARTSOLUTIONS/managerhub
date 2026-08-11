@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createAction } from "@/lib/actions/actions";
+import { createAction, updateAction } from "@/lib/actions/actions";
 import { generateActionsAI } from "@/lib/actions/ai";
 import { formatDate } from "@/lib/format";
 import { PRIORITY } from "@/lib/constants";
@@ -15,14 +15,15 @@ export type BlocoOpt = { id: string; name: string; pilarId: string; secaoId: str
 export type ItemOpt = { id: string; name: string; pilarId: string; secaoId: string; blocoId: string | null; active?: boolean };
 export type OccOpt = { id: string; seriesId: string; occurredOn: string };
 
-type Demanda = { description: string; assignees: string[]; files: File[] };
+type Demanda = { id?: string; description: string; assignees: string[]; files: File[] };
 
 export type CollectedAction = {
   payload: {
     is_sdpo: boolean; pilar_id: string; secao_id: string; bloco_id: string; item_id: string;
     meeting_series_id: string; kpi_id: string; tool_id: string; unit_id?: string;
     requester_id: string; problem_statement: string; due_date: string; priority: string; cc: string[];
-    demandas: { description: string; assignees: string[] }[];
+    /** `id` presente = demanda que JÁ existe (preserva histórico na edição) */
+    demandas: { id?: string; description: string; assignees: string[] }[];
   };
   headerFiles: File[];
   demandaFiles: File[][];
@@ -33,7 +34,7 @@ export type CollectedAction = {
 
 export function ActionDialog({
   open, onClose, people, pilares, secoes, blocos, itens, kpis, tools, series, occurrences, units,
-  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, defaultUnitId, editing, aiEnabled,
+  onCollect, lockedSeries, defaultRequesterId, defaultAssignees, defaultUnitId, editing, editingActionId, aiEnabled,
 }: {
   open: boolean;
   onClose: () => void;
@@ -53,6 +54,8 @@ export function ActionDialog({
   defaultAssignees?: string[];
   defaultUnitId?: string;
   editing?: CollectedAction | null;
+  /** id da ação EXISTENTE sendo editada (muda o salvar de criar para atualizar) */
+  editingActionId?: string | null;
   aiEnabled?: boolean;
 }) {
   const [isSdpo, setIsSdpo] = useState(true);
@@ -93,7 +96,7 @@ export function ActionDialog({
       setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || defaultUnitId || "all");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
       setProblema(p.problem_statement ?? "");
-      setDemandas(p.demandas.map((d, i) => ({ description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
+      setDemandas(p.demandas.map((d, i) => ({ id: d.id, description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
       setFiles(editing.headerFiles);
     } else {
       setIsSdpo(true); setPilarId(""); setSecaoId(""); setBlocoId(""); setItemId("");
@@ -260,8 +263,22 @@ export function ActionDialog({
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
       kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
       requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
-      demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
+      // o id da demanda vai junto na EDIÇÃO: sem ele a RPC criaria outra e o
+      // histórico de tratamento da original iria embora
+      demandas: cleanDemandas.map((d) => ({ id: d.id, description: d.description, assignees: d.assignees })),
     };
+
+    // editar ação existente: os anexos seguem sendo do cadastro, não do editar
+    if (editingActionId) {
+      start(async () => {
+        const res = await updateAction(editingActionId, payload);
+        if (res.error) { setError(res.error); return; }
+        onClose();
+        router.refresh();
+      });
+      return;
+    }
+
     const fd = new FormData();
     fd.append("payload", JSON.stringify(payload));
     for (const f of files) fd.append("files", f);
@@ -288,7 +305,7 @@ export function ActionDialog({
     <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "3vh 1rem", zIndex: 80, overflowY: "auto" }}>
       <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--mh-shadow-e3)", margin: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{onCollect ? (editing ? "Editar ação da reunião" : "Ação da reunião") : "Nova ação"}</h2>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{onCollect ? (editing ? "Editar ação da reunião" : "Ação da reunião") : editingActionId ? "Editar ação" : "Nova ação"}</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
@@ -534,7 +551,7 @@ export function ActionDialog({
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost" onClick={onClose}>{keepOpen ? "Fechar" : "Cancelar"}</button>
-          <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>{onCollect ? (editing ? "Salvar ação" : "Adicionar ação") : pending ? "Salvando…" : "Criar ação"}</button>
+          <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>{onCollect ? (editing ? "Salvar ação" : "Adicionar ação") : pending ? "Salvando…" : editingActionId ? "Salvar alterações" : "Criar ação"}</button>
         </div>
       </div>
     </div>

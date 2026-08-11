@@ -88,12 +88,14 @@ function eventText(e: TimelineEvent): string {
 }
 
 export function DemandaPanel({
-  open, onClose, demanda, requesterId, currentUserId, isAdmin, people,
+  open, onClose, demanda, requesterId, createdById, currentUserId, isAdmin, people,
 }: {
   open: boolean;
   onClose: () => void;
   demanda: DemandaInfo | null;
   requesterId: string | null;
+  /** quem CADASTROU a ação: é quem reatribui e decide os pedidos */
+  createdById?: string | null;
   currentUserId: string;
   isAdmin: boolean;
   people: Person[];
@@ -129,10 +131,13 @@ export function DemandaPanel({
 
   const isAssignee = demanda.assigneeIds.includes(currentUserId);
   const isRequester = currentUserId === requesterId;
-  const canManage = isRequester || isAdmin;
+  // reatribuir, cancelar, reabrir e decidir pedidos são de quem CADASTROU a
+  // ação (mais admin/owner). O banco aplica a mesma regra em pode_gerir_acao.
+  const canManage = currentUserId === createdById || isAdmin;
   const finalizada = status === "done" || status === "cancelled";
   const overdue = !!due && !finalizada && isOverdue(due);
   const hasPendingPrazo = requests.some((r) => r.type === "prazo");
+  const hasPendingReatribuicao = requests.some((r) => r.type === "reatribuicao");
   const eff = effStatus(status, overdue, requests.length > 0);
 
   // a criação vira a linha de autoria no cabeçalho; o histórico fica só com o
@@ -239,16 +244,20 @@ export function DemandaPanel({
                     <div key={a.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
                         <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{a.name}</span>
-                        {/* com UM responsável o selo repete o do topo da ação;
-                            com vários ele diz quem já concluiu a sua parte, que
-                            o selo do topo (o consolidado) não mostra */}
-                        {demanda.assigneeStates.length > 1 && <EffStatusBadge eff={aEff} overdue={aOverdue} />}
+                        {/* o botão vive na LINHA da pessoa, à direita do nome:
+                            é a ação dela, e ficava solto embaixo do bloco */}
+                        {a.id === currentUserId && !a.completedAt && !a.doneRequestedAt && !finalizada ? (
+                          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaAssigneeSubmit(demanda.id))}>
+                            {/* "minha parte" só faz sentido quando há partes de
+                                outras pessoas; sozinho, concluir é concluir */}
+                            {demanda.assigneeStates.length > 1 ? "Concluí minha parte" : "Concluir"}
+                          </button>
+                        ) : (
+                          /* com UM responsável o selo repete o do topo da ação;
+                             com vários ele diz quem já concluiu a sua parte */
+                          demanda.assigneeStates.length > 1 && <EffStatusBadge eff={aEff} overdue={aOverdue} />
+                        )}
                       </div>
-                      {a.id === currentUserId && !a.completedAt && !a.doneRequestedAt && !finalizada && (
-                        <div style={{ marginTop: "0.45rem" }}>
-                          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaAssigneeSubmit(demanda.id))}>Concluí minha parte</button>
-                        </div>
-                      )}
                       {a.id === currentUserId && awaiting && (
                         <div className="soft" style={{ fontSize: "0.78rem", marginTop: 4 }}>Aguardando aprovação do solicitante.</div>
                       )}
@@ -281,6 +290,8 @@ export function DemandaPanel({
           {/* Ações de tratamento */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
             {isAssignee && !finalizada && !hasPendingPrazo && <Btn m="prazo" label="Solicitar prorrogação" />}
+            {/* o responsável não reatribui sozinho: pede, e quem cadastrou decide */}
+            {isAssignee && !canManage && !finalizada && !hasPendingReatribuicao && <Btn m="pedir-reassign" label="Solicitar reatribuição" />}
             {canManage && !finalizada && <Btn m="reassign" label="Reatribuir" />}
             {canManage && !finalizada && <Btn m="cancel" label="Cancelar" tone="danger" />}
             {canManage && status === "done" && <Btn m="reopen" label="Reabrir" />}
@@ -308,6 +319,15 @@ export function DemandaPanel({
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
               <input className="input" placeholder="Motivo da reabertura (opcional)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: "1 1 240px" }} />
               <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaReopen(demanda.id, note))}>Reabrir</button>
+            </div>
+          )}
+          {mode === "pedir-reassign" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <span className="soft" style={{ fontSize: "0.8rem" }}>Indique para quem a demanda deve passar. Quem cadastrou a ação precisa aprovar.</span>
+              <PeoplePicker people={people} selected={reassignIds} onChange={setReassignIds} placeholder="Buscar responsável…" />
+              <input className="input" placeholder="Motivo (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
+              <button type="button" className="btn btn-primary btn-sm" disabled={pending || reassignIds.length === 0} style={{ alignSelf: "flex-start" }}
+                onClick={() => run(() => demandaRequest(demanda.id, "reatribuicao", "", note, reassignIds))}>Enviar pedido</button>
             </div>
           )}
           {mode === "reassign" && (

@@ -218,6 +218,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     toolName: (a.tool_id ? toolName.get(a.tool_id) ?? null : null) ?? a.legacy_tool ?? null,
     unitName: (a.unit_id ? unitById.get(a.unit_id) ?? null : null) ?? a.legacy_unit ?? null,
     requesterId: a.requester_id,
+    createdById: a.created_by,
     requesterName: (a.requester_id ? nameById.get(a.requester_id) ?? null : null) ?? a.legacy_requester ?? null,
     problem: a.problem_statement,
     createdAt: a.created_at,

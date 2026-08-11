@@ -1410,6 +1410,7 @@ export type Database = {
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
+      update_action: { Args: { p_id: string; p_data: Json }; Returns: undefined }
       import_action: { Args: { p_data: Json }; Returns: Json }
       demanda_set_problem: { Args: { p_demanda: string; p_texto: string }; Returns: undefined }
       search_action_ids: { Args: { p_filters?: Json; p_limit?: number; p_offset?: number }; Returns: Json }

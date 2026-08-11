@@ -13,7 +13,8 @@ import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { MINHA_PAPEIS, MINHA_PADRAO, MINHA_TODAS, PAPEL_LABEL, PAPEL_HINT, type MinhaPapel } from "@/lib/acoes-minhas";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
-import { deleteAction, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
+import { deleteAction, getActionForEdit, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
+import type { CollectedAction } from "./ActionDialog";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { ActionDialog, type Opt } from "./ActionDialog";
 import { ImportActionsDialog } from "./ImportActionsDialog";
@@ -352,6 +353,8 @@ export type ActionRow = {
   toolName: string | null;
   unitName: string | null;
   requesterId: string | null;
+  /** quem CADASTROU a ação: é quem pode editá-la e reatribuí-la */
+  createdById: string | null;
   requesterName: string | null;
   problem: string | null;
   createdAt: string;
@@ -377,7 +380,9 @@ export function ActionsManager({
   aiEnabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null } | null>(null);
+  const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null; createdById: string | null } | null>(null);
+  const [editAction, setEditAction] = useState<{ id: string; seed: CollectedAction } | null>(null);
+  const [editErro, setEditErro] = useState("");
 
   /**
    * Catálogos do formulário: pessoas, pilares, seções, blocos, itens, KPIs,
@@ -411,7 +416,30 @@ export function ActionsManager({
     return () => clearTimeout(t);
   }, [garantirOpcoes]);
 
-  const abrirNovaAcao = () => { setOpen(true); void garantirOpcoes(); };
+  const abrirNovaAcao = () => { setEditAction(null); setOpen(true); void garantirOpcoes(); };
+
+  /**
+   * Quem GERE a ação: quem a cadastrou, admin e owner. É quem edita e
+   * reatribui. O banco aplica a mesma regra (pode_gerir_acao).
+   */
+  const podeGerir = (a: ActionRow) => a.createdById === currentUserId || isAdmin || isOwner;
+  /** ação toda finalizada não é mais editável (a RPC recusa igual) */
+  const finalizadaToda = (a: ActionRow) => a.demandas.every((d) => d.status === "done" || d.status === "cancelled");
+
+  const abrirEdicao = async (a: ActionRow) => {
+    setEditErro("");
+    void garantirOpcoes();
+    const r = await getActionForEdit(a.id);
+    if (!("ok" in r) || !r.ok) { setEditErro(r.error); return; }
+    setEditAction({
+      id: a.id,
+      seed: {
+        payload: r.payload as CollectedAction["payload"],
+        headerFiles: [], demandaFiles: [], summary: "",
+      },
+    });
+    setOpen(true);
+  };
 
   const openPanel = (d: DemandaCard, a: ActionRow, di: number) => {
     void garantirOpcoes();
@@ -441,6 +469,7 @@ export function ActionsManager({
         occurredOn: a.occurredOn,
       },
       requesterId: a.requesterId,
+      createdById: a.createdById,
     });
   };
 
@@ -816,7 +845,12 @@ export function ActionsManager({
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                           <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a, di)}>Tratar</button>
-                            {first && (
+                            {first && podeGerir(a) && !finalizadaToda(a) && (
+                              <button type="button" className="icon-btn" title="Editar ação" onClick={() => void abrirEdicao(a)}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                              </button>
+                            )}
+                            {first && isOwner && (
                               <ConfirmActionButton
                                 action={deleteAction}
                                 fields={{ id: a.id }}
@@ -847,7 +881,7 @@ export function ActionsManager({
       {opcoes ? (
         <ActionDialog
           open={open}
-          onClose={() => setOpen(false)}
+          onClose={() => { setOpen(false); setEditAction(null); }}
           people={opcoes.people}
           pilares={opcoes.pilares}
           secoes={opcoes.secoes}
@@ -858,10 +892,15 @@ export function ActionsManager({
           series={opcoes.series}
           occurrences={opcoes.occurrences}
           units={units}
+          editing={editAction?.seed ?? null}
+          editingActionId={editAction?.id ?? null}
           aiEnabled={aiEnabled}
         />
       ) : (
         open && <CarregandoFormulario onClose={() => setOpen(false)} />
+      )}
+      {editErro && (
+        <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: "0.5rem 0" }}>{editErro}</p>
       )}
 
       <DemandaPanel
@@ -869,6 +908,7 @@ export function ActionsManager({
         onClose={() => setSelected(null)}
         demanda={selected?.demanda ?? null}
         requesterId={selected?.requesterId ?? null}
+        createdById={selected?.createdById ?? null}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
         people={opcoes?.people ?? []}

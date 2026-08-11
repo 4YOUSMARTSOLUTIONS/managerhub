@@ -229,6 +229,8 @@ export async function getOccurrenceDetail(occurrenceId: string): Promise<Occurre
 export type FollowDemanda = {
   demanda: DemandaInfo;
   requesterId: string | null;
+  /** quem cadastrou a ação: decide reatribuição e pedidos */
+  createdById: string | null;
   code: number | null;
   overdue: boolean;
   pendingReqCount: number;
@@ -285,7 +287,7 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
   // o recorte (série, ocorrência atual, demandas relevantes) já veio da RPC
   const { data: acts, error: errActs } = await supabase
     .from("actions")
-    .select("id, code, is_sdpo, priority, due_date, requester_id, problem_statement, occurrence_id, pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id, meeting_series_id")
+    .select("id, code, is_sdpo, priority, due_date, requester_id, created_by, problem_statement, occurrence_id, pilar_id, secao_id, bloco_id, item_id, kpi_id, tool_id, meeting_series_id")
     .in("id", relevantes)
     .order("code", { ascending: true });
   if (errActs) console.error("[getMeetingFollow] ações", errActs);
@@ -381,6 +383,7 @@ export async function getMeetingFollow(seriesId: string, currentOccurrenceId: st
           occurredOn: a.occurrence_id ? catalog.occDate.get(a.occurrence_id) ?? null : null,
         },
         requesterId: a.requester_id,
+        createdById: a.created_by,
         code: a.code,
         overdue,
         // aguardando decisão = pedidos de prazo pendentes + partes de responsáveis enviadas p/ aprovação
