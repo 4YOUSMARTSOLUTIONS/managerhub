@@ -16,7 +16,7 @@ export type ModuleKey =
   // vendáveis
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
-  | "chamados"
+  | "chamados" | "venda_interna"
   | "metas" | "feedbacks" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
@@ -63,6 +63,8 @@ export const MODULES: ModuleDef[] = [
   { key: "planner", label: "Planner", href: "/planner", group: "g_rotina" },
 
   { key: "chamados", label: "Chamados", href: "/chamados", group: null },
+
+  { key: "venda_interna", label: "Venda Interna", href: "/venda-interna", group: null },
 
   // Não é módulo vendável: é a tela que dá sentido ao perfil Gestor, então nasce
   // `core` (sempre ligada) e some do menu de quem não lidera equipe, por minRole.
@@ -112,6 +114,7 @@ export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; k
   { type: "group", key: "g_reunioes" },
   { type: "group", key: "g_rotina" },
   { type: "module", key: "chamados" },
+  { type: "module", key: "venda_interna" },
   { type: "group", key: "g_pessoas" },
   { type: "group", key: "g_ferramentas" },
   { type: "group", key: "g_sdpo" },
