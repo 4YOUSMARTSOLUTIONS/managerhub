@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, normalizar } from "@/lib/format";
 import { USER_TYPE } from "@/lib/constants";
 import { roleTone } from "./UsersManager";
+import { MovementTimeline } from "./MovementTimeline";
 
 export type TeamMember = {
   userId: string;
@@ -33,6 +34,7 @@ export type TeamMember = {
 export function TeamList({ members }: { members: TeamMember[] }) {
   const [busca, setBusca] = useState("");
   const [somenteAtivos, setSomenteAtivos] = useState(true);
+  const [linhaDoTempo, setLinhaDoTempo] = useState<TeamMember | null>(null);
 
   const visiveis = useMemo(() => {
     const q = normalizar(busca.trim());
@@ -79,6 +81,7 @@ export function TeamList({ members }: { members: TeamMember[] }) {
               <th>Admissão</th>
               <th>Perfil</th>
               <th>Situação</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -108,12 +111,42 @@ export function TeamList({ members }: { members: TeamMember[] }) {
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{m.admissionDate ? formatDate(m.admissionDate) : "—"}</td>
                 <td><Badge tone={roleTone(m.role)}>{m.role === "owner" ? "Proprietário" : USER_TYPE[m.role as keyof typeof USER_TYPE] ?? m.role}</Badge></td>
                 <td><Badge tone={m.active ? "green" : "red"}>{m.active ? "Ativo" : "Inativo"}</Badge></td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    title="Linha do tempo de setor, função, gestor e unidade"
+                    onClick={() => setLinhaDoTempo(m)}
+                  >
+                    Movimentações
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
         <EmptyState title="Nada encontrado" description="Nenhum colaborador da sua equipe bate com esse filtro." />
+      )}
+
+      {linhaDoTempo && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
+          <div className="card" style={{ width: "100%", maxWidth: 900, boxShadow: "var(--mh-shadow-e3)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", gap: "0.75rem" }}>
+              <div>
+                <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Movimentações</h2>
+                <p className="soft" style={{ fontSize: "0.82rem", margin: "0.25rem 0 0" }}>{linhaDoTempo.fullName ?? "Colaborador"}</p>
+              </div>
+              <button type="button" onClick={() => setLinhaDoTempo(null)} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)", flexShrink: 0 }}>×</button>
+            </div>
+            <div style={{ padding: "1.25rem" }}>
+              <MovementTimeline userId={linhaDoTempo.userId} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setLinhaDoTempo(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

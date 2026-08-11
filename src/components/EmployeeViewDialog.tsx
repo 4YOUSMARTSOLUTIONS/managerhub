@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getContractHistory, type ContractHistoryItem } from "@/lib/actions/employees";
+import { MovementTimeline } from "./MovementTimeline";
 import { Badge } from "@/components/ui/Badge";
 import { USER_TYPE } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
@@ -90,6 +91,11 @@ export function EmployeeViewDialog({
               <Field label="Gestor">{employee.managerName}</Field>
               <Field label="Unidades">{employee.unitNames.length > 0 ? employee.unitNames.join(", ") : ""}</Field>
             </div>
+          </div>
+
+          <div>
+            <p style={sectionTitle}>Movimentações</p>
+            <MovementTimeline userId={employee.userId} />
           </div>
 
           <div>

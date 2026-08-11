@@ -137,6 +137,40 @@ export type ContractHistoryItem = {
   perfil: string | null;
 };
 
+export type MovementHistoryItem = {
+  effective_from: string;
+  effective_to: string | null;
+  source: "backfill" | "trigger";
+  employee_code: string | null;
+  is_active: boolean;
+  dismissed_at: string | null;
+  setor: string | null;
+  subsetor: string | null;
+  funcao: string | null;
+  nivel: string | null;
+  hierarquia: string | null;
+  perfil: string;
+  gestor: string | null;
+  unidades: string[];
+  alterado_por: string | null;
+};
+
+/**
+ * Linha do tempo de movimentações do vínculo (setor, gestor, unidade, função…),
+ * uma linha por vigência, da mais recente para a mais antiga. A guarda mora na
+ * RPC: administração, RH, cadeia de gestão e a própria pessoa.
+ */
+export async function getMovementHistory(userId: string): Promise<MovementHistoryItem[]> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("employee_movement_history", { p_user: userId });
+    if (error) return [];
+    return (data ?? []) as unknown as MovementHistoryItem[];
+  } catch {
+    return [];
+  }
+}
+
 /** Histórico de contratos anteriores, para a ficha do colaborador. */
 export async function getContractHistory(userId: string): Promise<ContractHistoryItem[]> {
   try {
