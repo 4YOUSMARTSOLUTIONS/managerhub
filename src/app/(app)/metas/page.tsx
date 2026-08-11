@@ -83,8 +83,11 @@ export default async function GoalsPage() {
   // a CADEIA inteira abaixo (recursiva). É a base de PERMISSÃO: quem eu posso
   // editar, fechar e apurar. Não confundir com o escopo padrão de exibição.
   const reportIds: string[] = (reports ?? []).map((r) => r.user_id);
-  // so gestores (com subordinados) ou admin cadastram metas
-  const canCreateGoals = isAdmin || reportIds.length > 0;
+  // Cadastram metas individuais: admin/owner, quem tem subordinados e, por
+  // exceção, o Gerencial — que passa a cadastrar as PRÓPRIAS metas mesmo sem
+  // equipe (antes dependia de um admin para as metas dele). A RLS aplica o
+  // mesmo recorte: para si, não para terceiros.
+  const canCreateGoals = isAdmin || reportIds.length > 0 || role === "manager";
   // Ve metas de mais de um colaborador. Desacoplado de canCreateGoals de propósito:
   // um Gerencial sem equipe não cadastra meta, mas acompanha a empresa inteira, e
   // sem isto a coluna Colaborador sumiria justamente da tela dele.
@@ -411,6 +414,7 @@ export default async function GoalsPage() {
           canManageOthers={canSeeMultiple}
           canCreateGoals={canCreateGoals}
           isAdmin={isAdmin}
+          podeMetaPropria={role === "manager"}
           reportIds={reportIds}
           currentUserId={user.id}
           members={members}
@@ -435,7 +439,9 @@ export default async function GoalsPage() {
           subdepartments={areaSubdepartments}
           units={unitScope.units}
           members={areaMembers}
-          isAdmin={isAdmin}
+          // metas da ÁREA: quem lidera também cadastra (gestor e gerencial),
+          // não só a administração
+          isAdmin={isAdmin || role === "manager" || role === "team_lead"}
           currentUserId={user.id}
           scopedUnitId={unitScope.activeUnitId}
           unidadesExtras={unidadesExtras}

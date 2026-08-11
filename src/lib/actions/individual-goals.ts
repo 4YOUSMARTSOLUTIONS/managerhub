@@ -31,6 +31,23 @@ async function canManageOwner(ctx: Ctx, ownerId: string | null | undefined): Pro
   return souGestorDe(ctx.supabase, ownerId, ctx.tenantId);
 }
 
+/**
+ * Quem pode CADASTRAR/editar/excluir a meta de alguém.
+ *
+ * Igual a `canManageOwner`, com uma exceção: o papel Gerencial cadastra as
+ * PRÓPRIAS metas. Ele costuma ser o topo da cadeia (ou não ter equipe
+ * registrada) e ficava sem conseguir lançar nem as metas dele, dependendo de um
+ * admin. Cadastrar não é aprovar: fechar o mês e aprovar lançamento seguem em
+ * `canManageOwner`, onde a própria meta continua barrada: auto-aprovação não
+ * entra por esta porta.
+ */
+async function podeCadastrarPara(ctx: Ctx, ownerId: string | null | undefined): Promise<boolean> {
+  if (isAdminRole(ctx.role)) return true;
+  if (!ownerId) return false;
+  if (ownerId === ctx.userId) return ctx.role === "manager";
+  return souGestorDe(ctx.supabase, ownerId, ctx.tenantId);
+}
+
 async function goalOwner(ctx: Ctx, goalId: string): Promise<string | null> {
   const { data } = await ctx.supabase
     .from("individual_goals")
@@ -63,10 +80,12 @@ export async function createIndividualGoal(input: CreateGoalInput): Promise<Crea
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome da meta." };
 
-    // metas só são cadastradas por gestores: admin (qualquer dono) ou o gestor direto do dono
-    const owner_id = input.owner_id || "";
-    if (!owner_id) return { error: "Selecione o colaborador dono da meta." };
-    if (!(await canManageOwner(ctx, owner_id))) {
+    // metas só são cadastradas por gestores: admin (qualquer dono), o gestor
+    // direto do dono ou o Gerencial nas próprias. Dono em branco é "você", como
+    // promete o rótulo do seletor; quem não pode cadastrar para si esbarra na
+    // guarda logo abaixo.
+    const owner_id = input.owner_id || userId;
+    if (!(await podeCadastrarPara(ctx, owner_id))) {
       return { error: "Você só pode cadastrar metas para os seus colaboradores." };
     }
 
@@ -109,7 +128,7 @@ export async function updateIndividualGoal(input: UpdateGoalInput): Promise<Acti
     const ctx = await actionContext();
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome da meta." };
-    if (!(await canManageOwner(ctx, await goalOwner(ctx, input.id)))) {
+    if (!(await podeCadastrarPara(ctx, await goalOwner(ctx, input.id)))) {
       return { error: "Você não tem permissão para editar esta meta." };
     }
     const { error } = await ctx.supabase
@@ -134,7 +153,7 @@ export async function updateIndividualGoal(input: UpdateGoalInput): Promise<Acti
 export async function deleteIndividualGoal(id: string): Promise<ActionState> {
   try {
     const ctx = await actionContext();
-    if (!(await canManageOwner(ctx, await goalOwner(ctx, id)))) {
+    if (!(await podeCadastrarPara(ctx, await goalOwner(ctx, id)))) {
       return { error: "Você não tem permissão para excluir esta meta." };
     }
     const { error } = await ctx.supabase.from("individual_goals").delete().eq("id", id);
@@ -278,9 +297,9 @@ export async function setEntryWeights(input: { period: string; weights: { goal_i
     const total = Math.round(weights.reduce((s, w) => s + (Number(w.weight) || 0), 0));
     if (total !== 100) return { error: `A soma dos pesos deve ser 100% (atual: ${total}%).` };
 
-    // pesos são parte da definição da meta: só o gestor/admin do dono ajusta
+    // pesos são parte da definição da meta: quem cadastra a meta distribui
     const owner = await goalOwner(ctx, weights[0].goal_id);
-    if (!(await canManageOwner(ctx, owner))) {
+    if (!(await podeCadastrarPara(ctx, owner))) {
       return { error: "Apenas o gestor pode distribuir os pesos das metas." };
     }
     for (const w of weights) {
@@ -312,7 +331,7 @@ export async function copyPreviousMonthEntries(input: { owner_id: string; from_p
   try {
     const ctx = await actionContext();
     if (!input.owner_id || !input.from_period || !input.to_period) return { error: "Parâmetros inválidos." };
-    if (!(await canManageOwner(ctx, input.owner_id))) {
+    if (!(await podeCadastrarPara(ctx, input.owner_id))) {
       return { error: "Você só pode reaproveitar metas dos seus colaboradores." };
     }
     const { data: goals } = await ctx.supabase

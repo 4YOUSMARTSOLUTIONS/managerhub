@@ -115,7 +115,7 @@ const MAX_AVISO = 5;
 type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: number | null; actual: number | null; weight: number; partial: number | null; rvShare: number | null; rvPay: number; entryStatus: Enums<"goal_entry_status"> | null; reprovalNote: string | null };
 
 export function IndividualGoalsFarol({
-  goals, canManageOthers, canCreateGoals, isAdmin, reportIds,
+  goals, canManageOthers, canCreateGoals, isAdmin, podeMetaPropria = false, reportIds,
   currentUserId, members, departments, subdepartments, rvTimelines = [], rvDias = [], regrasRedutor = [],
   periodosFechados = [], rvCongelados = [], canLockPeriod = false,
 }: {
@@ -123,6 +123,8 @@ export function IndividualGoalsFarol({
   canManageOthers: boolean;
   canCreateGoals: boolean;
   isAdmin: boolean;
+  /** Gerencial: cadastra e edita as PRÓPRIAS metas (fechar continua sendo de terceiro) */
+  podeMetaPropria?: boolean;
   /** cadeia inteira abaixo: quem eu posso editar, fechar e apurar */
   reportIds: string[];
   currentUserId: string;
@@ -142,7 +144,8 @@ export function IndividualGoalsFarol({
 }) {
   const reportSet = useMemo(() => new Set(reportIds), [reportIds]);
   // pode editar a DEFINIÇÃO da meta (alvo, peso, conceito) do dono
-  const canEditDef = (ownerId: string) => isAdmin || reportSet.has(ownerId);
+  const canEditDef = (ownerId: string) =>
+    isAdmin || reportSet.has(ownerId) || (podeMetaPropria && ownerId === currentUserId);
   // pode fechar (aprovar/reprovar) as metas do dono
   const canClose = (ownerId: string) => isAdmin || reportSet.has(ownerId);
   // pode lançar a apuração (realizado) — o próprio dono, o gestor ou admin
