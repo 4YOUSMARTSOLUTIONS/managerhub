@@ -18,6 +18,7 @@ type SP = {
   pilar?: string | string[]; bloco?: string | string[]; item?: string | string[];
   kpi?: string | string[]; ferr?: string | string[]; reuniao?: string | string[];
   sol?: string | string[]; resp?: string | string[];
+  setor?: string | string[]; sub?: string | string[];
   minhas?: string | string[];
 };
 
@@ -54,6 +55,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     pilar: asList(sp.pilar), bloco: asList(sp.bloco), item: asList(sp.item),
     kpi: asList(sp.kpi), tool: asList(sp.ferr), meeting: asList(sp.reuniao),
     requester: asList(sp.sol), assignee: asList(sp.resp),
+    dept: asList(sp.setor), sub: asList(sp.sub),
     mine,
   };
 
@@ -76,6 +78,8 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("sdpo_itens").select("id, name, pilar_id, secao_id, bloco_id, active").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
+    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("action_kpis").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenant.id).is("deleted_at", null).order("name"),
@@ -95,6 +99,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     { data: actionsRaw },
     [
       { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
+      { data: deps }, { data: subs },
       { data: kpis }, { data: tools }, { data: seriesData }, { data: occData },
       { data: profilesData }, { data: filterOpts },
     ],
@@ -236,7 +241,7 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   }
   // `minhas` entra aqui como veio da URL, e não resolvido: trocar de página não
   // pode transformar um "Todas" explícito no padrão de novo
-  for (const [k, v] of Object.entries({ st: sp.st, prog: sp.prog, pilar: sp.pilar, bloco: sp.bloco, item: sp.item, kpi: sp.kpi, ferr: sp.ferr, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, [MINHA_PARAM]: sp.minhas })) {
+  for (const [k, v] of Object.entries({ st: sp.st, prog: sp.prog, pilar: sp.pilar, bloco: sp.bloco, item: sp.item, setor: sp.setor, sub: sp.sub, kpi: sp.kpi, ferr: sp.ferr, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, [MINHA_PARAM]: sp.minhas })) {
     asList(v).forEach((x) => pagerQuery.append(k, x));
   }
 
@@ -250,7 +255,14 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
         units={unitScope.units}
         aiEnabled={flags.hasOpenAI}
         filters={filters}
-        filterOptions={(filterOpts ?? { programas: [], pilares: [], blocos: [], itens: [], kpis: [], tools: [], meetings: [], requesters: [], assignees: [] }) as FilterOptions}
+        filterOptions={{
+          // as listas em uso saem da RPC (só o que existe nas ações); setor e
+          // subsetor saem do CADASTRO, senão o filtro nasceria vazio: a coluna é
+          // nova e as 7,5 mil ações antigas não têm setor nenhum
+          ...((filterOpts ?? { programas: [], pilares: [], blocos: [], itens: [], kpis: [], tools: [], meetings: [], requesters: [], assignees: [] }) as FilterOptions),
+          departments: (deps ?? []).map((d) => ({ id: d.id, nome: d.name })),
+          subdepartments: (subs ?? []).map((x) => ({ id: x.id, nome: x.name, deptId: x.department_id })),
+        }}
         total={actionsTotal}
       />
       <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerQuery} />

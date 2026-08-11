@@ -46,6 +46,14 @@ export type ActionFilters = {
   pilar: string[]; bloco: string[]; item: string[]; kpi: string[]; tool: string[];
   meeting: string[]; requester: string[]; assignee: string[];
   /**
+   * Setor e subsetor da ação, por ID.
+   *
+   * Os demais casam por NOME porque têm coluna legada em `actions`, resto de
+   * importação antiga. Setor e subsetor entraram depois e só existem como
+   * referência ao cadastro, então o id é exato e não confunde homônimos.
+   */
+  dept: string[]; sub: string[];
+  /**
    * "Minhas ações", por PAPEL. Vazio = todas da empresa.
    *
    * Não é um filtro do painel, é o modo de exibição da tela, e por isso fica de
@@ -58,7 +66,7 @@ export type ActionFilters = {
 const VAZIO: ActionFilters = {
   q: "", sdpo: "", from: "", to: "",
   status: [], programa: [], pilar: [], bloco: [], item: [], kpi: [], tool: [],
-  meeting: [], requester: [], assignee: [],
+  meeting: [], requester: [], assignee: [], dept: [], sub: [],
   mine: [],
 };
 
@@ -79,6 +87,9 @@ export type FilterOptions = {
   meetings: FilterOption[];
   requesters: FilterOption[];
   assignees: FilterOption[];
+  /** catálogo da empresa, não os valores em uso: setor é campo novo e quase nenhuma ação o tem ainda */
+  departments: { id: string; nome: string }[];
+  subdepartments: { id: string; nome: string; deptId: string | null }[];
 };
 
 const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações antigas.";
@@ -96,6 +107,8 @@ const CAMPOS = [
   { key: "pilar", label: "Pilar" },
   { key: "bloco", label: "Bloco" },
   { key: "item", label: "Item" },
+  { key: "dept", label: "Setor" },
+  { key: "sub", label: "Subsetor" },
   { key: "kpi", label: "KPI" },
   { key: "tool", label: "Ferramenta de gestão" },
   { key: "meeting", label: "Reunião" },
@@ -335,6 +348,7 @@ const PARAM: Record<keyof ActionFilters, string> = {
   programa: "prog", pilar: "pilar", bloco: "bloco", item: "item",
   kpi: "kpi", tool: "ferr", meeting: "reuniao",
   requester: "sol", assignee: "resp", from: "de", to: "ate",
+  dept: "setor", sub: "sub",
   mine: "minhas",
 };
 
@@ -572,7 +586,17 @@ export function ActionsManager({
     programas: programaOpts, pilares: pilarOpts, blocos: blocoOpts, itens: itemOpts,
     kpis: kpiOpts, tools: toolOpts, meetings: meetingOpts,
     requesters: requesterOpts, assignees: assigneeOpts,
+    departments: deptOpts, subdepartments: subOpts,
   } = filterOptions;
+
+  /**
+   * Subsetor segue o setor escolhido, como no formulário da ação. Sem setor
+   * marcado a lista é inteira; com setor marcado, mostrar subsetor de outra
+   * área só ofereceria combinação que devolve zero.
+   */
+  const subVisiveis = filtrosVistos.dept.length
+    ? subOpts.filter((x) => x.deptId && filtrosVistos.dept.includes(x.deptId))
+    : subOpts;
 
   /**
    * Filtros que a pessoa abriu mas ainda não preencheu.
@@ -621,6 +645,10 @@ export function ActionsManager({
         return <MultiSelect inline searchable label="Bloco" legacyHint="Bloco que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={blocoOpts.map((b) => ({ value: b.nome, label: b.nome, legacy: b.legacy }))} selected={filtrosVistos.bloco} onChange={(v) => applyFilters({ bloco: v })} />;
       case "item":
         return <MultiSelect inline searchable label="Item" legacyHint="Item que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={itemOpts.map((i) => ({ value: i.nome, label: i.nome, legacy: i.legacy }))} selected={filtrosVistos.item} onChange={(v) => applyFilters({ item: v })} />;
+      case "dept":
+        return <MultiSelect inline searchable label="Setor" options={(deptOpts ?? []).map((d) => ({ value: d.id, label: d.nome }))} selected={filtrosVistos.dept} onChange={(v) => applyFilters({ dept: v })} />;
+      case "sub":
+        return <MultiSelect inline searchable label="Subsetor" options={subVisiveis.map((x) => ({ value: x.id, label: x.nome }))} selected={filtrosVistos.sub} onChange={(v) => applyFilters({ sub: v })} />;
       case "kpi":
         return <MultiSelect inline searchable label="KPI" legacyHint="KPI que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={kpiOpts.map((x) => ({ value: x.nome, label: x.nome, legacy: x.legacy }))} selected={filtrosVistos.kpi} onChange={(v) => applyFilters({ kpi: v })} />;
       case "tool":
