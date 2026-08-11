@@ -58,14 +58,26 @@ export function indiceDeAlvos(
   unidadesDaEmpresa: string[],
 ): IndiceDeAlvos {
   const porMatricula = new Map<string, { id: string; unidades: string[] }[]>();
+  // "quantas unidades a empresa tem" vem do catálogo E das unidades dos
+  // próprios vínculos, e a resposta mais restritiva vence. Duas fontes porque
+  // uma sozinha falha: o catálogo pode não chegar (e aí a lista vazia diria
+  // "unidade única", liberando a matrícula solta justo onde ela é ambígua), e
+  // os vínculos sozinhos não veem a unidade recém-criada, ainda sem gente.
+  const unidadesVistas = new Set<string>();
+  for (const u of unidadesDaEmpresa ?? []) {
+    const n = normTexto(u);
+    if (n) unidadesVistas.add(n);
+  }
   for (const r of refs) {
+    const unidades = (r.units ?? []).map(normTexto).filter(Boolean);
+    for (const u of unidades) unidadesVistas.add(u);
     const mat = normMatricula(r.code ?? "");
     if (!mat) continue;
     const arr = porMatricula.get(mat) ?? [];
-    arr.push({ id: r.id, unidades: (r.units ?? []).map(normTexto).filter(Boolean) });
+    arr.push({ id: r.id, unidades });
     porMatricula.set(mat, arr);
   }
-  return { porMatricula, multiUnidade: unidadesDaEmpresa.length > 1 };
+  return { porMatricula, multiUnidade: unidadesVistas.size > 1 };
 }
 
 export type AlvoDaLinha = {
