@@ -8,7 +8,7 @@ import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 // as MESMAS regras que o servidor aplica: se divergissem, a prévia mentiria
 import { normTexto as norm, parseDataPlanilha, parseTipo } from "@/lib/absences-import";
-import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
 
 /**
  * Importação de férias e afastamentos em lote.
@@ -21,7 +21,7 @@ import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 
 const fmtBR = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 
-export function ImportAbsencesDialog({ members }: { members: { id: string; name: string; code?: string | null }[] }) {
+export function ImportAbsencesDialog({ members, unidades }: { members: { id: string; name: string; code?: string | null; units?: string[] }[]; unidades: string[] }) {
   const [open, setOpen] = useState(false);
   const { lendo, ler } = useLeituraDePlanilha();
   const [rows, setRows] = useState<AbsenceImportRow[]>([]);
@@ -36,15 +36,22 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
   function close() { setOpen(false); reset(); }
 
   const analysis = useMemo(() => {
-    const idx = indiceDeAlvos(members);
+    const idx = indiceDeAlvos(members, unidades);
     return rows.map((r) => {
-      const alvo = resolverAlvo(r.code ?? "", r.name ?? "", idx);
+      const alvo = resolverAlvo(r.code ?? "", r.unit ?? "", idx);
       const badDates = !r.start || !r.end || r.end < r.start;
       const badKind = parseTipo(r.kind ?? "") === null;
-      const invalid = (!r.name?.trim() && !r.code?.trim()) || badDates || badKind;
-      return { row: r, notFound: alvo.naoEncontrado, mismatch: alvo.divergente, invalid, badKind, importable: !!alvo.alvoId && !badDates && !badKind };
+      const invalid = alvo.motivo === "sem_matricula" || badDates || badKind;
+      return {
+        row: r,
+        motivo: alvo.motivo,
+        notFound: alvo.motivo === "nao_encontrada",
+        mismatch: alvo.motivo === "precisa_unidade" || alvo.motivo === "unidade_nao_confere" || alvo.motivo === "duplicada_na_unidade",
+        invalid, badKind,
+        importable: !!alvo.alvoId && !badDates && !badKind,
+      };
     });
-  }, [rows, members]);
+  }, [rows, members, unidades]);
 
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable).length,
@@ -57,16 +64,21 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
     const XLSX = await loadXlsx();
     const exemplo = members[0]?.name ?? "Fulano de Tal";
     const exemploId = members[0]?.code ?? "";
+    const exemploUn = members[0]?.units?.[0] ?? unidades[0] ?? "";
+    const multi = unidades.length > 1;
     const ws = XLSX.utils.aoa_to_sheet([
-      ["ID", "Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
-      [exemploId, exemplo, "Férias", "16/07/2026", "04/08/2026", "Sim", "1º período aquisitivo"],
-      [exemploId, exemplo, "Atestado", "10/09/2026", "11/09/2026", "Não", ""],
+      ["ID", "Unidade", "Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
+      [exemploId, exemploUn, exemplo, "Férias", "16/07/2026", "04/08/2026", "Sim", "1º período aquisitivo"],
+      [exemploId, exemploUn, exemplo, "Atestado", "10/09/2026", "11/09/2026", "Não", ""],
     ]);
-    ws["!cols"] = [{ wch: 12 }, { wch: 34 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      ["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica a pessoa (evita erro de nome e homônimos); se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."],
-      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
+      ["ID", "Sim", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). É ela que identifica a pessoa, junto com a Unidade. O nome NÃO identifica."],
+      ["Unidade", multi ? "Sim" : "Não", multi
+        ? "Obrigatória: a empresa tem mais de uma unidade, e a mesma matrícula pode existir em unidades diferentes. Escreva o nome da unidade como cadastrado."
+        : "A empresa tem uma única unidade; pode deixar em branco."],
+      ["Colaborador", "Não", "Somente conferência visual. O sistema identifica por ID e Unidade, nunca pelo nome."],
       ["Tipo", "Não", "Férias, Licença, Afastamento ou Atestado. Em branco vale Férias."],
       ["Início", "Sim", "Primeiro dia de ausência, no formato DD/MM/AAAA. Este dia conta como ausência."],
       ["Fim", "Sim", "Último dia de ausência, no formato DD/MM/AAAA. Este dia também conta."],
@@ -78,8 +90,8 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
       ["Períodos que se cruzam", "", "Uma pessoa não pode ter dois períodos sobrepostos. Linhas que cruzam com um período já lançado são recusadas e aparecem no resumo."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
-    const wsC = XLSX.utils.aoa_to_sheet([["Colaborador", "ID"], ...members.map((m) => [m.name, m.code ?? ""])]);
-    wsC["!cols"] = [{ wch: 34 }, { wch: 12 }];
+    const wsC = XLSX.utils.aoa_to_sheet([["ID", "Unidade", "Colaborador"], ...members.map((m) => [m.code ?? "", (m.units ?? []).join("; "), m.name])]);
+    wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ausências");
     XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
@@ -101,8 +113,10 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
       let nameIdx = find("colaborador", "nome", "funcionario");
       // "ID" casa por igualdade, não por trecho: "saida" contém "id"
       const idIdx = headers.findIndex((h) => h === "id" || h.includes("matricula") || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
+      const unitIdx = find("unidade", "empresa", "loja");
       const kindIdx = find("tipo", "motivo");
-      const startIdx = find("inicio", "de", "saida");
+      // "de" só por igualdade: "unidade" contém "de" e roubaria a coluna
+      const startIdx = (() => { const i = find("inicio", "saida"); return i >= 0 ? i : headers.findIndex((h) => h === "de"); })();
       const endIdx = find("fim", "termino", "ate", "retorno");
       const discIdx = find("desconta", "rv", "proporcional");
       const noteIdx = find("observacao", "obs", "nota");
@@ -118,6 +132,7 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
         parsed.push({
           name,
           code,
+          unit: get(r, unitIdx),
           kind: get(r, kindIdx),
           start: parseDataPlanilha(startIdx >= 0 ? r[startIdx] : ""),
           end: parseDataPlanilha(endIdx >= 0 ? r[endIdx] : ""),
@@ -166,8 +181,8 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
                     {counts.ok} período(s) a importar · {rows.length} linha(s){ignored > 0 && ` · ${ignored} ignorada(s)`}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
-                    {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} colaborador não encontrado</span>}
-                    {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} ID e nome divergem</span>}
+                    {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} matrícula não encontrada</span>}
+                    {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} conflito de unidade/matrícula</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (datas ou tipo)</span>}
                   </div>
                   {rows.length > 0 && (
@@ -177,10 +192,9 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
                           {a.row.name || a.row.code}
                           {a.row.kind ? ` · ${a.row.kind}` : ""}
                           {a.row.start ? ` · ${fmtBR(a.row.start)} a ${fmtBR(a.row.end) || "?"}` : ""}
-                          {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}
-                          {a.mismatch && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>ID e nome divergem</span>}
-                          {!a.notFound && a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo inválido</span>}
-                          {!a.notFound && a.invalid && !a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>datas inválidas</span>}
+                          {a.motivo && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{MOTIVO_LABEL[a.motivo]}</span>}
+                          {!a.motivo && a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo inválido</span>}
+                          {!a.motivo && a.invalid && !a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>datas inválidas</span>}
                         </li>
                       ))}
                       {rows.length > 14 && <li>… e mais {rows.length - 14}</li>}
@@ -199,7 +213,7 @@ export function ImportAbsencesDialog({ members }: { members: { id: string; name:
                       {summary.updated > 0 && <span className="badge badge-blue">{summary.updated} atualizado(s)</span>}
                       {summary.overlapping > 0 && <span className="badge badge-amber">{summary.overlapping} sobreposto(s)</span>}
                       {summary.notFound > 0 && <span className="badge badge-red">{summary.notFound} não encontrado(s)</span>}
-                      {summary.mismatch > 0 && <span className="badge badge-red">{summary.mismatch} ID e nome divergem</span>}
+                      {summary.mismatch > 0 && <span className="badge badge-red">{summary.mismatch} conflito de unidade/matrícula</span>}
                       {summary.invalid > 0 && <span className="badge badge-amber">{summary.invalid} inválida(s)</span>}
                     </div>
                   )}

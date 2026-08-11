@@ -154,22 +154,30 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
   try {
     const { supabase, tenantId, userId } = await dpActionContext();
 
-    const [{ data: membros }, { data: tipos }, { data: existentes }] = await Promise.all([
-      supabase
-        .from("memberships")
-        .select("user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)")
-        .eq("tenant_id", tenantId),
+    const [{ data: membros }, { data: tipos }, { data: existentes }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+      supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
       supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenantId),
       supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
+      supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+      // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
+      supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
     ]);
 
-    const refs: { id: string; name: string; code?: string | null }[] = [];
+    const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
+    const unidadesDoVinculo = new Map<string, string[]>();
+    for (const v of vinculoUnidade ?? []) {
+      const nm = nomeUnidade.get(v.unit_id);
+      if (!nm) continue;
+      const arr = unidadesDoVinculo.get(v.membership_id) ?? [];
+      arr.push(nm);
+      unidadesDoVinculo.set(v.membership_id, arr);
+    }
+    const refs: { id: string; code?: string | null; units?: string[] }[] = [];
     for (const m of membros ?? []) {
       if (!m.is_active) continue;
-      const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-      refs.push({ id: m.user_id, name: nm ?? "", code: m.employee_code });
+      refs.push({ id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [] });
     }
-    const idx = indiceDeAlvos(refs);
+    const idx = indiceDeAlvos(refs, (unidades ?? []).map((u) => u.name));
 
     // o que já está no banco, mais o que esta planilha já aceitou: sem a segunda
     // parte, duas linhas iguais da MESMA planilha entrariam como duas punições
@@ -183,14 +191,14 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     const r: SanctionImportResult = { ...vazio };
 
     for (const linha of rows ?? []) {
-      const nome = (linha.name ?? "").trim();
       const data = parseDataPlanilha(linha.occurredOn ?? "");
-      if ((!nome && !(linha.code ?? "").trim()) || !data) { r.invalid += 1; continue; }
+      if (!data) { r.invalid += 1; continue; }
 
-      const resolvido = resolverAlvo(linha.code ?? "", nome, idx);
-      if (resolvido.divergente) { r.mismatch += 1; continue; }
+      const resolvido = resolverAlvo(linha.code ?? "", linha.unit ?? "", idx);
+      if (resolvido.motivo === "sem_matricula") { r.invalid += 1; continue; }
+      if (resolvido.motivo === "nao_encontrada") { r.notFound += 1; continue; }
       const alvo = resolvido.alvoId;
-      if (!alvo) { r.notFound += 1; continue; }
+      if (!alvo) { r.mismatch += 1; continue; }
 
       const tipo = acharTipo(linha.type ?? "", tipos ?? []);
       if (!tipo) { r.unknownType += 1; continue; }
@@ -229,9 +237,9 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
       return {
         ...r,
         error: r.mismatch > 0
-          ? "Nenhuma punição importada: há linhas em que a matrícula e o nome apontam para pessoas diferentes."
+          ? "Nenhuma punição importada: conflito de unidade e matrícula (confira a coluna Unidade)."
           : r.notFound > 0
-            ? "Nenhuma punição importada, colaborador não encontrado (confira a matrícula ou o nome exato do cadastro)."
+            ? "Nenhuma punição importada, matrícula não encontrada no cadastro."
             : r.unknownType > 0
               ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Remuneração variável › Tipos de punição."
               : "Nenhuma linha válida, confira o colaborador e a data.",

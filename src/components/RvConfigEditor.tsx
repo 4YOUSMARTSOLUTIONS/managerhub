@@ -24,7 +24,7 @@ export type RvConfigRow = {
   value: number;
 };
 export type RvPositionRef = { id: string; name: string };
-export type RvMemberRef = { userId: string; name: string; code: string | null; positionId: string | null; positionName: string | null };
+export type RvMemberRef = { userId: string; name: string; code: string | null; units: string[]; positionId: string | null; positionName: string | null };
 
 /** valor vigente para um conjunto de vigências numa competência (YYYY-MM-01) */
 function currentValue(configs: RvConfigRow[], period: string): RvConfigRow | null {
@@ -35,9 +35,10 @@ function currentValue(configs: RvConfigRow[], period: string): RvConfigRow | nul
   return best;
 }
 
-export function RvConfigEditor({ positions, members, configs, canEdit = true }: {
+export function RvConfigEditor({ positions, members, configs, unidades, canEdit = true }: {
   positions: RvPositionRef[];
   members: RvMemberRef[];
+  unidades: string[];
   configs: RvConfigRow[];
   /** `false` deixa em consulta: valor vigente, histórico de vigências e exportação ficam; nova vigência e exclusão somem. */
   canEdit?: boolean;
@@ -78,6 +79,7 @@ export function RvConfigEditor({ positions, members, configs, canEdit = true }: 
         <RvScopeTable
           scope="position"
           refs={positions.map((p) => ({ id: p.id, name: p.name }))}
+          unidades={unidades}
           rows={positions.map((p) => ({ key: p.id, title: p.name, subtitle: null, configs: byPosition.get(p.id) ?? [] }))}
           period={period}
           canEdit={canEdit}
@@ -85,7 +87,8 @@ export function RvConfigEditor({ positions, members, configs, canEdit = true }: 
       ) : (
         <RvScopeTable
           scope="user"
-          refs={members.map((m) => ({ id: m.userId, name: m.name, code: m.code }))}
+          refs={members.map((m) => ({ id: m.userId, name: m.name, code: m.code, units: m.units }))}
+          unidades={unidades}
           rows={members.map((m) => {
             const inherited = m.positionId ? currentValue(byPosition.get(m.positionId) ?? [], period) : null;
             return {
@@ -103,9 +106,10 @@ export function RvConfigEditor({ positions, members, configs, canEdit = true }: 
   );
 }
 
-function RvScopeTable({ scope, refs, rows, period, canEdit }: {
+function RvScopeTable({ scope, refs, rows, period, canEdit, unidades }: {
   scope: "position" | "user";
-  refs: { id: string; name: string }[];
+  refs: { id: string; name: string; code?: string | null; units?: string[] }[];
+  unidades: string[];
   rows: { key: string; title: string; subtitle: string | null; configs: RvConfigRow[] }[];
   period: string;
   canEdit: boolean;
@@ -151,7 +155,7 @@ function RvScopeTable({ scope, refs, rows, period, canEdit }: {
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input className="input" placeholder={scope === "position" ? "Buscar função…" : "Buscar colaborador…"} value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 320 }} />
-        {canEdit && <ImportRvDialog scope={scope} refs={refs} />}
+        {canEdit && <ImportRvDialog scope={scope} refs={refs} unidades={unidades} />}
         <ExportButton
           filename={`rv_${scope === "position" ? "por_funcao" : "por_colaborador"}.xlsx`}
           sheetName="RV"

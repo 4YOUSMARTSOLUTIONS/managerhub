@@ -16,9 +16,12 @@ export { normTexto, parseDataPlanilha };
 
 /** uma linha da planilha, já lida e antes de qualquer validação de cadastro */
 export type SanctionImportRow = {
+  /** nome: coluna informativa; o sistema NÃO casa por nome */
   name: string;
-  /** matrícula do colaborador (coluna ID do modelo); quando presente, decide */
+  /** matrícula do colaborador (coluna ID do modelo); identifica junto com a unidade */
   code?: string;
+  /** unidade da linha; obrigatória em empresa com mais de uma unidade */
+  unit?: string;
   /** o nome do tipo como veio escrito, para o erro poder citá-lo */
   type: string;
   /** `YYYY-MM-DD`, ou "" se a célula não deu para entender */
@@ -33,7 +36,7 @@ export type SanctionImportResult = {
   /** sem nome, sem data, ou data ilegível */
   invalid: number;
   notFound: number;
-  /** matrícula e nome apontam para pessoas diferentes */
+  /** conflito de unidade e matrícula (não confere, falta unidade ou duplicada) */
   mismatch: number;
   /** o tipo escrito não existe no catálogo da empresa */
   unknownType: number;

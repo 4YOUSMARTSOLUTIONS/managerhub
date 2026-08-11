@@ -11,7 +11,7 @@ import {
   normTexto as norm, parseDataPlanilha, acharTipo,
   type SanctionImportRow, type SanctionImportResult,
 } from "@/lib/sanctions-import";
-import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
 
 /**
  * Importação de punições em lote.
@@ -25,10 +25,11 @@ import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
 const fmtBR = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 
 export function ImportSanctionsDialog({
-  members, types,
+  members, types, unidades,
 }: {
-  members: { id: string; name: string; code?: string | null }[];
+  members: { id: string; name: string; code?: string | null; units?: string[] }[];
   types: { id: string; name: string; active: boolean }[];
+  unidades: string[];
 }) {
   const [open, setOpen] = useState(false);
   const { lendo, ler } = useLeituraDePlanilha();
@@ -44,15 +45,22 @@ export function ImportSanctionsDialog({
   function close() { setOpen(false); reset(); }
 
   const analysis = useMemo(() => {
-    const idx = indiceDeAlvos(members);
+    const idx = indiceDeAlvos(members, unidades);
     return rows.map((r) => {
-      const alvo = resolverAlvo(r.code ?? "", r.name ?? "", idx);
+      const alvo = resolverAlvo(r.code ?? "", r.unit ?? "", idx);
       const badDate = !r.occurredOn;
       const badType = acharTipo(r.type ?? "", types) === null;
-      const invalid = (!r.name?.trim() && !r.code?.trim()) || badDate;
-      return { row: r, notFound: alvo.naoEncontrado, mismatch: alvo.divergente, invalid, badDate, badType, importable: !!alvo.alvoId && !badDate && !badType };
+      const invalid = alvo.motivo === "sem_matricula" || badDate;
+      return {
+        row: r,
+        motivo: alvo.motivo,
+        notFound: alvo.motivo === "nao_encontrada",
+        mismatch: alvo.motivo === "precisa_unidade" || alvo.motivo === "unidade_nao_confere" || alvo.motivo === "duplicada_na_unidade",
+        invalid, badDate, badType,
+        importable: !!alvo.alvoId && !badDate && !badType,
+      };
     });
-  }, [rows, members, types]);
+  }, [rows, members, types, unidades]);
 
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable).length,
@@ -66,19 +74,24 @@ export function ImportSanctionsDialog({
     const XLSX = await loadXlsx();
     const exemplo = members[0]?.name ?? "Fulano de Tal";
     const exemploId = members[0]?.code ?? "";
+    const exemploUn = members[0]?.units?.[0] ?? unidades[0] ?? "";
+    const multi = unidades.length > 1;
     const ativos = types.filter((t) => t.active);
     const tipo1 = ativos[0]?.name ?? "Advertência escrita";
     const tipo2 = ativos[1]?.name ?? tipo1;
     const ws = XLSX.utils.aoa_to_sheet([
-      ["ID", "Colaborador", "Tipo", "Data", "Observação"],
-      [exemploId, exemplo, tipo1, "12/03/2026", "Atraso reiterado"],
-      [exemploId, exemplo, tipo2, "28/05/2026", ""],
+      ["ID", "Unidade", "Colaborador", "Tipo", "Data", "Observação"],
+      [exemploId, exemploUn, exemplo, tipo1, "12/03/2026", "Atraso reiterado"],
+      [exemploId, exemploUn, exemplo, tipo2, "28/05/2026", ""],
     ]);
-    ws["!cols"] = [{ wch: 12 }, { wch: 34 }, { wch: 24 }, { wch: 12 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 24 }, { wch: 12 }, { wch: 40 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
-      ["ID", "Não", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). Quando preenchida, é ela que identifica a pessoa (evita erro de nome e homônimos); se matrícula e nome apontarem para pessoas diferentes, a linha é recusada. Colaborador sem matrícula: use o nome."],
-      ["Colaborador", "Sim", "Nome como está no cadastro. Acento e maiúscula não importam. Com a coluna ID preenchida, vira só conferência."],
+      ["ID", "Sim", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). É ela que identifica a pessoa, junto com a Unidade. O nome NÃO identifica."],
+      ["Unidade", multi ? "Sim" : "Não", multi
+        ? "Obrigatória: a empresa tem mais de uma unidade, e a mesma matrícula pode existir em unidades diferentes. Escreva o nome da unidade como cadastrado."
+        : "A empresa tem uma única unidade; pode deixar em branco."],
+      ["Colaborador", "Não", "Somente conferência visual. O sistema identifica por ID e Unidade, nunca pelo nome."],
       ["Tipo", "Sim", "Um dos tipos cadastrados em Remuneração variável › Tipos de punição. O nome tem de bater; tipo desconhecido não é criado automaticamente."],
       ["Data", "Sim", "Data da punição, no formato DD/MM/AAAA. É o mês desta data que sofre o redutor."],
       ["Observação", "Não", "Texto livre."],
@@ -89,8 +102,8 @@ export function ImportSanctionsDialog({
       ["O que a punição corta", "", "Nada por si só. Quem decide é o motivo cadastrado em Remuneração variável › Redutores, apontando para punição."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
-    const wsC = XLSX.utils.aoa_to_sheet([["Colaborador", "ID"], ...members.map((m) => [m.name, m.code ?? ""])]);
-    wsC["!cols"] = [{ wch: 34 }, { wch: 12 }];
+    const wsC = XLSX.utils.aoa_to_sheet([["ID", "Unidade", "Colaborador"], ...members.map((m) => [m.code ?? "", (m.units ?? []).join("; "), m.name])]);
+    wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Punições");
     XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
@@ -112,6 +125,7 @@ export function ImportSanctionsDialog({
       let nameIdx = find("colaborador", "nome", "funcionario");
       // "ID" casa por igualdade, não por trecho: "saida" contém "id"
       const idIdx = headers.findIndex((h) => h === "id" || h.includes("matricula") || h.startsWith("id do") || h.startsWith("id da") || h.includes("identificador"));
+      const unitIdx = find("unidade", "empresa", "loja");
       const typeIdx = find("tipo", "punicao", "sancao", "medida");
       const dateIdx = find("data", "ocorrencia", "aplicacao");
       const noteIdx = find("observacao", "obs", "motivo", "nota");
@@ -127,6 +141,7 @@ export function ImportSanctionsDialog({
         parsed.push({
           name,
           code,
+          unit: get(r, unitIdx),
           type: get(r, typeIdx),
           occurredOn: parseDataPlanilha(dateIdx >= 0 ? r[dateIdx] : ""),
           note: get(r, noteIdx),
@@ -173,8 +188,8 @@ export function ImportSanctionsDialog({
                     {counts.ok} punição(ões) a importar · {rows.length} linha(s){ignored > 0 && ` · ${ignored} ignorada(s)`}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
-                    {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} colaborador não encontrado</span>}
-                    {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} ID e nome divergem</span>}
+                    {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} matrícula não encontrada</span>}
+                    {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} conflito de unidade/matrícula</span>}
                     {counts.badType > 0 && <span className="badge badge-red">{counts.badType} tipo fora do catálogo</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (data)</span>}
                   </div>
@@ -185,10 +200,9 @@ export function ImportSanctionsDialog({
                           {a.row.name || a.row.code}
                           {a.row.type ? ` · ${a.row.type}` : ""}
                           {a.row.occurredOn ? ` · ${fmtBR(a.row.occurredOn)}` : ""}
-                          {a.notFound && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>não encontrado</span>}
-                          {a.mismatch && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>ID e nome divergem</span>}
-                          {!a.notFound && a.badDate && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>data inválida</span>}
-                          {!a.notFound && !a.badDate && a.badType && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo fora do catálogo</span>}
+                          {a.motivo && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{MOTIVO_LABEL[a.motivo]}</span>}
+                          {!a.motivo && a.badDate && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>data inválida</span>}
+                          {!a.motivo && !a.badDate && a.badType && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo fora do catálogo</span>}
                         </li>
                       ))}
                       {rows.length > 14 && <li>… e mais {rows.length - 14}</li>}
@@ -207,7 +221,7 @@ export function ImportSanctionsDialog({
                       {summary.updated > 0 && <span className="badge badge-blue">{summary.updated} atualizada(s)</span>}
                       {summary.unknownType > 0 && <span className="badge badge-amber">{summary.unknownType} tipo desconhecido</span>}
                       {summary.notFound > 0 && <span className="badge badge-red">{summary.notFound} não encontrado(s)</span>}
-                      {summary.mismatch > 0 && <span className="badge badge-red">{summary.mismatch} ID e nome divergem</span>}
+                      {summary.mismatch > 0 && <span className="badge badge-red">{summary.mismatch} conflito de unidade/matrícula</span>}
                       {summary.invalid > 0 && <span className="badge badge-amber">{summary.invalid} inválida(s)</span>}
                     </div>
                   )}

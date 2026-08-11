@@ -98,9 +98,12 @@ export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
 // ---------- Importação em lote (.xlsx) ----------
 
 export type AbsenceImportRow = {
+  /** nome: coluna informativa; o sistema NÃO casa por nome */
   name: string;
-  /** matrícula do colaborador (coluna ID do modelo); quando presente, decide */
+  /** matrícula do colaborador (coluna ID do modelo); identifica junto com a unidade */
   code?: string;
+  /** unidade da linha; obrigatória em empresa com mais de uma unidade */
+  unit?: string;
   kind: string;
   start: string;
   end: string;
@@ -114,7 +117,7 @@ export type AbsenceImportResult = {
   updated: number;
   invalid: number;
   notFound: number;
-  /** matrícula e nome apontam para pessoas diferentes */
+  /** conflito de unidade e matrícula (não confere, falta unidade ou duplicada) */
   mismatch: number;
   /** recusadas por cruzar com um período já lançado */
   overlapping: number;
@@ -135,17 +138,27 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
 
-    const { data: membros } = await supabase
-      .from("memberships")
-      .select("user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)")
-      .eq("tenant_id", tenantId);
-    const refs: { id: string; name: string; code?: string | null }[] = [];
+    const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+      supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
+      supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+      // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
+      supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    ]);
+    const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
+    const unidadesDoVinculo = new Map<string, string[]>();
+    for (const v of vinculoUnidade ?? []) {
+      const nm = nomeUnidade.get(v.unit_id);
+      if (!nm) continue;
+      const arr = unidadesDoVinculo.get(v.membership_id) ?? [];
+      arr.push(nm);
+      unidadesDoVinculo.set(v.membership_id, arr);
+    }
+    const refs: { id: string; code?: string | null; units?: string[] }[] = [];
     for (const m of membros ?? []) {
       if (!m.is_active) continue;
-      const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-      refs.push({ id: m.user_id, name: nm ?? "", code: m.employee_code });
+      refs.push({ id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [] });
     }
-    const idx = indiceDeAlvos(refs);
+    const idx = indiceDeAlvos(refs, (unidades ?? []).map((u) => u.name));
 
     const { data: existentes } = await supabase
       .from("employee_absences")
@@ -167,16 +180,16 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
     const r: AbsenceImportResult = { ...vazio };
 
     for (const linha of rows ?? []) {
-      const nome = (linha.name ?? "").trim();
       const inicio = parseDataPlanilha(linha.start ?? "");
       const fim = parseDataPlanilha(linha.end ?? "");
       const kind = parseTipo(linha.kind ?? "");
-      if ((!nome && !(linha.code ?? "").trim()) || !inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
+      if (!inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
 
-      const alvo = resolverAlvo(linha.code ?? "", nome, idx);
-      if (alvo.divergente) { r.mismatch += 1; continue; }
+      const alvo = resolverAlvo(linha.code ?? "", linha.unit ?? "", idx);
+      if (alvo.motivo === "sem_matricula") { r.invalid += 1; continue; }
+      if (alvo.motivo === "nao_encontrada") { r.notFound += 1; continue; }
       const userIdAlvo = alvo.alvoId;
-      if (!userIdAlvo) { r.notFound += 1; continue; }
+      if (!userIdAlvo) { r.mismatch += 1; continue; }
 
       const payload = {
         tenant_id: tenantId,
@@ -214,9 +227,9 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       return {
         ...r,
         error: r.mismatch > 0
-          ? "Nenhum período importado: há linhas em que a matrícula e o nome apontam para pessoas diferentes."
+          ? "Nenhum período importado: conflito de unidade e matrícula (confira a coluna Unidade)."
           : r.notFound > 0
-            ? "Nenhum período importado, colaborador não encontrado (confira a matrícula ou o nome exato do cadastro)."
+            ? "Nenhum período importado, matrícula não encontrada no cadastro."
             : r.overlapping > 0
               ? "Nenhum período importado: todos cruzam com períodos já lançados."
               : "Nenhuma linha válida, confira o colaborador e as datas de início e fim.",

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
-import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, type IndiceDeAlvos } from "@/lib/import-pessoa";
+import { normTexto } from "@/lib/absences-import";
 
 /** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
  *  recusa precisa virar mensagem na tela em vez de exceção. */
@@ -77,11 +78,14 @@ export async function upsertRvConfig(input: RvConfigInput): Promise<ActionState>
 
 // ---------- Importação em lote (.xlsx) ----------
 export type RvConfigImportRow = {
+  /** por função: nome da função (catálogo); por colaborador: coluna informativa */
   name: string;
   period: string;
   value: string;
   /** matrícula do colaborador (coluna ID; só no escopo por colaborador) */
   code?: string;
+  /** unidade da linha; obrigatória em empresa com mais de uma unidade */
+  unit?: string;
 };
 
 /** Importa vigências de RV (por função ou por colaborador), casando o nome com o cadastro. */
@@ -93,20 +97,36 @@ export async function importRvConfig(
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!PODE_DP.has(role)) return { imported: 0, invalid: 0, notFound: 0, mismatch: 0, error: SO_DP };
 
-    // catálogo de alvos: colaborador tem matrícula (que decide); função só nome
-    const refs: { id: string; name: string; code?: string | null }[] = [];
+    // função continua casando por NOME (item de catálogo, sem matrícula nem
+    // unidade); colaborador casa por unidade + matrícula
+    let funcaoPorNome: Map<string, string> | null = null;
+    let idx: IndiceDeAlvos | null = null;
     if (scope === "position") {
       const { data } = await supabase.from("positions").select("id, name").eq("tenant_id", tenantId);
-      for (const p of data ?? []) refs.push({ id: p.id, name: p.name });
+      funcaoPorNome = new Map((data ?? []).map((p) => [normTexto(p.name), p.id]));
     } else {
-      const { data } = await supabase.from("memberships").select("user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId);
-      for (const m of data ?? []) {
-        if (!m.is_active) continue;
-        const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-        refs.push({ id: m.user_id, name: nm ?? "", code: m.employee_code });
+      const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+        supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
+        supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+        // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
+        supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+      ]);
+      const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
+      const unidadesDoVinculo = new Map<string, string[]>();
+      for (const v of vinculoUnidade ?? []) {
+        const nm = nomeUnidade.get(v.unit_id);
+        if (!nm) continue;
+        const arr = unidadesDoVinculo.get(v.membership_id) ?? [];
+        arr.push(nm);
+        unidadesDoVinculo.set(v.membership_id, arr);
       }
+      const refs: { id: string; code?: string | null; units?: string[] }[] = [];
+      for (const m of membros ?? []) {
+        if (!m.is_active) continue;
+        refs.push({ id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [] });
+      }
+      idx = indiceDeAlvos(refs, (unidades ?? []).map((u) => u.name));
     }
-    const idx = indiceDeAlvos(refs);
 
     const { data: existing } = await supabase
       .from("individual_rv_config")
@@ -128,11 +148,19 @@ export async function importRvConfig(
       const name = (r.name ?? "").trim();
       const pm = (r.period ?? "").trim().match(/^(\d{4})-(\d{2})$/);
       const value = parseNum(r.value);
-      if ((!name && !(r.code ?? "").trim()) || !pm || value == null) { invalid++; continue; }
-      const alvo = resolverAlvo(r.code ?? "", name, idx);
-      if (alvo.divergente) { mismatch++; continue; }
-      const targetId = alvo.alvoId;
-      if (!targetId) { notFound++; continue; }
+      if (!pm || value == null) { invalid++; continue; }
+      let targetId: string | null;
+      if (scope === "position") {
+        if (!name) { invalid++; continue; }
+        targetId = funcaoPorNome!.get(normTexto(name)) ?? null;
+        if (!targetId) { notFound++; continue; }
+      } else {
+        const alvo = resolverAlvo(r.code ?? "", r.unit ?? "", idx!);
+        if (alvo.motivo === "sem_matricula") { invalid++; continue; }
+        if (alvo.motivo === "nao_encontrada") { notFound++; continue; }
+        if (!alvo.alvoId) { mismatch++; continue; }
+        targetId = alvo.alvoId;
+      }
       const ef = `${r.period}-01`;
       const payload = {
         tenant_id: tenantId, scope,
@@ -173,9 +201,11 @@ export async function importRvConfig(
       return {
         imported: 0, invalid, notFound, mismatch,
         error: mismatch > 0
-          ? "Nenhum item importado: há linhas em que a matrícula e o nome apontam para pessoas diferentes."
+          ? "Nenhum item importado: conflito de unidade e matrícula (confira a coluna Unidade)."
           : notFound > 0
-            ? `Nenhum item importado, ${scope === "position" ? "função" : "colaborador"} não encontrado (confira a matrícula ou o nome exato).`
+            ? scope === "position"
+              ? "Nenhum item importado, função não encontrada (confira o nome exato)."
+              : "Nenhum item importado, matrícula não encontrada no cadastro."
             : "Nenhuma linha válida, confira Competência (MM/AAAA) e Valor.",
       };
     }

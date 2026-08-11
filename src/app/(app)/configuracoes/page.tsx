@@ -294,6 +294,7 @@ export default async function SettingsPage() {
       userId: m.user_id,
       name: profById.get(m.user_id)?.full_name ?? profById.get(m.user_id)?.email ?? "—",
       code: m.employee_code,
+      units: (unitsByMem.get(m.id) ?? []).map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
       positionId: m.position_id,
       positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
     }))
@@ -377,14 +378,15 @@ export default async function SettingsPage() {
         {
           id: "ausencias",
           label: "Férias e afastamentos",
-          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code }))} absences={absenceRows} canEdit={canEditDP} />,
+          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code, units: m.units }))} unidades={(units ?? []).map((u) => u.name)} absences={absenceRows} canEdit={canEditDP} />,
         },
         {
           id: "punicoes",
           label: "Punições",
           content: (
             <SanctionsManager
-              members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code }))}
+              members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code, units: m.units }))}
+              unidades={(units ?? []).map((u) => u.name)}
               types={sanctionTypeOpts}
               sanctions={sanctionRows}
               cortaRv={punicaoCortaRv}
@@ -1021,7 +1023,7 @@ export default async function SettingsPage() {
         <Tabs
           variant="sub"
           tabs={[
-            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} canEdit={canEditDP} /> },
+            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} unidades={(units ?? []).map((u) => u.name)} canEdit={canEditDP} /> },
             { id: "rv-redutores", label: "Redutores", content: <RvReducerEditor regras={reducerRules} tiposPunicao={sanctionTypeOpts.filter((t) => t.active)} canEdit={canEditDP} /> },
             {
               id: "rv-punicoes",

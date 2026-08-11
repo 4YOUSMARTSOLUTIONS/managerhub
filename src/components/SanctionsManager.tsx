@@ -36,9 +36,10 @@ type Rascunho = { id?: string; userId: string; typeId: string; occurredOn: strin
 const hoje = () => new Date().toISOString().slice(0, 10);
 
 export function SanctionsManager({
-  members, types, sanctions, cortaRv, canEdit = true,
+  members, types, sanctions, cortaRv, unidades, canEdit = true,
 }: {
-  members: { id: string; name: string }[];
+  members: { id: string; name: string; code?: string | null; units?: string[] }[];
+  unidades: string[];
   types: { id: string; name: string; active: boolean }[];
   sanctions: SanctionRow[];
   /** existe motivo ativo apontando para punição? Se não, o registro não corta nada. */
@@ -125,7 +126,7 @@ export function SanctionsManager({
               {anos.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
-              {canEdit && <ImportSanctionsDialog members={members} types={types} />}
+              {canEdit && <ImportSanctionsDialog members={members} types={types} unidades={unidades} />}
               {/* exporta o que está EM VISTA, e nas MESMAS colunas que a
                   importação lê: dá para exportar, corrigir na planilha e
                   reimportar por cima sem duplicar nada */}

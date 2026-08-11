@@ -1,25 +1,26 @@
 /**
  * Resolução de "quem é esta linha" nas importações de planilha.
  *
- * As planilhas de férias, punições e RV identificam o colaborador por DUAS
- * colunas: o nome (o que o humano lê e confere) e o ID, que é a MATRÍCULA do
- * cadastro (`memberships.employee_code`), nunca o id interno do banco, que o
- * usuário não conhece. A regra, a mesma nas três importações e nas duas pontas
- * (prévia do diálogo e action):
+ * A chave é UNIDADE + MATRÍCULA (`memberships.employee_code` + as unidades do
+ * vínculo). Casamento por NOME não existe: nome é coluna informativa, para o
+ * humano conferir, e o sistema o ignora por decisão de produto: nome permite
+ * erro (typo, homônimo), identificador não.
  *
- *   - Matrícula preenchida e válida DECIDE. O nome vira conferência visual: um
- *     nome com typo ao lado de uma matrícula válida não derruba a linha.
- *   - Matrícula que não existe recusa a linha (não encontrado), sem cair para o
- *     nome: matrícula errada é sinal de planilha desalinhada, e casar pelo nome
- *     esconderia exatamente o erro que a coluna veio prevenir.
- *   - Matrícula e nome apontando para pessoas DIFERENTES recusa como
- *     divergente. É o erro clássico de arrastar a célula no Excel.
- *   - Sem matrícula, vale o casamento por nome normalizado de sempre (planilha
- *     antiga continua funcionando; colaborador sem matrícula também).
- *   - Matrícula repetida no cadastro não decide nada: sai do índice e as linhas
- *     dela caem no casamento por nome, em vez de escolher alguém em silêncio.
+ * A regra, a mesma nas três importações e nas duas pontas (prévia e action):
  *
- * A matrícula resolve o que o nome não consegue: homônimos.
+ *   - Empresa com UMA única unidade: a matrícula resolve sozinha. Se a linha
+ *     trouxer Unidade, ela é conferida mesmo assim.
+ *   - Empresa com MAIS de uma unidade: a coluna Unidade é obrigatória em toda
+ *     linha, e o casamento é estrito por (unidade, matrícula). Matrícula
+ *     sozinha não resolve nem quando é única na empresa: o SaaS não sabe se a
+ *     empresa repete matrícula entre unidades, então não aposta.
+ *   - Linha sem matrícula é inválida. Não há fallback.
+ *   - Matrícula duplicada DENTRO da mesma unidade não resolve nunca: é defeito
+ *     de cadastro, e a recusa aponta isso.
+ *
+ * Toda recusa carrega um `motivo`, e `MOTIVO_LABEL` é o texto do selo na
+ * prévia: a pessoa vê POR QUE a linha não entra, não um "não encontrado"
+ * genérico.
  */
 
 import { normTexto } from "@/lib/absences-import";
@@ -30,48 +31,65 @@ export const normMatricula = (s: string): string => {
   return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/, "") : t;
 };
 
-export type IndiceDeAlvos = {
-  porMatricula: Map<string, { id: string; nome: string }>;
-  idPorNome: Map<string, string>;
+export type MotivoDeRecusa =
+  | "sem_matricula"
+  | "precisa_unidade"
+  | "nao_encontrada"
+  | "unidade_nao_confere"
+  | "duplicada_na_unidade";
+
+export const MOTIVO_LABEL: Record<MotivoDeRecusa, string> = {
+  sem_matricula: "sem matrícula",
+  precisa_unidade: "informe a Unidade",
+  nao_encontrada: "matrícula não encontrada",
+  unidade_nao_confere: "unidade não confere",
+  duplicada_na_unidade: "matrícula duplicada no cadastro",
 };
 
-export function indiceDeAlvos(refs: { id: string; name: string; code?: string | null }[]): IndiceDeAlvos {
-  const porMatricula = new Map<string, { id: string; nome: string }>();
-  const repetidas = new Set<string>();
-  const idPorNome = new Map<string, string>();
+export type IndiceDeAlvos = {
+  /** matrícula normalizada → TODOS os donos, com as unidades de cada um (norm) */
+  porMatricula: Map<string, { id: string; unidades: string[] }[]>;
+  /** a empresa tem mais de uma unidade? decide se a coluna Unidade é obrigatória */
+  multiUnidade: boolean;
+};
+
+export function indiceDeAlvos(
+  refs: { id: string; code?: string | null; units?: string[] }[],
+  unidadesDaEmpresa: string[],
+): IndiceDeAlvos {
+  const porMatricula = new Map<string, { id: string; unidades: string[] }[]>();
   for (const r of refs) {
-    const nome = normTexto(r.name ?? "");
-    if (nome) idPorNome.set(nome, r.id);
     const mat = normMatricula(r.code ?? "");
     if (!mat) continue;
-    if (porMatricula.has(mat)) repetidas.add(mat);
-    porMatricula.set(mat, { id: r.id, nome });
+    const arr = porMatricula.get(mat) ?? [];
+    arr.push({ id: r.id, unidades: (r.units ?? []).map(normTexto).filter(Boolean) });
+    porMatricula.set(mat, arr);
   }
-  for (const mat of repetidas) porMatricula.delete(mat);
-  return { porMatricula, idPorNome };
+  return { porMatricula, multiUnidade: unidadesDaEmpresa.length > 1 };
 }
 
 export type AlvoDaLinha = {
   /** id interno resolvido (o que as tabelas gravam), ou null quando recusada */
   alvoId: string | null;
-  naoEncontrado: boolean;
-  divergente: boolean;
+  motivo: MotivoDeRecusa | null;
 };
 
-export function resolverAlvo(matriculaBruta: string, nomeBruto: string, idx: IndiceDeAlvos): AlvoDaLinha {
+const alvo = (id: string): AlvoDaLinha => ({ alvoId: id, motivo: null });
+const recusa = (motivo: MotivoDeRecusa): AlvoDaLinha => ({ alvoId: null, motivo });
+
+export function resolverAlvo(matriculaBruta: string, unidadeBruta: string, idx: IndiceDeAlvos): AlvoDaLinha {
   const mat = normMatricula(matriculaBruta ?? "");
-  const nome = normTexto(nomeBruto ?? "");
-  if (mat) {
-    const alvo = idx.porMatricula.get(mat);
-    if (!alvo) return { alvoId: null, naoEncontrado: true, divergente: false };
-    // divergente só quando o nome escrito existe no cadastro E não é o do dono
-    // da matrícula; nome com typo não condena uma matrícula válida
-    if (nome && nome !== alvo.nome && idx.idPorNome.has(nome)) {
-      return { alvoId: null, naoEncontrado: false, divergente: true };
-    }
-    return { alvoId: alvo.id, naoEncontrado: false, divergente: false };
-  }
-  const porNome = nome ? idx.idPorNome.get(nome) : undefined;
-  if (!porNome) return { alvoId: null, naoEncontrado: !!nome, divergente: false };
-  return { alvoId: porNome, naoEncontrado: false, divergente: false };
+  const unidade = normTexto(unidadeBruta ?? "");
+  if (!mat) return recusa("sem_matricula");
+  if (idx.multiUnidade && !unidade) return recusa("precisa_unidade");
+
+  const donos = idx.porMatricula.get(mat) ?? [];
+  if (donos.length === 0) return recusa("nao_encontrada");
+
+  // com Unidade na linha (obrigatória em empresa multiunidade, opcional na de
+  // unidade única), ela restringe: dono sem a unidade citada está fora
+  const candidatos = unidade ? donos.filter((d) => d.unidades.includes(unidade)) : donos;
+  if (candidatos.length === 1) return alvo(candidatos[0].id);
+  if (candidatos.length === 0) return recusa("unidade_nao_confere");
+  return recusa("duplicada_na_unidade");
 }

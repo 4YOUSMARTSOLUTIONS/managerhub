@@ -59,8 +59,9 @@ const novo = (): Rascunho => ({
   note: "",
 });
 
-export function AbsencesManager({ members, absences, canEdit = true }: {
-  members: { id: string; name: string }[];
+export function AbsencesManager({ members, unidades, absences, canEdit = true }: {
+  members: { id: string; name: string; code?: string | null; units?: string[] }[];
+  unidades: string[];
   absences: AbsenceRow[];
   /** `false` deixa em consulta: busca, filtro, lista e exportação ficam; lançar, editar e excluir somem. */
   canEdit?: boolean;
@@ -153,7 +154,7 @@ export function AbsencesManager({ members, absences, canEdit = true }: {
           {anos.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
-          {canEdit && <ImportAbsencesDialog members={members} />}
+          {canEdit && <ImportAbsencesDialog members={members} unidades={unidades} />}
           {/* exporta o que está EM VISTA, e no mesmo formato que a importação lê:
               dá para exportar, corrigir na planilha e reimportar por cima */}
           <ExportButton
