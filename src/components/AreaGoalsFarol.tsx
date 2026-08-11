@@ -39,6 +39,8 @@ export type AreaGoalRow = {
   unitId: string | null; // null = todas as unidades (Grupo)
   unitName: string | null;
   parentId: string | null; // IC pai (hierarquia)
+  /** quem cadastrou: é quem pode editar e excluir, além da administração */
+  createdById: string | null;
   ownerId: string | null;
   ownerName: string | null;
   entries: AreaEntryLite[];
@@ -113,7 +115,7 @@ function accumulate(consolidation: Enums<"area_consolidation">, unit: string, en
 const kpiKey = (g: AreaGoalRow) => `${g.name.trim().toLowerCase()}|${g.consolidation}|${g.unit.trim().toLowerCase()}`;
 
 export function AreaGoalsFarol({
-  goals, departments, subdepartments, units, members, isAdmin, currentUserId, scopedUnitId = null,
+  goals, departments, subdepartments, units, members, isAdmin, podeCriarIndicador = false, currentUserId, scopedUnitId = null,
   unidadesExtras = [], deptPadrao = "", subPadrao = "",
 }: {
   goals: AreaGoalRow[];
@@ -121,7 +123,10 @@ export function AreaGoalsFarol({
   subdepartments: SubOpt[];
   units: Opt[];
   members: Member[];
+  /** administração da empresa (owner/admin): mexe em qualquer indicador */
   isAdmin: boolean;
+  /** cadastra indicador novo: a administração e quem lidera (Gerencial, Gestor) */
+  podeCriarIndicador?: boolean;
   currentUserId: string;
   scopedUnitId?: string | null; // unidade do filtro global (trava o seletor)
   /** unidades fora do vínculo que a pessoa alcança por responder por meta lá */
@@ -313,7 +318,11 @@ export function AreaGoalsFarol({
 
   // resolve na lista combinada: em unidade extra, `units` (o vínculo) não a contém
   const unitName = unitSel === GROUP ? "Grupo (consolidado)" : unidadesVisiveis.find((u) => u.id === unitSel)?.name ?? "—";
+  // lançar resultado: administração ou o DONO do indicador, espelhando a RLS
   const canEnter = (g: AreaGoalRow) => isAdmin || g.ownerId === currentUserId;
+  // editar/excluir: administração em qualquer um, quem lidera só no que criou
+  const podeGerir = (g: AreaGoalRow) =>
+    isAdmin || (podeCriarIndicador && g.createdById === currentUserId);
   const grouped = unitSel === GROUP;
 
   /**
@@ -386,7 +395,7 @@ export function AreaGoalsFarol({
           </div>
         )}
         <BotaoFiltros aberto={filtrosAbertos} onToggle={() => setFiltrosAbertos((v) => !v)} resumo={resumoFiltros} />
-        {isAdmin && (
+        {podeCriarIndicador && (
           // O que a pessoa OLHA fica à esquerda; o que ela FAZ, à direita. O
           // painel do menu alinha pela direita para não vazar da tela.
           <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
@@ -472,7 +481,7 @@ export function AreaGoalsFarol({
       )}
 
       {/* Controlados por estado e fora do menu, para sobreviverem ao fechamento dele */}
-      {isAdmin && (
+      {podeCriarIndicador && (
         <>
           <ImportAreaGoalsDialog
             hideTrigger
@@ -505,7 +514,7 @@ export function AreaGoalsFarol({
       )}
 
       {rows.length === 0 ? (
-        <EmptyState title="Nenhum indicador" description={isAdmin ? "Use “+ Novo indicador” para cadastrar os indicadores da área." : "Nenhum indicador cadastrado para o filtro atual."} />
+        <EmptyState title="Nenhum indicador" description={podeCriarIndicador ? "Use “+ Novo indicador” para cadastrar os indicadores da área." : "Nenhum indicador cadastrado para o filtro atual."} />
       ) : (
         <div className="card" style={{ overflowX: "auto" }}>
           <table className="table area-goals-table metas-table">
@@ -537,7 +546,7 @@ export function AreaGoalsFarol({
                       {hasChildren ? (
                         <button type="button" onClick={() => toggleCollapse(chave)} title={isCollapsed ? "Expandir" : "Recolher"} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", width: 16, padding: 0, fontSize: "0.7rem", lineHeight: 1 }}>{isCollapsed ? "▸" : "▾"}</button>
                       ) : <span style={{ display: "inline-block", width: 16 }} />}
-                      {isAdmin && !grouped ? (
+                      {podeGerir(g) && !grouped ? (
                         <button type="button" onClick={() => setEditGoal(g)} title="Editar indicador" style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--text)", cursor: "pointer", textAlign: "left" }}>{g.name}</button>
                       ) : <span style={{ fontWeight: 600 }}>{g.name}</span>}
                       {hasChildren && isCollapsed && <span className="soft" style={{ fontSize: "0.68rem", marginLeft: 4 }}>+{(rows.filter((r) => r.chavePai === chave).length)}</span>}
@@ -580,7 +589,7 @@ export function AreaGoalsFarol({
                   ) : (
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
-                        {isAdmin && (
+                        {podeGerir(g) && (
                           <button type="button" className="icon-btn" title="Editar indicador (nome, setor, unidade, cálculo…)" onClick={() => setEditGoal(g)}>
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z" /></svg>
                           </button>
@@ -590,7 +599,7 @@ export function AreaGoalsFarol({
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
                           </button>
                         )}
-                        {isAdmin && <DeleteGoalButton id={g.id} />}
+                        {podeGerir(g) && <DeleteGoalButton id={g.id} />}
                       </div>
                     </td>
                   )}

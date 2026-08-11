@@ -9,6 +9,37 @@ function isAdminRole(role: Enums<"member_role">) {
   return role === "owner" || role === "admin";
 }
 
+/**
+ * Quem CADASTRA indicador da área: a administração e quem lidera.
+ *
+ * Gerencial e Gestor respondem pelos números da área, então cadastrar o
+ * indicador é parte do trabalho deles, não um pedido para o adm. Espelha a
+ * policy `area_goals_insert`.
+ */
+function podeCriarIndicador(role: Enums<"member_role">) {
+  return isAdminRole(role) || role === "manager" || role === "team_lead";
+}
+
+/**
+ * Quem EDITA ou EXCLUI um indicador: a administração em qualquer um, e quem
+ * lidera apenas no que ele mesmo criou. Espelha `area_goals_update`/`_delete`.
+ *
+ * A conferência é explícita, e não deixada só para a RLS, porque um UPDATE que
+ * a policy recusa não vira erro: ele afeta zero linhas em silêncio, e a tela
+ * diria "salvo" sem ter salvo nada.
+ */
+async function podeGerirIndicador(
+  supabase: Awaited<ReturnType<typeof actionContext>>["supabase"],
+  role: Enums<"member_role">,
+  userId: string,
+  goalId: string,
+): Promise<boolean> {
+  if (isAdminRole(role)) return true;
+  if (!podeCriarIndicador(role)) return false;
+  const { data } = await supabase.from("area_goals").select("created_by").eq("id", goalId).maybeSingle();
+  return data?.created_by === userId;
+}
+
 const normTxt = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
@@ -29,7 +60,7 @@ export type CreateAreaGoalInput = {
 export async function createAreaGoal(input: CreateAreaGoalInput): Promise<ActionState> {
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (!isAdminRole(role)) return { error: "Apenas owner/admin podem cadastrar indicadores." };
+    if (!podeCriarIndicador(role)) return { error: "Você não tem permissão para cadastrar indicadores." };
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome do indicador." };
 
@@ -73,8 +104,10 @@ export type UpdateAreaGoalInput = {
 
 export async function updateAreaGoal(input: UpdateAreaGoalInput): Promise<ActionState> {
   try {
-    const { supabase, role } = await actionContext();
-    if (!isAdminRole(role)) return { error: "Apenas owner/admin podem editar indicadores." };
+    const { supabase, userId, role } = await actionContext();
+    if (!(await podeGerirIndicador(supabase, role, userId, input.id))) {
+      return { error: "Você só pode editar indicadores que cadastrou." };
+    }
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome do indicador." };
     const { error } = await supabase
@@ -103,8 +136,10 @@ export async function updateAreaGoal(input: UpdateAreaGoalInput): Promise<Action
 
 export async function deleteAreaGoal(id: string): Promise<ActionState> {
   try {
-    const { supabase, role } = await actionContext();
-    if (!isAdminRole(role)) return { error: "Apenas owner/admin podem excluir indicadores." };
+    const { supabase, userId, role } = await actionContext();
+    if (!(await podeGerirIndicador(supabase, role, userId, id))) {
+      return { error: "Você só pode excluir indicadores que cadastrou." };
+    }
     const { error } = await supabase.from("area_goals").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/metas");
@@ -209,7 +244,7 @@ export async function importAreaGoals(
 ): Promise<{ imported: number; invalid: number; duplicates: number; error?: string }> {
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
-    if (!isAdminRole(role)) return { imported: 0, invalid: 0, duplicates: 0, error: "Apenas owner/admin podem cadastrar indicadores." };
+    if (!podeCriarIndicador(role)) return { imported: 0, invalid: 0, duplicates: 0, error: "Você não tem permissão para cadastrar indicadores." };
 
     const [{ data: deps }, { data: subs }, { data: mems }, { data: existing }, { data: unitsList }] = await Promise.all([
       supabase.from("departments").select("id, name").eq("tenant_id", tenantId),

@@ -51,7 +51,7 @@ export default async function GoalsPage() {
     reportsP,
     supabase
       .from("area_goals")
-      .select("id, name, description, unit, kind, direction, consolidation, department_id, subdepartment_id, unit_id, parent_id, owner_id, dept:departments(name), sub:subdepartments(name), orgUnit:units(name), owner:profiles!area_goals_owner_id_fkey(full_name)")
+      .select("id, name, description, unit, kind, direction, consolidation, department_id, subdepartment_id, unit_id, parent_id, owner_id, created_by, dept:departments(name), sub:subdepartments(name), orgUnit:units(name), owner:profiles!area_goals_owner_id_fkey(full_name)")
       .eq("tenant_id", tenant.id)
       .order("sort")
       .order("name"),
@@ -391,6 +391,7 @@ export default async function GoalsPage() {
     unitId: g.unit_id,
     unitName: (g.orgUnit as unknown as { name: string } | null)?.name ?? null,
     parentId: g.parent_id,
+createdById: g.created_by,
     ownerId: g.owner_id,
     ownerName: (g.owner as unknown as { full_name: string | null } | null)?.full_name ?? null,
     entries: areaEntriesByGoal.get(g.id) ?? [],
@@ -458,9 +459,11 @@ export default async function GoalsPage() {
           subdepartments={areaSubdepartments}
           units={unitScope.units}
           members={areaMembers}
-          // metas da ÁREA: quem lidera também cadastra (gestor e gerencial),
-          // não só a administração
-          isAdmin={isAdmin || role === "manager" || role === "team_lead"}
+          isAdmin={isAdmin}
+          // metas da ÁREA: quem lidera também CADASTRA (Gerencial e Gestor), e
+          // edita ou exclui o que cadastrou. Mexer no indicador dos outros
+          // continua sendo da administração, como diz a RLS.
+          podeCriarIndicador={isAdmin || role === "manager" || role === "team_lead"}
           currentUserId={user.id}
           scopedUnitId={unitScope.activeUnitId}
           unidadesExtras={unidadesExtras}
