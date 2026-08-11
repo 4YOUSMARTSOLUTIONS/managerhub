@@ -36,12 +36,16 @@ export type FeedbackRow = {
   title: string | null; situation: string | null; behavior: string | null; impact: string | null;
   nextSteps: string | null; notes: string | null; visibility: Enums<"feedback_visibility">;
   appliedAt: string | null; acknowledgedAt: string | null; competencyIds: string[]; attachments: FeedbackAttachment[];
+  /** setor e função do sujeito NA ÉPOCA do feedback (carimbo), já em texto */
+  subjectOrg: string | null;
 };
 export type SessionRow = {
   id: string; subjectId: string; subjectName: string; authorId: string; authorName: string;
   date: string; referenceMonth: string | null; title: string | null;
   highlights: string | null; development: string | null; actionPlan: string | null; overall: string | null;
   visibility: Enums<"feedback_visibility">; appliedAt: string | null; acknowledgedAt: string | null; itemFeedbackIds: string[];
+  /** setor e função do sujeito NA ÉPOCA da sessão (carimbo), já em texto */
+  subjectOrg: string | null;
 };
 export type PdiComment = { id: string; authorId: string; authorName: string; body: string; createdAt: string };
 export type PdiActionRow = {
@@ -462,6 +466,7 @@ function FeedbackCard({ f, compName, showSubject, canEdit, onEdit, showAck, onCr
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
         {showSubject && <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={f.subjectName} userId={f.subjectId} /> {f.subjectName}</span>}
         <span className="soft">{showSubject ? "· por " : "de "}{shortName(f.authorName)}</span>
+        {f.subjectOrg && <span className="soft" style={{ fontSize: "0.78rem" }}>· {f.subjectOrg}</span>}
       </div>
       {f.title && <div style={{ fontWeight: 700 }}>{f.title}</div>}
       {blocks.filter(([, v]) => (v ?? "").trim()).map(([label, v]) => (
@@ -525,6 +530,7 @@ function SessionCard({ s, feedbacks, showSubject, canEdit, onEdit, showAck }: {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
         {showSubject && <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontWeight: 600 }}><Avatar name={s.subjectName} userId={s.subjectId} /> {s.subjectName}</span>}
+        {s.subjectOrg && <span className="soft" style={{ fontSize: "0.78rem" }}>· {s.subjectOrg}</span>}
         <span className="soft">{showSubject ? "· por " : "de "}{shortName(s.authorName)}</span>
       </div>
       {s.title && <div style={{ fontWeight: 700 }}>{s.title}</div>}

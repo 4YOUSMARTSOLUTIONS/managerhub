@@ -21,13 +21,13 @@ export default async function FeedbacksPage() {
   const canManage = isAdmin || reportIds.length > 0;
   const reportSet = new Set(reportIds);
 
-  const [membersAll, { data: comps }, { data: fbs }, { data: sess }, { data: cadenceRulesData }, { data: pdiData }, { data: memberOrgData }] = await Promise.all([
+  const [membersAll, { data: comps }, { data: fbs }, { data: sess }, { data: cadenceRulesData }, { data: pdiData }, { data: memberOrgData }, { data: depsData }, { data: posData }] = await Promise.all([
     getMembers(tenant.id),
     supabase.from("feedback_competencies").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase
       .from("feedbacks")
       .select(
-        "id, subject_user_id, author_id, feedback_date, type, channel, title, situation, behavior, impact, next_steps, notes, visibility, applied_at, acknowledged_at, created_at, author:profiles!feedbacks_author_id_fkey(full_name), subject:profiles!feedbacks_subject_user_id_fkey(full_name), links:feedback_competency_links(competency_id), atts:feedback_attachments(id, path, filename, content_type)",
+        "id, subject_user_id, author_id, feedback_date, type, channel, title, situation, behavior, impact, next_steps, notes, visibility, applied_at, acknowledged_at, created_at, subject_department_id, subject_position_id, author:profiles!feedbacks_author_id_fkey(full_name), subject:profiles!feedbacks_subject_user_id_fkey(full_name), links:feedback_competency_links(competency_id), atts:feedback_attachments(id, path, filename, content_type)",
       )
       .eq("tenant_id", tenant.id)
       .order("feedback_date", { ascending: false })
@@ -35,7 +35,7 @@ export default async function FeedbacksPage() {
     supabase
       .from("feedback_sessions")
       .select(
-        "id, subject_user_id, author_id, session_date, reference_month, title, highlights, development, action_plan, overall, visibility, applied_at, acknowledged_at, author:profiles!feedback_sessions_author_id_fkey(full_name), subject:profiles!feedback_sessions_subject_user_id_fkey(full_name), items:feedback_session_items(feedback_id)",
+        "id, subject_user_id, author_id, session_date, reference_month, title, highlights, development, action_plan, overall, visibility, applied_at, acknowledged_at, subject_department_id, subject_position_id, author:profiles!feedback_sessions_author_id_fkey(full_name), subject:profiles!feedback_sessions_subject_user_id_fkey(full_name), items:feedback_session_items(feedback_id)",
       )
       .eq("tenant_id", tenant.id)
       .order("session_date", { ascending: false }),
@@ -48,7 +48,23 @@ export default async function FeedbacksPage() {
       .eq("tenant_id", tenant.id)
       .order("created_at", { ascending: false }),
     supabase.from("memberships").select("user_id, department_id, position_id").eq("tenant_id", tenant.id),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
+    supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
   ]);
+
+  // Setor e função DA ÉPOCA do feedback: o registro carrega o carimbo tirado na
+  // criação, e a transferência ou promoção posterior não reescreve o rótulo.
+  // Registro sem carimbo (não deveria existir após o backfill) cai no vínculo
+  // atual, que é a única informação restante.
+  const nomeSetorFb = new Map((depsData ?? []).map((d) => [d.id, d.name]));
+  const nomeFuncaoFb = new Map((posData ?? []).map((x) => [x.id, x.name]));
+  const orgDaEpoca = (subjectId: string, deptId: string | null, posId: string | null): string | null => {
+    const atual = (memberOrgData ?? []).find((m) => m.user_id === subjectId);
+    const setor = deptId ? nomeSetorFb.get(deptId) : atual?.department_id ? nomeSetorFb.get(atual.department_id) : null;
+    const funcao = posId ? nomeFuncaoFb.get(posId) : atual?.position_id ? nomeFuncaoFb.get(atual.position_id) : null;
+    const partes = [setor, funcao].filter(Boolean);
+    return partes.length > 0 ? partes.join(" · ") : null;
+  };
 
   // IA configurada? chave OpenAI centralizada na plataforma (contas do owner)
   const aiEnabled = (await getPlatformIntegrationFlags()).hasOpenAI;
@@ -71,6 +87,7 @@ export default async function FeedbacksPage() {
     visibility: f.visibility,
     appliedAt: f.applied_at,
     acknowledgedAt: f.acknowledged_at,
+    subjectOrg: orgDaEpoca(f.subject_user_id, f.subject_department_id, f.subject_position_id),
     competencyIds: ((f.links as unknown as { competency_id: string }[]) ?? []).map((l) => l.competency_id),
     attachments: ((f.atts as unknown as { id: string; path: string; filename: string; content_type: string | null }[]) ?? []).map((a) => ({
       id: a.id, path: a.path, filename: a.filename, contentType: a.content_type,
@@ -93,6 +110,7 @@ export default async function FeedbacksPage() {
     visibility: s.visibility,
     appliedAt: s.applied_at,
     acknowledgedAt: s.acknowledged_at,
+    subjectOrg: orgDaEpoca(s.subject_user_id, s.subject_department_id, s.subject_position_id),
     itemFeedbackIds: ((s.items as unknown as { feedback_id: string }[]) ?? []).map((i) => i.feedback_id),
   }));
 
