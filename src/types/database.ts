@@ -520,6 +520,34 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; name?: string; rank?: number; active?: boolean; created_at?: string }
         Relationships: []
       }
+      membership_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          department_id: string | null
+          dismissed_at: string | null
+          effective_from: string
+          effective_to: string | null
+          employee_code: string | null
+          hierarchy_level_id: string | null
+          id: string
+          is_active: boolean
+          manager_id: string | null
+          membership_id: string
+          position_id: string | null
+          position_level_id: string | null
+          role: Database["public"]["Enums"]["member_role"]
+          source: string
+          subdepartment_id: string | null
+          tenant_id: string
+          unit_ids: string[]
+          user_id: string
+        }
+        // escrita é exclusiva do trigger no banco: o app nunca insere/atualiza
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       membership_units: {
         Row: { membership_id: string; unit_id: string }
         Insert: { membership_id: string; unit_id: string }
@@ -1416,6 +1444,7 @@ export type Database = {
       search_action_ids: { Args: { p_filters?: Json; p_limit?: number; p_offset?: number }; Returns: Json }
       meeting_follow_action_ids: { Args: { p_series: string; p_occurrence: string; p_cutoff: string }; Returns: string[] }
       employee_contract_history: { Args: { p_user: string }; Returns: Json }
+      employee_movement_history: { Args: { p_user: string }; Returns: Json }
       action_filter_options: { Args: Record<string, never>; Returns: Json }
       auth_throttle_check: { Args: { p_chaves: Json }; Returns: Json }
       auth_throttle_falha: { Args: { p_chaves: Json }; Returns: Json }
