@@ -64,6 +64,9 @@ export const ORIGEM_AVISO: Record<Origem, string | null> = {
 
 export type Dono = { id: string; unidades: string[]; origem: Origem };
 
+/** o que as telas passam aos diálogos de importação */
+export type AlvoDeImportacao = { id: string; name: string; code: string | null; units: string[]; origem: Origem };
+
 export type IndiceDeAlvos = {
   /** matrícula normalizada → TODOS os donos, com as unidades de cada um (norm) */
   porMatricula: Map<string, Dono[]>;

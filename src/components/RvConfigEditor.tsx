@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { upsertRvConfig, deleteRvConfig } from "@/lib/actions/rv-config";
 import { ImportRvDialog } from "@/components/ImportRvDialog";
+import type { AlvoDeImportacao } from "@/lib/import-pessoa";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { confirmDialog } from "@/components/ui/confirm";
 import { MonthInput } from "@/components/ui/MonthInput";
@@ -35,9 +36,11 @@ function currentValue(configs: RvConfigRow[], period: string): RvConfigRow | nul
   return best;
 }
 
-export function RvConfigEditor({ positions, members, configs, unidades, canEdit = true }: {
+export function RvConfigEditor({ positions, members, configs, alvos, unidades, canEdit = true }: {
   positions: RvPositionRef[];
   members: RvMemberRef[];
+  /** quem a importação alcança: ativos + desligados + contratos anteriores */
+  alvos: AlvoDeImportacao[];
   unidades: string[];
   configs: RvConfigRow[];
   /** `false` deixa em consulta: valor vigente, histórico de vigências e exportação ficam; nova vigência e exclusão somem. */
@@ -79,6 +82,7 @@ export function RvConfigEditor({ positions, members, configs, unidades, canEdit 
         <RvScopeTable
           scope="position"
           refs={positions.map((p) => ({ id: p.id, name: p.name }))}
+          alvos={alvos}
           unidades={unidades}
           rows={positions.map((p) => ({ key: p.id, title: p.name, subtitle: null, configs: byPosition.get(p.id) ?? [] }))}
           period={period}
@@ -88,6 +92,7 @@ export function RvConfigEditor({ positions, members, configs, unidades, canEdit 
         <RvScopeTable
           scope="user"
           refs={members.map((m) => ({ id: m.userId, name: m.name, code: m.code, units: m.units }))}
+          alvos={alvos}
           unidades={unidades}
           rows={members.map((m) => {
             const inherited = m.positionId ? currentValue(byPosition.get(m.positionId) ?? [], period) : null;
@@ -106,9 +111,10 @@ export function RvConfigEditor({ positions, members, configs, unidades, canEdit 
   );
 }
 
-function RvScopeTable({ scope, refs, rows, period, canEdit, unidades }: {
+function RvScopeTable({ scope, refs, rows, period, canEdit, alvos, unidades }: {
   scope: "position" | "user";
   refs: { id: string; name: string; code?: string | null; units?: string[] }[];
+  alvos: AlvoDeImportacao[];
   unidades: string[];
   rows: { key: string; title: string; subtitle: string | null; configs: RvConfigRow[] }[];
   period: string;
@@ -155,7 +161,7 @@ function RvScopeTable({ scope, refs, rows, period, canEdit, unidades }: {
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input className="input" placeholder={scope === "position" ? "Buscar função…" : "Buscar colaborador…"} value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 320 }} />
-        {canEdit && <ImportRvDialog scope={scope} refs={refs} unidades={unidades} />}
+        {canEdit && <ImportRvDialog scope={scope} refs={refs} alvos={alvos} unidades={unidades} />}
         <ExportButton
           filename={`rv_${scope === "position" ? "por_funcao" : "por_colaborador"}.xlsx`}
           sheetName="RV"

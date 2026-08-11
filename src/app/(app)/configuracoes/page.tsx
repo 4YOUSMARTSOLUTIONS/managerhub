@@ -96,7 +96,7 @@ export default async function SettingsPage() {
     { data: subdepartments }, { data: positions }, { data: levels }, { data: hierarchies }, { data: rooms }, { data: holidays },
     { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
     { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
-    { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData }, { data: absencesData },
+    { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData }, { data: contratosData }, { data: absencesData },
     { data: sanctionTypesData }, { data: sanctionsData }, { data: reducerRulesData }, { data: reducerBandsData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
@@ -132,6 +132,9 @@ export default async function SettingsPage() {
     // owner/admin da empresa ativa.
     supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
     supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    // contratos encerrados: as importações aceitam lançar histórico pela
+    // matrícula antiga, e a PRÉVIA precisa reconhecê-la igual ao servidor
+    supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenant.id),
     // férias e afastamentos: a RLS é owner/admin, e esta tela já é
     supabase
       .from("employee_absences")
@@ -300,6 +303,34 @@ export default async function SettingsPage() {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
+  /**
+   * Quem as IMPORTAÇÕES podem alcançar: o quadro ativo, os desligados e os
+   * contratos anteriores (matrícula antiga da mesma pessoa). É mais gente do
+   * que `rvMembers`, que continua sendo só o quadro ativo porque alimenta os
+   * FORMULÁRIOS, onde oferecer desligado seria erro. A prévia precisa da mesma
+   * lista que o servidor usa, senão ela acusa "matrícula não encontrada" para
+   * uma linha que o servidor aceitaria.
+   */
+  const unidadesDoUser = new Map(mems.map((m) => [m.user_id,
+    (unitsByMem.get(m.id) ?? []).map((id) => unitById.get(id)?.name).filter((x): x is string => !!x)]));
+  const nomeDoUser = (id: string) => profById.get(id)?.full_name ?? profById.get(id)?.email ?? "—";
+  const importTargets: { id: string; name: string; code: string | null; units: string[]; origem: "ativo" | "desligado" | "contrato_anterior" }[] = [
+    ...mems.map((m) => ({
+      id: m.user_id,
+      name: nomeDoUser(m.user_id),
+      code: m.employee_code,
+      units: unidadesDoUser.get(m.user_id) ?? [],
+      origem: (m.is_active ? "ativo" : "desligado") as "ativo" | "desligado",
+    })),
+    ...(contratosData ?? []).map((c) => ({
+      id: c.user_id,
+      name: nomeDoUser(c.user_id),
+      code: c.employee_code,
+      units: unidadesDoUser.get(c.user_id) ?? [],
+      origem: "contrato_anterior" as const,
+    })),
+  ];
+
   const sanctionTypeOpts = (sanctionTypesData ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active }));
   const sanctionTypeName = new Map(sanctionTypeOpts.map((t) => [t.id, t.name]));
   const sanctionRows: SanctionRow[] = (sanctionsData ?? []).map((s2) => ({
@@ -378,14 +409,15 @@ export default async function SettingsPage() {
         {
           id: "ausencias",
           label: "Férias e afastamentos",
-          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code, units: m.units }))} unidades={(units ?? []).map((u) => u.name)} absences={absenceRows} canEdit={canEditDP} />,
+          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} absences={absenceRows} canEdit={canEditDP} />,
         },
         {
           id: "punicoes",
           label: "Punições",
           content: (
             <SanctionsManager
-              members={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code, units: m.units }))}
+              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+              alvos={importTargets}
               unidades={(units ?? []).map((u) => u.name)}
               types={sanctionTypeOpts}
               sanctions={sanctionRows}
@@ -1023,7 +1055,7 @@ export default async function SettingsPage() {
         <Tabs
           variant="sub"
           tabs={[
-            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} unidades={(units ?? []).map((u) => u.name)} canEdit={canEditDP} /> },
+            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} canEdit={canEditDP} /> },
             { id: "rv-redutores", label: "Redutores", content: <RvReducerEditor regras={reducerRules} tiposPunicao={sanctionTypeOpts.filter((t) => t.active)} canEdit={canEditDP} /> },
             {
               id: "rv-punicoes",

@@ -7,7 +7,10 @@ import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importRvConfig, type RvConfigImportRow } from "@/lib/actions/rv-config";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
-import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type MotivoDeRecusa } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type MotivoDeRecusa, type AlvoDeImportacao } from "@/lib/import-pessoa";
+
+const SITUACAO: Record<string, string> = { ativo: "Ativo", desligado: "Desligado", contrato_anterior: "Contrato anterior" };
+
 
 const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
@@ -25,7 +28,7 @@ function toMonth(v: unknown): string {
 
 type Ref = { id: string; name: string; code?: string | null; units?: string[] };
 
-export function ImportRvDialog({ scope, refs, unidades, open: openProp, onClose, hideTrigger }: { scope: "position" | "user"; refs: Ref[]; unidades: string[]; open?: boolean; onClose?: () => void; hideTrigger?: boolean }) {
+export function ImportRvDialog({ scope, refs, alvos, unidades, open: openProp, onClose, hideTrigger }: { scope: "position" | "user"; refs: Ref[]; alvos: AlvoDeImportacao[]; unidades: string[]; open?: boolean; onClose?: () => void; hideTrigger?: boolean }) {
   const label = scope === "position" ? "Função" : "Colaborador";
   const [internalOpen, setInternalOpen] = useState(false);
   const { lendo, ler } = useLeituraDePlanilha();
@@ -45,7 +48,7 @@ export function ImportRvDialog({ scope, refs, unidades, open: openProp, onClose,
   const analysis = useMemo(() => {
     // função casa por NOME (item de catálogo); colaborador por unidade + matrícula
     const funcoes = scope === "position" ? new Set(refs.map((r) => norm(r.name))) : null;
-    const idx = scope === "user" ? indiceDeAlvos(refs, unidades) : null;
+    const idx = scope === "user" ? indiceDeAlvos(alvos, unidades) : null;
     // mesma linha (alvo + competência) repetida: o servidor grava a última
     const vistos = new Set<string>();
     return rows.map((r) => {
@@ -74,7 +77,7 @@ export function ImportRvDialog({ scope, refs, unidades, open: openProp, onClose,
       const mismatch = motivo === "precisa_unidade" || motivo === "unidade_nao_confere" || motivo === "duplicada_na_unidade";
       return { row: r, motivo, notFound, mismatch, invalid, duplicate, importable };
     });
-  }, [rows, refs, unidades, scope]);
+  }, [rows, refs, alvos, unidades, scope]);
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable && !a.duplicate).length,
     notFound: analysis.filter((a) => a.notFound).length,
@@ -89,8 +92,9 @@ export function ImportRvDialog({ scope, refs, unidades, open: openProp, onClose,
     // ID (matrícula) e Unidade só existem para colaborador; função é
     // identificada pelo nome (item de catálogo)
     const comId = scope === "user";
-    const exampleId = refs[0]?.code ?? "";
-    const exampleUn = refs[0]?.units?.[0] ?? unidades[0] ?? "";
+    const ativos = alvos.filter((a) => a.origem === "ativo");
+    const exampleId = (comId ? ativos[0]?.code : refs[0]?.code) ?? "";
+    const exampleUn = (comId ? ativos[0]?.units?.[0] : refs[0]?.units?.[0]) ?? unidades[0] ?? "";
     const multi = unidades.length > 1;
     const ws = XLSX.utils.aoa_to_sheet(comId ? [
       ["ID", "Unidade", label, "Competência", "Valor"],
@@ -122,8 +126,11 @@ export function ImportRvDialog({ scope, refs, unidades, open: openProp, onClose,
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "RV");
     if (comId) {
-      const wsC = XLSX.utils.aoa_to_sheet([["ID", "Unidade", label], ...refs.map((r) => [r.code ?? "", (r.units ?? []).join("; "), r.name])]);
-      wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }];
+      const wsC = XLSX.utils.aoa_to_sheet([
+        ["ID", "Unidade", label, "Situação"],
+        ...alvos.map((a) => [a.code ?? "", a.units.join("; "), a.name, SITUACAO[a.origem]]),
+      ]);
+      wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 18 }];
       XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
     }
     XLSX.utils.book_append_sheet(wb, wsI, "Instruções");

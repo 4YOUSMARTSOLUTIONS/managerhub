@@ -8,7 +8,10 @@ import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 // as MESMAS regras que o servidor aplica: se divergissem, a prévia mentiria
 import { normTexto as norm, parseDataPlanilha, parseTipo } from "@/lib/absences-import";
-import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO, type AlvoDeImportacao } from "@/lib/import-pessoa";
+
+const SITUACAO: Record<string, string> = { ativo: "Ativo", desligado: "Desligado", contrato_anterior: "Contrato anterior" };
+
 
 /**
  * Importação de férias e afastamentos em lote.
@@ -21,7 +24,7 @@ import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO } from "@/lib/i
 
 const fmtBR = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 
-export function ImportAbsencesDialog({ members, unidades }: { members: { id: string; name: string; code?: string | null; units?: string[] }[]; unidades: string[] }) {
+export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImportacao[]; unidades: string[] }) {
   const [open, setOpen] = useState(false);
   const { lendo, ler } = useLeituraDePlanilha();
   const [rows, setRows] = useState<AbsenceImportRow[]>([]);
@@ -69,7 +72,7 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
   function close() { setOpen(false); reset(); }
 
   const analysis = useMemo(() => {
-    const idx = indiceDeAlvos(members, unidades);
+    const idx = indiceDeAlvos(alvos, unidades);
     return rows.map((r) => {
       const alvo = resolverAlvo(r.code ?? "", r.unit ?? "", idx);
       const badDates = !r.start || !r.end || r.end < r.start;
@@ -87,7 +90,7 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
         importable: !!alvo.alvoId && !badDates && !badKind,
       };
     });
-  }, [rows, members, unidades]);
+  }, [rows, alvos, unidades]);
 
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable).length,
@@ -98,9 +101,10 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
 
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
-    const exemplo = members[0]?.name ?? "Fulano de Tal";
-    const exemploId = members[0]?.code ?? "";
-    const exemploUn = members[0]?.units?.[0] ?? unidades[0] ?? "";
+    const ativos = alvos.filter((a) => a.origem === "ativo");
+    const exemplo = ativos[0]?.name ?? "Fulano de Tal";
+    const exemploId = ativos[0]?.code ?? "";
+    const exemploUn = ativos[0]?.units?.[0] ?? unidades[0] ?? "";
     const multi = unidades.length > 1;
     const ws = XLSX.utils.aoa_to_sheet([
       ["ID", "Unidade", "Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
@@ -126,8 +130,13 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
       ["Períodos que se cruzam", "", "Uma pessoa não pode ter dois períodos sobrepostos. Linhas que cruzam com um período já lançado são recusadas e aparecem no resumo."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
-    const wsC = XLSX.utils.aoa_to_sheet([["ID", "Unidade", "Colaborador"], ...members.map((m) => [m.code ?? "", (m.units ?? []).join("; "), m.name])]);
-    wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }];
+    // a aba de apoio lista TAMBÉM desligados e contratos anteriores, com a
+    // situação: é deles que sai a matrícula de um lançamento de histórico
+    const wsC = XLSX.utils.aoa_to_sheet([
+      ["ID", "Unidade", "Colaborador", "Situação"],
+      ...alvos.map((a) => [a.code ?? "", a.units.join("; "), a.name, SITUACAO[a.origem]]),
+    ]);
+    wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ausências");
     XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");

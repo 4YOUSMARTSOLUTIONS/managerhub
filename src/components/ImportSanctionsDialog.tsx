@@ -11,7 +11,10 @@ import {
   normTexto as norm, parseDataPlanilha, acharTipo,
   type SanctionImportRow, type SanctionImportResult,
 } from "@/lib/sanctions-import";
-import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type AlvoDeImportacao } from "@/lib/import-pessoa";
+
+const SITUACAO: Record<string, string> = { ativo: "Ativo", desligado: "Desligado", contrato_anterior: "Contrato anterior" };
+
 
 /**
  * Importação de punições em lote.
@@ -25,9 +28,9 @@ import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
 const fmtBR = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 
 export function ImportSanctionsDialog({
-  members, types, unidades,
+  alvos, types, unidades,
 }: {
-  members: { id: string; name: string; code?: string | null; units?: string[] }[];
+  alvos: AlvoDeImportacao[];
   types: { id: string; name: string; active: boolean }[];
   unidades: string[];
 }) {
@@ -45,7 +48,7 @@ export function ImportSanctionsDialog({
   function close() { setOpen(false); reset(); }
 
   const analysis = useMemo(() => {
-    const idx = indiceDeAlvos(members, unidades);
+    const idx = indiceDeAlvos(alvos, unidades);
     return rows.map((r) => {
       const alvo = resolverAlvo(r.code ?? "", r.unit ?? "", idx);
       const badDate = !r.occurredOn;
@@ -60,7 +63,7 @@ export function ImportSanctionsDialog({
         importable: !!alvo.alvoId && !badDate && !badType,
       };
     });
-  }, [rows, members, types, unidades]);
+  }, [rows, alvos, types, unidades]);
 
   const counts = useMemo(() => ({
     ok: analysis.filter((a) => a.importable).length,
@@ -72,9 +75,10 @@ export function ImportSanctionsDialog({
 
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
-    const exemplo = members[0]?.name ?? "Fulano de Tal";
-    const exemploId = members[0]?.code ?? "";
-    const exemploUn = members[0]?.units?.[0] ?? unidades[0] ?? "";
+    const noQuadro = alvos.filter((a) => a.origem === "ativo");
+    const exemplo = noQuadro[0]?.name ?? "Fulano de Tal";
+    const exemploId = noQuadro[0]?.code ?? "";
+    const exemploUn = noQuadro[0]?.units?.[0] ?? unidades[0] ?? "";
     const multi = unidades.length > 1;
     const ativos = types.filter((t) => t.active);
     const tipo1 = ativos[0]?.name ?? "Advertência escrita";
@@ -102,8 +106,11 @@ export function ImportSanctionsDialog({
       ["O que a punição corta", "", "Nada por si só. Quem decide é o motivo cadastrado em Remuneração variável › Redutores, apontando para punição."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
-    const wsC = XLSX.utils.aoa_to_sheet([["ID", "Unidade", "Colaborador"], ...members.map((m) => [m.code ?? "", (m.units ?? []).join("; "), m.name])]);
-    wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }];
+    const wsC = XLSX.utils.aoa_to_sheet([
+      ["ID", "Unidade", "Colaborador", "Situação"],
+      ...alvos.map((a) => [a.code ?? "", a.units.join("; "), a.name, SITUACAO[a.origem]]),
+    ]);
+    wsC["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Punições");
     XLSX.utils.book_append_sheet(wb, wsC, "Colaboradores");
