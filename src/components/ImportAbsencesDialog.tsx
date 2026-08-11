@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadXlsx } from "@/lib/xlsx-lazy";
-import { importAbsences, type AbsenceImportRow, type AbsenceImportResult } from "@/lib/actions/absences";
+import { importAbsences, type AbsenceImportRow, type AbsenceImportResult, type LinhaRecusada } from "@/lib/actions/absences";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 // as MESMAS regras que o servidor aplica: se divergissem, a prévia mentiria
@@ -33,6 +33,39 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
   const router = useRouter();
 
   function reset() { setRows([]); setIgnored(0); setFileName(""); setParseError(""); setSummary(null); }
+
+  /**
+   * As linhas recusadas viram planilha. Com centenas de linhas, ler selo por
+   * selo na tela não é caminho: quem vai corrigir precisa do arquivo aberto ao
+   * lado do original, com o número da linha para achar cada uma.
+   */
+  async function baixarRecusadas(itens: LinhaRecusada[], sufixo: string) {
+    const XLSX = await loadXlsx();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Linha", "ID", "Unidade", "Colaborador", "Período", "Por que ficou de fora"],
+      ...itens.map((i) => [i.linha, i.code, i.unit, i.name, i.periodo, i.motivo]),
+    ]);
+    ws["!cols"] = [{ wch: 7 }, { wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 24 }, { wch: 40 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Fora da importação");
+    XLSX.writeFile(wb, `ferias_fora_da_importacao_${sufixo}.xlsx`);
+  }
+
+  /** o que a PRÉVIA recusaria, no mesmo formato do resumo do servidor */
+  const recusadasDaPrevia = (): LinhaRecusada[] =>
+    analysis
+      .map((a, i) => ({ a, linha: i + 2 }))
+      .filter(({ a }) => !a.importable)
+      .map(({ a, linha }) => ({
+        linha,
+        code: (a.row.code ?? "").trim(),
+        unit: (a.row.unit ?? "").trim(),
+        name: (a.row.name ?? "").trim(),
+        periodo: [a.row.start, a.row.end].filter(Boolean).map(fmtBR).join(" a "),
+        motivo: a.motivo
+          ? MOTIVO_LABEL[a.motivo]
+          : a.badKind ? "Tipo não reconhecido" : "Datas inválidas",
+      }));
   function close() { setOpen(false); reset(); }
 
   const analysis = useMemo(() => {
@@ -185,21 +218,36 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
                     {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} conflito de unidade/matrícula</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (datas ou tipo)</span>}
                   </div>
-                  {rows.length > 0 && (
-                    <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 170, overflow: "auto" }}>
-                      {analysis.slice(0, 14).map((a, i) => (
-                        <li key={i} style={{ color: a.importable ? undefined : "var(--text-soft)" }}>
-                          {a.row.name || a.row.code}
-                          {a.row.kind ? ` · ${a.row.kind}` : ""}
-                          {a.row.start ? ` · ${fmtBR(a.row.start)} a ${fmtBR(a.row.end) || "?"}` : ""}
-                          {a.motivo && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{MOTIVO_LABEL[a.motivo]}</span>}
-                          {!a.motivo && a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo inválido</span>}
-                          {!a.motivo && a.invalid && !a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>datas inválidas</span>}
-                        </li>
-                      ))}
-                      {rows.length > 14 && <li>… e mais {rows.length - 14}</li>}
-                    </ul>
-                  )}
+                  {/* a lista mostra o que NÃO vai entrar: é isso que exige ação.
+                      O que entra já está contado no topo. */}
+                  {(() => {
+                    const fora = analysis.filter((a) => !a.importable);
+                    if (fora.length === 0) {
+                      return rows.length > 0 ? <p className="muted" style={{ margin: "0.5rem 0 0", fontSize: "0.8rem" }}>Todas as linhas estão prontas para importar.</p> : null;
+                    }
+                    return (
+                      <>
+                        <div className="muted" style={{ margin: "0.6rem 0 0.25rem", fontSize: "0.78rem", fontWeight: 600 }}>
+                          {fora.length} linha(s) ficam de fora:
+                        </div>
+                        <ul className="muted" style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 200, overflow: "auto" }}>
+                          {analysis.map((a, i) => ({ a, linha: i + 2 })).filter(({ a }) => !a.importable).slice(0, 60).map(({ a, linha }) => (
+                            <li key={linha} style={{ color: "var(--text-soft)" }}>
+                              linha {linha} · {a.row.code || "sem ID"}{a.row.unit ? ` · ${a.row.unit}` : ""}{a.row.name ? ` · ${a.row.name}` : ""}
+                              {a.motivo && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{MOTIVO_LABEL[a.motivo]}</span>}
+                              {!a.motivo && a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>tipo inválido</span>}
+                              {!a.motivo && a.invalid && !a.badKind && <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>datas inválidas</span>}
+                            </li>
+                          ))}
+                          {fora.length > 60 && <li>… e mais {fora.length - 60}. Baixe a lista para ver todas.</li>}
+                        </ul>
+                        <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.5rem" }}
+                          onClick={() => void baixarRecusadas(recusadasDaPrevia(), "conferencia")}>
+                          ↓ Baixar as {fora.length} linha(s) de fora
+                        </button>
+                      </>
+                    );
+                  })()}
                   <p className="muted" style={{ margin: "0.6rem 0 0", fontSize: "0.76rem" }}>
                     Períodos com as mesmas datas já lançados são atualizados, não duplicados.
                   </p>
@@ -216,6 +264,26 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
                       {summary.mismatch > 0 && <span className="badge badge-red">{summary.mismatch} conflito de unidade/matrícula</span>}
                       {summary.invalid > 0 && <span className="badge badge-amber">{summary.invalid} inválida(s)</span>}
                     </div>
+                  )}
+                  {summary.rejeitadas?.length > 0 && (
+                    <>
+                      <div className="muted" style={{ margin: "0.6rem 0 0.25rem", fontSize: "0.78rem", fontWeight: 600 }}>
+                        Ficaram de fora:
+                      </div>
+                      <ul className="muted" style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 200, overflow: "auto" }}>
+                        {summary.rejeitadas.slice(0, 60).map((i) => (
+                          <li key={i.linha}>
+                            linha {i.linha} · {i.code || "sem ID"}{i.unit ? ` · ${i.unit}` : ""}{i.name ? ` · ${i.name}` : ""}
+                            <span className="badge badge-red" style={{ marginLeft: 6, fontSize: "0.62rem" }}>{i.motivo}</span>
+                          </li>
+                        ))}
+                        {summary.rejeitadas.length > 60 && <li>… e mais {summary.rejeitadas.length - 60}. Baixe a lista para ver todas.</li>}
+                      </ul>
+                      <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.5rem" }}
+                        onClick={() => void baixarRecusadas(summary.rejeitadas, "resultado")}>
+                        ↓ Baixar as {summary.rejeitadas.length} linha(s) de fora
+                      </button>
+                    </>
                   )}
                 </div>
               )}

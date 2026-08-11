@@ -5,7 +5,7 @@ import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam } from "@/lib/absences-import";
-import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
 
 /**
  * Férias e afastamentos do colaborador.
@@ -121,7 +121,23 @@ export type AbsenceImportResult = {
   mismatch: number;
   /** recusadas por cruzar com um período já lançado */
   overlapping: number;
+  /**
+   * QUAIS linhas ficaram de fora. Sem isto o resumo dizia "3 não encontrados"
+   * e a pessoa não tinha como descobrir quem: a contagem some, a planilha tem
+   * centenas de linhas, e a prévia mostrava só as primeiras.
+   */
+  rejeitadas: LinhaRecusada[];
   error?: string;
+};
+
+export type LinhaRecusada = {
+  /** número da linha na planilha, contando o cabeçalho */
+  linha: number;
+  code: string;
+  unit: string;
+  name: string;
+  periodo: string;
+  motivo: string;
 };
 
 /**
@@ -133,7 +149,7 @@ export type AbsenceImportResult = {
  * na constraint do banco. A constraint continua lá como rede de segurança.
  */
 export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceImportResult> {
-  const vazio: AbsenceImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, mismatch: 0, overlapping: 0 };
+  const vazio: AbsenceImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, mismatch: 0, overlapping: 0, rejeitadas: [] };
   try {
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
@@ -177,19 +193,35 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
 
     const inserts: Record<string, unknown>[] = [];
     const updates: { id: string; payload: Record<string, unknown> }[] = [];
-    const r: AbsenceImportResult = { ...vazio };
+    const r: AbsenceImportResult = { ...vazio, rejeitadas: [] };
 
+    let nLinha = 1; // 1 é o cabeçalho; a primeira linha de dados é a 2
     for (const linha of rows ?? []) {
+      nLinha += 1;
+      const recusar = (motivo: string) => {
+        r.rejeitadas.push({
+          linha: nLinha,
+          code: (linha.code ?? "").trim(),
+          unit: (linha.unit ?? "").trim(),
+          name: (linha.name ?? "").trim(),
+          periodo: [linha.start, linha.end].filter(Boolean).join(" a "),
+          motivo,
+        });
+      };
       const inicio = parseDataPlanilha(linha.start ?? "");
       const fim = parseDataPlanilha(linha.end ?? "");
       const kind = parseTipo(linha.kind ?? "");
-      if (!inicio || !fim || fim < inicio || !kind) { r.invalid += 1; continue; }
+      if (!inicio || !fim || fim < inicio || !kind) {
+        r.invalid += 1;
+        recusar(!kind ? "Tipo não reconhecido" : !inicio || !fim ? "Data de início ou fim ilegível" : "Fim anterior ao início");
+        continue;
+      }
 
       const alvo = resolverAlvo(linha.code ?? "", linha.unit ?? "", idx);
-      if (alvo.motivo === "sem_matricula") { r.invalid += 1; continue; }
-      if (alvo.motivo === "nao_encontrada") { r.notFound += 1; continue; }
+      if (alvo.motivo === "sem_matricula") { r.invalid += 1; recusar(MOTIVO_LABEL.sem_matricula); continue; }
+      if (alvo.motivo === "nao_encontrada") { r.notFound += 1; recusar(MOTIVO_LABEL.nao_encontrada); continue; }
       const userIdAlvo = alvo.alvoId;
-      if (!userIdAlvo) { r.mismatch += 1; continue; }
+      if (!userIdAlvo) { r.mismatch += 1; recusar(MOTIVO_LABEL[alvo.motivo!]); continue; }
 
       const payload = {
         tenant_id: tenantId,
@@ -205,7 +237,11 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       const doDono = porDono.get(userIdAlvo) ?? [];
       const igual = doDono.find((x) => x.inicio === inicio && x.fim === fim);
       if (igual?.id) { updates.push({ id: igual.id, payload }); continue; }
-      if (doDono.some((x) => periodosCruzam(inicio, fim, x.inicio, x.fim))) { r.overlapping += 1; continue; }
+      if (doDono.some((x) => periodosCruzam(inicio, fim, x.inicio, x.fim))) {
+        r.overlapping += 1;
+        recusar("Cruza com um período já lançado");
+        continue;
+      }
 
       inserts.push(payload);
       doDono.push({ inicio, fim });
