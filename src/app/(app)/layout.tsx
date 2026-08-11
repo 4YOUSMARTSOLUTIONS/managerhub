@@ -14,6 +14,18 @@ const CORE_ONLY_STATE = Object.fromEntries(
   MODULES.map((m) => [m.key, m.core ? "on" : "hidden"]),
 ) as Record<ModuleKey, ModuleState>;
 
+/**
+ * O próprio usuário SEMPRE entra no mapa de fotos.
+ *
+ * `getAvatarMap` monta o mapa a partir das `memberships` da empresa, e quem não
+ * é membro dela fica de fora: é o caso do owner de plataforma, que administra o
+ * sistema sem pertencer a nenhuma empresa. Ele via a própria foto sumir do menu
+ * e caía nas iniciais, sem erro nenhum na tela, porque a ausência no mapa é
+ * indistinguível de "não tem foto".
+ */
+const proprioAvatar = (userId: string, path: string | null | undefined): Record<string, string> =>
+  path ? { [userId]: path } : {};
+
 export default async function AppLayout({
   children,
 }: {
@@ -35,17 +47,19 @@ export default async function AppLayout({
     const supabase = await createClient();
     const { data: activeId } = await supabase.rpc("my_active_tenant");
     if (!activeId) {
+      const perfil = await getOwnIdentity(user.id);
       return (
         <AppShell
           role="owner"
           isSuperAdmin
           tenantName="Plataforma"
-          userName={user.email?.split("@")[0] ?? "Owner"}
+          userName={perfil?.full_name?.trim() || user.email?.split("@")[0] || "Owner"}
           unitScope={{ units: [], allowedUnitIds: [], unrestricted: true, activeUnitId: null, locked: false }}
           theme={theme}
           moduleState={CORE_ONLY_STATE}
           construction={[]}
           platformOnly
+          avatars={proprioAvatar(user.id, perfil?.avatar_url)}
           currentUserId={user.id}
         >
           {children}
@@ -79,7 +93,9 @@ export default async function AppLayout({
       moduleState={moduleState}
       construction={[...construction]}
       companyScope={ctx.companyScope}
-      avatars={avatars}
+      // o próprio por último: o super admin administra uma empresa da qual não
+      // é membro, e sem isto some do mapa e perde a própria foto no menu
+      avatars={{ ...avatars, ...proprioAvatar(user.id, perfil?.avatar_url) }}
       currentUserId={user.id}
     >
       {children}
