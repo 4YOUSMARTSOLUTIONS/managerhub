@@ -23,6 +23,9 @@ function buildData(formData: FormData, cpf: string) {
     manager_id: String(formData.get("manager_id") ?? ""),
     role: String(formData.get("role") ?? "member"),
     unit_ids: formData.getAll("unit_ids").map(String).filter(Boolean),
+    // data de vigência da movimentação (só a edição envia; a criação ignora e
+    // a primeira vigência nasce na admissão)
+    effective_date: String(formData.get("effective_date") ?? ""),
   };
 }
 

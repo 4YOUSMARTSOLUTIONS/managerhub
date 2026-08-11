@@ -247,6 +247,18 @@ export function EmployeeDialog({
               </Field>
             </div>
 
+            {isEdit && (
+              <div style={grid2}>
+                <Field label="Movimentação vigente a partir de">
+                  <input name="effective_date" type="date" className="input" />
+                  <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>
+                    Se esta edição mudar setor, função, gestor ou unidade, a linha do tempo
+                    registra a mudança valendo desta data. Em branco, vale hoje.
+                  </p>
+                </Field>
+              </div>
+            )}
+
             {!isEdit && (
               <>
                 <p style={sectionTitle}>Acesso</p>
