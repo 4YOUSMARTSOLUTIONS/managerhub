@@ -892,6 +892,8 @@ export function ActionsManager({
           series={opcoes.series}
           occurrences={opcoes.occurrences}
           units={units}
+          departments={opcoes.departments}
+          subdepartments={opcoes.subdepartments}
           editing={editAction?.seed ?? null}
           editingActionId={editAction?.id ?? null}
           aiEnabled={aiEnabled}

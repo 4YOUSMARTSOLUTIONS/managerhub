@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { PeoplePicker, type Person } from "./PeoplePicker";
 import { TorView } from "./TorView";
 import { ElapsedTimer } from "./ElapsedTimer";
-import { ActionDialog, type Opt, type SecaoOpt, type BlocoOpt, type ItemOpt, type CollectedAction } from "./ActionDialog";
+import { ActionDialog, type Opt, type SecaoOpt, type BlocoOpt, type ItemOpt, type CollectedAction , type SubOpt } from "./ActionDialog";
 import { confirmDialog } from "@/components/ui/confirm";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { MeetingRecordingPanel } from "./MeetingRecordingPanel";
@@ -29,6 +29,8 @@ export function RegisterDialog({
   pilares,
   secoes,
   blocos,
+  departments = [],
+  subdepartments = [],
   itens,
   kpis,
   tools,
@@ -45,6 +47,9 @@ export function RegisterDialog({
   pilares: Opt[];
   secoes: SecaoOpt[];
   blocos: BlocoOpt[];
+  /** setor/subsetor da ação (mesmo formulário da tela de Ações) */
+  departments?: Opt[];
+  subdepartments?: SubOpt[];
   itens: ItemOpt[];
   kpis: Opt[];
   tools: Opt[];
@@ -476,6 +481,8 @@ export function RegisterDialog({
         tools={tools}
         series={[]}
         occurrences={[]}
+        departments={departments}
+        subdepartments={subdepartments}
         onCollect={(a) => {
           // criada ou editada à mão vira "manual" — assim não é substituída ao regerar por IA
           const m: CollectedAction = { ...a, source: "manual" };

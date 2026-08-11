@@ -639,6 +639,8 @@ export function MeetingRecords({
         pilares={taxonomia?.pilares ?? []}
         secoes={taxonomia?.secoes ?? []}
         blocos={taxonomia?.blocos ?? []}
+        departments={taxonomia?.departments ?? []}
+        subdepartments={taxonomia?.subdepartments ?? []}
         itens={taxonomia?.itens ?? []}
         kpis={taxonomia?.kpis ?? []}
         tools={taxonomia?.tools ?? []}

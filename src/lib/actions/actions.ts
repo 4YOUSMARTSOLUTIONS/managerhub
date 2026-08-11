@@ -525,6 +525,7 @@ export async function getActionForEdit(actionId: string): Promise<
         pilar_id: a.pilar_id ?? "", secao_id: a.secao_id ?? "", bloco_id: a.bloco_id ?? "", item_id: a.item_id ?? "",
         meeting_series_id: a.meeting_series_id ?? "", occurrence_id: a.occurrence_id ?? "",
         kpi_id: a.kpi_id ?? "", tool_id: a.tool_id ?? "", unit_id: a.unit_id ?? "",
+        department_id: a.department_id ?? "", subdepartment_id: a.subdepartment_id ?? "",
         requester_id: a.requester_id ?? "", problem_statement: a.problem_statement ?? "",
         due_date: a.due_date ?? "", priority: a.priority,
         cc: (ccs ?? []).map((c) => c.user_id),
@@ -561,7 +562,7 @@ export async function getAttachmentUrl(path: string): Promise<string | null> {
 /** Colunas iguais às do modelo de importação, para o arquivo poder ser reimportado. */
 const EXPORT_HEADERS = [
   "Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo",
-  "Data de conclusão", "Status", "Prioridade", "Unidade", "KPI", "Ferramenta", "SDPO", "Programa",
+  "Data de conclusão", "Status", "Prioridade", "Unidade", "Setor", "Subsetor", "KPI", "Ferramenta", "SDPO", "Programa",
   "Pilar", "Seção", "Bloco", "Item", "Comentários",
 ];
 
@@ -605,7 +606,7 @@ export async function exportActions(
 
     const [
       { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens },
-      { data: kpis }, { data: tools }, { data: unitsData }, { data: series }, { data: mems },
+      { data: kpis }, { data: tools }, { data: unitsData }, { data: depsX }, { data: subsX }, { data: series }, { data: mems },
     ] = await Promise.all([
       supabase.from("sdpo_programas").select("id, name").eq("tenant_id", tenantId),
       supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenantId),
@@ -615,6 +616,8 @@ export async function exportActions(
       supabase.from("action_kpis").select("id, name").eq("tenant_id", tenantId),
       supabase.from("action_tools").select("id, name").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("departments").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("subdepartments").select("id, name").eq("tenant_id", tenantId),
       supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId),
       supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
     ]);
@@ -622,6 +625,7 @@ export async function exportActions(
     const mProg = nameMap(programas), mPilar = nameMap(pilares), mSecao = nameMap(secoes);
     const mBloco = nameMap(blocos), mItem = nameMap(itens), mKpi = nameMap(kpis);
     const mTool = nameMap(tools), mUnit = nameMap(unitsData), mSeries = nameMap(series);
+    const mDep = nameMap(depsX), mSub = nameMap(subsX);
     const mUser = new Map<string, string>();
     for (const m of mems ?? []) {
       const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
@@ -691,6 +695,8 @@ export async function exportActions(
         status,
         PRIORITY_LABEL[a.priority] ?? a.priority,
         nm(a.unit_id, mUnit, a.legacy_unit) || "Todas as unidades",
+        a.department_id ? mDep.get(a.department_id) ?? "" : "",
+        a.subdepartment_id ? mSub.get(a.subdepartment_id) ?? "" : "",
         nm(a.kpi_id, mKpi, a.legacy_kpi),
         nm(a.tool_id, mTool, a.legacy_tool),
         a.is_sdpo ? "Sim" : "Não",
@@ -705,7 +711,7 @@ export async function exportActions(
 
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...rows]);
-    ws["!cols"] = [40, 26, 20, 20, 15, 28, 12, 16, 20, 12, 16, 16, 14, 8, 12, 16, 16, 16, 16, 40].map((wch) => ({ wch }));
+    ws["!cols"] = [40, 26, 20, 20, 15, 28, 12, 16, 20, 12, 16, 18, 18, 16, 14, 8, 12, 16, 16, 16, 16, 40].map((wch) => ({ wch }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ações");
     const file = XLSX.write(wb, { type: "base64", bookType: "xlsx" }) as string;
@@ -735,6 +741,8 @@ export type ActionFormOptions = {
   tools: { id: string; name: string; active: boolean }[];
   series: { id: string; name: string }[];
   occurrences: { id: string; seriesId: string; occurredOn: string }[];
+  departments: { id: string; name: string }[];
+  subdepartments: { id: string; name: string; departmentId: string }[];
 };
 
 export async function getActionFormOptions(): Promise<ActionFormOptions> {
@@ -743,6 +751,7 @@ export async function getActionFormOptions(): Promise<ActionFormOptions> {
   const [
     { data: members }, { data: pilares }, { data: secoes }, { data: blocos },
     { data: itens }, { data: kpis }, { data: tools }, { data: series }, { data: occ },
+    { data: deps }, { data: subs },
   ] = await Promise.all([
     supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).eq("is_active", true),
     supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenantId).order("name"),
@@ -753,6 +762,8 @@ export async function getActionFormOptions(): Promise<ActionFormOptions> {
     supabase.from("action_tools").select("id, name, active").eq("tenant_id", tenantId).order("name"),
     supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId).is("deleted_at", null).order("name"),
     supabase.from("meeting_occurrences").select("id, series_id, occurred_on").eq("tenant_id", tenantId).is("deleted_at", null).order("occurred_on", { ascending: false }).limit(500),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenantId).order("name"),
+    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenantId).order("name"),
   ]);
 
   return {
@@ -767,5 +778,7 @@ export async function getActionFormOptions(): Promise<ActionFormOptions> {
     tools: (tools ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active })),
     series: (series ?? []).map((s) => ({ id: s.id, name: s.name })),
     occurrences: (occ ?? []).map((o) => ({ id: o.id, seriesId: o.series_id, occurredOn: o.occurred_on })),
+    departments: (deps ?? []).map((d) => ({ id: d.id, name: d.name })),
+    subdepartments: (subs ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id })),
   };
 }

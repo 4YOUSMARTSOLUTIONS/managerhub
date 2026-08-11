@@ -13,6 +13,7 @@ export type Opt = { id: string; name: string; active?: boolean };
 export type SecaoOpt = { id: string; name: string; active?: boolean };
 export type BlocoOpt = { id: string; name: string; pilarId: string; secaoId: string; active?: boolean };
 export type ItemOpt = { id: string; name: string; pilarId: string; secaoId: string; blocoId: string | null; active?: boolean };
+export type SubOpt = { id: string; name: string; departmentId: string };
 export type OccOpt = { id: string; seriesId: string; occurredOn: string };
 
 type Demanda = { id?: string; description: string; assignees: string[]; files: File[] };
@@ -21,6 +22,7 @@ export type CollectedAction = {
   payload: {
     is_sdpo: boolean; pilar_id: string; secao_id: string; bloco_id: string; item_id: string;
     meeting_series_id: string; kpi_id: string; tool_id: string; unit_id?: string;
+    department_id?: string; subdepartment_id?: string;
     requester_id: string; problem_statement: string; due_date: string; priority: string; cc: string[];
     /** `id` presente = demanda que JÁ existe (preserva histórico na edição) */
     demandas: { id?: string; description: string; assignees: string[] }[];
@@ -34,6 +36,7 @@ export type CollectedAction = {
 
 export function ActionDialog({
   open, onClose, people, pilares, secoes, blocos, itens, kpis, tools, series, occurrences, units,
+  departments = [], subdepartments = [],
   onCollect, lockedSeries, defaultRequesterId, defaultAssignees, defaultUnitId, editing, editingActionId, aiEnabled,
 }: {
   open: boolean;
@@ -48,6 +51,9 @@ export function ActionDialog({
   series: Opt[];
   occurrences: OccOpt[];
   units?: Opt[];
+  /** setor e subsetor da AÇÃO (recorte para exportação e relatórios) */
+  departments?: Opt[];
+  subdepartments?: SubOpt[];
   onCollect?: (a: CollectedAction) => void;
   lockedSeries?: { id: string; name: string } | null;
   defaultRequesterId?: string;
@@ -67,6 +73,8 @@ export function ActionDialog({
   const [occurrenceId, setOccurrenceId] = useState("");
   const [kpiId, setKpiId] = useState("");
   const [unitId, setUnitId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [subdepartmentId, setSubdepartmentId] = useState("");
   const [toolId, setToolId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("medium");
@@ -94,6 +102,7 @@ export function ActionDialog({
       const p = editing.payload;
       setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
       setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || defaultUnitId || "all");
+      setDepartmentId(p.department_id ?? ""); setSubdepartmentId(p.subdepartment_id ?? "");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
       setProblema(p.problem_statement ?? "");
       setDemandas(p.demandas.map((d, i) => ({ id: d.id, description: d.description, assignees: d.assignees, files: editing.demandaFiles[i] ?? [] })));
@@ -101,6 +110,7 @@ export function ActionDialog({
     } else {
       setIsSdpo(true); setPilarId(""); setSecaoId(""); setBlocoId(""); setItemId("");
       setSeriesId(lockedSeries?.id ?? ""); setKpiId(""); setToolId(""); setUnitId(defaultUnitId ?? "");
+      setDepartmentId(""); setSubdepartmentId("");
       setDueDate(""); setPriority("medium"); setRequesterId(defaultRequesterId ?? ""); setCc([]);
       setProblema("");
       setDemandas([{ description: "", assignees: defaultAssignees ?? [], files: [] }]); setFiles([]);
@@ -118,6 +128,16 @@ export function ActionDialog({
   const blocoOpts = useMemo(
     () => blocos.filter((b) => !pilarId || b.pilarId === pilarId).filter((b) => isActive(b, blocoId)),
     [blocos, pilarId, blocoId],
+  );
+  /**
+   * Nem todo pilar tem bloco. Onde não tem, o campo não aparece (escolher entre
+   * nada é ruído); onde tem, ele é obrigatório, porque a hierarquia do pilar
+   * passa por ele.
+   */
+  const pilarTemBloco = blocoOpts.length > 0;
+  const subOpts = useMemo(
+    () => subdepartments.filter((x) => !departmentId || x.departmentId === departmentId),
+    [subdepartments, departmentId],
   );
   const itemOpts = useMemo(() => {
     const list = itens.filter((i) => (!pilarId || i.pilarId === pilarId) && (!blocoId || i.blocoId === blocoId));
@@ -236,6 +256,8 @@ export function ActionDialog({
     if (!requesterId) { setError("Informe o solicitante."); return; }
     if (!dueDate) { setError("Informe o prazo da ação."); return; }
     if (isSdpo && (!pilarId || !itemId)) { setError("Para SDPO, informe o Pilar e o Item."); return; }
+    // onde o pilar TEM bloco, ele faz parte da hierarquia e não é dispensável
+    if (isSdpo && pilarTemBloco && !blocoId) { setError("Informe o Bloco."); return; }
     if (isSdpo && !seriesId) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
 
     // modo coletar: devolve a ação ao pai (não salva agora)
@@ -246,6 +268,7 @@ export function ActionDialog({
           pilar_id: pilarId, secao_id: secaoDerivada, bloco_id: blocoId, item_id: itemId,
           meeting_series_id: seriesId,
           kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
+          department_id: departmentId, subdepartment_id: subdepartmentId,
           requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
           demandas: cleanDemandas.map((d) => ({ description: d.description, assignees: d.assignees })),
         },
@@ -262,6 +285,7 @@ export function ActionDialog({
       pilar_id: pilarId, secao_id: secaoDerivada, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
       kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
+      department_id: departmentId, subdepartment_id: subdepartmentId,
       requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
       // o id da demanda vai junto na EDIÇÃO: sem ele a RPC criaria outra e o
       // histórico de tratamento da original iria embora
@@ -401,10 +425,12 @@ export function ActionDialog({
                 <label className="label">Pilar</label>
                 <SearchSelect options={pilarOpts} value={pilarId} onChange={onPilar} placeholder="Buscar pilar…" />
               </div>
-              <div>
-                <label className="label">Bloco <span className="soft">(opcional)</span></label>
-                <SearchSelect options={blocoOpts} value={blocoId} onChange={onBloco} placeholder="Buscar bloco…" emptyHint="Sem blocos nesta seção" />
-              </div>
+              {pilarTemBloco && (
+                <div>
+                  <label className="label">Bloco <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <SearchSelect options={blocoOpts} value={blocoId} onChange={onBloco} placeholder="Buscar bloco…" />
+                </div>
+              )}
               <div>
                 <label className="label">Item <span style={{ color: "var(--mh-danger)" }}>*</span></label>
                 <SearchSelect options={itemOpts} value={itemId} onChange={onItem} placeholder="Buscar item…" />
@@ -427,11 +453,11 @@ export function ActionDialog({
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
               <div>
-                <label className="label">Reunião {isSdpo ? <span style={{ color: "var(--mh-danger)" }}>*</span> : <span className="soft">(opcional)</span>}</label>
+                <label className="label">Reunião {isSdpo && <span style={{ color: "var(--mh-danger)" }}>*</span>}</label>
                 <SearchSelect options={series} value={seriesId} onChange={(id) => { setSeriesId(id); setOccurrenceId(""); }} placeholder="Buscar reunião…" />
               </div>
               <div>
-                <label className="label">Referência da reunião <span className="soft">(opcional)</span></label>
+                <label className="label">Referência da reunião</label>
                 <SearchSelect options={occOpts} value={occurrenceId} onChange={setOccurrenceId} placeholder="Buscar data…" emptyHint="Sem registros" />
               </div>
             </div>
@@ -440,11 +466,11 @@ export function ActionDialog({
           {/* KPI + Ferramenta */}
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
             <div>
-              <label className="label">KPI <span className="soft">(opcional)</span></label>
+              <label className="label">KPI</label>
               <SearchSelect options={kpiOpts} value={kpiId} onChange={setKpiId} placeholder="Buscar KPI…" />
             </div>
             <div>
-              <label className="label">Ferramenta de gestão <span className="soft">(opcional)</span></label>
+              <label className="label">Ferramenta de gestão</label>
               <SearchSelect options={toolOpts} value={toolId} onChange={setToolId} placeholder="Buscar ferramenta…" />
             </div>
           </div>
@@ -452,19 +478,60 @@ export function ActionDialog({
           {/* Solicitante + Em cópia */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
             <div>
-              <label className="label">Solicitante</label>
+              <label className="label">Solicitante <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <PeoplePicker people={people} selected={requesterId ? [requesterId] : []} onChange={(ids) => setRequesterId(ids[0] ?? "")} single placeholder="Buscar solicitante…" />
             </div>
             <div>
-              <label className="label">Em cópia <span className="soft">(conhecimento)</span></label>
+              <label className="label">Em cópia</label>
               <PeoplePicker people={people} selected={cc} onChange={setCc} placeholder="Adicionar em cópia…" />
             </div>
           </div>
 
+          {/* Setor da AÇÃO (não o do responsável): é o recorte que a exportação
+              e os relatórios usam, e fica gravado na ação, sem se mover quando
+              a pessoa muda de área. */}
+          {departments.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.8rem" }}>
+            <div>
+              <label className="label">Setor</label>
+              <SearchSelect
+                options={departments}
+                value={departmentId}
+                onChange={(id) => {
+                  setDepartmentId(id);
+                  // subsetor que não pertence ao setor novo não faz sentido
+                  if (subdepartmentId) {
+                    const sub = subdepartments.find((x) => x.id === subdepartmentId);
+                    if (!id || (sub && sub.departmentId !== id)) setSubdepartmentId("");
+                  }
+                }}
+                placeholder="Buscar setor…"
+              />
+            </div>
+            <div>
+              <label className="label">Subsetor</label>
+              <SearchSelect
+                options={subOpts}
+                value={subdepartmentId}
+                onChange={(id) => {
+                  setSubdepartmentId(id);
+                  // escolher o subsetor primeiro preenche o setor dele
+                  if (id) {
+                    const sub = subdepartments.find((x) => x.id === id);
+                    if (sub) setDepartmentId(sub.departmentId);
+                  }
+                }}
+                placeholder={departmentId ? "Buscar subsetor…" : "Escolha o setor primeiro…"}
+                emptyHint="Sem subsetores neste setor"
+              />
+            </div>
+          </div>
+          )}
+
           {/* Problema/Diagnóstico: encostado nas Demandas de propósito, para quem
               preenche escrever o porquê logo antes de escrever o que fazer */}
           <div style={{ background: "var(--surface-2)", padding: "0.85rem", borderRadius: 9 }}>
-            <label className="label">Problema / Diagnóstico <span className="soft">(opcional)</span></label>
+            <label className="label">Problema / Diagnóstico</label>
             <textarea
               className="textarea"
               value={problema}
