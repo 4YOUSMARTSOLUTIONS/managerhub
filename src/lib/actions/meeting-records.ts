@@ -743,9 +743,17 @@ export async function deleteSeries(formData: FormData): Promise<ActionState> {
 }
 
 export async function deleteOccurrence(formData: FormData): Promise<ActionState> {
-  const { supabase } = await actionContext();
+  const { supabase, userId, role } = await actionContext();
+  const id = String(formData.get("id"));
+  // apagar o registro apaga a memória da reunião para todos, então segue a
+  // MESMA regra de excluir a série (o banco cobre o mesmo recorte)
+  const { data: occ } = await supabase.from("meeting_occurrences").select("series_id").eq("id", id).maybeSingle();
+  if (!occ) return { error: "Registro não encontrado." };
+  if (!(await canDeleteSeries(supabase, userId, role, occ.series_id))) {
+    return { error: "Você não tem permissão para excluir este registro. Apenas o dono da reunião, o proprietário ou o gerencial podem excluí-lo." };
+  }
   // soft-delete: mantém a ação vinculada (occurrence_id) e o histórico.
-  const { error } = await supabase.from("meeting_occurrences").update({ deleted_at: new Date().toISOString() }).eq("id", String(formData.get("id")));
+  const { error } = await supabase.from("meeting_occurrences").update({ deleted_at: new Date().toISOString() }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(RP);
   return { ok: true };

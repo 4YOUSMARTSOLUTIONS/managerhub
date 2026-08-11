@@ -547,17 +547,24 @@ export function MeetingRecords({
                     {o.recordingsCount > 0 && (
                       <button type="button" className="icon-btn" title={`Gravações (${o.recordingsCount})`} onClick={() => setViewerOcc(o)}>🎙</button>
                     )}
-                    <ConfirmActionButton
-                      action={deleteOccurrence}
-                      fields={{ id: o.id }}
-                      className="icon-btn icon-btn-danger"
-                      buttonTitle="Excluir registro"
-                      title="Excluir registro"
-                      message="Excluir este registro de reunião?"
-                      confirmLabel="Excluir"
-                    >
-                      <Ico d={ICON.trash} />
-                    </ConfirmActionButton>
+                    {(() => {
+                      const s = seriesById.get(o.seriesId);
+                      // excluir o registro apaga a memória da reunião: mesma
+                      // regra de excluir a série
+                      return s && canDeleteSeries(s) ? (
+                        <ConfirmActionButton
+                          action={deleteOccurrence}
+                          fields={{ id: o.id }}
+                          className="icon-btn icon-btn-danger"
+                          buttonTitle="Excluir registro"
+                          title="Excluir registro"
+                          message="Excluir este registro de reunião?"
+                          confirmLabel="Excluir"
+                        >
+                          <Ico d={ICON.trash} />
+                        </ConfirmActionButton>
+                      ) : null;
+                    })()}
                   </div>
                 </td>
               </tr>
