@@ -98,6 +98,12 @@ export function MeetingRecords({
     role === "owner" || role === "manager"
     || s.ownerUserId === currentUserId
     || (s.isPrivate ? s.participantIds.includes(currentUserId) : role === "admin");
+  // excluir apaga o histórico de todos: participante de reunião privada edita,
+  // mas não exclui (mesmo recorte da action e da policy no banco)
+  const canDeleteSeries = (s: SeriesRow) =>
+    role === "owner" || role === "manager"
+    || s.ownerUserId === currentUserId
+    || (!s.isPrivate && role === "admin");
   const router = useRouter();
   const [pending, start] = useTransition();
   /**
@@ -404,17 +410,19 @@ export function MeetingRecords({
                           <input type="hidden" name="is_active" value={String(s.isActive)} />
                           <button className="icon-btn" type="submit" title={s.isActive ? "Inativar" : "Ativar"}><Ico d={ICON.power} /></button>
                         </form>
-                        <ConfirmActionButton
-                          action={deleteSeries}
-                          fields={{ id: s.id }}
-                          className="icon-btn icon-btn-danger"
-                          buttonTitle="Excluir"
-                          title="Excluir reunião (TOR)"
-                          message={<>Excluir <strong>{s.name}</strong>? Todo o histórico de registros dessa série será removido.</>}
-                          confirmLabel="Excluir"
-                        >
-                          <Ico d={ICON.trash} />
-                        </ConfirmActionButton>
+                        {canDeleteSeries(s) && (
+                          <ConfirmActionButton
+                            action={deleteSeries}
+                            fields={{ id: s.id }}
+                            className="icon-btn icon-btn-danger"
+                            buttonTitle="Excluir"
+                            title="Excluir reunião (TOR)"
+                            message={<>Excluir <strong>{s.name}</strong>? Todo o histórico de registros dessa série será removido.</>}
+                            confirmLabel="Excluir"
+                          >
+                            <Ico d={ICON.trash} />
+                          </ConfirmActionButton>
+                        )}
                       </>
                     )}
                   </div>

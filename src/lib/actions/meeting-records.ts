@@ -14,7 +14,7 @@ import type { Database, Enums } from "@/types/database";
 import type { DemandaInfo } from "@/components/DemandaPanel";
 
 /**
- * Quem pode editar/excluir a série (o criador NÃO edita):
+ * Quem pode EDITAR/inativar a série (o criador NÃO edita):
  * - dono (owner_user_id), papel `owner` e papel `manager` (gerencial) sempre;
  * - reunião PÚBLICA: também `admin`;
  * - reunião PRIVADA: também os participantes.
@@ -28,6 +28,22 @@ async function canEditSeries(supabase: SupabaseClient<Database>, userId: string,
   const { data: part } = await supabase.from("meeting_series_participants")
     .select("user_id").eq("series_id", seriesId).eq("user_id", userId).maybeSingle();
   return !!part;
+}
+
+/**
+ * Quem pode EXCLUIR a série: editar não basta.
+ *
+ * Excluir apaga o histórico de todos os participantes, então é poder de quem
+ * responde pela reunião: dono, `owner` e `manager`; e, só na reunião PÚBLICA,
+ * `admin`. Participante de reunião privada edita e inativa, mas não exclui.
+ * O banco cobre o mesmo recorte (policy de delete + trigger no soft-delete).
+ */
+async function canDeleteSeries(supabase: SupabaseClient<Database>, userId: string, role: string, seriesId: string): Promise<boolean> {
+  if (role === "owner" || role === "manager") return true;
+  const { data } = await supabase.from("meeting_series").select("owner_user_id, is_private").eq("id", seriesId).maybeSingle();
+  if (!data) return false;
+  if (data.owner_user_id === userId) return true;
+  return !data.is_private && role === "admin";
 }
 
 /** Próxima página de registros (ocorrências), para "Carregar mais" sem perder o estado da tela. */
@@ -703,8 +719,8 @@ export async function toggleSeries(formData: FormData): Promise<void> {
 export async function deleteSeries(formData: FormData): Promise<ActionState> {
   const { supabase, userId, role } = await actionContext();
   const id = String(formData.get("id"));
-  if (!(await canEditSeries(supabase, userId, role, id))) {
-    return { error: "Você não tem permissão para excluir esta reunião." };
+  if (!(await canDeleteSeries(supabase, userId, role, id))) {
+    return { error: "Você não tem permissão para excluir esta reunião. Apenas o dono, o proprietário ou o gerencial podem excluí-la." };
   }
   // soft-delete: preserva histórico e não órfã as ações (FK intacta).
   // Desativa + desliga auto-reserva para limpar reservas futuras e cancelar o convite.
