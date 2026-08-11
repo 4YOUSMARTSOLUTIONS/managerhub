@@ -14,6 +14,7 @@ import {
   acknowledgeFeedback, getFeedbackAttachmentUrl, setFeedbackApplied,
   createFeedbackSession, updateFeedbackSession, deleteFeedbackSession,
   setFeedbackSessionApplied, acknowledgeFeedbackSession, generateFeedbackSessionAI,
+  generateFeedbackAI,
 } from "@/lib/actions/feedbacks";
 import {
   createPdiAction, updatePdiAction, deletePdiAction, setPdiStatus, addPdiComment, deletePdiComment,
@@ -150,7 +151,7 @@ export function FeedbacksManager({ feedbacks, sessions, subjectOptions, allSubje
       {fbDialog && (
         <FeedbackDialog mode={fbDialog.mode} row={fbDialog.row} subjectOptions={roster}
           competencies={competencies.filter((c) => c.active || (fbDialog.row?.competencyIds ?? []).includes(c.id))}
-          onClose={() => setFbDialog(null)} />
+          aiEnabled={aiEnabled} onClose={() => setFbDialog(null)} />
       )}
       {sessDialog && (
         <FeedbackSessionDialog mode={sessDialog.mode} row={sessDialog.row} subjectOptions={roster}
@@ -724,8 +725,8 @@ function AttachmentLink({ att }: { att: FeedbackAttachment }) {
 }
 
 // ---------------- Dialog pontual ----------------
-function FeedbackDialog({ mode, row, subjectOptions, competencies, onClose }: {
-  mode: "new" | "edit"; row?: FeedbackRow; subjectOptions: Opt[]; competencies: CompOpt[]; onClose: () => void;
+function FeedbackDialog({ mode, row, subjectOptions, competencies, aiEnabled, onClose }: {
+  mode: "new" | "edit"; row?: FeedbackRow; subjectOptions: Opt[]; competencies: CompOpt[]; aiEnabled: boolean; onClose: () => void;
 }) {
   const [subjectId, setSubjectId] = useState(row?.subjectId ?? "");
   const [date, setDate] = useState(row?.date ?? today());
@@ -741,9 +742,33 @@ function FeedbackDialog({ mode, row, subjectOptions, competencies, onClose }: {
   const [compIds, setCompIds] = useState<string[]>(row?.competencyIds ?? []);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [aiDraft, setAiDraft] = useState("");
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [aiPending, startAi] = useTransition();
   const router = useRouter();
   const toggleComp = (id: string) => setCompIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const runAi = () => {
+    if (!aiDraft.trim()) { setError("Conte o que aconteceu para a IA distribuir nos campos."); return; }
+    setError(null); setAiMsg(null);
+    startAi(async () => {
+      const r = await generateFeedbackAI({
+        draft: aiDraft,
+        type,
+        subject_name: subjectOptions.find((o) => o.id === subjectId)?.name ?? row?.subjectName ?? null,
+        atuais: { situation, behavior, impact, next_steps: nextSteps, notes },
+      });
+      if (!("ok" in r) || !r.ok) { setError(r.error); return; }
+      // valor da IA quando veio; senão preserva o que o gestor já digitou
+      if (r.situation) setSituation(r.situation);
+      if (r.behavior) setBehavior(r.behavior);
+      if (r.impact) setImpact(r.impact);
+      if (r.next_steps) setNextSteps(r.next_steps);
+      if (r.notes) setNotes(r.notes);
+      setAiMsg("Campos preenchidos a partir do relato, revise e edite antes de registrar.");
+    });
+  };
 
   const submit = () => {
     if (mode === "new" && !subjectId) { setError("Selecione o colaborador."); return; }
@@ -784,6 +809,17 @@ function FeedbackDialog({ mode, row, subjectOptions, competencies, onClose }: {
       </div>
       <div><label className="label">Título (opcional)</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       <div className="soft" style={{ fontSize: "0.78rem", margin: "-0.2rem 0" }}>Modelo SBI: descreva a situação, o comportamento observado, o impacto e os próximos passos.</div>
+      <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", background: "var(--bg-subtle, rgba(0,0,0,0.02))" }}>
+        <textarea className="input" rows={3} placeholder="Conte com suas palavras o que aconteceu, a IA distribui nos campos abaixo…" value={aiDraft} onChange={(e) => setAiDraft(e.target.value)} />
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={!aiEnabled || aiPending || !aiDraft.trim()}
+            title={aiEnabled ? "Preencher Situação, Comportamento, Impacto, Próximos passos e Observações a partir do relato" : "IA não configurada (peça ao proprietário do sistema)"}
+            onClick={runAi}>
+            {aiPending ? "Preenchendo…" : "✨ Preencher com IA"}
+          </button>
+        </div>
+      </div>
+      {aiMsg && <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>{aiMsg}</p>}
       <div><label className="label">Situação</label><textarea className="input" rows={2} value={situation} onChange={(e) => setSituation(e.target.value)} /></div>
       <div><label className="label">Comportamento</label><textarea className="input" rows={2} value={behavior} onChange={(e) => setBehavior(e.target.value)} /></div>
       <div><label className="label">Impacto</label><textarea className="input" rows={2} value={impact} onChange={(e) => setImpact(e.target.value)} /></div>

@@ -475,6 +475,96 @@ export async function generateFeedbackSessionAI(input: { subject_user_id: string
   }
 }
 
+// ---------- campos SBI por IA (Novo feedback) ----------
+export type FeedbackDraftAI =
+  | { ok: true; situation: string; behavior: string; impact: string; next_steps: string; notes: string }
+  | { ok?: false; error: string };
+
+/**
+ * Estrutura um RELATO livre do gestor nos cinco campos do modelo SBI.
+ *
+ * `atuais` leva o que já foi digitado nos campos: a IA completa e lapida em vez
+ * de ignorar. A chave da OpenAI é a da plataforma e nunca volta ao cliente.
+ */
+export async function generateFeedbackAI(input: {
+  draft: string;
+  type: Enums<"feedback_type">;
+  subject_name?: string | null;
+  atuais?: { situation: string; behavior: string; impact: string; next_steps: string; notes: string };
+}): Promise<FeedbackDraftAI> {
+  try {
+    const draft = (input.draft ?? "").trim();
+    if (!draft) return { error: "Conte o que aconteceu para a IA distribuir nos campos." };
+
+    await actionContext(); // garante sessão
+
+    const { apiKey, model } = await getPlatformOpenAI();
+    if (!apiKey) return { error: "IA não configurada. Peça ao proprietário do sistema para configurar a chave da OpenAI." };
+
+    const typeLabel: Record<string, string> = { reconhecimento: "Reconhecimento", construtivo: "Construtivo", neutro: "Neutro" };
+    const atuais = input.atuais;
+    const atuaisTexto = atuais
+      ? [
+          atuais.situation.trim() ? `Situação: ${atuais.situation.trim()}` : null,
+          atuais.behavior.trim() ? `Comportamento: ${atuais.behavior.trim()}` : null,
+          atuais.impact.trim() ? `Impacto: ${atuais.impact.trim()}` : null,
+          atuais.next_steps.trim() ? `Próximos passos: ${atuais.next_steps.trim()}` : null,
+          atuais.notes.trim() ? `Observações: ${atuais.notes.trim()}` : null,
+        ].filter(Boolean).join("\n")
+      : "";
+
+    const system =
+      "Você é um assistente de RH que estrutura o relato de um feedback no modelo SBI, em português do Brasil. " +
+      "Produza um JSON com exatamente cinco chaves de TEXTO: " +
+      "\"situacao\" (o contexto: quando, onde, em que circunstância), " +
+      "\"comportamento\" (o que a pessoa fez, em termos observáveis), " +
+      "\"impacto\" (a consequência para o time, o cliente ou o resultado), " +
+      "\"proximos_passos\" (combinados e orientações dali em diante) e " +
+      "\"observacoes\" (o que for relevante e não couber nas outras; string vazia se nada sobrar). " +
+      "REGRA DE FIDELIDADE: baseie-se SOMENTE no relato e nos campos já preenchidos. NÃO invente fatos, números nem compromissos. " +
+      "Campo sem sustentação no texto fica como string vazia — nunca preencha por preencher. " +
+      "Quando houver campos já preenchidos, incorpore o conteúdo deles (lapidando a redação), sem descartar informação. " +
+      "Tom profissional e respeitoso, coerente com o tipo do feedback. Frases diretas, sem jargão. " +
+      "Não inclua nada além do JSON.";
+
+    const contexto = [
+      `Tipo do feedback: ${typeLabel[input.type] ?? input.type}.`,
+      input.subject_name ? `Colaborador: ${input.subject_name}.` : null,
+      atuaisTexto ? `Campos já preenchidos pelo gestor:\n${atuaisTexto}` : null,
+    ].filter(Boolean).join("\n");
+
+    const user = `${contexto}\n\nRelato do gestor:\n${draft}`;
+
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: "system", content: system }, { role: "user", content: user }], response_format: { type: "json_object" } }),
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      let msg = `Falha na chamada à OpenAI (HTTP ${resp.status}).`;
+      try { const j = JSON.parse(body); if (j?.error?.message) msg = `OpenAI: ${j.error.message}`; } catch { /* noop */ }
+      return { error: msg };
+    }
+    const data = await resp.json();
+    const content: string = data?.choices?.[0]?.message?.content ?? "";
+    const cleaned = content.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    let parsed: { situacao?: unknown; comportamento?: unknown; impacto?: unknown; proximos_passos?: unknown; observacoes?: unknown } = {};
+    try { parsed = JSON.parse(cleaned); } catch { return { error: "A IA devolveu um formato inesperado. Tente novamente." }; }
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : v == null ? "" : Array.isArray(v) ? v.map(String).join("\n") : String(v));
+    return {
+      ok: true,
+      situation: str(parsed.situacao),
+      behavior: str(parsed.comportamento),
+      impact: str(parsed.impacto),
+      next_steps: str(parsed.proximos_passos),
+      notes: str(parsed.observacoes),
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 // ---------- periodicidade por setor + função (owner/admin) ----------
 export async function upsertCadenceRule(input: { department_id: string; position_id: string; cadence_days: number }): Promise<ActionState> {
   try {
