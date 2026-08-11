@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
-import { indiceDeAlvos, resolverAlvo, type IndiceDeAlvos } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, type IndiceDeAlvos, type Origem } from "@/lib/import-pessoa";
 import { normTexto } from "@/lib/absences-import";
 
 /** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
@@ -105,11 +105,12 @@ export async function importRvConfig(
       const { data } = await supabase.from("positions").select("id, name").eq("tenant_id", tenantId);
       funcaoPorNome = new Map((data ?? []).map((p) => [normTexto(p.name), p.id]));
     } else {
-      const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+      const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
         supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
         supabase.from("units").select("id, name").eq("tenant_id", tenantId),
         // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
         supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+        supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
       ]);
       const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
       const unidadesDoVinculo = new Map<string, string[]>();
@@ -120,10 +121,16 @@ export async function importRvConfig(
         arr.push(nm);
         unidadesDoVinculo.set(v.membership_id, arr);
       }
-      const refs: { id: string; code?: string | null; units?: string[] }[] = [];
+      // ativos, desligados e contratos anteriores: ver import-pessoa.ts
+      const unidadesPorUser = new Map<string, string[]>();
+      const refs: { id: string; code?: string | null; units?: string[]; origem?: Origem }[] = [];
       for (const m of membros ?? []) {
-        if (!m.is_active) continue;
-        refs.push({ id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [] });
+        const uns = unidadesDoVinculo.get(m.id) ?? [];
+        unidadesPorUser.set(m.user_id, uns);
+        refs.push({ id: m.user_id, code: m.employee_code, units: uns, origem: m.is_active ? "ativo" : "desligado" });
+      }
+      for (const c of contratos ?? []) {
+        refs.push({ id: c.user_id, code: c.employee_code, units: unidadesPorUser.get(c.user_id) ?? [], origem: "contrato_anterior" });
       }
       idx = indiceDeAlvos(refs, (unidades ?? []).map((u) => u.name));
     }

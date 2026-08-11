@@ -8,7 +8,7 @@ import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 // as MESMAS regras que o servidor aplica: se divergissem, a prévia mentiria
 import { normTexto as norm, parseDataPlanilha, parseTipo } from "@/lib/absences-import";
-import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO } from "@/lib/import-pessoa";
 
 /**
  * Importação de férias e afastamentos em lote.
@@ -78,6 +78,9 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
       return {
         row: r,
         motivo: alvo.motivo,
+        // lançamento em histórico entra, mas com selo: quem confere precisa ver
+        // que aquela linha é de alguém desligado ou de um contrato antigo
+        aviso: alvo.origem ? ORIGEM_AVISO[alvo.origem] : null,
         notFound: alvo.motivo === "nao_encontrada",
         mismatch: alvo.motivo === "precisa_unidade" || alvo.motivo === "unidade_nao_confere" || alvo.motivo === "duplicada_na_unidade",
         invalid, badKind,
@@ -214,6 +217,9 @@ export function ImportAbsencesDialog({ members, unidades }: { members: { id: str
                     {counts.ok} período(s) a importar · {rows.length} linha(s){ignored > 0 && ` · ${ignored} ignorada(s)`}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
+                    {analysis.filter((a) => a.importable && a.aviso).length > 0 && (
+                      <span className="badge badge-amber">{analysis.filter((a) => a.importable && a.aviso).length} em histórico (desligado ou contrato anterior)</span>
+                    )}
                     {counts.notFound > 0 && <span className="badge badge-red">{counts.notFound} matrícula não encontrada</span>}
                     {counts.mismatch > 0 && <span className="badge badge-red">{counts.mismatch} conflito de unidade/matrícula</span>}
                     {counts.invalid > 0 && <span className="badge badge-red">{counts.invalid} inválida(s) (datas ou tipo)</span>}

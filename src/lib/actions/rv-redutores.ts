@@ -9,7 +9,7 @@ import {
   parseDataPlanilha, acharTipo, chaveDaPunicao,
   type SanctionImportRow, type SanctionImportResult,
 } from "@/lib/sanctions-import";
-import { indiceDeAlvos, resolverAlvo } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, type Origem } from "@/lib/import-pessoa";
 
 /**
  * Redutores da remuneração variável: catálogo de punições, o registro da
@@ -154,13 +154,14 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
   try {
     const { supabase, tenantId, userId } = await dpActionContext();
 
-    const [{ data: membros }, { data: tipos }, { data: existentes }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+    const [{ data: membros }, { data: tipos }, { data: existentes }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
       supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
       supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenantId),
       supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
       supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+      supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
     ]);
 
     const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
@@ -172,10 +173,21 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
       arr.push(nm);
       unidadesDoVinculo.set(v.membership_id, arr);
     }
-    const refs: { id: string; code?: string | null; units?: string[] }[] = [];
+    // Lançamento de histórico é caso legítimo: férias de quem já saiu, ou de um
+    // contrato ANTERIOR da mesma pessoa (a matrícula muda na recontratação).
+    // Por isso o índice cobre os três, e a origem só muda a preferência e o
+    // aviso na tela. As unidades do contrato antigo são as do vínculo de hoje,
+    // que é a única informação de unidade que existe: employee_contracts não
+    // guarda unidade.
+    const unidadesPorUser = new Map<string, string[]>();
+    const refs: { id: string; code?: string | null; units?: string[]; origem?: Origem }[] = [];
     for (const m of membros ?? []) {
-      if (!m.is_active) continue;
-      refs.push({ id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [] });
+      const uns = unidadesDoVinculo.get(m.id) ?? [];
+      unidadesPorUser.set(m.user_id, uns);
+      refs.push({ id: m.user_id, code: m.employee_code, units: uns, origem: m.is_active ? "ativo" : "desligado" });
+    }
+    for (const c of contratos ?? []) {
+      refs.push({ id: c.user_id, code: c.employee_code, units: unidadesPorUser.get(c.user_id) ?? [], origem: "contrato_anterior" });
     }
     const idx = indiceDeAlvos(refs, (unidades ?? []).map((u) => u.name));
 

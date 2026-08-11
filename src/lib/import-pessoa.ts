@@ -46,18 +46,36 @@ export const MOTIVO_LABEL: Record<MotivoDeRecusa, string> = {
   duplicada_na_unidade: "matrícula duplicada no cadastro",
 };
 
+/**
+ * De onde a matrícula veio. Lançamento de histórico (férias de quem já saiu,
+ * ou de um contrato anterior da mesma pessoa) é caso legítimo e frequente numa
+ * migração, então essas matrículas RESOLVEM; o que muda é a ordem de
+ * preferência e o aviso que a linha carrega para a tela.
+ */
+export type Origem = "ativo" | "desligado" | "contrato_anterior";
+
+const PESO: Record<Origem, number> = { ativo: 0, desligado: 1, contrato_anterior: 2 };
+
+export const ORIGEM_AVISO: Record<Origem, string | null> = {
+  ativo: null,
+  desligado: "colaborador desligado",
+  contrato_anterior: "contrato anterior",
+};
+
+export type Dono = { id: string; unidades: string[]; origem: Origem };
+
 export type IndiceDeAlvos = {
   /** matrícula normalizada → TODOS os donos, com as unidades de cada um (norm) */
-  porMatricula: Map<string, { id: string; unidades: string[] }[]>;
+  porMatricula: Map<string, Dono[]>;
   /** a empresa tem mais de uma unidade? decide se a coluna Unidade é obrigatória */
   multiUnidade: boolean;
 };
 
 export function indiceDeAlvos(
-  refs: { id: string; code?: string | null; units?: string[] }[],
+  refs: { id: string; code?: string | null; units?: string[]; origem?: Origem }[],
   unidadesDaEmpresa: string[],
 ): IndiceDeAlvos {
-  const porMatricula = new Map<string, { id: string; unidades: string[] }[]>();
+  const porMatricula = new Map<string, Dono[]>();
   // "quantas unidades a empresa tem" vem do catálogo E das unidades dos
   // próprios vínculos, e a resposta mais restritiva vence. Duas fontes porque
   // uma sozinha falha: o catálogo pode não chegar (e aí a lista vazia diria
@@ -74,7 +92,7 @@ export function indiceDeAlvos(
     const mat = normMatricula(r.code ?? "");
     if (!mat) continue;
     const arr = porMatricula.get(mat) ?? [];
-    arr.push({ id: r.id, unidades });
+    arr.push({ id: r.id, unidades, origem: r.origem ?? "ativo" });
     porMatricula.set(mat, arr);
   }
   return { porMatricula, multiUnidade: unidadesVistas.size > 1 };
@@ -84,10 +102,12 @@ export type AlvoDaLinha = {
   /** id interno resolvido (o que as tabelas gravam), ou null quando recusada */
   alvoId: string | null;
   motivo: MotivoDeRecusa | null;
+  /** de onde a matrícula veio; a tela avisa quando não é o vínculo ativo */
+  origem: Origem | null;
 };
 
-const alvo = (id: string): AlvoDaLinha => ({ alvoId: id, motivo: null });
-const recusa = (motivo: MotivoDeRecusa): AlvoDaLinha => ({ alvoId: null, motivo });
+const alvo = (d: Dono): AlvoDaLinha => ({ alvoId: d.id, motivo: null, origem: d.origem });
+const recusa = (motivo: MotivoDeRecusa): AlvoDaLinha => ({ alvoId: null, motivo, origem: null });
 
 export function resolverAlvo(matriculaBruta: string, unidadeBruta: string, idx: IndiceDeAlvos): AlvoDaLinha {
   const mat = normMatricula(matriculaBruta ?? "");
@@ -101,7 +121,14 @@ export function resolverAlvo(matriculaBruta: string, unidadeBruta: string, idx: 
   // com Unidade na linha (obrigatória em empresa multiunidade, opcional na de
   // unidade única), ela restringe: dono sem a unidade citada está fora
   const candidatos = unidade ? donos.filter((d) => d.unidades.includes(unidade)) : donos;
-  if (candidatos.length === 1) return alvo(candidatos[0].id);
   if (candidatos.length === 0) return recusa("unidade_nao_confere");
-  return recusa("duplicada_na_unidade");
+
+  // A matrícula pode ter mais de um dono legítimo: a de hoje e a de um contrato
+  // antigo reaproveitada por outra pessoa. O vínculo ATIVO ganha do desligado,
+  // que ganha do contrato encerrado. Empate no MESMO nível é defeito de
+  // cadastro, e aí ninguém decide.
+  const melhor = Math.min(...candidatos.map((d) => PESO[d.origem]));
+  const finalistas = candidatos.filter((d) => PESO[d.origem] === melhor);
+  if (finalistas.length > 1) return recusa("duplicada_na_unidade");
+  return alvo(finalistas[0]);
 }

@@ -5,7 +5,7 @@ import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam } from "@/lib/absences-import";
-import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL } from "@/lib/import-pessoa";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO, type Origem } from "@/lib/import-pessoa";
 
 /**
  * Férias e afastamentos do colaborador.
@@ -154,11 +154,12 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
 
-    const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
-      supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
+    const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
+      supabase.from("memberships").select("id, user_id, is_active, employee_code, dismissed_at").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
       supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+      supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
     ]);
     const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
     const unidadesDoVinculo = new Map<string, string[]>();
@@ -169,12 +170,28 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       arr.push(nm);
       unidadesDoVinculo.set(v.membership_id, arr);
     }
-    const refs: { id: string; code?: string | null; units?: string[] }[] = [];
+    // Lançamento de histórico é caso legítimo: férias de quem já saiu, ou de um
+    // contrato ANTERIOR da mesma pessoa (a matrícula muda na recontratação).
+    // Por isso o índice cobre os três, e a origem só muda a preferência e o
+    // aviso na tela. As unidades do contrato antigo são as do vínculo de hoje,
+    // que é a única informação de unidade que existe: employee_contracts não
+    // guarda unidade.
+    const unidadesPorUser = new Map<string, string[]>();
+    const refs: { id: string; code?: string | null; units?: string[]; origem?: Origem }[] = [];
     for (const m of membros ?? []) {
-      if (!m.is_active) continue;
-      refs.push({ id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [] });
+      const uns = unidadesDoVinculo.get(m.id) ?? [];
+      unidadesPorUser.set(m.user_id, uns);
+      refs.push({ id: m.user_id, code: m.employee_code, units: uns, origem: m.is_active ? "ativo" : "desligado" });
+    }
+    for (const c of contratos ?? []) {
+      refs.push({ id: c.user_id, code: c.employee_code, units: unidadesPorUser.get(c.user_id) ?? [], origem: "contrato_anterior" });
     }
     const idx = indiceDeAlvos(refs, (unidades ?? []).map((u) => u.name));
+    // desligamento por pessoa: uma ausência DEPOIS da saída é erro de digitação,
+    // não histórico, e entrar mudaria a proporcionalidade de um mês que a pessoa
+    // nem trabalhou
+    const saidaPorUser = new Map<string, string>();
+    for (const m of membros ?? []) if (m.dismissed_at) saidaPorUser.set(m.user_id, m.dismissed_at);
 
     const { data: existentes } = await supabase
       .from("employee_absences")
@@ -222,6 +239,13 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       if (alvo.motivo === "nao_encontrada") { r.notFound += 1; recusar(MOTIVO_LABEL.nao_encontrada); continue; }
       const userIdAlvo = alvo.alvoId;
       if (!userIdAlvo) { r.mismatch += 1; recusar(MOTIVO_LABEL[alvo.motivo!]); continue; }
+
+      const saida = saidaPorUser.get(userIdAlvo);
+      if (saida && inicio > saida) {
+        r.invalid += 1;
+        recusar(`Período começa depois do desligamento (${saida.slice(8, 10)}/${saida.slice(5, 7)}/${saida.slice(0, 4)})`);
+        continue;
+      }
 
       const payload = {
         tenant_id: tenantId,

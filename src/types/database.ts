@@ -710,6 +710,16 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date?: string; end_date?: string; discounts_rv?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // Contratos ENCERRADOS do colaborador (vínculos anteriores, com outra
+      // matrícula). A importação em lote arquiva aqui ao detectar recontratação,
+      // e as importações de férias/punições/RV consultam para aceitar
+      // lançamento de histórico pela matrícula antiga.
+      employee_contracts: {
+        Row: { id: string; tenant_id: string; user_id: string; employee_code: string | null; admission_date: string | null; dismissed_at: string | null; department_id: string | null; subdepartment_id: string | null; position_id: string | null; position_level_id: string | null; source: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; employee_code?: string | null; admission_date?: string | null; dismissed_at?: string | null; department_id?: string | null; subdepartment_id?: string | null; position_id?: string | null; position_level_id?: string | null; source?: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; employee_code?: string | null; admission_date?: string | null; dismissed_at?: string | null; department_id?: string | null; subdepartment_id?: string | null; position_id?: string | null; position_level_id?: string | null; source?: string; created_at?: string }
+        Relationships: []
+      }
       // ---- redutores da remuneração variável ----
       // O catálogo de punições e as REGRAS são configuração: leitura para
       // qualquer membro. `employee_sanctions` é dado disciplinar, e a leitura é
