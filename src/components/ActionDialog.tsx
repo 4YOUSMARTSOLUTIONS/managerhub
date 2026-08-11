@@ -110,16 +110,27 @@ export function ActionDialog({
   const pilarOpts = useMemo(() => pilares.filter((p) => isActive(p, pilarId)), [pilares, pilarId]);
   const kpiOpts = useMemo(() => kpis.filter((k) => isActive(k, kpiId)), [kpis, kpiId]);
   const toolOpts = useMemo(() => tools.filter((t) => isActive(t, toolId)), [tools, toolId]);
-  // cascata: Pilar + Seção (global) → [Bloco] → Item
-  const secaoOpts = useMemo(() => secoes.filter((s) => isActive(s, secaoId)), [secoes, secaoId]);
+  // cascata: Pilar → [Bloco] → Item. A Seção saiu da tela: ela é DERIVADA do
+  // item (ou do bloco), que já a carregam, e continua indo para o banco.
   const blocoOpts = useMemo(
-    () => blocos.filter((b) => (!pilarId || b.pilarId === pilarId) && (!secaoId || b.secaoId === secaoId)).filter((b) => isActive(b, blocoId)),
-    [blocos, pilarId, secaoId, blocoId],
+    () => blocos.filter((b) => !pilarId || b.pilarId === pilarId).filter((b) => isActive(b, blocoId)),
+    [blocos, pilarId, blocoId],
   );
   const itemOpts = useMemo(() => {
-    const list = itens.filter((i) => (!pilarId || i.pilarId === pilarId) && (!secaoId || i.secaoId === secaoId) && (!blocoId || i.blocoId === blocoId));
+    const list = itens.filter((i) => (!pilarId || i.pilarId === pilarId) && (!blocoId || i.blocoId === blocoId));
     return list.filter((i) => isActive(i, itemId));
-  }, [itens, pilarId, secaoId, blocoId, itemId]);
+  }, [itens, pilarId, blocoId, itemId]);
+  /** Seção do item escolhido (ou do bloco): o que vai para o banco. */
+  const secaoDerivada = useMemo(() => {
+    const it = itemId ? itens.find((x) => x.id === itemId) : null;
+    if (it?.secaoId) return it.secaoId;
+    const b = blocoId ? blocos.find((x) => x.id === blocoId) : null;
+    return b?.secaoId ?? "";
+  }, [itens, blocos, itemId, blocoId]);
+  const secaoNome = useMemo(
+    () => (secaoDerivada ? secoes.find((x) => x.id === secaoDerivada)?.name ?? "" : ""),
+    [secoes, secaoDerivada],
+  );
   const occOpts = useMemo(
     () => occurrences.filter((o) => !seriesId || o.seriesId === seriesId).map((o) => ({ id: o.id, name: formatDate(o.occurredOn) })),
     [occurrences, seriesId],
@@ -127,16 +138,11 @@ export function ActionDialog({
 
   if (!open) return null;
 
-  // Pilar e Seção são independentes (seção é global). Ao mudar, limpa bloco/item incompatíveis.
+  // Ao trocar o Pilar, limpa bloco/item que não pertencem a ele.
   const onPilar = (id: string) => {
     setPilarId(id);
     if (blocoId) { const b = blocos.find((x) => x.id === blocoId); if (!id || (b && b.pilarId !== id)) setBlocoId(""); }
     if (itemId) { const it = itens.find((x) => x.id === itemId); if (!id || (it && it.pilarId !== id)) setItemId(""); }
-  };
-  const onSecao = (id: string) => {
-    setSecaoId(id);
-    if (blocoId) { const b = blocos.find((x) => x.id === blocoId); if (!id || (b && b.secaoId !== id)) setBlocoId(""); }
-    if (itemId) { const it = itens.find((x) => x.id === itemId); if (!id || (it && it.secaoId !== id)) setItemId(""); }
   };
   // ao escolher o bloco (opcional): preenche pilar e seção; limpa item se não pertencer
   const onBloco = (id: string) => {
@@ -216,10 +222,17 @@ export function ActionDialog({
     setError(""); setSaved("");
     const cleanDemandas = demandas.filter((d) => d.description.trim());
     if (cleanDemandas.length === 0) { setError("Informe ao menos uma demanda."); return; }
+    // ação sem responsável nasce órfã: ninguém a vê na própria lista e ela
+    // não cobra ninguém. O servidor recusa igual.
+    const semResp = cleanDemandas.findIndex((d) => d.assignees.length === 0);
+    if (semResp >= 0) {
+      setError(`Informe ao menos um responsável na demanda ${semResp + 1}.`);
+      return;
+    }
     if (units && units.length > 0 && !unitId) { setError("Selecione a unidade (ou “Todas as unidades”)."); return; }
     if (!requesterId) { setError("Informe o solicitante."); return; }
     if (!dueDate) { setError("Informe o prazo da ação."); return; }
-    if (isSdpo && (!pilarId || !secaoId || !itemId)) { setError("Para SDPO, informe Pilar, Seção e Item."); return; }
+    if (isSdpo && (!pilarId || !itemId)) { setError("Para SDPO, informe o Pilar e o Item."); return; }
     if (isSdpo && !seriesId) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
 
     // modo coletar: devolve a ação ao pai (não salva agora)
@@ -227,7 +240,7 @@ export function ActionDialog({
       onCollect({
         payload: {
           is_sdpo: isSdpo,
-          pilar_id: pilarId, secao_id: secaoId, bloco_id: blocoId, item_id: itemId,
+          pilar_id: pilarId, secao_id: secaoDerivada, bloco_id: blocoId, item_id: itemId,
           meeting_series_id: seriesId,
           kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
           requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
@@ -243,7 +256,7 @@ export function ActionDialog({
 
     const payload = {
       is_sdpo: isSdpo,
-      pilar_id: pilarId, secao_id: secaoId, bloco_id: blocoId, item_id: itemId,
+      pilar_id: pilarId, secao_id: secaoDerivada, bloco_id: blocoId, item_id: itemId,
       meeting_series_id: seriesId, occurrence_id: occurrenceId,
       kpi_id: kpiId, tool_id: toolId, unit_id: unitId === "all" ? "" : unitId,
       requester_id: requesterId, problem_statement: problema.trim(), due_date: dueDate, priority, cc,
@@ -372,17 +385,20 @@ export function ActionDialog({
                 <SearchSelect options={pilarOpts} value={pilarId} onChange={onPilar} placeholder="Buscar pilar…" />
               </div>
               <div>
-                <label className="label">Seção</label>
-                <SearchSelect options={secaoOpts} value={secaoId} onChange={onSecao} placeholder="Buscar seção…" />
-              </div>
-              <div>
                 <label className="label">Bloco <span className="soft">(opcional)</span></label>
                 <SearchSelect options={blocoOpts} value={blocoId} onChange={onBloco} placeholder="Buscar bloco…" emptyHint="Sem blocos nesta seção" />
               </div>
               <div>
-                <label className="label">Item</label>
+                <label className="label">Item <span style={{ color: "var(--mh-danger)" }}>*</span></label>
                 <SearchSelect options={itemOpts} value={itemId} onChange={onItem} placeholder="Buscar item…" />
               </div>
+              {/* a Seção não é mais escolhida: vem do item/bloco e vai para o
+                  banco do mesmo jeito. Fica visível para conferência. */}
+              {secaoNome && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <span className="soft" style={{ fontSize: "0.78rem" }}>Seção: <strong>{secaoNome}</strong></span>
+                </div>
+              )}
             </div>
           )}
 

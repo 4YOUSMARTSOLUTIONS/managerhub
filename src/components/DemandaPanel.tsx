@@ -239,7 +239,10 @@ export function DemandaPanel({
                     <div key={a.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.5rem 0.7rem" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap" }}>
                         <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{a.name}</span>
-                        <EffStatusBadge eff={aEff} overdue={aOverdue} />
+                        {/* com UM responsável o selo repete o do topo da ação;
+                            com vários ele diz quem já concluiu a sua parte, que
+                            o selo do topo (o consolidado) não mostra */}
+                        {demanda.assigneeStates.length > 1 && <EffStatusBadge eff={aEff} overdue={aOverdue} />}
                       </div>
                       {a.id === currentUserId && !a.completedAt && !a.doneRequestedAt && !finalizada && (
                         <div style={{ marginTop: "0.45rem" }}>
