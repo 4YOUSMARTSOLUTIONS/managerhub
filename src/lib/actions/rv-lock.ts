@@ -50,13 +50,24 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
     { data: mems }, { data: cfgs }, { data: ausencias }, { data: sancoes },
     { data: regrasRaw }, { data: faixasRaw },
   ] = await Promise.all([
-    admin.from("memberships").select("user_id, position_id, admission_date, dismissed_at").eq("tenant_id", tenantId),
+    admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at, department_id, subdepartment_id, manager_id").eq("tenant_id", tenantId),
     admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenantId),
     admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv").eq("tenant_id", tenantId),
     admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
     admin.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenantId).eq("active", true).order("sort"),
     admin.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenantId).order("min_qtd"),
   ]);
+
+  // unidades por vínculo, para o carimbo do retrato
+  const { data: vinculoUnidades } = await admin
+    .from("membership_units").select("membership_id, unit_id")
+    .in("membership_id", (mems ?? []).map((m) => m.id));
+  const unidadesDe = new Map<string, string[]>();
+  for (const vu of vinculoUnidades ?? []) {
+    const arr = unidadesDe.get(vu.membership_id) ?? [];
+    arr.push(vu.unit_id);
+    unidadesDe.set(vu.membership_id, arr);
+  }
 
   const faixasPorRegra = new Map<string, { min: number; max: number | null; pct: number }[]>();
   for (const b of faixasRaw ?? []) {
@@ -95,6 +106,8 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   const linhas: {
     tenant_id: string; period: string; user_id: string;
     rv_full: number; prop_factor: number; reducer_pct: number; pool: number; detail: Detalhe[];
+    department_id: string | null; subdepartment_id: string | null; position_id: string | null;
+    manager_id: string | null; unit_ids: string[];
   }[] = [];
 
   for (const m of mems ?? []) {
@@ -134,6 +147,14 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
       reducer_pct: pct,
       pool: Number((cheio * prop * (1 - pct / 100)).toFixed(2)),
       detail: red.aplicados.map((a) => ({ motivo: a.nome, quantidade: a.quantidade, pct: a.pct })),
+      // o VÍNCULO da época vai junto com o dinheiro: transferência futura não
+      // reescreve o rótulo do mês fechado. Lido de memberships mesmo, porque o
+      // fechamento acontece agora: o estado atual É o da época do clique.
+      department_id: m.department_id,
+      subdepartment_id: m.subdepartment_id,
+      position_id: m.position_id,
+      manager_id: m.manager_id,
+      unit_ids: (unidadesDe.get(m.id) ?? []).sort(),
     });
   }
 

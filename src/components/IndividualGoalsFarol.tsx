@@ -69,6 +69,8 @@ export type RvCongeladoRow = {
   fator: number;
   pctTotal: number;
   motivos: { nome: string; quantidade: number; pct: number }[];
+  /** vínculo carimbado no fechamento; null em retratos anteriores ao carimbo */
+  vinculo: { setor: string | null; funcao: string | null; gestor: string | null; unidades: string[] } | null;
 };
 export type Opt = { id: string; name: string };
 export type SubOpt = { id: string; name: string; departmentId: string };
@@ -507,6 +509,20 @@ export function IndividualGoalsFarol({
   const singleOwner = owners.size === 1 ? [...owners][0] : null;
   const hasAberta = view.rows.some((r) => r.entryStatus === "aberta");
   const canCloseMonth = mode === "mes" && !!singleOwner && canClose(singleOwner) && hasAberta;
+  // vínculo carimbado no fechamento, para o mês fechado contar de quem era a
+  // época, mesmo que a pessoa tenha sido transferida depois
+  const vinculoDaEpoca = (() => {
+    if (!mesFechado || !singleOwner) return null;
+    const v = congelados.get(`${period}|${singleOwner}`)?.vinculo;
+    if (!v) return null;
+    const partes = [
+      v.setor && `Setor ${v.setor}`,
+      v.funcao && `Função ${v.funcao}`,
+      v.gestor && `Gestor ${v.gestor}`,
+      v.unidades.length > 0 && `Unidade ${v.unidades.join(", ")}`,
+    ].filter(Boolean);
+    return partes.length > 0 ? partes.join(" · ") : null;
+  })();
   const abertaCount = view.rows.filter((r) => r.entryStatus === "aberta").length;
   const singleOwnerName = singleOwner ? view.rows.find((r) => r.goal.ownerId === singleOwner)?.goal.ownerName ?? null : null;
 
@@ -688,6 +704,11 @@ export function IndividualGoalsFarol({
                   O valor não muda mais: férias, atestado, punição ou vigência de RV lançados
                   agora não alcançam este mês, e os lançamentos foram aprovados junto.
                 </span>
+                {vinculoDaEpoca && (
+                  <div className="soft" style={{ fontSize: "0.78rem", marginTop: 2 }}>
+                    Vínculo na época do fechamento: {vinculoDaEpoca}
+                  </div>
+                )}
               </>
             ) : (
               <>

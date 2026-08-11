@@ -789,10 +789,12 @@ export type Database = {
       // O retrato dos três números que vêm de fora do lançamento da meta, um por
       // colaborador que tinha pote na competência. `detail` traz os motivos do
       // corte, para o aviso da tela continuar explicando o valor menor.
+      // as colunas de vínculo (setor, função, gestor, unidades) são o carimbo da
+      // época do fechamento; nulas em retratos anteriores ao carimbo
       rv_period_snapshots: {
-        Row: { id: string; tenant_id: string; period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; pool: number; detail: Json; created_at: string }
-        Insert: { id?: string; tenant_id: string; period: string; user_id: string; rv_full: number; prop_factor?: number; reducer_pct?: number; pool: number; detail?: Json; created_at?: string }
-        Update: { id?: string; tenant_id?: string; period?: string; user_id?: string; rv_full?: number; prop_factor?: number; reducer_pct?: number; pool?: number; detail?: Json; created_at?: string }
+        Row: { id: string; tenant_id: string; period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; pool: number; detail: Json; created_at: string; department_id: string | null; subdepartment_id: string | null; position_id: string | null; manager_id: string | null; unit_ids: string[] }
+        Insert: { id?: string; tenant_id: string; period: string; user_id: string; rv_full: number; prop_factor?: number; reducer_pct?: number; pool: number; detail?: Json; created_at?: string; department_id?: string | null; subdepartment_id?: string | null; position_id?: string | null; manager_id?: string | null; unit_ids?: string[] }
+        Update: { id?: string; tenant_id?: string; period?: string; user_id?: string; rv_full?: number; prop_factor?: number; reducer_pct?: number; pool?: number; detail?: Json; created_at?: string; department_id?: string | null; subdepartment_id?: string | null; position_id?: string | null; manager_id?: string | null; unit_ids?: string[] }
         Relationships: []
       }
       // ---- Planner (kanban) ----

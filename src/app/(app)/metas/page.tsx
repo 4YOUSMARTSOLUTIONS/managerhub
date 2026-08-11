@@ -47,7 +47,7 @@ export default async function GoalsPage() {
       ])
     : Promise.resolve(null);
 
-  const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, todosMembros, donos] = await Promise.all([
+  const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, { data: cargos }, { data: unidadesTodas }, todosMembros, donos] = await Promise.all([
     reportsP,
     supabase
       .from("area_goals")
@@ -57,6 +57,9 @@ export default async function GoalsPage() {
       .order("name"),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
+    // cargos e unidades só para dar nome ao vínculo carimbado nos retratos de RV
+    supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
+    supabase.from("units").select("id, name").eq("tenant_id", tenant.id),
     getMembers(tenant.id),
     donosP,
   ]);
@@ -179,8 +182,8 @@ export default async function GoalsPage() {
     // um número na mão e ninguém sabendo qual vale.
     supabase.from("rv_period_locks").select("period, locked_at").eq("tenant_id", tenant.id),
     ownerIds.length
-      ? supabase.from("rv_period_snapshots").select("period, user_id, rv_full, prop_factor, reducer_pct, detail").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; detail: unknown }[] }),
+      ? supabase.from("rv_period_snapshots").select("period, user_id, rv_full, prop_factor, reducer_pct, detail, department_id, position_id, manager_id, unit_ids").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; detail: unknown; department_id: string | null; position_id: string | null; manager_id: string | null; unit_ids: string[] }[] }),
   ]);
 
   // evidências: uma consulta só para todos os lançamentos em vista, e não uma por
@@ -286,6 +289,14 @@ export default async function GoalsPage() {
   // O atingimento continua vivo, porque ele tem o próprio fechamento por
   // lançamento. Aqui se trava o dinheiro; lá se trava o desempenho.
   const periodosFechados = (cadeados ?? []).map((c) => c.period);
+  // nomes do vínculo carimbado no fechamento; retrato antigo (sem carimbo) fica sem
+  const nomeSetor = new Map((deps ?? []).map((d) => [d.id, d.name]));
+  const nomeCargo = new Map((cargos ?? []).map((c) => [c.id, c.name]));
+  const nomeUnidade = new Map((unidadesTodas ?? []).map((u) => [u.id, u.name]));
+  const nomeMembro = new Map<string, string>();
+  for (const m of todosMembros) {
+    if (m.profile?.id) nomeMembro.set(m.profile.id, m.profile.full_name ?? "");
+  }
   const rvCongelados: RvCongeladoRow[] = (retratos ?? []).map((r) => ({
     period: r.period,
     ownerId: r.user_id,
@@ -297,6 +308,14 @@ export default async function GoalsPage() {
           nome: String(d.motivo ?? ""), quantidade: Number(d.quantidade ?? 0), pct: Number(d.pct ?? 0),
         }))
       : [],
+    vinculo: r.department_id || r.position_id || r.manager_id || (r.unit_ids ?? []).length
+      ? {
+          setor: r.department_id ? nomeSetor.get(r.department_id) ?? null : null,
+          funcao: r.position_id ? nomeCargo.get(r.position_id) ?? null : null,
+          gestor: r.manager_id ? nomeMembro.get(r.manager_id) || null : null,
+          unidades: (r.unit_ids ?? []).map((u) => nomeUnidade.get(u)).filter((x): x is string => !!x),
+        }
+      : null,
   }));
 
   // mapa dono -> setor/subsetor + opcoes de filtro (so p/ quem ve multiplos colaboradores)
