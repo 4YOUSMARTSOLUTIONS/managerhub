@@ -4,6 +4,16 @@ import type { Database } from "@/types/database";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
+/**
+ * Rotas que um usuário AUTENTICADO alcança mesmo com a senha padrão pendente.
+ *
+ * Lista separada de `PUBLIC_PATHS` de propósito: `/trocar-senha` exige sessão,
+ * então não pode virar rota pública. `/suspenso` entra porque obrigar um
+ * desligado a definir senha nova para só então descobrir que o acesso está
+ * inativo é fluxo absurdo.
+ */
+const LIVRES_DA_TROCA = ["/trocar-senha", "/suspenso", "/auth"];
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -60,10 +70,38 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // autenticado em página de auth -> dashboard
+  /**
+   * Senha ainda é a que a administração cadastrou: só a tela de troca.
+   *
+   * A pendência vem DENTRO do token que o getClaims acabou de validar, então
+   * este gate não custa ida ao banco nenhuma. A leitura autoritativa (que pega
+   * um reset feito por admin há pouco) mora no layout autenticado.
+   */
+  const trocaPendente =
+    (claims?.claims?.app_metadata as { must_change_password?: boolean } | undefined)
+      ?.must_change_password === true;
+
+  // autenticado em página de auth -> dashboard, ou a troca quando ela é devida
   if (autenticado && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = trocaPendente ? "/trocar-senha" : "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  /**
+   * Só GET, e isso é correção e não estilo: o redirect responde 307, que
+   * PRESERVA o método, e o Next despacha server action por id e não por rota.
+   * Um POST de action redirecionado para cá chegaria com o cabeçalho da action
+   * intacto e rodaria assim mesmo. Quem tranca escrita é a guarda do
+   * `actionContext`; aqui se tranca navegação.
+   */
+  if (
+    autenticado && trocaPendente && request.method === "GET"
+    && !LIVRES_DA_TROCA.some((p) => pathname.startsWith(p))
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/trocar-senha";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

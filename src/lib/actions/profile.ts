@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import sharp from "sharp";
 import { actionContext } from "./context";
+import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { getAuthUser } from "@/lib/auth-cache";
+import { redirect } from "next/navigation";
 import { verifyOwnPassword } from "./verify-password";
 import type { ActionState } from "./types";
 import { AVATAR_BUCKET, AVATAR_MAX_BYTES, AVATAR_MIMES, AVATAR_SIZE } from "@/lib/avatar";
@@ -77,10 +81,17 @@ export async function getOwnProfile(): Promise<OwnProfile | null> {
  *
  * Não usa a RPC admin_set_password: ela é restrita a owner/admin e pularia justamente
  * a exigência da senha atual.
+ *
+ * `createClient` direto, e NÃO `actionContext`: quem está com a senha padrão
+ * pendente é barrado lá dentro, e trocar a senha é exatamente o que essa pessoa
+ * precisa fazer para sair da pendência. A troca perde as guardas de vínculo
+ * inativo e empresa suspensa que o `actionContext` dá, o que é aceitável: nenhum
+ * dano vem de um desligado definir a própria senha, e o `requireContext` continua
+ * mandando ele para /suspenso em toda tela.
  */
 export async function changeOwnPassword(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const supabase = await createClient();
     const atual = String(formData.get("current_password") ?? "");
     const nova = String(formData.get("new_password") ?? "");
     const confirmacao = String(formData.get("confirm_password") ?? "");
@@ -108,6 +119,48 @@ export async function changeOwnPassword(_prev: ActionState, formData: FormData):
 
     return { ok: true, message: "Senha alterada." };
   } catch (e) { return { error: (e as Error).message }; }
+}
+
+/**
+ * Troca obrigatória no primeiro acesso.
+ *
+ * Reusa a troca voluntária inteira (validações, senha atual e updateUser) e só
+ * acrescenta as duas pontas que o caso obrigatório precisa. A ORDEM importa:
+ *
+ * 1. Trocar a senha primeiro. Se limpasse a pendência antes e o updateUser
+ *    falhasse, a pessoa sairia da obrigação sem ter trocado senha nenhuma.
+ * 2. Limpar a pendência com SERVICE ROLE. A RPC é revogada de `authenticated`
+ *    justamente para não existir caminho em que alguém limpe a própria
+ *    pendência pelo PostgREST sem trocar coisa alguma.
+ * 3. Renovar o token, e isto não é cosmético: o updateUser rotaciona a sessão,
+ *    mas o token que ele devolve foi cunhado ANTES do passo 2 e ainda carrega a
+ *    pendência. Sem este passo a pessoa troca a senha e continua presa na tela.
+ */
+export async function trocarSenhaObrigatoria(prev: ActionState, formData: FormData): Promise<ActionState> {
+  const user = await getAuthUser();
+  if (!user) redirect("/login");
+
+  const r = await changeOwnPassword(prev, formData);
+  if (!r.ok) return r;
+
+  await createServiceClient().rpc("concluir_troca_de_senha", { p_user: user.id });
+
+  // `signInWithPassword` e não `refreshSession`: a senha nova está aqui, e ele
+  // não depende de o refresh token ter sobrevivido à rotação do updateUser.
+  // Não passa pelo throttle de login de propósito: não é tentativa de adivinhar
+  // senha, é a senha que esta mesma requisição acabou de definir.
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: user.email ?? "",
+    password: String(formData.get("new_password") ?? ""),
+  });
+  if (error) {
+    // a senha JÁ foi trocada; só o token não renovou. Entrar de novo resolve.
+    await supabase.auth.signOut();
+    redirect("/login");
+  }
+
+  redirect("/dashboard");
 }
 
 /**

@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { getAuthUser, getIsSuperAdmin } from "@/lib/auth-cache";
+import { getAuthUser, getIsSuperAdmin, trocaDeSenhaPendente } from "@/lib/auth-cache";
 import type { Enums } from "@/types/database";
 
 /**
@@ -19,6 +19,22 @@ export const actionContext = cache(async function actionContext() {
   const supabase = await createClient();
   const [user, isSuper] = await Promise.all([getAuthUser(), getIsSuperAdmin()]);
   if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+
+  /**
+   * Senha ainda é a que a administração cadastrou: nenhuma escrita antes da troca.
+   *
+   * O redirect do proxy não serve para isto. Ele responde 307, que preserva o
+   * método, e o Next despacha server action por id e não por rota: a action
+   * rodaria no destino do redirect. A trava de escrita precisa estar aqui.
+   *
+   * Custo zero no caminho comum: a resposta veio dentro do token que o
+   * `getAuthUser` já leu. Só quando o token não carrega a informação (`null`) é
+   * que se paga uma ida ao banco.
+   */
+  const pendente = user.trocaPendente ?? (await trocaDeSenhaPendente());
+  if (pendente) {
+    throw new Error("Defina uma senha própria antes de usar o sistema.");
+  }
 
   if (isSuper) {
     const { data: activeId } = await supabase.rpc("my_active_tenant");

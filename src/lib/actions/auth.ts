@@ -58,14 +58,21 @@ export async function signIn(
     email = found;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     const v = await registrarFalha(chaves);
     return { error: v.bloqueado ? mensagemBloqueio(v.esperaSegundos) : "E-mail/CPF ou senha inválidos." };
   }
 
   await registrarSucesso(chaves);
-  redirect("/dashboard");
+
+  // Senha ainda é a que a administração cadastrou: a troca vem antes de tudo.
+  // O proxy também barraria, mas aqui a resposta do login já traz a informação,
+  // então a pessoa vai direto para a tela certa em vez de piscar o /dashboard.
+  const pendente =
+    (data.user?.app_metadata as { must_change_password?: boolean } | undefined)
+      ?.must_change_password === true;
+  redirect(pendente ? "/trocar-senha" : "/dashboard");
 }
 
 export async function signOut(): Promise<void> {

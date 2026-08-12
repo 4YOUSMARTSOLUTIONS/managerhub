@@ -5,7 +5,7 @@ import { checkSuperAdmin } from "@/lib/platform";
 import { getTheme } from "@/lib/theme";
 import { getModuleAccess } from "@/lib/module-access";
 import { getAvatarMap } from "@/lib/avatars";
-import { getAuthUser, getOwnIdentity } from "@/lib/auth-cache";
+import { getAuthUser, getOwnIdentity, trocaDeSenhaPendente } from "@/lib/auth-cache";
 import { AppShell } from "@/components/AppShell";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
@@ -34,12 +34,24 @@ export default async function AppLayout({
   // 1º estágio: identidade, tema e papel de plataforma, tudo junto. Antes eram três
   // esperas em fila, e o getUser/is_super_admin ainda se repetiam dentro do
   // requireContext logo abaixo (agora compartilhados por auth-cache).
-  const [user, theme, isSuperAdmin] = await Promise.all([
+  const [user, theme, isSuperAdmin, trocaPendente] = await Promise.all([
     getAuthUser(),
     getTheme(),
     checkSuperAdmin(),
+    trocaDeSenhaPendente(),
   ]);
   if (!user) redirect("/login");
+
+  /**
+   * Senha ainda é a que a administração cadastrou: nenhuma tela antes da troca.
+   *
+   * Fica AQUI, acima do ramo do super admin sem empresa e do requireContext,
+   * porque os dois saem cedo: uma guarda mais abaixo deixaria o super admin
+   * passar. A leitura é autoritativa (vai ao banco, em paralelo com o
+   * checkSuperAdmin que já era uma RPC), então pega inclusive o reset que um
+   * administrador acabou de fazer, sem esperar o token expirar.
+   */
+  if (trocaPendente) redirect("/trocar-senha");
 
   // Super admin sem NENHUMA empresa no sistema: shell reduzido, só o Painel ADM.
   if (isSuperAdmin) {

@@ -1437,6 +1437,12 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      // Troca obrigatória da senha definida por terceiro. `marcar_troca_pendente`
+      // NÃO entra de propósito: ela é revogada de `authenticated` (quem marca são
+      // as RPCs de criação e o reset por admin, por dentro), e este arquivo
+      // descreve o privilégio, não só o schema.
+      minha_troca_pendente: { Args: Record<PropertyKey, never>; Returns: boolean }
+      concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
