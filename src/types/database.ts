@@ -753,6 +753,16 @@ export type Database = {
       // qualquer membro. `employee_sanctions` é dado disciplinar, e a leitura é
       // owner/admin/manager — a tela de Metas chega nele pelo service client e
       // manda ao cliente só o percentual, nunca a lista.
+      // O que a empresa considera falta, com a GRAVIDADE junto: ela é do
+      // catálogo e não do lançamento, senão o mesmo atraso seria leve para um
+      // gestor e grave para outro. `code` é o número do regulamento, que o
+      // documento assinado precisa citar.
+      infraction_types: {
+        Row: { id: string; tenant_id: string; code: string; name: string; description: string | null; severity: Database["public"]["Enums"]["infraction_severity"]; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; code: string; name: string; description?: string | null; severity?: Database["public"]["Enums"]["infraction_severity"]; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; code?: string; name?: string; description?: string | null; severity?: Database["public"]["Enums"]["infraction_severity"]; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       sanction_types: {
         Row: { id: string; tenant_id: string; name: string; active: boolean; sort: number; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; name: string; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
@@ -763,6 +773,21 @@ export type Database = {
         Row: { id: string; tenant_id: string; user_id: string; sanction_type_id: string; occurred_on: string; note: string | null; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; user_id: string; sanction_type_id: string; occurred_on: string; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Update: { id?: string; tenant_id?: string; user_id?: string; sanction_type_id?: string; occurred_on?: string; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // O PROCESSO da punição, separado do fato acima. `employee_sanctions` é o
+      // que reduz remuneração variável e não tem status: uma linha lá já vale.
+      // Aqui mora o caminho até ela (rascunho, envio, decisão do RH) e o
+      // carimbo de época, congelado pelo trigger ao sair do rascunho, para o
+      // papel assinado continuar batendo com o registro.
+      //
+      // Não existe `cpf` nesta tabela de propósito: ela é legível pelo gestor
+      // de equipe, e uma coluna dessas entregaria CPF a dezenas de pessoas pelo
+      // PostgREST. O documento lê o CPF pela RPC `punicao_documento`.
+      punicao_lancamentos: {
+        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["punicao_status"]; applied_on: string | null; infraction_type_id: string | null; infraction_code: string | null; infraction_name: string | null; infraction_description: string | null; severity: Database["public"]["Enums"]["infraction_severity"] | null; sanction_type_id: string | null; sanction_name: string | null; extra_info: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; signed_path: string | null; signed_filename: string | null; signed_size: number | null; signed_content_type: string | null; signed_uploaded_at: string | null; signed_uploaded_by: string | null; created_by: string; submitted_at: string | null; decided_at: string | null; decided_by: string | null; decision_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; sanction_id: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; status?: Database["public"]["Enums"]["punicao_status"]; applied_on?: string | null; infraction_type_id?: string | null; infraction_code?: string | null; infraction_name?: string | null; infraction_description?: string | null; severity?: Database["public"]["Enums"]["infraction_severity"] | null; sanction_type_id?: string | null; sanction_name?: string | null; extra_info?: string | null; snap_full_name?: string | null; snap_employee_code?: string | null; snap_department_id?: string | null; snap_department_name?: string | null; snap_subdepartment_id?: string | null; snap_subdepartment_name?: string | null; snap_position_id?: string | null; snap_position_name?: string | null; snap_manager_id?: string | null; snap_manager_name?: string | null; snap_unit_id?: string | null; snap_unit_name?: string | null; signed_path?: string | null; signed_filename?: string | null; signed_size?: number | null; signed_content_type?: string | null; signed_uploaded_at?: string | null; signed_uploaded_by?: string | null; created_by: string; submitted_at?: string | null; decided_at?: string | null; decided_by?: string | null; decision_note?: string | null; cancelled_at?: string | null; cancelled_by?: string | null; cancel_note?: string | null; sanction_id?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; status?: Database["public"]["Enums"]["punicao_status"]; applied_on?: string | null; infraction_type_id?: string | null; infraction_code?: string | null; infraction_name?: string | null; infraction_description?: string | null; severity?: Database["public"]["Enums"]["infraction_severity"] | null; sanction_type_id?: string | null; sanction_name?: string | null; extra_info?: string | null; snap_full_name?: string | null; snap_employee_code?: string | null; snap_department_id?: string | null; snap_department_name?: string | null; snap_subdepartment_id?: string | null; snap_subdepartment_name?: string | null; snap_position_id?: string | null; snap_position_name?: string | null; snap_manager_id?: string | null; snap_manager_name?: string | null; snap_unit_id?: string | null; snap_unit_name?: string | null; signed_path?: string | null; signed_filename?: string | null; signed_size?: number | null; signed_content_type?: string | null; signed_uploaded_at?: string | null; signed_uploaded_by?: string | null; created_by?: string; submitted_at?: string | null; decided_at?: string | null; decided_by?: string | null; decision_note?: string | null; cancelled_at?: string | null; cancelled_by?: string | null; cancel_note?: string | null; sanction_id?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       rv_reducer_rules: {
@@ -1624,6 +1649,13 @@ export type Database = {
         }
         Returns: string
       }
+      // Punições. `punicao_documento` devolve o CPF daquela pessoa, e só dela:
+      // `tenant_dados_pessoais` exige owner/admin/manager/hr e barraria o gestor
+      // de equipe, que é justamente quem aplica a punição.
+      punicao_submeter: { Args: { p_id: string }; Returns: undefined }
+      punicao_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
+      punicao_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
+      punicao_documento: { Args: { p_id: string }; Returns: Json }
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
@@ -1821,6 +1853,8 @@ export type Database = {
       // denominador da aderência; `ausente` é o no-show de verdade
       training_attendance_status: "presente" | "ausente" | "justificado"
       rv_reducer_source: "absence" | "sanction"
+      infraction_severity: "leve" | "media" | "grave"
+      punicao_status: "rascunho" | "pendente" | "aprovada" | "reprovada" | "cancelada"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
       feedback_channel: "presencial" | "reuniao_1a1" | "videochamada" | "mensagem" | "outro"

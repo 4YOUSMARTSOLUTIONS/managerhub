@@ -224,6 +224,40 @@ export const GOAL_ENTRY_STATUS_TONE: Record<Enums<"goal_entry_status">, Tone> = 
   reprovada: "red",
 };
 
+// ---------- Punições ----------
+// A gravidade é do CATÁLOGO de infração, não do lançamento: o mesmo fato não
+// pode ser leve para um gestor e grave para outro.
+export const INFRACTION_SEVERITY: Record<Enums<"infraction_severity">, string> = {
+  leve: "Leve",
+  media: "Média",
+  grave: "Grave",
+};
+
+export const INFRACTION_SEVERITY_TONE: Record<Enums<"infraction_severity">, Tone> = {
+  leve: "gray",
+  media: "amber",
+  grave: "red",
+};
+
+// O rótulo diz em que MÃO está o lançamento, porque é isso que a pessoa quer
+// saber ao abrir a lista. "Aprovada" é o único estado que vale como punição e
+// entra no cálculo da remuneração variável.
+export const PUNICAO_STATUS: Record<Enums<"punicao_status">, string> = {
+  rascunho: "Rascunho",
+  pendente: "Aguardando o RH",
+  aprovada: "Aprovada",
+  reprovada: "Reprovada",
+  cancelada: "Cancelada",
+};
+
+export const PUNICAO_STATUS_TONE: Record<Enums<"punicao_status">, Tone> = {
+  rascunho: "gray",
+  pendente: "amber",
+  aprovada: "green",
+  reprovada: "red",
+  cancelada: "gray",
+};
+
 // ---------- Férias e ausências ----------
 export const ABSENCE_KIND_LABEL: Record<Enums<"absence_kind">, string> = {
   ferias: "Férias",

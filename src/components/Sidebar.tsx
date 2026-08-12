@@ -94,6 +94,9 @@ export function Sidebar({
     // owner de plataforma sem empresa: só o Painel ADM
     if (platformOnly) return m.key === "admin";
     if (m.minRole === "team_lead" && !canLeadTeam) return false;
+    // "quem lidera equipe, mais o RH": Punições é lançada pelo gestor e aprovada
+    // pelo RH, então nenhum dos dois pode ficar sem o item de menu.
+    if (m.minRole === "team_lead_hr" && !canLeadTeam && role !== "hr") return false;
     if (m.minRole === "manager" && !canManage) return false;
     if (m.minRole === "admin" && !canAdmin) return false;
     if (m.minRole === "owner" && !isOwner) return false;

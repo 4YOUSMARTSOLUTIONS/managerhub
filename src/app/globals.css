@@ -1711,3 +1711,69 @@ a.tab {
    com o texto faria a linha encostar no meio da pessoa de baixo */
 .org-canvas .org-card { height: 52px; box-sizing: border-box; }
 .org-canvas .org-toggle-void { display: none; }
+
+/* ============================================================
+   Documento imprimível
+   ============================================================
+   Nasceu com o comunicado de punição, mas o bloco é genérico de propósito: o
+   certificado de treinamento vai querer o mesmo tratamento.
+
+   As cores aqui são fixas, e não tokens: no papel não existe modo escuro, e um
+   documento que herdasse o tema sairia com fundo preto na impressora de quem
+   estiver no tema escuro. */
+.doc-page { max-width: 820px; margin: 0 auto; }
+
+.doc-folha {
+  background: #fff;
+  color: #111;
+  padding: 2rem 2.25rem;
+  border: 1px solid #d8dde5;
+  border-radius: var(--mh-radius-lg);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.doc-cabecalho {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+  border-bottom: 2px solid #111; padding-bottom: 0.75rem; margin-bottom: 1.25rem;
+}
+.doc-empresa { font-size: 1.05rem; font-weight: 700; }
+.doc-unidade { font-size: 0.8rem; color: #555; }
+.doc-titulo { text-align: right; font-weight: 700; }
+.doc-tipo { font-size: 0.8rem; letter-spacing: 0.06em; color: #444; }
+.doc-tarja {
+  border: 2px dashed #b00020; color: #b00020; font-weight: 700; letter-spacing: 0.08em;
+  text-align: center; padding: 0.4rem; margin: 0 0 1.25rem; border-radius: 6px;
+}
+.doc-secao {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: #444; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid #d8dde5; padding-bottom: 0.2rem;
+}
+.doc-grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem 1.25rem; margin: 0; }
+.doc-campo-largo { grid-column: span 2; }
+.doc-campo dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: #666; }
+.doc-campo dd { margin: 0; font-size: 0.9rem; }
+.doc-texto { margin: 0.6rem 0 0; text-align: justify; }
+.doc-destaque {
+  margin: 0; padding: 0.6rem 0.8rem; border: 1px solid #111; border-radius: 6px;
+  font-weight: 700; font-size: 1rem; display: inline-block;
+}
+.doc-assinaturas {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 2.5rem 2rem; margin-top: 3rem;
+}
+.doc-assinatura { text-align: center; }
+.doc-linha-assinatura { border-top: 1px solid #111; margin-bottom: 0.35rem; }
+.doc-quem { font-size: 0.8rem; font-weight: 600; }
+.doc-data { font-size: 0.72rem; color: #555; margin-top: 0.2rem; }
+.doc-rodape { margin-top: 2rem; font-size: 0.7rem; color: #555; border-top: 1px solid #d8dde5; padding-top: 0.5rem; }
+
+@media print {
+  @page { size: A4; margin: 15mm; }
+  /* a casca do sistema não vai ao papel */
+  .app-sidebar, .app-topbar, .app-scrim, .no-print { display: none !important; }
+  body { background: #fff !important; }
+  .app-main, .app-content, main { padding: 0 !important; margin: 0 !important; }
+  .doc-page { max-width: none; }
+  .doc-folha { border: none; border-radius: 0; padding: 0; }
+  /* assinatura não se separa do nome de quem assina */
+  .doc-assinatura, .doc-tarja { break-inside: avoid; }
+}

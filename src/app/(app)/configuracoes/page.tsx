@@ -24,6 +24,7 @@ import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
 import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManager";
+import { InfractionTypesManager, type InfracaoRow } from "@/components/InfractionTypesManager";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
   createSanctionType, deleteSanctionType, setSanctionTypeActive,
@@ -97,7 +98,8 @@ export default async function SettingsPage() {
     { data: programas }, { data: pilares }, { data: secoes }, { data: blocos }, { data: itens }, { data: kpis }, { data: tools },
     { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
     { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData }, { data: contratosData }, { data: absencesData },
-    { data: sanctionTypesData }, { data: sanctionsData }, { data: reducerRulesData }, { data: reducerBandsData },
+    { data: sanctionTypesData }, { data: infractionTypesData }, { data: sanctionsData }, { data: reducerRulesData }, { data: reducerBandsData },
+    { data: sancoesDeLancamento },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -144,6 +146,14 @@ export default async function SettingsPage() {
     // Redutores da RV. Catálogo e regras são configuração (qualquer membro lê);
     // a punição em si é disciplinar, e a RLS é owner/admin/manager.
     supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
+    // catálogo de infrações: o que a pessoa fez, com a gravidade que o
+    // regulamento define. Leitura é de qualquer membro (o gestor precisa dele
+    // para lançar), escrita é do departamento pessoal.
+    supabase
+      .from("infraction_types")
+      .select("id, code, name, description, severity, active")
+      .eq("tenant_id", tenant.id)
+      .order("sort").order("code"),
     supabase
       .from("employee_sanctions")
       .select("id, user_id, sanction_type_id, occurred_on, note")
@@ -151,6 +161,9 @@ export default async function SettingsPage() {
       .order("occurred_on", { ascending: false }),
     supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("rv_reducer_bands").select("id, rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
+    // quais punições nasceram de um lançamento aprovado: essas não se editam nem
+    // se excluem por aqui, para o processo e o fato não passarem a divergir
+    supabase.from("punicao_lancamentos").select("sanction_id").eq("tenant_id", tenant.id).not("sanction_id", "is", null),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -332,7 +345,12 @@ export default async function SettingsPage() {
   ];
 
   const sanctionTypeOpts = (sanctionTypesData ?? []).map((t) => ({ id: t.id, name: t.name, active: t.active }));
+  const infractionRows: InfracaoRow[] = (infractionTypesData ?? []).map((i) => ({
+    id: i.id, code: i.code, name: i.name,
+    description: i.description, severity: i.severity, active: i.active,
+  }));
   const sanctionTypeName = new Map(sanctionTypeOpts.map((t) => [t.id, t.name]));
+  const vindasDeLancamento = new Set((sancoesDeLancamento ?? []).map((l) => l.sanction_id).filter(Boolean) as string[]);
   const sanctionRows: SanctionRow[] = (sanctionsData ?? []).map((s2) => ({
     id: s2.id,
     userId: s2.user_id,
@@ -340,6 +358,7 @@ export default async function SettingsPage() {
     typeName: sanctionTypeName.get(s2.sanction_type_id) ?? "—",
     occurredOn: s2.occurred_on,
     note: s2.note,
+    fromLancamento: vindasDeLancamento.has(s2.id),
   }));
   const faixasPorRegra = new Map<string, { id: string; min: number; max: number | null; pct: number }[]>();
   for (const b of reducerBandsData ?? []) {
@@ -410,21 +429,6 @@ export default async function SettingsPage() {
           id: "ausencias",
           label: "Férias e afastamentos",
           content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} absences={absenceRows} canEdit={canEditDP} />,
-        },
-        {
-          id: "punicoes",
-          label: "Punições",
-          content: (
-            <SanctionsManager
-              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
-              alvos={importTargets}
-              unidades={(units ?? []).map((u) => u.name)}
-              types={sanctionTypeOpts}
-              sanctions={sanctionRows}
-              cortaRv={punicaoCortaRv}
-              canEdit={canEditDP}
-            />
-          ),
         },
       ]}
     />
@@ -1057,22 +1061,6 @@ export default async function SettingsPage() {
           tabs={[
             { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} canEdit={canEditDP} /> },
             { id: "rv-redutores", label: "Redutores", content: <RvReducerEditor regras={reducerRules} tiposPunicao={sanctionTypeOpts.filter((t) => t.active)} canEdit={canEditDP} /> },
-            {
-              id: "rv-punicoes",
-              label: "Tipos de punição",
-              content: (
-                <RegistryList
-                  canEdit={canEditDP}
-                  title="Tipos de punição"
-                  description="As sanções previstas nas regras da empresa. O quanto cada uma reduz da RV fica na sub-aba Redutores."
-                  items={sanctionTypeOpts.map((t) => ({ id: t.id, name: t.name, active: t.active, canDelete: !sanctionRows.some((s2) => s2.typeId === t.id) }))}
-                  createAction={createSanctionType}
-                  deleteAction={deleteSanctionType}
-                  toggleAction={setSanctionTypeActive}
-                  placeholder="Ex.: Advertência escrita"
-                />
-              ),
-            },
           ]}
         />
       ),
@@ -1101,6 +1089,53 @@ export default async function SettingsPage() {
         </div>
       ),
     },
+    {
+      id: "punicoes",
+      label: "Punições",
+      content: (
+        <Tabs
+          variant="sub"
+          tabs={[
+            {
+              id: "pun-infracoes",
+              label: "Tipos de infração",
+              content: <InfractionTypesManager rows={infractionRows} canEdit={canEditDP} />,
+            },
+            {
+              id: "pun-tipos",
+              label: "Tipos de punição",
+              content: (
+                <RegistryList
+                  canEdit={canEditDP}
+                  title="Tipos de punição"
+                  description="As sanções previstas nas regras da empresa. O quanto cada uma reduz da RV fica em Remuneração variável › Redutores."
+                  items={sanctionTypeOpts.map((t) => ({ id: t.id, name: t.name, active: t.active, canDelete: !sanctionRows.some((s2) => s2.typeId === t.id) }))}
+                  createAction={createSanctionType}
+                  deleteAction={deleteSanctionType}
+                  toggleAction={setSanctionTypeActive}
+                  placeholder="Ex.: Advertência escrita"
+                />
+              ),
+            },
+            {
+              id: "pun-registro",
+              label: "Registro direto",
+              content: (
+                <SanctionsManager
+                  members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+                  alvos={importTargets}
+                  unidades={(units ?? []).map((u) => u.name)}
+                  types={sanctionTypeOpts}
+                  sanctions={sanctionRows}
+                  cortaRv={punicaoCortaRv}
+                  canEdit={canEditDP}
+                />
+              ),
+            },
+          ]}
+        />
+      ),
+    },
     { id: "salas", label: "Salas", content: salasTab },
     { id: "feriados", label: "Calendário e Feriados", content: feriadosTab },
   ];
@@ -1109,7 +1144,7 @@ export default async function SettingsPage() {
   // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
   // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as duas
   // abas que SÃO o departamento pessoal.
-  const DP_TABS = new Set(["usuarios", "rv"]);
+  const DP_TABS = new Set(["usuarios", "rv", "punicoes"]);
   const tabsVisiveis = isHr ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
 
   return (

@@ -17,7 +17,7 @@ export type ModuleKey =
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
   | "chamados" | "venda_interna"
-  | "metas" | "feedbacks" | "treinamentos"
+  | "metas" | "feedbacks" | "punicoes" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
   | "cinco_s" | "padroes"
@@ -35,7 +35,11 @@ export type ModuleDef = {
   href: string;
   group: GroupKey | null; // null = item de topo
   core?: true; // sempre "on", não aparece na lista de venda
-  minRole?: "team_lead" | "manager" | "admin" | "owner" | "super"; // restrição por papel (independente da venda)
+  // Restrição por papel (independente da venda). `team_lead_hr` é "quem lidera
+  // equipe, MAIS o RH": nasceu com Punições, onde o gestor lança e o RH aprova.
+  // Nenhum dos tokens antigos servia: `team_lead` esconderia o módulo de quem
+  // aprova, e `manager` esconderia de quem lança.
+  minRole?: "team_lead" | "team_lead_hr" | "manager" | "admin" | "owner" | "super";
 };
 
 export const MODULE_GROUPS: { key: GroupKey; label: string }[] = [
@@ -71,6 +75,9 @@ export const MODULES: ModuleDef[] = [
   { key: "minha_equipe", label: "Minha equipe", href: "/minha-equipe", group: "g_pessoas", core: true, minRole: "team_lead" },
   { key: "metas", label: "Metas", href: "/metas", group: "g_pessoas" },
   { key: "feedbacks", label: "Feedbacks", href: "/feedbacks", group: "g_pessoas" },
+  // Quem lança é o gestor da pessoa; quem aprova é o RH. Daí o minRole próprio:
+  // a tela não faz sentido para quem não faz nem uma coisa nem outra.
+  { key: "punicoes", label: "Punições", href: "/punicoes", group: "g_pessoas", minRole: "team_lead_hr" },
 
   // Módulo próprio, e não mais um item de Gestão de pessoas: ele vai crescer
   // com estrutura de trilhas, turmas e presença, que não cabe dentro de um

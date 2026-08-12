@@ -30,6 +30,15 @@ export type SanctionRow = {
   typeName: string;
   occurredOn: string;
   note: string | null;
+  /**
+   * Veio de um lançamento aprovado em Punições?
+   *
+   * Se veio, editar ou excluir por aqui faria o processo e o fato divergirem: o
+   * lançamento continuaria dizendo "aprovada" com dados que já não existem. A
+   * FK `on delete restrict` recusa a exclusão de qualquer jeito; a tela desliga
+   * os botões antes, para a recusa não chegar como erro cru.
+   */
+  fromLancamento?: boolean;
 };
 
 type Rascunho = { id?: string; userId: string; typeId: string; occurredOn: string; note: string };
@@ -119,7 +128,7 @@ export function SanctionsManager({
 
       {ativos.length === 0 ? (
         <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>
-          Cadastre os tipos de punição primeiro, em Remuneração variável › Tipos de punição.
+          Cadastre os tipos de punição primeiro, em Punições › Tipos de punição.
         </p>
       ) : (
         <>
@@ -195,13 +204,14 @@ export function SanctionsManager({
                 <th>Colaborador</th>
                 <th>Tipo</th>
                 <th>Data</th>
+                <th style={{ width: 130 }}>Origem</th>
                 {canEdit && <th style={{ textAlign: "right" }}></th>}
               </tr>
             </thead>
             <tbody>
               {lista.length === 0 ? (
                 <tr>
-                  <td colSpan={canEdit ? 4 : 3} className="soft" style={{ textAlign: "center", padding: "1rem" }}>
+                  <td colSpan={canEdit ? 5 : 4} className="soft" style={{ textAlign: "center", padding: "1rem" }}>
                     {sanctions.length === 0 ? "Nenhuma punição registrada." : "Nenhuma punição com esse filtro."}
                   </td>
                 </tr>
@@ -213,10 +223,26 @@ export function SanctionsManager({
                   </td>
                   <td className="muted">{s.typeName}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{formatDate(s.occurredOn)}</td>
+                  <td>
+                    {s.fromLancamento
+                      ? <span className="muted" style={{ fontSize: "0.78rem" }}>Lançamento aprovado</span>
+                      : <span className="soft" style={{ fontSize: "0.78rem" }}>Registro direto</span>}
+                  </td>
                   {canEdit && (
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button type="button" className="icon-btn" title="Editar" disabled={pendente} onClick={() => abrirEdicao(s)}><Pencil size={14} /></button>
-                      <button type="button" className="icon-btn icon-btn-danger" title="Excluir" disabled={pendente} onClick={() => remover(s)}><Trash2 size={14} /></button>
+                      <button
+                        type="button" className="icon-btn" title={s.fromLancamento ? "Editada em Punições" : "Editar"}
+                        disabled={pendente || s.fromLancamento} onClick={() => abrirEdicao(s)}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button" className="icon-btn icon-btn-danger"
+                        title={s.fromLancamento ? "Para desfazer, cancele o lançamento em Punições" : "Excluir"}
+                        disabled={pendente || s.fromLancamento} onClick={() => remover(s)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   )}
                 </tr>
