@@ -71,7 +71,12 @@ export const MODULES: ModuleDef[] = [
   { key: "minha_equipe", label: "Minha equipe", href: "/minha-equipe", group: "g_pessoas", core: true, minRole: "team_lead" },
   { key: "metas", label: "Metas", href: "/metas", group: "g_pessoas" },
   { key: "feedbacks", label: "Feedbacks", href: "/feedbacks", group: "g_pessoas" },
-  { key: "treinamentos", label: "Treinamentos", href: "/treinamentos", group: "g_pessoas" },
+
+  // Módulo próprio, e não mais um item de Gestão de pessoas: ele vai crescer
+  // com estrutura de trilhas, turmas e presença, que não cabe dentro de um
+  // grupo com metas e feedbacks. A key não muda, então o que já foi vendido
+  // por unidade (`unit_modules.module_key`) continua valendo.
+  { key: "treinamentos", label: "Treinamentos", href: "/treinamentos", group: null },
 
   { key: "gapa", label: "GAPA", href: "/ferramentas-gestao/gapa", group: "g_ferramentas" },
   { key: "gop", label: "GOP", href: "/ferramentas-gestao/gop", group: "g_ferramentas" },
@@ -116,6 +121,7 @@ export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; k
   { type: "module", key: "chamados" },
   { type: "module", key: "venda_interna" },
   { type: "group", key: "g_pessoas" },
+  { type: "module", key: "treinamentos" },
   { type: "group", key: "g_ferramentas" },
   { type: "group", key: "g_sdpo" },
   { type: "module", key: "portaria" },
