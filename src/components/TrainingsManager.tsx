@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Pencil, Trash2, UserPlus } from "lucide-react";
+import { FileCheck, GraduationCap, History, Layers, Pencil, PlayCircle, Trash2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
@@ -10,6 +11,12 @@ import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { confirmDialog } from "@/components/ui/confirm";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { TrainingDialog } from "@/components/TrainingDialog";
+import { TrainingSessionsManager, type SessionRow } from "@/components/TrainingSessionsManager";
+import { TrainingMaterialsDialog } from "@/components/TrainingMaterialsDialog";
+import { TrainingExamDialog } from "@/components/TrainingExamDialog";
+import { TrainingGradingQueue } from "@/components/TrainingGradingQueue";
+import { TrainingHistoryImportDialog } from "@/components/TrainingHistoryImportDialog";
+import { TrainingsDashboard } from "@/components/TrainingsDashboard";
 import { deleteTraining, enrollPeople, getTrainingForEdit, type TrainingForEdit } from "@/lib/actions/trainings";
 import {
   effTrainingStatus, TRAINING_STATUS_LABEL, TRAINING_STATUS_TONE,
@@ -22,6 +29,13 @@ import type { Enums } from "@/types/database";
 
 export type Opt = { id: string; name: string };
 export type SubOpt = { id: string; name: string; departmentId: string };
+/** Pessoa com a lotação junto: o formulário precisa saber quem está em qual escopo. */
+export type PersonOpt = Opt & {
+  positionId: string | null;
+  deptId: string | null;
+  subId: string | null;
+  unitIds: string[];
+};
 
 export type TrainingRow = {
   id: string;
@@ -33,10 +47,11 @@ export type TrainingRow = {
   validadeMeses: number | null;
   antecipacaoDias: number;
   prazoDias: number | null;
-  unitName: string | null;
-  deptName: string | null;
-  subName: string | null;
-  pilarName: string | null;
+  /** vazio em qualquer um destes = vale para todos daquele tipo */
+  unitNames: string[];
+  deptNames: string[];
+  subNames: string[];
+  pilarNames: string[];
   active: boolean;
   ownerNames: string[];
   ruleCount: number;
@@ -84,23 +99,28 @@ function StatusBadge({ s }: { s: EffTrainingStatus }) {
 
 export function TrainingsManager({
   trainings, myEnrollments, enrollments, podeCadastrar, currentUserId,
-  people, departments, subdepartments, positions, pilares, units,
+  people, departments, subdepartments, positions, pilares, units, sessions, rooms,
 }: {
   trainings: TrainingRow[];
   myEnrollments: MyEnrollmentRow[];
   enrollments: EnrollmentRow[];
   podeCadastrar: boolean;
   currentUserId: string;
-  people: Opt[];
+  people: PersonOpt[];
   departments: Opt[];
   subdepartments: SubOpt[];
   positions: Opt[];
   pilares: Opt[];
   units: Opt[];
+  sessions: SessionRow[];
+  rooms: Opt[];
 }) {
   const [editing, setEditing] = useState<TrainingForEdit | null>(null);
   const [criando, setCriando] = useState(false);
   const [matricular, setMatricular] = useState<TrainingRow | null>(null);
+  const [conteudo, setConteudo] = useState<TrainingRow | null>(null);
+  const [prova, setProva] = useState<TrainingRow | null>(null);
+  const [legado, setLegado] = useState<TrainingRow | null>(null);
 
   const tabs: Tab[] = [
     {
@@ -121,13 +141,43 @@ export function TrainingsManager({
             if (t) setEditing(t);
           }}
           onMatricular={setMatricular}
+          onConteudo={setConteudo}
+          onProva={setProva}
+          onLegado={setLegado}
         />
       ),
+    },
+    {
+      id: "turmas",
+      label: `Turmas${sessions.length ? ` · ${sessions.length}` : ""}`,
+      content: (
+        <TrainingSessionsManager
+          sessions={sessions}
+          // turma só existe para quem tem quem conduza: auto instrucional fica de fora
+          trainings={trainings
+            .filter((t) => t.active && t.delivery !== "auto_instrucional")
+            .map((t) => ({ id: t.id, name: t.name, workloadMinutes: t.workloadMinutes }))}
+          people={people}
+          units={units}
+          rooms={rooms}
+          podeCriar={podeCadastrar}
+        />
+      ),
+    },
+    {
+      id: "painel",
+      label: "Painel",
+      content: <TrainingsDashboard enrollments={enrollments} trainings={trainings} departments={departments} />,
     },
     {
       id: "acompanhamento",
       label: "Acompanhamento",
       content: <Acompanhamento rows={enrollments} departments={departments} currentUserId={currentUserId} />,
+    },
+    {
+      id: "correcoes",
+      label: "Correções",
+      content: <TrainingGradingQueue />,
     },
   ];
 
@@ -150,6 +200,31 @@ export function TrainingsManager({
 
       {matricular && (
         <MatricularDialog training={matricular} people={people} onClose={() => setMatricular(null)} />
+      )}
+
+      {conteudo && (
+        <TrainingMaterialsDialog
+          trainingId={conteudo.id}
+          trainingName={conteudo.name}
+          onClose={() => setConteudo(null)}
+        />
+      )}
+
+      {prova && (
+        <TrainingExamDialog
+          trainingId={prova.id}
+          trainingName={prova.name}
+          onClose={() => setProva(null)}
+        />
+      )}
+
+      {legado && (
+        <TrainingHistoryImportDialog
+          trainingId={legado.id}
+          trainingName={legado.name}
+          people={people}
+          onClose={() => setLegado(null)}
+        />
       )}
     </>
   );
@@ -201,6 +276,7 @@ function MeusTreinamentos({ rows }: { rows: MyEnrollmentRow[] }) {
               <th>Validade</th>
               <th>Nota</th>
               <th>Situação</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -218,28 +294,44 @@ function MeusTreinamentos({ rows }: { rows: MyEnrollmentRow[] }) {
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{r.expiresAt ? formatDate(r.expiresAt) : "—"}</td>
                 <td className="muted">{r.score != null ? `${r.score}%` : "—"}</td>
                 <td><StatusBadge s={r.s} /></td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  {PODE_FAZER.has(r.s) ? (
+                    <Link href={`/treinamentos/realizar/${r.id}`} className="btn btn-primary btn-sm">
+                      <PlayCircle size={14} style={{ marginRight: "0.3rem" }} />
+                      {r.s === "em_andamento" ? "Continuar" : "Fazer"}
+                    </Link>
+                  ) : r.s === "concluido" || r.s === "a_vencer" ? (
+                    <Link href={`/treinamentos/realizar/${r.id}`} className="btn btn-ghost btn-sm">
+                      Rever
+                    </Link>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
-        O conteúdo e a prova entram na próxima etapa do módulo. Por enquanto esta tela mostra o que
-        está atribuído a você e o prazo de cada item.
-      </p>
     </div>
   );
 }
 
+/** Situações em que ainda há o que fazer: as demais só permitem rever. */
+const PODE_FAZER = new Set<EffTrainingStatus>([
+  "nao_iniciado", "em_andamento", "atrasado", "vencido", "reprovado",
+]);
+
 // ------------------------------------------------------------------ catálogo
 function Catalogo({
-  rows, podeCadastrar, onNovo, onEditar, onMatricular,
+  rows, podeCadastrar, onNovo, onEditar, onMatricular, onConteudo, onProva, onLegado,
 }: {
   rows: TrainingRow[];
   podeCadastrar: boolean;
   onNovo: () => void;
   onEditar: (id: string) => void;
   onMatricular: (t: TrainingRow) => void;
+  onConteudo: (t: TrainingRow) => void;
+  onProva: (t: TrainingRow) => void;
+  onLegado: (t: TrainingRow) => void;
 }) {
   const [busca, setBusca] = useState("");
   const [pending, start] = useTransition();
@@ -249,7 +341,7 @@ function Catalogo({
     const q = normalizar(busca.trim());
     if (!q) return rows;
     return rows.filter((r) =>
-      [r.name, r.code, r.deptName, r.pilarName].some((v) => v && normalizar(v).includes(q)));
+      [r.name, r.code, ...r.deptNames, ...r.pilarNames].some((v) => v && normalizar(v).includes(q)));
   }, [rows, busca]);
 
   const excluir = (t: TrainingRow) => {
@@ -313,9 +405,11 @@ function Catalogo({
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{cargaHoraria(t.workloadMinutes)}</td>
                   <td className="muted">{periodicidadeLabel(t.validadeMeses)}</td>
                   <td className="muted">
-                    {t.deptName ?? "Toda a empresa"}
-                    {t.subName && <span className="soft"> · {t.subName}</span>}
-                    {t.unitName && <div className="soft" style={{ fontSize: "0.72rem" }}>{t.unitName}</div>}
+                    {t.deptNames.length > 0 ? t.deptNames.join(", ") : "Todos os setores"}
+                    {t.subNames.length > 0 && <span className="soft"> · {t.subNames.join(", ")}</span>}
+                    <div className="soft" style={{ fontSize: "0.72rem" }}>
+                      {t.unitNames.length > 0 ? t.unitNames.join(", ") : "Todas as unidades"}
+                    </div>
                   </td>
                   <td className="muted">{t.ownerNames.length > 0 ? t.ownerNames.join(", ") : "—"}</td>
                   <td className="muted">{t.ruleCount > 0 ? `${t.ruleCount} regra${t.ruleCount > 1 ? "s" : ""}` : "—"}</td>
@@ -323,8 +417,17 @@ function Catalogo({
                   {podeCadastrar && (
                     <td>
                       <span style={{ display: "inline-flex", gap: "0.3rem" }}>
+                        <button type="button" className="icon-btn" title="Conteúdo do treinamento" onClick={() => onConteudo(t)}>
+                          <Layers size={15} />
+                        </button>
+                        <button type="button" className="icon-btn" title="Avaliação" onClick={() => onProva(t)}>
+                          <FileCheck size={15} />
+                        </button>
                         <button type="button" className="icon-btn" title="Matricular colaboradores" onClick={() => onMatricular(t)}>
                           <UserPlus size={15} />
+                        </button>
+                        <button type="button" className="icon-btn" title="Importar histórico anterior ao sistema" onClick={() => onLegado(t)}>
+                          <History size={15} />
                         </button>
                         <button type="button" className="icon-btn" title="Editar" onClick={() => onEditar(t.id)}>
                           <Pencil size={15} />

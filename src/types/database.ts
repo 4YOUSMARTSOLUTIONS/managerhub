@@ -1208,6 +1208,8 @@ export type Database = {
           slug: string
           status: Database["public"]["Enums"]["tenant_status"]
           ticket_sla_mode: string
+          /** teto de upload de vídeo de treinamento, por empresa (padrão 100) */
+          training_video_max_mb: number
           units_limit: number | null
           updated_at: string
         }
@@ -1222,6 +1224,7 @@ export type Database = {
           slug: string
           status?: Database["public"]["Enums"]["tenant_status"]
           ticket_sla_mode?: string
+          training_video_max_mb?: number
           units_limit?: number | null
           updated_at?: string
         }
@@ -1236,6 +1239,7 @@ export type Database = {
           slug?: string
           status?: Database["public"]["Enums"]["tenant_status"]
           ticket_sla_mode?: string
+          training_video_max_mb?: number
           units_limit?: number | null
           updated_at?: string
         }
@@ -1379,15 +1383,44 @@ export type Database = {
       // conteúdo, e cada recertificação precisa de uma matrícula nova para o
       // histórico de 5 anos sobreviver.
       trainings: {
-        Row: { id: string; tenant_id: string; name: string; description: string | null; code: string | null; workload_minutes: number; delivery: Database["public"]["Enums"]["training_delivery"]; validade_meses: number | null; antecipacao_dias: number; prazo_dias: number | null; unit_id: string | null; department_id: string | null; subdepartment_id: string | null; programa_id: string | null; pilar_id: string | null; secao_id: string | null; bloco_id: string | null; item_id: string | null; active: boolean; deleted_at: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; code?: string | null; workload_minutes?: number; delivery?: Database["public"]["Enums"]["training_delivery"]; validade_meses?: number | null; antecipacao_dias?: number; prazo_dias?: number | null; unit_id?: string | null; department_id?: string | null; subdepartment_id?: string | null; programa_id?: string | null; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; code?: string | null; workload_minutes?: number; delivery?: Database["public"]["Enums"]["training_delivery"]; validade_meses?: number | null; antecipacao_dias?: number; prazo_dias?: number | null; unit_id?: string | null; department_id?: string | null; subdepartment_id?: string | null; programa_id?: string | null; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; name: string; description: string | null; code: string | null; workload_minutes: number; delivery: Database["public"]["Enums"]["training_delivery"]; validade_meses: number | null; antecipacao_dias: number; prazo_dias: number | null; active: boolean; deleted_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; code?: string | null; workload_minutes?: number; delivery?: Database["public"]["Enums"]["training_delivery"]; validade_meses?: number | null; antecipacao_dias?: number; prazo_dias?: number | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; code?: string | null; workload_minutes?: number; delivery?: Database["public"]["Enums"]["training_delivery"]; validade_meses?: number | null; antecipacao_dias?: number; prazo_dias?: number | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // Onde o treinamento se aplica: unidade, setor, subsetor, pilar (e, quando
+      // entrarem no formulário, bloco e item). `ref_id` é polimórfico, por isso
+      // sem FK. Nenhuma linha de um `kind` significa TODOS daquele tipo.
+      training_scopes: {
+        Row: { id: string; tenant_id: string; training_id: string; kind: string; ref_id: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; kind: string; ref_id: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; kind?: string; ref_id?: string; created_at?: string }
+        Relationships: []
+      }
+      // `unit_id` nulo = responde por todas as unidades do treinamento; com
+      // unidade, responde só por ela. As duas formas convivem.
+      // A TURMA é a oferta do curso (data, instrutor, local, vagas). Curso auto
+      // instrucional não tem turma: por isso `session_id` da matrícula é nulo.
+      // `released_at` é a liberação do instrutor: sem ela o participante não
+      // inicia uma turma conduzida.
+      training_sessions: {
+        Row: { id: string; tenant_id: string; training_id: string; unit_id: string | null; code: number; name: string | null; starts_at: string; ends_at: string | null; mode: Database["public"]["Enums"]["training_session_mode"]; room_id: string | null; meeting_url: string | null; location: string | null; instructor_id: string | null; capacity: number | null; status: Database["public"]["Enums"]["training_session_status"]; released_at: string | null; released_by: string | null; notes: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; unit_id?: string | null; code?: number; name?: string | null; starts_at: string; ends_at?: string | null; mode?: Database["public"]["Enums"]["training_session_mode"]; room_id?: string | null; meeting_url?: string | null; location?: string | null; instructor_id?: string | null; capacity?: number | null; status?: Database["public"]["Enums"]["training_session_status"]; released_at?: string | null; released_by?: string | null; notes?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; unit_id?: string | null; code?: number; name?: string | null; starts_at?: string; ends_at?: string | null; mode?: Database["public"]["Enums"]["training_session_mode"]; room_id?: string | null; meeting_url?: string | null; location?: string | null; instructor_id?: string | null; capacity?: number | null; status?: Database["public"]["Enums"]["training_session_status"]; released_at?: string | null; released_by?: string | null; notes?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // presença ESTRUTURADA por participante, e não um PDF anexado: é o que
+      // permite calcular aderência e responder "quem faltou" sem abrir arquivo
+      training_session_attendance: {
+        Row: { id: string; tenant_id: string; session_id: string; enrollment_id: string; status: Database["public"]["Enums"]["training_attendance_status"]; note: string | null; checked_by: string | null; checked_at: string }
+        Insert: { id?: string; tenant_id: string; session_id: string; enrollment_id: string; status: Database["public"]["Enums"]["training_attendance_status"]; note?: string | null; checked_by?: string | null; checked_at?: string }
+        Update: { id?: string; tenant_id?: string; session_id?: string; enrollment_id?: string; status?: Database["public"]["Enums"]["training_attendance_status"]; note?: string | null; checked_by?: string | null; checked_at?: string }
         Relationships: []
       }
       training_owners: {
-        Row: { id: string; tenant_id: string; training_id: string; user_id: string; created_at: string }
-        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; created_at?: string }
-        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; created_at?: string }
+        Row: { id: string; tenant_id: string; training_id: string; user_id: string; unit_id: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; unit_id?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; unit_id?: string | null; created_at?: string }
         Relationships: []
       }
       // `ref_id` é polimórfico (aponta para 5 tabelas conforme o `kind`), por
@@ -1401,9 +1434,74 @@ export type Database = {
       // os `snap_*` são o vínculo DA ÉPOCA da matrícula: relatório de ciclo
       // antigo não pode ser reescrito por uma transferência de hoje
       training_enrollments: {
-        Row: { id: string; tenant_id: string; training_id: string; user_id: string; session_id: string | null; cycle_no: number; origin: Database["public"]["Enums"]["training_enrollment_origin"]; status: Database["public"]["Enums"]["training_enrollment_status"]; mandatory: boolean; due_at: string | null; started_at: string | null; completed_at: string | null; expires_at: string | null; score: number | null; exempted_by: string | null; exempted_reason: string | null; exempted_until: string | null; snap_position_id: string | null; snap_department_id: string | null; snap_subdepartment_id: string | null; snap_unit_id: string | null; applicable: boolean; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; training_id: string; user_id: string; session_id: string | null; cycle_no: number; origin: Database["public"]["Enums"]["training_enrollment_origin"]; status: Database["public"]["Enums"]["training_enrollment_status"]; mandatory: boolean; due_at: string | null; started_at: string | null; completed_at: string | null; expires_at: string | null; score: number | null; exempted_by: string | null; exempted_reason: string | null; exempted_until: string | null; snap_position_id: string | null; snap_department_id: string | null; snap_subdepartment_id: string | null; snap_unit_id: string | null; applicable: boolean; extra_attempts: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; extra_attempts?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; extra_attempts?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      training_materials: {
+        Row: { id: string; tenant_id: string; training_id: string; sort: number; kind: Database["public"]["Enums"]["training_material_kind"]; title: string; storage_path: string | null; filename: string | null; size_bytes: number | null; content_type: string | null; external_url: string | null; body: string | null; duration_seconds: number | null; min_watch_pct: number; required: boolean; deleted_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; sort?: number; kind: Database["public"]["Enums"]["training_material_kind"]; title: string; storage_path?: string | null; filename?: string | null; size_bytes?: number | null; content_type?: string | null; external_url?: string | null; body?: string | null; duration_seconds?: number | null; min_watch_pct?: number; required?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; sort?: number; kind?: Database["public"]["Enums"]["training_material_kind"]; title?: string; storage_path?: string | null; filename?: string | null; size_bytes?: number | null; content_type?: string | null; external_url?: string | null; body?: string | null; duration_seconds?: number | null; min_watch_pct?: number; required?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // `watched_seconds` é tempo EFETIVO somado pelos heartbeats, e
+      // `max_position_seconds` é o ponto mais distante já alcançado. Arrastar a
+      // barra move o segundo e não o primeiro, e a conclusão olha o primeiro.
+      training_material_progress: {
+        Row: { id: string; tenant_id: string; enrollment_id: string; material_id: string; watched_seconds: number; max_position_seconds: number; pct: number; completed_at: string | null; last_heartbeat_at: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; enrollment_id: string; material_id: string; watched_seconds?: number; max_position_seconds?: number; pct?: number; completed_at?: string | null; last_heartbeat_at?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; enrollment_id?: string; material_id?: string; watched_seconds?: number; max_position_seconds?: number; pct?: number; completed_at?: string | null; last_heartbeat_at?: string | null; created_at?: string }
+        Relationships: []
+      }
+      // append-only: é o log de permanência que o Anexo II da NR-1 pede de EAD.
+      // Sem policy de update nem de delete no banco, de propósito.
+      training_watch_spans: {
+        Row: { id: string; tenant_id: string; enrollment_id: string; material_id: string; started_at: string; ended_at: string; from_seconds: number; to_seconds: number }
+        Insert: { id?: string; tenant_id: string; enrollment_id: string; material_id: string; started_at?: string; ended_at?: string; from_seconds?: number; to_seconds?: number }
+        Update: never
+        Relationships: []
+      }
+      training_exams: {
+        Row: { id: string; tenant_id: string; training_id: string; title: string; instructions: string | null; passing_score: number; max_attempts: number | null; time_limit_minutes: number | null; min_minutes: number; shuffle_questions: boolean; shuffle_options: boolean; show_result_detail: boolean; starts_after_content: boolean; active: boolean; deleted_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; title?: string; instructions?: string | null; passing_score?: number; max_attempts?: number | null; time_limit_minutes?: number | null; min_minutes?: number; shuffle_questions?: boolean; shuffle_options?: boolean; show_result_detail?: boolean; starts_after_content?: boolean; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; title?: string; instructions?: string | null; passing_score?: number; max_attempts?: number | null; time_limit_minutes?: number | null; min_minutes?: number; shuffle_questions?: boolean; shuffle_options?: boolean; show_result_detail?: boolean; starts_after_content?: boolean; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // `correct` é o gabarito VIVO: a RLS só deixa quem gere o treinamento ler
+      // esta tabela. Quem responde vê o snapshot da tentativa, sem gabarito.
+      training_exam_questions: {
+        Row: { id: string; tenant_id: string; exam_id: string; sort: number; kind: Database["public"]["Enums"]["training_question_kind"]; statement: string; options: Json; correct: Json | null; weight: number; deleted_at: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; exam_id: string; sort?: number; kind: Database["public"]["Enums"]["training_question_kind"]; statement: string; options?: Json; correct?: Json | null; weight?: number; deleted_at?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; exam_id?: string; sort?: number; kind?: Database["public"]["Enums"]["training_question_kind"]; statement?: string; options?: Json; correct?: Json | null; weight?: number; deleted_at?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      /**
+       * `answer_key` está fora do Row DE PROPÓSITO, como `cpf` em `profiles`.
+       * A coluna é revogada de `authenticated` no banco, então um
+       * `.select("answer_key")` viraria 42501 em produção; deixando-a fora do
+       * tipo, ele quebra na compilação. Não recoloque.
+       *
+       * Sem Insert nem Update: tentativa só nasce e muda por RPC.
+       */
+      training_exam_attempts: {
+        Row: { id: string; tenant_id: string; exam_id: string; enrollment_id: string; user_id: string; attempt_no: number; status: Database["public"]["Enums"]["training_attempt_status"]; questions_snapshot: Json; started_at: string; deadline_at: string | null; submitted_at: string | null; graded_at: string | null; score: number | null; passed: boolean | null; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      training_exam_answers: {
+        Row: { id: string; tenant_id: string; attempt_id: string; question_id: string; answer: Json | null; correct: boolean | null; score: number | null; feedback: string | null; graded_by: string | null; graded_at: string | null; answered_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      // retrato do que valia na conclusão: renomear o curso amanhã não reescreve
+      // o certificado emitido hoje
+      training_certificates: {
+        Row: { id: string; tenant_id: string; enrollment_id: string; code: string; user_name: string; training_name: string; workload_minutes: number; content_summary: string | null; instructor_name: string | null; completed_at: string; expires_at: string | null; score: number | null; created_at: string; deleted_at: string | null }
+        Insert: { id?: string; tenant_id: string; enrollment_id: string; code: string; user_name: string; training_name: string; workload_minutes: number; content_summary?: string | null; instructor_name?: string | null; completed_at: string; expires_at?: string | null; score?: number | null; created_at?: string; deleted_at?: string | null }
+        Update: never
         Relationships: []
       }
     }
@@ -1479,6 +1577,27 @@ export type Database = {
       // `authenticated`. O app chama a porta com guarda.
       training_materialize: { Args: { p_training: string }; Returns: number }
       pode_gerir_treinamento: { Args: { p_training: string }; Returns: boolean }
+      pode_gerir_turma: { Args: { p_session: string }; Returns: boolean }
+      treinamento_iniciar: { Args: { p_enrollment: string }; Returns: undefined }
+      /** devolve o código do certificado emitido */
+      treinamento_concluir: { Args: { p_enrollment: string }; Returns: string }
+      /** devolve o id da tentativa (a em andamento, se já houver) */
+      prova_iniciar: { Args: { p_enrollment: string }; Returns: string }
+      prova_responder: { Args: { p_attempt: string; p_question: string; p_answer: Json }; Returns: undefined }
+      prova_enviar: { Args: { p_attempt: string }; Returns: undefined }
+      prova_corrigir: { Args: { p_answer: string; p_score: number; p_feedback?: string | null }; Returns: undefined }
+      prova_reabrir: { Args: { p_enrollment: string }; Returns: undefined }
+      /** conclusão anterior ao sistema, com a data real; devolve a matrícula criada */
+      training_importar_historico: {
+        Args: {
+          p_training: string
+          p_user: string
+          p_completed: string
+          p_score?: number | null
+          p_instructor?: string | null
+        }
+        Returns: string
+      }
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
@@ -1665,6 +1784,15 @@ export type Database = {
         | "nao_iniciado" | "em_andamento" | "aguardando_correcao" | "concluido"
         | "reprovado" | "isento" | "cancelado" | "nao_aplicavel" | "no_show"
       training_enrollment_origin: "regra" | "manual" | "turma" | "importado" | "recertificacao"
+      training_session_status: "planejada" | "liberada" | "em_andamento" | "concluida" | "cancelada"
+      training_session_mode: "presencial" | "online"
+      training_material_kind: "video_upload" | "video_url" | "arquivo" | "link" | "texto"
+      training_question_kind:
+        | "multipla_escolha" | "multipla_selecao" | "verdadeiro_falso" | "dissertativa"
+      training_attempt_status: "em_andamento" | "aguardando_correcao" | "aprovado" | "reprovado"
+      // `justificado` (estava afastado) não é falha de ninguém e sai do
+      // denominador da aderência; `ausente` é o no-show de verdade
+      training_attendance_status: "presente" | "ausente" | "justificado"
       rv_reducer_source: "absence" | "sanction"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
