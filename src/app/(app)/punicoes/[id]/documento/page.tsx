@@ -43,9 +43,20 @@ type Documento = {
   motivoDaDecisao: string | null;
 };
 
+/**
+ * A tarja de "não vale".
+ *
+ * `rascunho` e `pendente` NÃO recebem tarja, e isso é o ponto do documento: é
+ * exatamente no rascunho que o gestor imprime o papel para colher as
+ * assinaturas, e um "sem validade" impresso ali desmentiria o que a pessoa está
+ * assinando. Pendente é o mesmo papel, já assinado, esperando o RH.
+ *
+ * A tarja existe para os dois estados em que o documento circulando por aí
+ * seria uma mentira: reprovado e cancelado não valem como punição, não contam
+ * para a remuneração variável, e quem receber uma cópia precisa ver isso sem
+ * ter de perguntar.
+ */
 const TARJA: Partial<Record<Enums<"punicao_status">, string>> = {
-  rascunho: "RASCUNHO SEM VALIDADE",
-  pendente: "AGUARDANDO APROVAÇÃO DO RH",
   reprovada: "REPROVADO, SEM VALIDADE",
   cancelada: "CANCELADO, SEM VALIDADE",
 };
