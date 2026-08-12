@@ -253,7 +253,7 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
           : r.notFound > 0
             ? "Nenhuma punição importada, matrícula não encontrada no cadastro."
             : r.unknownType > 0
-              ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Remuneração variável › Tipos de punição."
+              ? "Nenhuma punição importada: o tipo escrito não existe no catálogo da empresa. Cadastre-o em Punições › Tipos de punição."
               : "Nenhuma linha válida, confira o colaborador e a data.",
       };
     }

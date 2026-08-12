@@ -96,11 +96,11 @@ export function ImportSanctionsDialog({
         ? "Obrigatória: a empresa tem mais de uma unidade, e a mesma matrícula pode existir em unidades diferentes. Escreva o nome da unidade como cadastrado."
         : "A empresa tem uma única unidade; pode deixar em branco."],
       ["Colaborador", "Não", "Somente conferência visual. O sistema identifica por ID e Unidade, nunca pelo nome."],
-      ["Tipo", "Sim", "Um dos tipos cadastrados em Remuneração variável › Tipos de punição. O nome tem de bater; tipo desconhecido não é criado automaticamente."],
+      ["Tipo", "Sim", "Um dos tipos cadastrados em Punições › Tipos de punição. O nome tem de bater; tipo desconhecido não é criado automaticamente."],
       ["Data", "Sim", "Data da punição, no formato DD/MM/AAAA. É o mês desta data que sofre o redutor."],
       ["Observação", "Não", "Texto livre."],
       ["", "", ""],
-      ["Tipos cadastrados hoje", "", ativos.length > 0 ? ativos.map((t) => t.name).join(" · ") : "Nenhum. Cadastre em Remuneração variável › Tipos de punição antes de importar."],
+      ["Tipos cadastrados hoje", "", ativos.length > 0 ? ativos.map((t) => t.name).join(" · ") : "Nenhum. Cadastre em Punições › Tipos de punição antes de importar."],
       ["", "", ""],
       ["Reimportar a mesma planilha", "", "Não duplica. Mesma pessoa, mesmo tipo e mesma data é tratada como a mesma punição, e só a observação é atualizada."],
       ["O que a punição corta", "", "Nada por si só. Quem decide é o motivo cadastrado em Remuneração variável › Redutores, apontando para punição."],
