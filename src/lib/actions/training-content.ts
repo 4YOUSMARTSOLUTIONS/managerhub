@@ -402,6 +402,10 @@ export type ConteudoParaFazer = {
   /** turma com instrutor que ainda não liberou o início */
   bloqueadoPorTurma: boolean;
   turmaQuando: string | null;
+  /** passo de trilha cujo anterior obrigatório ainda não foi concluído */
+  bloqueadoPorPreRequisito: boolean;
+  preRequisitoNome: string | null;
+  trilhaNome: string | null;
   materiais: MaterialParaFazer[];
 };
 
@@ -411,7 +415,7 @@ export async function getConteudoParaFazer(enrollmentId: string): Promise<Conteu
 
     const { data: e } = await supabase
       .from("training_enrollments")
-      .select("id, user_id, training_id, status, session_id")
+      .select("id, user_id, training_id, status, session_id, path_id")
       .eq("id", enrollmentId)
       .maybeSingle();
     if (!e || e.user_id !== userId) return null;
@@ -448,6 +452,53 @@ export async function getConteudoParaFazer(enrollmentId: string): Promise<Conteu
       quando = turma?.starts_at ?? null;
     }
 
+    // Pré-requisito da trilha, para a tela EXPLICAR o bloqueio.
+    //
+    // Quem impede de fato é a guarda no banco (`trilha_passo_bloqueado`, dentro
+    // de treinamento_iniciar/prova_iniciar/treinamento_concluir). Isto aqui é a
+    // mesma pergunta feita de novo só para dizer qual curso falta, porque uma
+    // tela que trava sem dizer o motivo vira chamado no RH.
+    let preRequisito: { curso: string; trilha: string } | null = null;
+    if (e.path_id) {
+      const [{ data: trilha }, { data: passos }] = await Promise.all([
+        supabase.from("training_paths").select("name").eq("id", e.path_id).maybeSingle(),
+        supabase
+          .from("training_path_steps")
+          .select("training_id, sort, required, trainings(name, active, deleted_at)")
+          .eq("path_id", e.path_id)
+          .order("sort"),
+      ]);
+
+      type PassoDb = {
+        training_id: string; sort: number; required: boolean;
+        trainings: { name: string; active: boolean; deleted_at: string | null } | null;
+      };
+      const lista = (passos ?? []) as unknown as PassoDb[];
+      const meu = lista.find((p) => p.training_id === e.training_id);
+
+      if (meu) {
+        const anteriores = lista.filter(
+          (p) => p.sort < meu.sort && p.required && p.trainings?.active && !p.trainings.deleted_at,
+        );
+        if (anteriores.length > 0) {
+          const { data: feitas } = await supabase
+            .from("training_enrollments")
+            .select("training_id, status")
+            .eq("user_id", userId)
+            .in("training_id", anteriores.map((p) => p.training_id))
+            .in("status", ["concluido", "isento"]);
+          const cumpridos = new Set((feitas ?? []).map((f) => f.training_id));
+          const falta = anteriores.find((p) => !cumpridos.has(p.training_id));
+          if (falta) {
+            preRequisito = {
+              curso: falta.trainings?.name ?? "o treinamento anterior",
+              trilha: trilha?.name ?? "trilha",
+            };
+          }
+        }
+      }
+    }
+
     const prog = new Map((progresso ?? []).map((p) => [p.material_id, p]));
 
     return {
@@ -459,6 +510,9 @@ export async function getConteudoParaFazer(enrollmentId: string): Promise<Conteu
       status: e.status,
       bloqueadoPorTurma: bloqueado,
       turmaQuando: quando,
+      bloqueadoPorPreRequisito: !!preRequisito,
+      preRequisitoNome: preRequisito?.curso ?? null,
+      trilhaNome: preRequisito?.trilha ?? null,
       materiais: (materiais ?? []).map((m) => ({
         id: m.id,
         kind: m.kind,

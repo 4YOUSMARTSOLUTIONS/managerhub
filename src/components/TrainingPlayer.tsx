@@ -79,12 +79,12 @@ export function TrainingPlayer({
             onProgresso={(pct, concluido) => atualizar(ativo.id, { pct, concluido })}
           />
         ) : (
-          <p className="soft" style={{ fontSize: "0.85rem" }}>Escolha um item da trilha ao lado.</p>
+          <p className="soft" style={{ fontSize: "0.85rem" }}>Escolha um item do conteúdo ao lado.</p>
         )}
       </div>
 
       <div className="card" style={{ padding: "1rem" }}>
-        <h2 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.7rem" }}>Trilha</h2>
+        <h2 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.7rem" }}>Conteúdo</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
           {materiais.map((m) => {
             const Icone = ICONE[m.kind];

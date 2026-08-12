@@ -29,7 +29,9 @@ export type EffTrainingStatus =
   | "isento"
   | "cancelado"
   | "nao_aplicavel"
-  | "no_show";
+  | "no_show"
+  /** passo de trilha cujo anterior obrigatório ainda não foi concluído */
+  | "aguardando_pre_requisito";
 
 export type EnrollmentForStatus = {
   status: Enums<"training_enrollment_status">;
@@ -129,6 +131,7 @@ export const TRAINING_STATUS_LABEL: Record<EffTrainingStatus, string> = {
   cancelado: "Cancelado",
   nao_aplicavel: "Não aplicável",
   no_show: "Ausente",
+  aguardando_pre_requisito: "Aguardando pré-requisito",
 };
 
 export const TRAINING_STATUS_TONE: Record<EffTrainingStatus, "green" | "amber" | "red" | "blue" | "gray" | "purple"> = {
@@ -144,12 +147,14 @@ export const TRAINING_STATUS_TONE: Record<EffTrainingStatus, "green" | "amber" |
   cancelado: "gray",
   nao_aplicavel: "gray",
   no_show: "red",
+  aguardando_pre_requisito: "gray",
 };
 
 /** Conta como pendência de conformidade: obrigatório que não está em dia. */
 export function contaComoPendente(eff: EffTrainingStatus): boolean {
   return eff === "nao_iniciado" || eff === "em_andamento" || eff === "atrasado"
     || eff === "vencido" || eff === "reprovado" || eff === "no_show"
+    || eff === "aguardando_pre_requisito"
     || eff === "aguardando_correcao";
 }
 
@@ -191,4 +196,17 @@ export function cargaHoraria(minutos: number): string {
   const m = minutos % 60;
   if (!h) return `${m}min`;
   return m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
+
+/**
+ * Aplica o bloqueio de pré-requisito sobre o status já derivado.
+ *
+ * `atrasado` NÃO é sobrescrito de propósito: o prazo do programa continua
+ * correndo enquanto a pessoa espera o passo anterior, e esconder isso faria a
+ * trilha inteira estourar sem ninguém ver. Quem trava a fila é o programa, e é
+ * o programa que precisa aparecer no vermelho.
+ */
+export function effComBloqueio(eff: EffTrainingStatus, bloqueada: boolean): EffTrainingStatus {
+  if (!bloqueada) return eff;
+  return eff === "nao_iniciado" || eff === "em_andamento" ? "aguardando_pre_requisito" : eff;
 }

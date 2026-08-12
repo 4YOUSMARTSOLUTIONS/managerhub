@@ -42,7 +42,14 @@ export default async function RealizarTreinamentoPage({
         </p>
       </div>
 
-      {conteudo.bloqueadoPorTurma ? (
+      {conteudo.bloqueadoPorPreRequisito ? (
+        <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
+          <p style={{ margin: 0, fontWeight: 600 }}>Este treinamento faz parte de uma trilha.</p>
+          <p className="soft" style={{ fontSize: "0.85rem", margin: "0.5rem 0 0" }}>
+            {conteudo.trilhaNome}: conclua &quot;{conteudo.preRequisitoNome}&quot; para liberar este.
+          </p>
+        </div>
+      ) : conteudo.bloqueadoPorTurma ? (
         <div className="card" style={{ padding: "1.5rem", textAlign: "center" }}>
           <p style={{ margin: 0, fontWeight: 600 }}>Este treinamento acontece em turma.</p>
           <p className="soft" style={{ fontSize: "0.85rem", margin: "0.5rem 0 0" }}>
