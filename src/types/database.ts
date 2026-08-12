@@ -1434,9 +1434,9 @@ export type Database = {
       // os `snap_*` são o vínculo DA ÉPOCA da matrícula: relatório de ciclo
       // antigo não pode ser reescrito por uma transferência de hoje
       training_enrollments: {
-        Row: { id: string; tenant_id: string; training_id: string; user_id: string; session_id: string | null; cycle_no: number; origin: Database["public"]["Enums"]["training_enrollment_origin"]; status: Database["public"]["Enums"]["training_enrollment_status"]; mandatory: boolean; due_at: string | null; started_at: string | null; completed_at: string | null; expires_at: string | null; score: number | null; exempted_by: string | null; exempted_reason: string | null; exempted_until: string | null; snap_position_id: string | null; snap_department_id: string | null; snap_subdepartment_id: string | null; snap_unit_id: string | null; applicable: boolean; extra_attempts: number; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; extra_attempts?: number; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; extra_attempts?: number; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; training_id: string; user_id: string; session_id: string | null; cycle_no: number; origin: Database["public"]["Enums"]["training_enrollment_origin"]; status: Database["public"]["Enums"]["training_enrollment_status"]; mandatory: boolean; due_at: string | null; started_at: string | null; completed_at: string | null; expires_at: string | null; score: number | null; exempted_by: string | null; exempted_reason: string | null; exempted_until: string | null; snap_position_id: string | null; snap_department_id: string | null; snap_subdepartment_id: string | null; snap_unit_id: string | null; applicable: boolean; extra_attempts: number; due_notified_at: string | null; path_id: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; extra_attempts?: number; due_notified_at?: string | null; path_id?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; extra_attempts?: number; due_notified_at?: string | null; path_id?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       training_materials: {
@@ -1460,6 +1460,29 @@ export type Database = {
         Row: { id: string; tenant_id: string; enrollment_id: string; material_id: string; started_at: string; ended_at: string; from_seconds: number; to_seconds: number }
         Insert: { id?: string; tenant_id: string; enrollment_id: string; material_id: string; started_at?: string; ended_at?: string; from_seconds?: number; to_seconds?: number }
         Update: never
+        Relationships: []
+      }
+      // Trilha: programa que encadeia cursos DO CATÁLOGO em ordem. Os passos
+      // apontam para `trainings`, então a matrícula continua sendo de um curso
+      // e todo o resto do módulo funciona sem saber que trilha existe.
+      training_paths: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; prazo_dias: number | null; active: boolean; deleted_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; prazo_dias?: number | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; prazo_dias?: number | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      training_path_steps: {
+        Row: { id: string; tenant_id: string; path_id: string; training_id: string; sort: number; required: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; path_id: string; training_id: string; sort?: number; required?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; path_id?: string; training_id?: string; sort?: number; required?: boolean; created_at?: string }
+        Relationships: []
+      }
+      // `ref_id` é polimórfico (5 tabelas conforme o `kind`), mesmo molde de
+      // `training_assignment_rules`, e por isso sem FK
+      training_path_rules: {
+        Row: { id: string; tenant_id: string; path_id: string; kind: string; ref_id: string; mandatory: boolean; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; path_id: string; kind: string; ref_id: string; mandatory?: boolean; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; path_id?: string; kind?: string; ref_id?: string; mandatory?: boolean; active?: boolean; created_at?: string }
         Relationships: []
       }
       training_exams: {
@@ -1578,6 +1601,9 @@ export type Database = {
       training_materialize: { Args: { p_training: string }; Returns: number }
       pode_gerir_treinamento: { Args: { p_training: string }; Returns: boolean }
       pode_gerir_turma: { Args: { p_session: string }; Returns: boolean }
+      pode_gerir_trilha: { Args: { p_path: string }; Returns: boolean }
+      /** materializa as matrículas dos passos; devolve quantas criou */
+      trilha_materialize: { Args: { p_path: string }; Returns: number }
       treinamento_iniciar: { Args: { p_enrollment: string }; Returns: undefined }
       /** devolve o código do certificado emitido */
       treinamento_concluir: { Args: { p_enrollment: string }; Returns: string }
@@ -1783,7 +1809,8 @@ export type Database = {
       training_enrollment_status:
         | "nao_iniciado" | "em_andamento" | "aguardando_correcao" | "concluido"
         | "reprovado" | "isento" | "cancelado" | "nao_aplicavel" | "no_show"
-      training_enrollment_origin: "regra" | "manual" | "turma" | "importado" | "recertificacao"
+      training_enrollment_origin:
+        | "regra" | "manual" | "turma" | "importado" | "recertificacao" | "trilha"
       training_session_status: "planejada" | "liberada" | "em_andamento" | "concluida" | "cancelada"
       training_session_mode: "presencial" | "online"
       training_material_kind: "video_upload" | "video_url" | "arquivo" | "link" | "texto"
