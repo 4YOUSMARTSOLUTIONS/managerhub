@@ -33,6 +33,9 @@ export function NotificationsBell() {
     // a notificação sabe para onde aponta: quadro do Planner ou lista de Ações
     if (n.plannerBoardId) router.push(`/planner?quadro=${n.plannerBoardId}`);
     else if (n.demandaId) router.push("/acoes");
+    // treinamento não tem destino próprio na tabela: o tipo já diz para onde ir,
+    // e uma coluna a mais em `notifications` custaria uma migração por módulo
+    else if (n.type.startsWith("training_")) router.push("/treinamentos");
   };
 
   return (

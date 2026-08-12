@@ -1,5 +1,6 @@
 "use server";
 
+
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
@@ -21,6 +22,20 @@ export type RegraPublico = {
   mandatory: boolean;
 };
 
+/** Onde o treinamento se aplica. Vazio num tipo = todos daquele tipo. */
+export type EscopoTreinamento = {
+  kind: "unit" | "department" | "subdepartment" | "pilar" | "bloco" | "item";
+  refId: string;
+};
+
+/**
+ * Responsável pelo treinamento.
+ *
+ * `unitId` nulo = responde por todas as unidades. Com unidade, responde só por
+ * ela: um curso que roda em três filiais costuma ter um dono em cada uma.
+ */
+export type ResponsavelTreinamento = { userId: string; unitId: string | null };
+
 export type TrainingInput = {
   id?: string;
   name: string;
@@ -31,16 +46,9 @@ export type TrainingInput = {
   validade_meses: number | null;
   antecipacao_dias: number;
   prazo_dias: number | null;
-  unit_id?: string | null;
-  department_id?: string | null;
-  subdepartment_id?: string | null;
-  programa_id?: string | null;
-  pilar_id?: string | null;
-  secao_id?: string | null;
-  bloco_id?: string | null;
-  item_id?: string | null;
+  escopos: EscopoTreinamento[];
   active: boolean;
-  ownerIds: string[];
+  owners: ResponsavelTreinamento[];
   regras: RegraPublico[];
 };
 
@@ -53,7 +61,7 @@ export async function saveTraining(input: TrainingInput): Promise<ActionState & 
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome do treinamento." };
     if (!(input.workload_minutes > 0)) return { error: "Informe a carga horária." };
-    if (input.ownerIds.length === 0) return { error: "Informe ao menos um responsável pelo treinamento." };
+    if (input.owners.length === 0) return { error: "Informe ao menos um responsável pelo treinamento." };
 
     const campos = {
       tenant_id: tenantId,
@@ -65,14 +73,6 @@ export async function saveTraining(input: TrainingInput): Promise<ActionState & 
       validade_meses: input.validade_meses,
       antecipacao_dias: input.antecipacao_dias ?? 60,
       prazo_dias: input.prazo_dias,
-      unit_id: input.unit_id || null,
-      department_id: input.department_id || null,
-      subdepartment_id: input.subdepartment_id || null,
-      programa_id: input.programa_id || null,
-      pilar_id: input.pilar_id || null,
-      secao_id: input.secao_id || null,
-      bloco_id: input.bloco_id || null,
-      item_id: input.item_id || null,
       active: input.active,
     };
 
@@ -95,11 +95,23 @@ export async function saveTraining(input: TrainingInput): Promise<ActionState & 
     }
     if (!trainingId) return { error: "Não foi possível salvar o treinamento." };
 
-    // responsáveis e regras são substituídos por inteiro: é mais simples de
-    // acertar do que um diff, e a tabela é pequena por treinamento
+    // escopos, responsáveis e regras são substituídos por inteiro: é mais
+    // simples de acertar do que um diff, e a tabela é pequena por treinamento
+    await supabase.from("training_scopes").delete().eq("training_id", trainingId);
+    if (input.escopos.length > 0) {
+      const { error: eEscopos } = await supabase.from("training_scopes").insert(
+        input.escopos.map((e) => ({
+          tenant_id: tenantId, training_id: trainingId, kind: e.kind, ref_id: e.refId,
+        })),
+      );
+      if (eEscopos) return { error: eEscopos.message };
+    }
+
     await supabase.from("training_owners").delete().eq("training_id", trainingId);
     const { error: eOwners } = await supabase.from("training_owners").insert(
-      input.ownerIds.map((uid) => ({ tenant_id: tenantId, training_id: trainingId, user_id: uid })),
+      input.owners.map((o) => ({
+        tenant_id: tenantId, training_id: trainingId, user_id: o.userId, unit_id: o.unitId,
+      })),
     );
     if (eOwners) return { error: eOwners.message };
 
@@ -263,10 +275,11 @@ export type TrainingForEdit = TrainingInput & { id: string };
 export async function getTrainingForEdit(id: string): Promise<TrainingForEdit | null> {
   try {
     const { supabase } = await actionContext();
-    const [{ data: t }, { data: owners }, { data: regras }] = await Promise.all([
+    const [{ data: t }, { data: owners }, { data: regras }, { data: escopos }] = await Promise.all([
       supabase.from("trainings").select("*").eq("id", id).maybeSingle(),
-      supabase.from("training_owners").select("user_id").eq("training_id", id),
+      supabase.from("training_owners").select("user_id, unit_id").eq("training_id", id),
       supabase.from("training_assignment_rules").select("kind, ref_id, mandatory").eq("training_id", id),
+      supabase.from("training_scopes").select("kind, ref_id").eq("training_id", id),
     ]);
     if (!t) return null;
     return {
@@ -279,16 +292,9 @@ export async function getTrainingForEdit(id: string): Promise<TrainingForEdit | 
       validade_meses: t.validade_meses,
       antecipacao_dias: t.antecipacao_dias,
       prazo_dias: t.prazo_dias,
-      unit_id: t.unit_id,
-      department_id: t.department_id,
-      subdepartment_id: t.subdepartment_id,
-      programa_id: t.programa_id,
-      pilar_id: t.pilar_id,
-      secao_id: t.secao_id,
-      bloco_id: t.bloco_id,
-      item_id: t.item_id,
+      escopos: (escopos ?? []).map((e) => ({ kind: e.kind as EscopoTreinamento["kind"], refId: e.ref_id })),
       active: t.active,
-      ownerIds: (owners ?? []).map((o) => o.user_id),
+      owners: (owners ?? []).map((o) => ({ userId: o.user_id, unitId: o.unit_id })),
       regras: (regras ?? []).map((r) => ({
         kind: r.kind as RegraPublico["kind"],
         refId: r.ref_id,
@@ -297,5 +303,54 @@ export async function getTrainingForEdit(id: string): Promise<TrainingForEdit | 
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Histórico legado: registra treinamentos que a empresa já fez antes do sistema.
+ *
+ * Sem isto, o primeiro dia de uso mostra 100% de inadimplência e a empresa
+ * convoca de novo gente que já está treinada, o que queima o módulo logo na
+ * largada. A data informada é a data REAL da conclusão, e é dela que sai o
+ * vencimento: um curso anual feito em março vence em março.
+ *
+ * Em lote por treinamento: turma antiga inteira de uma vez, que é como o
+ * registro costuma existir no papel.
+ */
+export async function importarHistorico(input: {
+  trainingId: string;
+  userIds: string[];
+  completedAt: string;
+  score: number | null;
+  instructor: string | null;
+}): Promise<ActionState & { importados?: number }> {
+  try {
+    const { supabase } = await actionContext();
+    if (input.userIds.length === 0) return { error: "Escolha ao menos um colaborador." };
+    if (!input.completedAt) return { error: "Informe a data da conclusão." };
+
+    let importados = 0;
+    const falhas: string[] = [];
+    for (const userId of input.userIds) {
+      const { error } = await supabase.rpc("training_importar_historico", {
+        p_training: input.trainingId,
+        p_user: userId,
+        p_completed: input.completedAt,
+        p_score: input.score,
+        p_instructor: input.instructor?.trim() || null,
+      });
+      if (error) falhas.push(error.message);
+      else importados += 1;
+    }
+
+    revalidatePath("/treinamentos");
+    if (importados === 0) return { error: falhas[0] ?? "Nada foi importado." };
+    return {
+      ok: true,
+      importados,
+      warning: falhas.length > 0 ? `${falhas.length} não importados: ${falhas[0]}` : undefined,
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 }
