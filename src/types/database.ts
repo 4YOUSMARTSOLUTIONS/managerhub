@@ -1373,6 +1373,39 @@ export type Database = {
           },
         ]
       }
+      // ---- Treinamentos ----
+      // Curso, turma, matrícula e tentativa são entidades SEPARADAS (padrão de
+      // LMS): curso com data e instrutor impediria duas ofertas do mesmo
+      // conteúdo, e cada recertificação precisa de uma matrícula nova para o
+      // histórico de 5 anos sobreviver.
+      trainings: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; code: string | null; workload_minutes: number; delivery: Database["public"]["Enums"]["training_delivery"]; validade_meses: number | null; antecipacao_dias: number; prazo_dias: number | null; unit_id: string | null; department_id: string | null; subdepartment_id: string | null; programa_id: string | null; pilar_id: string | null; secao_id: string | null; bloco_id: string | null; item_id: string | null; active: boolean; deleted_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; code?: string | null; workload_minutes?: number; delivery?: Database["public"]["Enums"]["training_delivery"]; validade_meses?: number | null; antecipacao_dias?: number; prazo_dias?: number | null; unit_id?: string | null; department_id?: string | null; subdepartment_id?: string | null; programa_id?: string | null; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; code?: string | null; workload_minutes?: number; delivery?: Database["public"]["Enums"]["training_delivery"]; validade_meses?: number | null; antecipacao_dias?: number; prazo_dias?: number | null; unit_id?: string | null; department_id?: string | null; subdepartment_id?: string | null; programa_id?: string | null; pilar_id?: string | null; secao_id?: string | null; bloco_id?: string | null; item_id?: string | null; active?: boolean; deleted_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      training_owners: {
+        Row: { id: string; tenant_id: string; training_id: string; user_id: string; created_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; created_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; created_at?: string }
+        Relationships: []
+      }
+      // `ref_id` é polimórfico (aponta para 5 tabelas conforme o `kind`), por
+      // isso não tem FK. Mesmo molde de checklist_audiences.
+      training_assignment_rules: {
+        Row: { id: string; tenant_id: string; training_id: string; kind: string; ref_id: string; mandatory: boolean; active: boolean; created_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; kind: string; ref_id: string; mandatory?: boolean; active?: boolean; created_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; kind?: string; ref_id?: string; mandatory?: boolean; active?: boolean; created_at?: string }
+        Relationships: []
+      }
+      // os `snap_*` são o vínculo DA ÉPOCA da matrícula: relatório de ciclo
+      // antigo não pode ser reescrito por uma transferência de hoje
+      training_enrollments: {
+        Row: { id: string; tenant_id: string; training_id: string; user_id: string; session_id: string | null; cycle_no: number; origin: Database["public"]["Enums"]["training_enrollment_origin"]; status: Database["public"]["Enums"]["training_enrollment_status"]; mandatory: boolean; due_at: string | null; started_at: string | null; completed_at: string | null; expires_at: string | null; score: number | null; exempted_by: string | null; exempted_reason: string | null; exempted_until: string | null; snap_position_id: string | null; snap_department_id: string | null; snap_subdepartment_id: string | null; snap_unit_id: string | null; applicable: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; training_id: string; user_id: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; training_id?: string; user_id?: string; session_id?: string | null; cycle_no?: number; origin?: Database["public"]["Enums"]["training_enrollment_origin"]; status?: Database["public"]["Enums"]["training_enrollment_status"]; mandatory?: boolean; due_at?: string | null; started_at?: string | null; completed_at?: string | null; expires_at?: string | null; score?: number | null; exempted_by?: string | null; exempted_reason?: string | null; exempted_until?: string | null; snap_position_id?: string | null; snap_department_id?: string | null; snap_subdepartment_id?: string | null; snap_unit_id?: string | null; applicable?: boolean; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1442,6 +1475,10 @@ export type Database = {
       // as RPCs de criação e o reset por admin, por dentro), e este arquivo
       // descreve o privilégio, não só o schema.
       minha_troca_pendente: { Args: Record<PropertyKey, never>; Returns: boolean }
+      // `training_materialize_exec` NÃO entra: é a engrenagem, revogada de
+      // `authenticated`. O app chama a porta com guarda.
+      training_materialize: { Args: { p_training: string }; Returns: number }
+      pode_gerir_treinamento: { Args: { p_training: string }; Returns: boolean }
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
@@ -1619,6 +1656,15 @@ export type Database = {
       goal_direction: "maior_melhor" | "menor_melhor" | "binaria"
       goal_entry_status: "aberta" | "aprovada" | "reprovada"
       absence_kind: "ferias" | "licenca" | "afastamento" | "atestado" | "falta"
+      training_delivery: "auto_instrucional" | "turma" | "misto"
+      // Só os status de FATO. `a_vencer`, `vencido` e `overdue` são derivados de
+      // data e calculados na leitura (src/lib/training-schedule.ts): gravá-los
+      // exigiria um job para mantê-los verdadeiros, e job atrasado vira
+      // relatório mentiroso.
+      training_enrollment_status:
+        | "nao_iniciado" | "em_andamento" | "aguardando_correcao" | "concluido"
+        | "reprovado" | "isento" | "cancelado" | "nao_aplicavel" | "no_show"
+      training_enrollment_origin: "regra" | "manual" | "turma" | "importado" | "recertificacao"
       rv_reducer_source: "absence" | "sanction"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
