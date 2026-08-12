@@ -12,6 +12,7 @@ import {
 } from "@/lib/training-schedule";
 import { formatDate } from "@/lib/format";
 import type { EnrollmentRow, Opt, TrainingRow } from "@/components/TrainingsManager";
+import type { TrilhaRow } from "@/components/TrainingPathsPanel";
 
 /**
  * Painel de conformidade.
@@ -27,11 +28,12 @@ import type { EnrollmentRow, Opt, TrainingRow } from "@/components/TrainingsMana
  * de papel nenhum.
  */
 export function TrainingsDashboard({
-  enrollments, trainings, departments,
+  enrollments, trainings, departments, paths,
 }: {
   enrollments: EnrollmentRow[];
   trainings: TrainingRow[];
   departments: Opt[];
+  paths: TrilhaRow[];
 }) {
   const [setor, setSetor] = useState("");
 
@@ -43,6 +45,7 @@ export function TrainingsDashboard({
     () => new Map(departments.map((d) => [d.id, d.name])),
     [departments],
   );
+  const nomeTrilha = useMemo(() => new Map(paths.map((p) => [p.id, p.name])), [paths]);
 
   const linhas = useMemo(() => {
     const base = setor ? enrollments.filter((e) => e.deptId === setor) : enrollments;
@@ -101,6 +104,36 @@ export function TrainingsDashboard({
     return [...mapa.values()].sort((a, b) => (a.emDia / a.total) - (b.emDia / b.total));
   }, [obrigatorias, nomeSetor]);
 
+  /**
+   * Conformidade por trilha: a pergunta é sobre o PROGRAMA, não sobre cursos.
+   *
+   * Atribuídos = pessoas com matrícula viva vinda da trilha. Completos = quem
+   * está em dia em todos os passos da trilha, resolvido por nome do curso
+   * (o card usa a mesma régua) e pela conta que já vale no resto do painel.
+   */
+  const porTrilha = useMemo(() => {
+    return paths
+      .map((t) => {
+        const daTrilha = linhas.filter((l) => l.pathId === t.id);
+        const pessoas = [...new Set(daTrilha.map((l) => l.userId))];
+        if (pessoas.length === 0) return null;
+        const emDiaPorPessoa = new Map<string, Set<string>>();
+        for (const l of linhas) {
+          if (!contaComoEmDia(l.s)) continue;
+          const atual = emDiaPorPessoa.get(l.userId) ?? new Set<string>();
+          atual.add(l.trainingName);
+          emDiaPorPessoa.set(l.userId, atual);
+        }
+        const completos = pessoas.filter((u) => {
+          const feitos = emDiaPorPessoa.get(u) ?? new Set<string>();
+          return t.passoNames.every((n) => feitos.has(n));
+        }).length;
+        return { nome: t.name, total: pessoas.length, completos };
+      })
+      .filter((x): x is { nome: string; total: number; completos: number } => x !== null)
+      .sort((a, b) => (a.completos / a.total) - (b.completos / b.total));
+  }, [paths, linhas]);
+
   if (enrollments.length === 0) {
     return (
       <EmptyState
@@ -123,9 +156,10 @@ export function TrainingsDashboard({
         <ExportButton
           filename="treinamentos-conformidade"
           sheetName="Conformidade"
-          headers={["Colaborador", "Treinamento", "Setor", "Obrigatório", "Situação", "Prazo", "Concluído em", "Vence em", "Nota"]}
+          headers={["Colaborador", "Trilha", "Treinamento", "Setor", "Obrigatório", "Situação", "Prazo", "Concluído em", "Vence em", "Nota"]}
           rows={linhas.map((l) => [
             l.userName,
+            l.pathId ? (nomeTrilha.get(l.pathId) ?? "") : "",
             l.trainingName,
             l.deptId ? (nomeSetor.get(l.deptId) ?? "") : "",
             l.mandatory ? "Sim" : "Não",
@@ -174,6 +208,18 @@ export function TrainingsDashboard({
           }))}
         />
       </div>
+
+      {porTrilha.length > 0 && (
+        <Barras
+          titulo="Conformidade por trilha"
+          vazio="Nenhuma trilha atribuída no filtro."
+          itens={porTrilha.map((t) => ({
+            nome: t.nome,
+            pct: Math.round((t.completos / t.total) * 100),
+            detalhe: `${t.completos} de ${t.total} concluíram`,
+          }))}
+        />
+      )}
 
       <div className="card" style={{ padding: "1rem" }}>
         <h3 style={{ fontSize: "0.92rem", fontWeight: 700, margin: "0 0 0.7rem" }}>Próximos vencimentos</h3>

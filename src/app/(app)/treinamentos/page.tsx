@@ -12,6 +12,7 @@ import {
   type PersonOpt,
 } from "@/components/TrainingsManager";
 import type { SessionRow } from "@/components/TrainingSessionsManager";
+import type { TrilhaRow } from "@/components/TrainingPathsPanel";
 
 export default async function TreinamentosPage() {
   const gate = await moduleGate("treinamentos");
@@ -49,13 +50,14 @@ export default async function TreinamentosPage() {
     { data: turmas },
     { data: matriculasEmTurma },
     { data: salas },
+    { data: trilhas },
   ] = await Promise.all([
     cursosQuery,
     // as minhas: a RLS já recorta, o filtro por user_id é só para não trazer a
     // equipe inteira de quem é gestor
     supabase
       .from("training_enrollments")
-      .select("id, training_id, status, mandatory, due_at, completed_at, expires_at, score, session_id, cycle_no")
+      .select("id, training_id, status, mandatory, due_at, completed_at, expires_at, score, session_id, cycle_no, path_id")
       .eq("tenant_id", tenant.id)
       .eq("user_id", user.id)
       .neq("status", "nao_aplicavel")
@@ -63,7 +65,7 @@ export default async function TreinamentosPage() {
     // o acompanhamento: quem não gere ninguém recebe só as próprias, por RLS
     supabase
       .from("training_enrollments")
-      .select("id, training_id, user_id, status, mandatory, due_at, completed_at, expires_at, score, snap_department_id, applicable")
+      .select("id, training_id, user_id, status, mandatory, due_at, completed_at, expires_at, score, snap_department_id, applicable, path_id")
       .eq("tenant_id", tenant.id)
       .neq("status", "nao_aplicavel")
       .neq("status", "cancelado")
@@ -100,6 +102,13 @@ export default async function TreinamentosPage() {
       .not("session_id", "is", null),
     // as mesmas salas das reuniões: turma presencial escolhe daqui
     supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
+    // trilhas com os passos já ordenados: o embed devolve na ordem do `order`
+    supabase
+      .from("training_paths")
+      .select("id, name, description, prazo_dias, active, steps:training_path_steps(training_id, sort, required), rules:training_path_rules(kind, ref_id)")
+      .eq("tenant_id", tenant.id)
+      .is("deleted_at", null)
+      .order("name"),
   ]);
 
   type VinculoDb = {
@@ -183,6 +192,33 @@ export default async function TreinamentosPage() {
 
   const cursoPorId = new Map(trainings.map((t) => [t.id, t]));
 
+  // Bloqueio de pré-requisito, calculado aqui e não no cliente: o passo 2 só
+  // abre com o passo 1 concluído, e a tela precisa saber disso para mostrar o
+  // cadeado sem uma consulta por linha. Quem impede de fato é a guarda no banco.
+  //
+  // A ordem dos passos vem de `trilhas`, que já foi carregado acima; os cursos
+  // que a pessoa cumpriu saem das próprias matrículas, sem ida extra ao banco.
+  const cumpridosPorMim = new Set(
+    (minhas ?? []).filter((e) => e.status === "concluido" || e.status === "isento")
+      .map((e) => e.training_id),
+  );
+  type PassoLeve = { training_id: string; sort: number; required: boolean };
+  const passosPorTrilha = new Map<string, PassoLeve[]>();
+  for (const t of (trilhas ?? []) as unknown as { id: string; steps: PassoLeve[] | null }[]) {
+    passosPorTrilha.set(t.id, [...(t.steps ?? [])].sort((a, b) => a.sort - b.sort));
+  }
+  const bloqueadaPorPreRequisito = (pathId: string | null, trainingId: string) => {
+    if (!pathId) return false;
+    const passos = passosPorTrilha.get(pathId) ?? [];
+    const meu = passos.find((p) => p.training_id === trainingId);
+    if (!meu) return false;
+    return passos.some(
+      (p) => p.sort < meu.sort && p.required
+        && cursoPorId.get(p.training_id)?.active !== false
+        && !cumpridosPorMim.has(p.training_id),
+    );
+  };
+
   const myEnrollments: MyEnrollmentRow[] = (minhas ?? [])
     .filter((e) => cursoPorId.has(e.training_id))
     .map((e) => ({
@@ -199,6 +235,8 @@ export default async function TreinamentosPage() {
       expiresAt: e.expires_at,
       score: e.score,
       cycleNo: e.cycle_no,
+      pathId: e.path_id,
+      bloqueada: bloqueadaPorPreRequisito(e.path_id, e.training_id),
     }));
 
   const enrollments: EnrollmentRow[] = (todasMatriculas ?? [])
@@ -217,7 +255,37 @@ export default async function TreinamentosPage() {
       completedAt: e.completed_at,
       expiresAt: e.expires_at,
       score: e.score,
+      pathId: e.path_id,
     }));
+
+  // Trilhas: os passos vêm do embed e precisam ser ordenados aqui, porque o
+  // PostgREST não ordena tabela filha. `atribuidos` conta PESSOAS, não
+  // matrículas: quatro passos da mesma pessoa são um colaborador em formação.
+  type TrilhaDb = {
+    id: string; name: string; description: string | null;
+    prazo_dias: number | null; active: boolean;
+    steps: { training_id: string; sort: number; required: boolean }[] | null;
+    rules: { kind: string; ref_id: string }[] | null;
+  };
+  const pessoasPorTrilha = new Map<string, Set<string>>();
+  for (const e of todasMatriculas ?? []) {
+    if (!e.path_id) continue;
+    const atual = pessoasPorTrilha.get(e.path_id) ?? new Set<string>();
+    atual.add(e.user_id);
+    pessoasPorTrilha.set(e.path_id, atual);
+  }
+  const paths: TrilhaRow[] = ((trilhas ?? []) as unknown as TrilhaDb[]).map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    prazoDias: t.prazo_dias,
+    active: t.active,
+    passoNames: [...(t.steps ?? [])]
+      .sort((a, b) => a.sort - b.sort)
+      .map((p) => cursoPorId.get(p.training_id)?.name ?? "Treinamento removido"),
+    ruleCount: (t.rules ?? []).length,
+    atribuidos: pessoasPorTrilha.get(t.id)?.size ?? 0,
+  }));
 
   // convocados por turma: uma contagem em memória em vez de N consultas
   const convocadosPorTurma = new Map<string, number>();
@@ -311,6 +379,7 @@ export default async function TreinamentosPage() {
         units={unitScope.units}
         sessions={sessions}
         rooms={(salas ?? []).map((r) => ({ id: r.id, name: r.name }))}
+        paths={paths}
       />
     </div>
   );

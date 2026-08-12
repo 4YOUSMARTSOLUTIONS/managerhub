@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileCheck, GraduationCap, History, Layers, Pencil, PlayCircle, Trash2, UserPlus } from "lucide-react";
+import { FileCheck, GraduationCap, History, Layers, Lock, Pencil, PlayCircle, Trash2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
@@ -17,9 +17,11 @@ import { TrainingExamDialog } from "@/components/TrainingExamDialog";
 import { TrainingGradingQueue } from "@/components/TrainingGradingQueue";
 import { TrainingHistoryImportDialog } from "@/components/TrainingHistoryImportDialog";
 import { TrainingsDashboard } from "@/components/TrainingsDashboard";
+import { TrainingPathsPanel, type TrilhaRow } from "@/components/TrainingPathsPanel";
+import { TrainingPathCards } from "@/components/TrainingPathCards";
 import { deleteTraining, enrollPeople, getTrainingForEdit, type TrainingForEdit } from "@/lib/actions/trainings";
 import {
-  effTrainingStatus, TRAINING_STATUS_LABEL, TRAINING_STATUS_TONE,
+  effTrainingStatus, effComBloqueio, TRAINING_STATUS_LABEL, TRAINING_STATUS_TONE,
   cargaHoraria, periodicidadeLabel, DELIVERY_LABEL,
   contaComoEmDia, contaComoPendente,
   type EffTrainingStatus,
@@ -72,6 +74,10 @@ export type MyEnrollmentRow = {
   expiresAt: string | null;
   score: number | null;
   cycleNo: number;
+  /** de qual trilha esta matrícula veio; null = curso avulso */
+  pathId: string | null;
+  /** passo de trilha cujo anterior obrigatório ainda não foi concluído */
+  bloqueada: boolean;
 };
 
 export type EnrollmentRow = {
@@ -88,6 +94,8 @@ export type EnrollmentRow = {
   completedAt: string | null;
   expiresAt: string | null;
   score: number | null;
+  /** de qual trilha esta matrícula veio; null = curso avulso */
+  pathId: string | null;
 };
 
 const eff = (e: { status: Enums<"training_enrollment_status">; dueAt: string | null; expiresAt: string | null; antecipacaoDias: number }) =>
@@ -99,7 +107,7 @@ function StatusBadge({ s }: { s: EffTrainingStatus }) {
 
 export function TrainingsManager({
   trainings, myEnrollments, enrollments, podeCadastrar, currentUserId,
-  people, departments, subdepartments, positions, pilares, units, sessions, rooms,
+  people, departments, subdepartments, positions, pilares, units, sessions, rooms, paths,
 }: {
   trainings: TrainingRow[];
   myEnrollments: MyEnrollmentRow[];
@@ -114,6 +122,7 @@ export function TrainingsManager({
   units: Opt[];
   sessions: SessionRow[];
   rooms: Opt[];
+  paths: TrilhaRow[];
 }) {
   const [editing, setEditing] = useState<TrainingForEdit | null>(null);
   const [criando, setCriando] = useState(false);
@@ -126,7 +135,7 @@ export function TrainingsManager({
     {
       id: "meus",
       label: `Meus treinamentos${myEnrollments.length ? ` · ${myEnrollments.length}` : ""}`,
-      content: <MeusTreinamentos rows={myEnrollments} />,
+      content: <MeusTreinamentos rows={myEnrollments} paths={paths} />,
     },
     {
       id: "catalogo",
@@ -144,6 +153,22 @@ export function TrainingsManager({
           onConteudo={setConteudo}
           onProva={setProva}
           onLegado={setLegado}
+        />
+      ),
+    },
+    {
+      id: "trilhas",
+      label: `Trilhas${paths.length ? ` · ${paths.length}` : ""}`,
+      content: (
+        <TrainingPathsPanel
+          rows={paths}
+          trainings={trainings}
+          people={people}
+          departments={departments}
+          subdepartments={subdepartments}
+          positions={positions}
+          units={units}
+          podeCadastrar={podeCadastrar}
         />
       ),
     },
@@ -167,7 +192,7 @@ export function TrainingsManager({
     {
       id: "painel",
       label: "Painel",
-      content: <TrainingsDashboard enrollments={enrollments} trainings={trainings} departments={departments} />,
+      content: <TrainingsDashboard enrollments={enrollments} trainings={trainings} departments={departments} paths={paths} />,
     },
     {
       id: "acompanhamento",
@@ -231,13 +256,16 @@ export function TrainingsManager({
 }
 
 // ------------------------------------------------------------------ meus
-function MeusTreinamentos({ rows }: { rows: MyEnrollmentRow[] }) {
-  const comStatus = rows.map((r) => ({ ...r, s: eff(r) }));
+function MeusTreinamentos({ rows, paths }: { rows: MyEnrollmentRow[]; paths: TrilhaRow[] }) {
+  const comStatus = rows.map((r) => ({ ...r, s: effComBloqueio(eff(r), r.bloqueada) }));
   // ordem de urgência: o que cobra primeiro aparece primeiro
   const peso: Record<EffTrainingStatus, number> = {
     atrasado: 0, vencido: 1, a_vencer: 2, em_andamento: 3, nao_iniciado: 4,
-    aguardando_correcao: 5, reprovado: 6, no_show: 7, concluido: 8,
-    isento: 9, cancelado: 10, nao_aplicavel: 11,
+    // o que espera pré-requisito fica logo abaixo do que pode ser feito agora:
+    // é pendência, mas não é a pendência que a pessoa consegue resolver hoje
+    aguardando_pre_requisito: 5,
+    aguardando_correcao: 6, reprovado: 7, no_show: 8, concluido: 9,
+    isento: 10, cancelado: 11, nao_aplicavel: 12,
   };
   const ordenadas = [...comStatus].sort((a, b) => peso[a.s] - peso[b.s] || a.trainingName.localeCompare(b.trainingName, "pt-BR"));
 
@@ -263,6 +291,8 @@ function MeusTreinamentos({ rows }: { rows: MyEnrollmentRow[] }) {
         <StatCard label="Obrigatórios em dia" value={emDia} tone="green" />
         <StatCard label="Horas concluídas" value={cargaHoraria(horas)} tone="blue" icon={<GraduationCap size={16} />} />
       </div>
+
+      <TrainingPathCards paths={paths} rows={rows} />
 
       <div className="card" style={{ overflowX: "auto" }}>
         <table className="table">
@@ -295,7 +325,15 @@ function MeusTreinamentos({ rows }: { rows: MyEnrollmentRow[] }) {
                 <td className="muted">{r.score != null ? `${r.score}%` : "—"}</td>
                 <td><StatusBadge s={r.s} /></td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  {PODE_FAZER.has(r.s) ? (
+                  {r.bloqueada ? (
+                    <span
+                      className="soft"
+                      style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.78rem" }}
+                      title="Conclua o treinamento anterior da trilha para liberar este"
+                    >
+                      <Lock size={14} /> Aguardando
+                    </span>
+                  ) : PODE_FAZER.has(r.s) ? (
                     <Link href={`/treinamentos/realizar/${r.id}`} className="btn btn-primary btn-sm">
                       <PlayCircle size={14} style={{ marginRight: "0.3rem" }} />
                       {r.s === "em_andamento" ? "Continuar" : "Fazer"}
