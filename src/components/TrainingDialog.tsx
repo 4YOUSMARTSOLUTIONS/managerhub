@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { PeoplePicker } from "@/components/PeoplePicker";
-import { saveTraining, type RegraPublico, type TrainingForEdit } from "@/lib/actions/trainings";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+import {
+  saveTraining,
+  type EscopoTreinamento, type RegraPublico, type ResponsavelTreinamento, type TrainingForEdit,
+} from "@/lib/actions/trainings";
 import { PERIODICIDADE_OPCOES, DELIVERY_LABEL } from "@/lib/training-schedule";
 import type { Enums } from "@/types/database";
+
+import type { PersonOpt } from "@/components/TrainingsManager";
 
 type Opt = { id: string; name: string };
 type SubOpt = { id: string; name: string; departmentId: string };
@@ -36,7 +42,7 @@ export function TrainingDialog({
   training, people, departments, subdepartments, positions, pilares, units, onClose,
 }: {
   training: TrainingForEdit | null;
-  people: Opt[];
+  people: PersonOpt[];
   departments: Opt[];
   subdepartments: SubOpt[];
   positions: Opt[];
@@ -53,24 +59,125 @@ export function TrainingDialog({
   const [validade, setValidade] = useState<string>(training?.validade_meses != null ? String(training.validade_meses) : "");
   const [antecipacao, setAntecipacao] = useState(String(training?.antecipacao_dias ?? 60));
   const [prazo, setPrazo] = useState(training?.prazo_dias != null ? String(training.prazo_dias) : "");
-  const [unitId, setUnitId] = useState(training?.unit_id ?? "");
-  const [deptId, setDeptId] = useState(training?.department_id ?? "");
-  const [subId, setSubId] = useState(training?.subdepartment_id ?? "");
-  const [pilarId, setPilarId] = useState(training?.pilar_id ?? "");
+  // escopo por tipo: lista vazia = "todos" daquele tipo
+  const doTipo = (k: EscopoTreinamento["kind"]) =>
+    (training?.escopos ?? []).filter((e) => e.kind === k).map((e) => e.refId);
+  const [unitIds, setUnitIds] = useState<string[]>(doTipo("unit"));
+  const [deptIds, setDeptIds] = useState<string[]>(doTipo("department"));
+  const [subIds, setSubIds] = useState<string[]>(doTipo("subdepartment"));
+  const [pilarIds, setPilarIds] = useState<string[]>(doTipo("pilar"));
   const [active, setActive] = useState(training?.active ?? true);
-  const [ownerIds, setOwnerIds] = useState<string[]>(training?.ownerIds ?? []);
+  /**
+   * Responsáveis em dois modos, e não os dois ao mesmo tempo.
+   *
+   * O caso comum é o mesmo dono em todas as unidades, e mostrar um campo por
+   * unidade só para isso enchia a tela de campos vazios. O modo por unidade
+   * existe porque cada filial costuma ter quem responde por ela; ele aparece
+   * quando é pedido, não por padrão.
+   */
+  const [mesmoResponsavel, setMesmoResponsavel] = useState(
+    // ao reabrir, o modo é o que já está gravado
+    !(training?.owners ?? []).some((o) => o.unitId),
+  );
+  const [ownersGerais, setOwnersGerais] = useState<string[]>(
+    (training?.owners ?? []).filter((o) => !o.unitId).map((o) => o.userId),
+  );
+  const [ownersPorUnidade, setOwnersPorUnidade] = useState<Record<string, string[]>>(() => {
+    const m: Record<string, string[]> = {};
+    for (const o of training?.owners ?? []) {
+      if (o.unitId) m[o.unitId] = [...(m[o.unitId] ?? []), o.userId];
+    }
+    return m;
+  });
   const [regras, setRegras] = useState<RegraPublico[]>(training?.regras ?? []);
 
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
   const router = useRouter();
 
-  const subsDoSetor = deptId ? subdepartments.filter((s) => s.departmentId === deptId) : subdepartments;
+  // subsetor segue os setores marcados: oferecer subsetor de outra área só
+  // produziria combinação que não descreve ninguém
+  const subsDoSetor = deptIds.length > 0
+    ? subdepartments.filter((s) => deptIds.includes(s.departmentId))
+    : subdepartments;
 
-  const addRegra = (kind: RegraPublico["kind"], refId: string) => {
-    if (!refId) return;
-    if (regras.some((r) => r.kind === kind && r.refId === refId)) return;
-    setRegras([...regras, { kind, refId, mandatory: true }]);
+  // as unidades que pedem responsável próprio: as marcadas, ou todas quando o
+  // treinamento vale para a empresa inteira
+  const unidadesDoEscopo = unitIds.length > 0 ? units.filter((u) => unitIds.includes(u.id)) : units;
+
+  /**
+   * Quem o escopo alcança.
+   *
+   * "Quem deve fazer" só pode oferecer o que existe dentro do escopo: um
+   * treinamento do Armazém não deveria aceitar o cargo de Auxiliar Financeiro,
+   * e aceitar hoje significa uma matrícula indevida que só aparece meses depois
+   * num relatório de conformidade errado.
+   *
+   * Lista vazia num tipo de escopo significa "todos", então ela não filtra nada.
+   */
+  const pessoasNoEscopo = useMemo(() => people.filter((p) => {
+    if (unitIds.length > 0 && !p.unitIds.some((u) => unitIds.includes(u))) return false;
+    if (deptIds.length > 0 && !(p.deptId && deptIds.includes(p.deptId))) return false;
+    if (subIds.length > 0 && !(p.subId && subIds.includes(p.subId))) return false;
+    return true;
+  }), [people, unitIds, deptIds, subIds]);
+
+  const temEscopo = unitIds.length > 0 || deptIds.length > 0 || subIds.length > 0;
+
+  // cargos que de fato existem no escopo, e não o catálogo inteiro
+  const cargosNoEscopo = useMemo(() => {
+    if (!temEscopo) return positions;
+    const ids = new Set(pessoasNoEscopo.map((p) => p.positionId).filter(Boolean) as string[]);
+    return positions.filter((c) => ids.has(c.id));
+  }, [positions, pessoasNoEscopo, temEscopo]);
+
+  const setoresNoEscopo = deptIds.length > 0 ? departments.filter((d) => deptIds.includes(d.id)) : departments;
+  const subsNoEscopo = subIds.length > 0 ? subdepartments.filter((x) => subIds.includes(x.id)) : subsDoSetor;
+  const unidadesParaPublico = unidadesDoEscopo;
+
+  /**
+   * Regra que saiu do escopo é removida na hora, com aviso.
+   *
+   * Deixar a regra órfã cadastrada seria pior: ela continuaria matriculando
+   * gente de fora na próxima materialização, sem nada na tela explicando por quê.
+   */
+  const [avisoEscopo, setAvisoEscopo] = useState("");
+  useEffect(() => {
+    const valida = (r: RegraPublico) => {
+      if (r.kind === "position") return cargosNoEscopo.some((c) => c.id === r.refId);
+      if (r.kind === "department") return setoresNoEscopo.some((d) => d.id === r.refId);
+      if (r.kind === "subdepartment") return subsNoEscopo.some((x) => x.id === r.refId);
+      if (r.kind === "unit") return unidadesParaPublico.some((u) => u.id === r.refId);
+      return pessoasNoEscopo.some((p) => p.id === r.refId);
+    };
+    const mantidas = regras.filter(valida);
+    if (mantidas.length !== regras.length) {
+      const fora = regras.length - mantidas.length;
+      setRegras(mantidas);
+      setAvisoEscopo(
+        `${fora} ${fora === 1 ? "item saiu" : "itens saíram"} de "quem deve fazer" por ficar fora do escopo.`,
+      );
+    }
+    // roda quando o ESCOPO muda; `regras` fica de fora para o aviso não se
+    // reprocessar a cada item adicionado à mão
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargosNoEscopo, setoresNoEscopo, subsNoEscopo, unidadesParaPublico, pessoasNoEscopo]);
+
+  /** o que já está marcado de um tipo, para o seletor mostrar o check */
+  const marcados = (kind: RegraPublico["kind"]) =>
+    regras.filter((r) => r.kind === kind).map((r) => r.refId);
+
+  /**
+   * Troca de uma vez o conjunto de um tipo, preservando o "Obrigatório" de quem
+   * já estava na lista: desmarcar e remarcar um cargo não pode zerar a escolha
+   * que a pessoa fez ao lado.
+   */
+  const sincronizar = (kind: RegraPublico["kind"], ids: string[]) => {
+    const antigas = new Map(regras.filter((r) => r.kind === kind).map((r) => [r.refId, r.mandatory]));
+    setRegras([
+      ...regras.filter((r) => r.kind !== kind),
+      ...ids.map((refId) => ({ kind, refId, mandatory: antigas.get(refId) ?? true })),
+    ]);
   };
   const nomeDaRegra = (r: RegraPublico): string => {
     const lista = r.kind === "position" ? positions
@@ -85,6 +192,17 @@ export function TrainingDialog({
     setErro("");
     const carga = (Number(horas) || 0) * 60 + (Number(minutos) || 0);
     start(async () => {
+      const escopos: EscopoTreinamento[] = [
+        ...unitIds.map((id) => ({ kind: "unit" as const, refId: id })),
+        ...deptIds.map((id) => ({ kind: "department" as const, refId: id })),
+        ...subIds.map((id) => ({ kind: "subdepartment" as const, refId: id })),
+        ...pilarIds.map((id) => ({ kind: "pilar" as const, refId: id })),
+      ];
+      // grava só o modo ativo: o outro fica no formulário, não no banco
+      const owners: ResponsavelTreinamento[] = mesmoResponsavel || unidadesDoEscopo.length <= 1
+        ? ownersGerais.map((userId) => ({ userId, unitId: null }))
+        : unidadesDoEscopo.flatMap((u) =>
+            (ownersPorUnidade[u.id] ?? []).map((userId) => ({ userId, unitId: u.id })));
       const r = await saveTraining({
         id: training?.id,
         name, description, code,
@@ -93,12 +211,9 @@ export function TrainingDialog({
         validade_meses: validade === "" ? null : Number(validade),
         antecipacao_dias: Number(antecipacao) || 60,
         prazo_dias: prazo === "" ? null : Number(prazo),
-        unit_id: unitId || null,
-        department_id: deptId || null,
-        subdepartment_id: subId || null,
-        pilar_id: pilarId || null,
+        escopos,
         active,
-        ownerIds,
+        owners,
         regras,
       });
       if (r.error) { setErro(r.error); return; }
@@ -188,74 +303,144 @@ export function TrainingDialog({
           )}
 
           <p style={sectionTitle}>Onde se aplica</p>
+          <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+            Deixar um campo em branco vale para todos: não é preciso marcar tudo para dizer o óbvio.
+          </p>
+          {/* sem <label> em volta: o MultiSelect já escreve o próprio rótulo */}
           <div style={grid2}>
-            <div>
-              <label className="label">Unidade</label>
-              <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                <option value="">Todas</option>
-                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Setor</label>
-              <select className="select" value={deptId} onChange={(e) => { setDeptId(e.target.value); setSubId(""); }}>
-                <option value="">Todos</option>
-                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Subsetor</label>
-              <select className="select" value={subId} onChange={(e) => setSubId(e.target.value)}>
-                <option value="">Todos</option>
-                {subsDoSetor.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Pilar</label>
-              <select className="select" value={pilarId} onChange={(e) => setPilarId(e.target.value)}>
-                <option value="">—</option>
-                {pilares.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
+            <MultiSelect
+              label="Unidades"
+              allLabel="Todas as unidades"
+              options={units.map((u) => ({ value: u.id, label: u.name }))}
+              selected={unitIds}
+              onChange={setUnitIds}
+            />
+            <MultiSelect
+              label="Setores"
+              allLabel="Todos os setores"
+              searchable
+              options={departments.map((d) => ({ value: d.id, label: d.name }))}
+              selected={deptIds}
+              onChange={(v) => {
+                setDeptIds(v);
+                // subsetor de setor que saiu deixa de fazer sentido
+                setSubIds(subIds.filter((id) =>
+                  v.length === 0 || v.includes(subdepartments.find((s) => s.id === id)?.departmentId ?? "")));
+              }}
+            />
+            <MultiSelect
+              label="Subsetores"
+              allLabel="Todos os subsetores"
+              searchable
+              options={subsDoSetor.map((s) => ({ value: s.id, label: s.name }))}
+              selected={subIds}
+              onChange={setSubIds}
+            />
+            <MultiSelect
+              label="Pilares"
+              allLabel="Nenhum pilar"
+              searchable
+              options={pilares.map((p) => ({ value: p.id, label: p.name }))}
+              selected={pilarIds}
+              onChange={setPilarIds}
+            />
           </div>
 
           <p style={sectionTitle}>Responsáveis<Req /></p>
-          <PeoplePicker people={people} selected={ownerIds} onChange={setOwnerIds} placeholder="Buscar responsável…" />
+          {unidadesDoEscopo.length > 1 && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem" }}>
+              <input
+                type="checkbox"
+                checked={mesmoResponsavel}
+                onChange={(e) => setMesmoResponsavel(e.target.checked)}
+              />
+              Mesmo responsável para todas as unidades
+            </label>
+          )}
+
+          {mesmoResponsavel || unidadesDoEscopo.length <= 1 ? (
+            <PeoplePicker people={people} selected={ownersGerais} onChange={setOwnersGerais} placeholder="Buscar responsável…" />
+          ) : (
+            unidadesDoEscopo.map((u) => (
+              <div key={u.id}>
+                <label className="label">{u.name}</label>
+                <PeoplePicker
+                  people={people}
+                  selected={ownersPorUnidade[u.id] ?? []}
+                  onChange={(ids) => setOwnersPorUnidade({ ...ownersPorUnidade, [u.id]: ids })}
+                  placeholder={`Buscar responsável em ${u.name}…`}
+                />
+              </div>
+            ))
+          )}
 
           <p style={sectionTitle}>Quem deve fazer</p>
           <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
             A regra acompanha a estrutura: quem entra no cargo passa a dever o treinamento, e quem sai
             deixa de ser cobrado sem perder o que já fez.
+            {temEscopo && " As opções abaixo são só as que existem dentro do escopo escolhido acima."}
           </p>
+          {avisoEscopo && (
+            <p style={{ fontSize: "0.8rem", margin: 0, color: "var(--mh-warning, var(--text))", background: "var(--mh-surface-1)", border: "1px solid var(--border)", padding: "0.45rem 0.7rem", borderRadius: 8 }}>
+              {avisoEscopo}
+            </p>
+          )}
+          <div>
+            <label className="label">Por colaborador</label>
+            <PeoplePicker
+              people={pessoasNoEscopo}
+              selected={regras.filter((r) => r.kind === "user").map((r) => r.refId)}
+              onChange={(ids) => setRegras([
+                ...regras.filter((r) => r.kind !== "user"),
+                ...ids.map((id) => ({
+                  kind: "user" as const,
+                  refId: id,
+                  // mantém o que já estava marcado ao reabrir a lista
+                  mandatory: regras.find((r) => r.kind === "user" && r.refId === id)?.mandatory ?? true,
+                })),
+              ])}
+              placeholder="Buscar colaborador…"
+            />
+            <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>
+              Para quem deve fazer independentemente do cargo. Diferente de matricular avulso:
+              a regra continua valendo nos próximos ciclos.
+            </p>
+          </div>
+
           <div style={grid2}>
-            <div>
-              <label className="label">Por cargo</label>
-              <select className="select" value="" onChange={(e) => addRegra("position", e.target.value)}>
-                <option value="">Adicionar cargo…</option>
-                {positions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Por setor</label>
-              <select className="select" value="" onChange={(e) => addRegra("department", e.target.value)}>
-                <option value="">Adicionar setor…</option>
-                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Por subsetor</label>
-              <select className="select" value="" onChange={(e) => addRegra("subdepartment", e.target.value)}>
-                <option value="">Adicionar subsetor…</option>
-                {subdepartments.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Por unidade</label>
-              <select className="select" value="" onChange={(e) => addRegra("unit", e.target.value)}>
-                <option value="">Adicionar unidade…</option>
-                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
+            {/* MultiSelect e não <select>: ele marca com um check o que já foi
+                escolhido e tem busca, que é o que salva uma lista de 197 cargos */}
+            <MultiSelect
+              label="Por cargo"
+              searchable
+              allLabel={cargosNoEscopo.length > 0 ? "Nenhum cargo" : "Nenhum cargo no escopo"}
+              options={cargosNoEscopo.map((p) => ({ value: p.id, label: p.name }))}
+              selected={marcados("position")}
+              onChange={(ids) => sincronizar("position", ids)}
+            />
+            <MultiSelect
+              label="Por setor"
+              searchable
+              allLabel="Nenhum setor"
+              options={setoresNoEscopo.map((d) => ({ value: d.id, label: d.name }))}
+              selected={marcados("department")}
+              onChange={(ids) => sincronizar("department", ids)}
+            />
+            <MultiSelect
+              label="Por subsetor"
+              searchable
+              allLabel="Nenhum subsetor"
+              options={subsNoEscopo.map((x) => ({ value: x.id, label: x.name }))}
+              selected={marcados("subdepartment")}
+              onChange={(ids) => sincronizar("subdepartment", ids)}
+            />
+            <MultiSelect
+              label="Por unidade"
+              allLabel="Nenhuma unidade"
+              options={unidadesParaPublico.map((u) => ({ value: u.id, label: u.name }))}
+              selected={marcados("unit")}
+              onChange={(ids) => sincronizar("unit", ids)}
+            />
           </div>
 
           {regras.length > 0 && (

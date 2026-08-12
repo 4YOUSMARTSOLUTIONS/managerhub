@@ -9,7 +9,9 @@ import {
   type EnrollmentRow,
   type Opt,
   type SubOpt,
+  type PersonOpt,
 } from "@/components/TrainingsManager";
+import type { SessionRow } from "@/components/TrainingSessionsManager";
 
 export default async function TreinamentosPage() {
   const gate = await moduleGate("treinamentos");
@@ -19,33 +21,34 @@ export default async function TreinamentosPage() {
   const podeCadastrar = role === "owner" || role === "admin" || role === "hr";
   const supabase = await createClient();
 
-  const unitIds = effectiveUnitFilter(unitScope);
-  // Treinamento sem unidade vale para a empresa inteira e aparece em qualquer
-  // recorte, mesmo critério de /acoes e /checklists.
-  const unitOr = unitIds ? `unit_id.in.(${unitIds.join(",")}),unit_id.is.null` : null;
+  const unitIdsDoEscopo = effectiveUnitFilter(unitScope);
 
-  let cursosQuery = supabase
+  const cursosQuery = supabase
     .from("trainings")
     .select(
       "id, name, description, code, workload_minutes, delivery, validade_meses, antecipacao_dias, prazo_dias, " +
-      "unit_id, department_id, subdepartment_id, active, created_at, " +
-      "unit:units(name), dept:departments(name), sub:subdepartments(name), " +
-      "pilar:sdpo_pilares(name), owners:training_owners(user_id), rules:training_assignment_rules(kind, ref_id, mandatory)",
+      "active, created_at, " +
+      "owners:training_owners(user_id, unit_id), " +
+      "rules:training_assignment_rules(kind, ref_id, mandatory), " +
+      "escopos:training_scopes(kind, ref_id)",
     )
     .eq("tenant_id", tenant.id)
     .is("deleted_at", null)
     .order("name");
-  if (unitOr) cursosQuery = cursosQuery.or(unitOr);
 
   const [
     { data: cursos },
     { data: minhas },
     { data: todasMatriculas },
-    membros,
+    { data: vinculos },
+    { data: vinculoUnidades },
     { data: deps },
     { data: subs },
     { data: cargos },
     { data: pilares },
+    { data: turmas },
+    { data: matriculasEmTurma },
+    { data: salas },
   ] = await Promise.all([
     cursosQuery,
     // as minhas: a RLS já recorta, o filtro por user_id é só para não trazer a
@@ -65,19 +68,56 @@ export default async function TreinamentosPage() {
       .neq("status", "nao_aplicavel")
       .neq("status", "cancelado")
       .limit(5000),
-    getMembers(tenant.id),
+    // lotação de quem está ativo: é o que permite oferecer, em "quem deve
+    // fazer", só cargos e pessoas que existem dentro do escopo do treinamento
+    supabase
+      .from("memberships")
+      .select("id, user_id, position_id, department_id, subdepartment_id, profiles!memberships_user_id_fkey(full_name, email)")
+      .eq("tenant_id", tenant.id)
+      .eq("is_active", true),
+    supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("sdpo_pilares").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
+    // turmas com o que a lista precisa: instrutor, unidade e a contagem de
+    // convocados e presença, para a aderência aparecer sem uma consulta por linha
+    supabase
+      .from("training_sessions")
+      .select(
+        "id, training_id, code, name, starts_at, ends_at, mode, room_id, meeting_url, location, instructor_id, unit_id, capacity, status, released_at, created_by, " +
+        "trainings(name), unit:units(name), sala:rooms(name), " +
+        "instrutor:profiles!training_sessions_instructor_id_fkey(full_name), " +
+        "presencas:training_session_attendance(status)",
+      )
+      .eq("tenant_id", tenant.id)
+      .order("starts_at", { ascending: false })
+      .limit(300),
+    supabase
+      .from("training_enrollments")
+      .select("session_id")
+      .eq("tenant_id", tenant.id)
+      .not("session_id", "is", null),
+    // as mesmas salas das reuniões: turma presencial escolhe daqui
+    supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
   ]);
 
-  const nomePorUsuario = new Map<string, string>();
-  for (const m of membros) {
-    if (m.profile?.id) nomePorUsuario.set(m.profile.id, m.profile.full_name ?? m.profile.email ?? "—");
+  type VinculoDb = {
+    id: string; user_id: string;
+    position_id: string | null; department_id: string | null; subdepartment_id: string | null;
+    profiles: { full_name: string | null; email: string | null } | null;
+  };
+  const quadro = (vinculos ?? []) as unknown as VinculoDb[];
+
+  const unidadesPorVinculo = new Map<string, string[]>();
+  for (const vu of vinculoUnidades ?? []) {
+    unidadesPorVinculo.set(vu.membership_id, [...(unidadesPorVinculo.get(vu.membership_id) ?? []), vu.unit_id]);
   }
 
-  const nome1 = (v: unknown) => (v as { name: string } | null)?.name ?? null;
+  const nomePorUsuario = new Map<string, string>();
+  for (const m of quadro) {
+    nomePorUsuario.set(m.user_id, m.profiles?.full_name ?? m.profiles?.email ?? "—");
+  }
 
   // O typegen não resolve embed de tabela cujas Relationships são declaradas
   // vazias (elas são mantidas à mão aqui). Mesmo padrão de /checklists: o
@@ -86,14 +126,37 @@ export default async function TreinamentosPage() {
     id: string; name: string; description: string | null; code: string | null;
     workload_minutes: number; delivery: TrainingRow["delivery"];
     validade_meses: number | null; antecipacao_dias: number; prazo_dias: number | null;
-    unit_id: string | null; department_id: string | null; subdepartment_id: string | null;
     active: boolean; created_at: string;
-    unit: unknown; dept: unknown; sub: unknown; pilar: unknown;
-    owners: { user_id: string }[] | null;
+    owners: { user_id: string; unit_id: string | null }[] | null;
     rules: { kind: string; ref_id: string; mandatory: boolean }[] | null;
+    escopos: { kind: string; ref_id: string }[] | null;
   };
 
-  const trainings: TrainingRow[] = ((cursos ?? []) as unknown as CursoDb[]).map((t) => ({
+  const nomeUnidade = new Map(unitScope.units.map((u) => [u.id, u.name]));
+  const nomeSetor = new Map((deps ?? []).map((d) => [d.id, d.name]));
+  const nomeSub = new Map((subs ?? []).map((x) => [x.id, x.name]));
+  const nomePilar = new Map((pilares ?? []).map((p) => [p.id, p.name]));
+  const nomesDoEscopo = (
+    escopos: { kind: string; ref_id: string }[],
+    kind: string,
+    mapa: Map<string, string>,
+  ) => escopos.filter((e) => e.kind === kind).map((e) => mapa.get(e.ref_id)).filter((n): n is string => !!n);
+  // Sem nenhuma unidade marcada, o treinamento vale para a empresa toda e
+  // aparece em qualquer recorte do seletor do topo. Com unidades marcadas, só
+  // aparece quando pelo menos uma delas está no escopo ativo. O recorte é feito
+  // aqui, e não no banco, porque a relação virou N:N e o `.or()` do PostgREST
+  // não alcança tabela filha.
+  const noEscopo = (us: string[]) =>
+    !unitIdsDoEscopo || us.length === 0 || us.some((u) => unitIdsDoEscopo.includes(u));
+
+  const trainings: TrainingRow[] = ((cursos ?? []) as unknown as CursoDb[])
+    .map((t) => ({
+      t,
+      esc: t.escopos ?? [],
+      us: (t.escopos ?? []).filter((e) => e.kind === "unit").map((e) => e.ref_id),
+    }))
+    .filter(({ us }) => noEscopo(us))
+    .map(({ t, esc, us }) => ({
     id: t.id,
     name: t.name,
     description: t.description,
@@ -103,12 +166,17 @@ export default async function TreinamentosPage() {
     validadeMeses: t.validade_meses,
     antecipacaoDias: t.antecipacao_dias,
     prazoDias: t.prazo_dias,
-    unitName: nome1(t.unit),
-    deptName: nome1(t.dept),
-    subName: nome1(t.sub),
-    pilarName: nome1(t.pilar),
+    unitNames: us.map((u) => nomeUnidade.get(u)).filter((n): n is string => !!n),
+    deptNames: nomesDoEscopo(esc, "department", nomeSetor),
+    subNames: nomesDoEscopo(esc, "subdepartment", nomeSub),
+    pilarNames: nomesDoEscopo(esc, "pilar", nomePilar),
     active: t.active,
-    ownerNames: (t.owners ?? []).map((o) => nomePorUsuario.get(o.user_id) ?? "—"),
+    // responsável geral primeiro, depois os de cada unidade com o nome dela
+    ownerNames: (t.owners ?? []).map((o) => {
+      const nome = nomePorUsuario.get(o.user_id) ?? "—";
+      const un = o.unit_id ? nomeUnidade.get(o.unit_id) : null;
+      return un ? `${nome} (${un})` : nome;
+    }),
     ruleCount: (t.rules ?? []).length,
     mandatory: (t.rules ?? []).some((r) => r.mandatory),
   }));
@@ -151,13 +219,76 @@ export default async function TreinamentosPage() {
       score: e.score,
     }));
 
+  // convocados por turma: uma contagem em memória em vez de N consultas
+  const convocadosPorTurma = new Map<string, number>();
+  for (const e of matriculasEmTurma ?? []) {
+    if (e.session_id) convocadosPorTurma.set(e.session_id, (convocadosPorTurma.get(e.session_id) ?? 0) + 1);
+  }
+
+  type TurmaDb = {
+    id: string; training_id: string; code: number; name: string | null;
+    starts_at: string; ends_at: string | null;
+    mode: SessionRow["mode"]; room_id: string | null; meeting_url: string | null;
+    location: string | null; instructor_id: string | null; unit_id: string | null; capacity: number | null;
+    status: SessionRow["status"]; released_at: string | null; created_by: string | null;
+    trainings: { name: string } | null; unit: { name: string } | null; sala: { name: string } | null;
+    instrutor: { full_name: string | null } | null;
+    presencas: { status: "presente" | "ausente" | "justificado" }[] | null;
+  };
+
+  // quem administra o curso administra as turmas dele; o instrutor e quem criou
+  // também. É o espelho de `pode_gerir_turma` no banco, só para a tela saber
+  // quais botões mostrar (a trava de verdade continua na RLS).
+  const cursosQueGerencio = new Set(
+    ((cursos ?? []) as unknown as CursoDb[])
+      .filter((t) => podeCadastrar || (t.owners ?? []).some((o) => o.user_id === user.id))
+      .map((t) => t.id),
+  );
+
+  const sessions: SessionRow[] = ((turmas ?? []) as unknown as TurmaDb[]).map((s) => {
+    const p = s.presencas ?? [];
+    return {
+      id: s.id,
+      trainingId: s.training_id,
+      trainingName: s.trainings?.name ?? "—",
+      code: s.code,
+      name: s.name,
+      startsAt: s.starts_at,
+      endsAt: s.ends_at,
+      mode: s.mode,
+      roomId: s.room_id,
+      roomName: s.sala?.name ?? null,
+      meetingUrl: s.meeting_url,
+      location: s.location,
+      instructorId: s.instructor_id,
+      instructorName: s.instrutor?.full_name ?? null,
+      unitName: s.unit?.name ?? null,
+      capacity: s.capacity,
+      status: s.status,
+      releasedAt: s.released_at,
+      convocados: convocadosPorTurma.get(s.id) ?? 0,
+      presentes: p.filter((x) => x.status === "presente").length,
+      ausentes: p.filter((x) => x.status === "ausente").length,
+      justificados: p.filter((x) => x.status === "justificado").length,
+      podeGerir: cursosQueGerencio.has(s.training_id) || s.instructor_id === user.id || s.created_by === user.id,
+    };
+  });
+
   const departments: Opt[] = (deps ?? []).map((d) => ({ id: d.id, name: d.name }));
   const subdepartments: SubOpt[] = (subs ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
   const positions: Opt[] = (cargos ?? []).map((p) => ({ id: p.id, name: p.name }));
   const pilaresOpt: Opt[] = (pilares ?? []).map((p) => ({ id: p.id, name: p.name }));
-  const people: Opt[] = membros
-    .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "—" }))
-    .filter((p) => p.id)
+  // cada pessoa carrega a própria lotação: o formulário usa isso para não
+  // oferecer cargo ou colaborador que está fora do escopo do treinamento
+  const people: PersonOpt[] = quadro
+    .map((m) => ({
+      id: m.user_id,
+      name: m.profiles?.full_name ?? m.profiles?.email ?? "—",
+      positionId: m.position_id,
+      deptId: m.department_id,
+      subId: m.subdepartment_id,
+      unitIds: unidadesPorVinculo.get(m.id) ?? [],
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
@@ -178,6 +309,8 @@ export default async function TreinamentosPage() {
         positions={positions}
         pilares={pilaresOpt}
         units={unitScope.units}
+        sessions={sessions}
+        rooms={(salas ?? []).map((r) => ({ id: r.id, name: r.name }))}
       />
     </div>
   );
