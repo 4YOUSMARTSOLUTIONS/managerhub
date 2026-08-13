@@ -132,6 +132,14 @@ export function TrainingsManager({
   const [legado, setLegado] = useState<TrainingRow | null>(null);
 
   const tabs: Tab[] = [
+    // O Painel abre primeiro: é o retrato geral, e quem entra na tela quer
+    // saber como está antes de agir. Para o Funcionário ele mostra só os
+    // próprios números, que é o recorte que a RLS entrega.
+    {
+      id: "painel",
+      label: "Painel",
+      content: <TrainingsDashboard enrollments={enrollments} trainings={trainings} departments={departments} paths={paths} />,
+    },
     {
       id: "meus",
       label: `Meus treinamentos${myEnrollments.length ? ` · ${myEnrollments.length}` : ""}`,
@@ -190,11 +198,6 @@ export function TrainingsManager({
       ),
     },
     {
-      id: "painel",
-      label: "Painel",
-      content: <TrainingsDashboard enrollments={enrollments} trainings={trainings} departments={departments} paths={paths} />,
-    },
-    {
       id: "acompanhamento",
       label: "Acompanhamento",
       content: <Acompanhamento rows={enrollments} departments={departments} currentUserId={currentUserId} />,
@@ -208,7 +211,7 @@ export function TrainingsManager({
 
   return (
     <>
-      <Tabs tabs={tabs} initialId="meus" />
+      <Tabs tabs={tabs} initialId="painel" />
 
       {(criando || editing) && (
         <TrainingDialog
