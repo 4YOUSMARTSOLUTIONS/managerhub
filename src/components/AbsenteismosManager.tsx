@@ -703,8 +703,11 @@ function PainelConfirmacao({
       </div>
       {linha.reasonNote && <Campo rotulo="O que se sabia no lançamento" valor={linha.reasonNote} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.8rem" }}>
-        <div style={{ gridColumn: "span 2", minWidth: 0 }}>
+      {/* Quatro colunas do mesmo tamanho: o Motivo ocupava metade da linha e
+          empurrava o Término para baixo, separando o par de datas. O mínimo é
+          150px porque com 160 a quarta coluna não cabe na largura do diálogo. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem" }}>
+        <div style={{ minWidth: 0 }}>
           <label className="label">Motivo <span style={{ color: "var(--mh-danger)" }}>*</span></label>
           <select
             className="select" value={c.absenceTypeId}
@@ -712,14 +715,6 @@ function PainelConfirmacao({
           >
             {tipos.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          {tipo && (
-            <div style={{ marginTop: "0.4rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-              <Badge tone={ABSENCE_KIND_TONE[tipo.kind]}>{ABSENCE_KIND_LABEL[tipo.kind]}</Badge>
-              {tipo.description && (
-                <span className="soft" style={{ fontSize: "0.78rem" }}>{tipo.description}</span>
-              )}
-            </div>
-          )}
         </div>
         <div>
           <label className="label">Início <span style={{ color: "var(--mh-danger)" }}>*</span></label>
@@ -760,6 +755,17 @@ function PainelConfirmacao({
           </div>
         )}
       </div>
+
+      {/* O comportamento e a explicação do tipo saem do grid: dentro da célula
+          do Motivo, um texto longo esticava a linha inteira. */}
+      {tipo && (
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "-0.4rem" }}>
+          <Badge tone={ABSENCE_KIND_TONE[tipo.kind]}>{ABSENCE_KIND_LABEL[tipo.kind]}</Badge>
+          {tipo.description && (
+            <span className="soft" style={{ fontSize: "0.78rem" }}>{tipo.description}</span>
+          )}
+        </div>
+      )}
 
       {/* A ausência de horas vale para QUALQUER motivo: no atestado ela é o
           meio período no consultório; na falta, é o horário que a folha vai

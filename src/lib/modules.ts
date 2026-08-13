@@ -123,28 +123,40 @@ export const MODULES: ModuleDef[] = [
   { key: "admin", label: "Painel ADM", href: "/admin", group: null, core: true, minRole: "super" },
 ];
 
-/** Ordem exata do menu (mistura itens de topo e grupos). */
-export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; key: GroupKey })[] = [
-  { type: "module", key: "dashboard" },
-  { type: "group", key: "g_reunioes" },
-  { type: "group", key: "g_rotina" },
-  { type: "module", key: "chamados" },
-  { type: "module", key: "venda_interna" },
-  { type: "group", key: "g_pessoas" },
-  { type: "module", key: "treinamentos" },
-  { type: "group", key: "g_ferramentas" },
-  { type: "group", key: "g_sdpo" },
-  { type: "module", key: "portaria" },
-  { type: "module", key: "multas_avarias" },
-  { type: "module", key: "cinco_s" },
-  { type: "module", key: "padroes" },
-  { type: "group", key: "g_seguranca" },
-  { type: "module", key: "auditoria" },
-  { type: "module", key: "configuracoes" },
-  { type: "module", key: "admin" },
-];
+/** Compara rótulos como um leitor brasileiro leria: acento e caixa não separam. */
+const porNome = (a: string, b: string) => a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+
+/**
+ * O menu é alfabético, com duas âncoras que a ordem alfabética não deve mexer:
+ * o Dashboard abre a lista (é a porta de entrada do sistema) e o bloco de
+ * administração fecha (Configurações, Logs do sistema e Painel ADM não são
+ * trabalho do dia a dia). Entre eles, grupos e itens soltos se misturam e são
+ * ordenados pelo rótulo, que é o que a pessoa lê.
+ */
+const NAV_TOPO: ModuleKey[] = ["dashboard"];
+const NAV_RODAPE: ModuleKey[] = ["configuracoes", "auditoria", "admin"];
+
+/** Ordem exata do menu (mistura itens de topo e grupos), derivada dos rótulos. */
+export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; key: GroupKey })[] = (() => {
+  const ancoras = new Set<ModuleKey>([...NAV_TOPO, ...NAV_RODAPE]);
+  const miolo = [
+    ...MODULE_GROUPS.map((g) => ({ type: "group" as const, key: g.key, label: g.label })),
+    ...MODULES
+      .filter((m) => m.group === null && !ancoras.has(m.key))
+      .map((m) => ({ type: "module" as const, key: m.key, label: m.label })),
+  ].sort((a, b) => porNome(a.label, b.label));
+
+  return [
+    ...NAV_TOPO.map((key) => ({ type: "module" as const, key })),
+    ...miolo.map(({ type, key }) => (type === "group"
+      ? { type: "group" as const, key: key as GroupKey }
+      : { type: "module" as const, key: key as ModuleKey })),
+    ...NAV_RODAPE.map((key) => ({ type: "module" as const, key })),
+  ];
+})();
 
 export const MODULE_BY_KEY = Object.fromEntries(MODULES.map((m) => [m.key, m])) as Record<ModuleKey, ModuleDef>;
-export const modulesInGroup = (g: GroupKey) => MODULES.filter((m) => m.group === g);
+export const modulesInGroup = (g: GroupKey) =>
+  MODULES.filter((m) => m.group === g).sort((a, b) => porNome(a.label, b.label));
 export const SELLABLE_MODULES = MODULES.filter((m) => !m.core);
 export const SELLABLE_KEYS = SELLABLE_MODULES.map((m) => m.key);
