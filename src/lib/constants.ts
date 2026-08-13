@@ -297,6 +297,29 @@ export const ABSENCE_DESCONTA_PADRAO: Record<Enums<"absence_kind">, boolean> = {
   falta: false,
 };
 
+/**
+ * Situação do lançamento de absenteísmo.
+ *
+ * "Não comparecimento" é o aviso de que a pessoa não apareceu: existe, já
+ * disparou o comunicado, e ainda não é absenteísmo nenhum. Só "Aprovado" vira
+ * ausência de verdade e conta para a remuneração variável.
+ */
+export const ABSENTEISMO_STATUS: Record<Enums<"absenteismo_status">, string> = {
+  aberto: "Não comparecimento",
+  pendente: "Aguardando o RH",
+  aprovado: "Aprovado",
+  reprovado: "Reprovado",
+  cancelado: "Cancelado",
+};
+
+export const ABSENTEISMO_STATUS_TONE: Record<Enums<"absenteismo_status">, Tone> = {
+  aberto: "blue",
+  pendente: "amber",
+  aprovado: "green",
+  reprovado: "red",
+  cancelado: "gray",
+};
+
 // ---------- Feedbacks ----------
 export const FEEDBACK_TYPE_LABEL: Record<Enums<"feedback_type">, string> = {
   reconhecimento: "Reconhecimento",

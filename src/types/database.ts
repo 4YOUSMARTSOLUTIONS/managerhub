@@ -738,6 +738,60 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date?: string; end_date?: string; discounts_rv?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // Catálogo de tipos de absenteísmo. `kind` é a AMARRA com a remuneração
+      // variável: `rv_reducer_rules` observa o enum, não este catálogo, então
+      // "Atestado médico" e "Atestado odontológico" podem coexistir e contam na
+      // mesma faixa de redutor. As flags `requires_*` dizem o que o gestor terá
+      // de preencher na confirmação.
+      absence_types: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; kind: Database["public"]["Enums"]["absence_kind"]; requires_document: boolean; requires_medical: boolean; discounts_rv_default: boolean; counts_as_absenteeism: boolean; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; kind: Database["public"]["Enums"]["absence_kind"]; requires_document?: boolean; requires_medical?: boolean; discounts_rv_default?: boolean; counts_as_absenteeism?: boolean; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; kind?: Database["public"]["Enums"]["absence_kind"]; requires_document?: boolean; requires_medical?: boolean; discounts_rv_default?: boolean; counts_as_absenteeism?: boolean; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // Quem recebe o comunicado de não comparecimento. Guarda e-mail e não
+      // `user_id` de propósito: quem precisa saber costuma ser gente de fora do
+      // organograma (portaria, contabilidade, transporte). `unit_id` nulo recebe
+      // de todas as unidades.
+      absenteismo_email_recipients: {
+        Row: { id: string; tenant_id: string; unit_id: string | null; email: string; name: string | null; active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; email: string; name?: string | null; active?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string | null; email?: string; name?: string | null; active?: boolean; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // O PROCESSO do absenteísmo, separado do fato acima. `employee_absences`
+      // é o que a remuneração variável lê e não tem status: uma linha lá já
+      // vale. Aqui mora o caminho até ela (registro do não comparecimento,
+      // confirmação do motivo, decisão do RH) e o carimbo de época.
+      //
+      // Não existe CID nesta tabela de propósito: a tela faz `select("*")` e o
+      // dado clínico chegaria ao navegador de todo gestor com alçada. Ele vive
+      // em `absenteismo_atestados`, lido só pela RPC `absenteismo_atestado`.
+      absenteismo_lancamentos: {
+        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["absenteismo_status"]; occurred_on: string; reported_at: string; reason_note: string | null; absence_type_id: string | null; snap_type_name: string | null; snap_kind: Database["public"]["Enums"]["absence_kind"] | null; snap_requires_document: boolean; snap_requires_medical: boolean; snap_discounts_rv_default: boolean; start_date: string | null; end_date: string | null; discounts_rv: boolean | null; note: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; doc_path: string | null; doc_filename: string | null; doc_size: number | null; doc_content_type: string | null; doc_uploaded_at: string | null; doc_uploaded_by: string | null; created_by: string; submitted_at: string | null; decided_at: string | null; decided_by: string | null; decision_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; email_status: string | null; email_at: string | null; absence_id: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; status?: Database["public"]["Enums"]["absenteismo_status"]; occurred_on: string; reported_at?: string; reason_note?: string | null; absence_type_id?: string | null; snap_type_name?: string | null; snap_kind?: Database["public"]["Enums"]["absence_kind"] | null; snap_requires_document?: boolean; snap_requires_medical?: boolean; snap_discounts_rv_default?: boolean; start_date?: string | null; end_date?: string | null; discounts_rv?: boolean | null; note?: string | null; snap_full_name?: string | null; snap_employee_code?: string | null; snap_department_id?: string | null; snap_department_name?: string | null; snap_subdepartment_id?: string | null; snap_subdepartment_name?: string | null; snap_position_id?: string | null; snap_position_name?: string | null; snap_manager_id?: string | null; snap_manager_name?: string | null; snap_unit_id?: string | null; snap_unit_name?: string | null; doc_path?: string | null; doc_filename?: string | null; doc_size?: number | null; doc_content_type?: string | null; doc_uploaded_at?: string | null; doc_uploaded_by?: string | null; created_by: string; submitted_at?: string | null; decided_at?: string | null; decided_by?: string | null; decision_note?: string | null; cancelled_at?: string | null; cancelled_by?: string | null; cancel_note?: string | null; email_status?: string | null; email_at?: string | null; absence_id?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; status?: Database["public"]["Enums"]["absenteismo_status"]; occurred_on?: string; reported_at?: string; reason_note?: string | null; absence_type_id?: string | null; snap_type_name?: string | null; snap_kind?: Database["public"]["Enums"]["absence_kind"] | null; snap_requires_document?: boolean; snap_requires_medical?: boolean; snap_discounts_rv_default?: boolean; start_date?: string | null; end_date?: string | null; discounts_rv?: boolean | null; note?: string | null; snap_full_name?: string | null; snap_employee_code?: string | null; snap_department_id?: string | null; snap_department_name?: string | null; snap_subdepartment_id?: string | null; snap_subdepartment_name?: string | null; snap_position_id?: string | null; snap_position_name?: string | null; snap_manager_id?: string | null; snap_manager_name?: string | null; snap_unit_id?: string | null; snap_unit_name?: string | null; doc_path?: string | null; doc_filename?: string | null; doc_size?: number | null; doc_content_type?: string | null; doc_uploaded_at?: string | null; doc_uploaded_by?: string | null; created_by?: string; submitted_at?: string | null; decided_at?: string | null; decided_by?: string | null; decision_note?: string | null; cancelled_at?: string | null; cancelled_by?: string | null; cancel_note?: string | null; email_status?: string | null; email_at?: string | null; absence_id?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // O dado clínico, 1:1 com o lançamento e fora do `audit_trigger` de
+      // propósito: CID em Logs do sistema viraria histórico permanente numa
+      // tela genérica. A LEITURA é pela RPC; este tipo existe para a ESCRITA
+      // durante a confirmação.
+      absenteismo_atestados: {
+        Row: { lancamento_id: string; tenant_id: string; cid_code: string | null; cid_description: string | null; doctor_name: string | null; doctor_crm: string | null; facility: string | null; issued_on: string | null; days_off: number | null; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { lancamento_id: string; tenant_id: string; cid_code?: string | null; cid_description?: string | null; doctor_name?: string | null; doctor_crm?: string | null; facility?: string | null; issued_on?: string | null; days_off?: number | null; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { lancamento_id?: string; tenant_id?: string; cid_code?: string | null; cid_description?: string | null; doctor_name?: string | null; doctor_crm?: string | null; facility?: string | null; issued_on?: string | null; days_off?: number | null; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // Cada tentativa de comunicado. Existe porque não há fila, retry nem
+      // retorno de bounce: sem este registro, um e-mail que não chegou é
+      // indistinguível de um que nunca foi tentado.
+      absenteismo_emails: {
+        Row: { id: string; tenant_id: string; lancamento_id: string; event: string; to_emails: string[]; status: string; error: string | null; sent_by: string | null; sent_at: string }
+        Insert: { id?: string; tenant_id: string; lancamento_id: string; event: string; to_emails?: string[]; status: string; error?: string | null; sent_by?: string | null; sent_at?: string }
+        Update: { id?: string; tenant_id?: string; lancamento_id?: string; event?: string; to_emails?: string[]; status?: string; error?: string | null; sent_by?: string | null; sent_at?: string }
+        Relationships: []
+      }
       // Contratos ENCERRADOS do colaborador (vínculos anteriores, com outra
       // matrícula). A importação em lote arquiva aqui ao detectar recontratação,
       // e as importações de férias/punições/RV consultam para aceitar
@@ -1656,6 +1710,13 @@ export type Database = {
       punicao_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
       punicao_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
       punicao_documento: { Args: { p_id: string }; Returns: Json }
+      // Absenteísmos. `absenteismo_atestado` é a ÚNICA porta de leitura do dado
+      // clínico: a tabela filha existe para o CID não viajar na listagem, e essa
+      // separação só vale enquanto ninguém abrir uma segunda porta.
+      absenteismo_confirmar: { Args: { p_id: string }; Returns: undefined }
+      absenteismo_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
+      absenteismo_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
+      absenteismo_atestado: { Args: { p_id: string }; Returns: Json }
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
@@ -1855,6 +1916,7 @@ export type Database = {
       rv_reducer_source: "absence" | "sanction"
       infraction_severity: "leve" | "media" | "grave"
       punicao_status: "rascunho" | "pendente" | "aprovada" | "reprovada" | "cancelada"
+      absenteismo_status: "aberto" | "pendente" | "aprovado" | "reprovado" | "cancelado"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
       feedback_channel: "presencial" | "reuniao_1a1" | "videochamada" | "mensagem" | "outro"
