@@ -311,7 +311,9 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       "\"em_copia\" (array de nomes da lista de Pessoas que devem ter conhecimento), " +
       "\"problema\" (string: o problema, a situação ou o diagnóstico que motivou esta ação, nas palavras do próprio texto, ou null), e " +
       "\"demandas\" (array com 1+ objetos { \"descricao\": string, \"responsaveis\": [nomes] }). " +
-      "Regras: para nomes (responsaveis, solicitante, em_copia) use SOMENTE nomes que aparecem na lista de Pessoas; " +
+      "Regras: para nomes (responsaveis, solicitante, em_copia) use SOMENTE nomes que aparecem na lista de Pessoas, " +
+      "copiando o nome COMPLETO exatamente como está na lista; se o texto citar apenas um primeiro nome e mais de uma " +
+      "pessoa da lista puder corresponder, use null em vez de escolher uma; " +
       "para índices use SOMENTE valores válidos dos catálogos fornecidos (nunca invente índices); " +
       "preencha um campo APENAS quando a informação estiver clara no texto — caso contrário use null (ou array vazio). " +
       "\"ferramenta_index\": preencha SOMENTE se o texto mencionar EXPLICITAMENTE o nome de uma das Ferramentas de gestão listadas " +
@@ -369,13 +371,35 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
 
     // índice de pessoas normalizado para casar nomes (responsável, solicitante, em cópia)
     const byNorm = candidates.map((c) => ({ id: c.id, n: normName(c.name) }));
+    const draftWords = new Set(normName(draft).split(/[^a-z0-9]+/).filter(Boolean));
+    const NAME_STOP = new Set(["da", "de", "do", "das", "dos", "e"]);
     const matchPerson = (raw: unknown): string | null => {
       const q = normName(toText(raw));
       if (!q) return null;
-      const exact = byNorm.find((c) => c.n === q);
-      if (exact) return exact.id;
-      const partial = byNorm.find((c) => c.n.includes(q) || q.includes(c.n));
-      return partial ? partial.id : null;
+      let hits = byNorm.filter((c) => c.n === q);
+      if (!hits.length) {
+        // aproximação exige nome E sobrenome: uma palavra só ("luiz") casava
+        // com o primeiro homônimo da lista
+        const words = q.split(" ").filter(Boolean);
+        if (words.length < 2) return null;
+        hits = byNorm.filter((c) => {
+          const cw = c.n.split(" ");
+          return words.every((w) => cw.includes(w));
+        });
+      }
+      if (hits.length !== 1) return null;
+      // o nome tem de estar apoiado no texto: o modelo copia o nome completo
+      // da lista, então um "Luiz" solto no rascunho voltaria como homônimo
+      // escolhido; as palavras do nome presentes no rascunho precisam apontar
+      // para essa pessoa e para mais ninguém
+      const hit = hits[0];
+      const support = hit.n.split(" ").filter((w) => !NAME_STOP.has(w) && draftWords.has(w));
+      if (!support.length) return null;
+      const alsoMatches = byNorm.filter((c) => {
+        const cw = c.n.split(" ");
+        return support.every((w) => cw.includes(w));
+      });
+      return alsoMatches.length === 1 ? hit.id : null;
     };
     // lê um índice vindo do modelo; null/ausente NÃO é índice
     // (Number(null) === 0 transformava "não citado" no primeiro item do catálogo)
