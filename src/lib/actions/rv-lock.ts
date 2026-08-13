@@ -52,7 +52,7 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   ] = await Promise.all([
     admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at, department_id, subdepartment_id, manager_id").eq("tenant_id", tenantId),
     admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenantId),
-    admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv").eq("tenant_id", tenantId),
+    admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenantId),
     admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
     admin.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenantId).eq("active", true).order("sort"),
     admin.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenantId).order("min_qtd"),
@@ -118,6 +118,8 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
 
     const minhasAus = (ausencias ?? []).filter((a) => a.user_id === m.user_id);
     const paraProporcional = minhasAus
+      // abonada fica no histórico, mas não reduz remuneração variável
+      .filter((a) => !a.waived)
       .filter((a) => a.discounts_rv || kindsPorFaixa.has(a.kind))
       .map((a) => ({ inicio: a.start_date, fim: a.end_date, kind: a.kind }));
     const minhasSanc = (sancoes ?? [])

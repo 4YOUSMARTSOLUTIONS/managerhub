@@ -143,6 +143,11 @@ export default async function AbsenteismosPage() {
     discountsRv: l.discounts_rv,
     note: l.note,
     kinship: l.kinship_of_deceased,
+    workAccident: l.work_accident,
+    certificateKind: l.certificate_kind,
+    waived: l.waived,
+    hoursStart: l.hours_start,
+    hoursEnd: l.hours_end,
     fullName: l.snap_full_name,
     employeeCode: l.snap_employee_code,
     departmentName: l.snap_department_name,
@@ -188,6 +193,9 @@ export default async function AbsenteismosPage() {
           requiresCompanion: t.requires_companion, requiresKinship: t.requires_kinship,
           discountsRvDefault: t.discounts_rv_default, active: t.active,
         }))}
+        unidades={(unidadesTodas ?? [])
+          .filter((u) => !unidades || unidades.includes(u.id))
+          .map((u) => ({ id: u.id, name: u.name }))}
         kindsComRedutor={kindsComRedutor}
         meuId={user.id}
         podeDecidir={ehDp}

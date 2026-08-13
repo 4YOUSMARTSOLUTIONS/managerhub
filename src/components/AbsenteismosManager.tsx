@@ -18,10 +18,12 @@ import {
 } from "@/lib/constants";
 import {
   anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, confirmarAbsenteismo,
-  decidirAbsenteismo, getAtestado, getDocumentoAbsenteismoUrl, lancarNaoComparecimento,
-  reenviarComunicado, removerDocumentoAbsenteismo, salvarConfirmacao,
-  type AtestadoLido,
+  decidirAbsenteismo, getAlertaInss, getAtestado, getDocumentoAbsenteismoUrl,
+  lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
+  salvarConfirmacao,
+  type AlertaInss, type AtestadoLido,
 } from "@/lib/actions/absenteismos";
+import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
 import type { Enums } from "@/types/database";
 
 export type AbsenteismoRow = {
@@ -40,6 +42,11 @@ export type AbsenteismoRow = {
   discountsRv: boolean | null;
   note: string | null;
   kinship: string | null;
+  workAccident: boolean;
+  certificateKind: string | null;
+  waived: boolean;
+  hoursStart: string | null;
+  hoursEnd: string | null;
   fullName: string | null;
   employeeCode: string | null;
   departmentName: string | null;
@@ -91,6 +98,9 @@ type Confirmacao = {
   endDate: string;
   note: string;
   parentesco: string;
+  acidenteTrabalho: boolean;
+  tipoAtestado: string;
+  abonada: boolean;
   cid: string;
   cidDescricao: string;
   medico: string;
@@ -129,11 +139,13 @@ const hoje = () => {
  * dado é buscado sob demanda pela RPC, nunca junto da lista.
  */
 export function AbsenteismosManager({
-  rows, pessoas, tipos, kindsComRedutor, meuId, podeDecidir, podeCancelarAprovado,
+  rows, pessoas, tipos, unidades, kindsComRedutor, meuId, podeDecidir, podeCancelarAprovado,
 }: {
   rows: AbsenteismoRow[];
   pessoas: Pessoa[];
   tipos: Tipo[];
+  /** para o filtro do relatório do RH */
+  unidades: { id: string; name: string }[];
   /**
    * Comportamentos que já têm faixa de redutor ativa em Remuneração variável.
    * A tela usa para dizer ao gestor o efeito real do tipo escolhido, em vez de
@@ -325,6 +337,9 @@ export function AbsenteismosManager({
               r.decidedByName ?? "", r.decisionNote ?? "",
             ])}
           />
+          {/* O relatório completo (CPF, CID, médico) é de quem decide: a
+              exportação acima continua sendo a do gestor, sem esses campos. */}
+          {podeDecidir && <RelatorioAbsenteismoDialog unidades={unidades} />}
           <button
             type="button" className="btn btn-primary btn-sm"
             onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "" }); }}
@@ -571,9 +586,16 @@ function PainelConfirmacao({
     endDate: linha.endDate ?? linha.occurredOn,
     note: linha.note ?? "",
     parentesco: linha.kinship ?? "",
+    acidenteTrabalho: linha.workAccident,
+    tipoAtestado: linha.certificateKind ?? "medico",
+    abonada: linha.waived,
     cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
-    emHoras: false, horaInicio: "", horaFim: "", acompanhado: "",
+    emHoras: Boolean(linha.hoursStart),
+    horaInicio: linha.hoursStart?.slice(0, 5) ?? "",
+    horaFim: linha.hoursEnd?.slice(0, 5) ?? "",
+    acompanhado: "",
   });
+  const [inss, setInss] = useState<AlertaInss | null>(null);
   const [temDoc, setTemDoc] = useState(Boolean(linha.docPath));
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
@@ -592,14 +614,19 @@ function PainelConfirmacao({
         cid: a.cid ?? "", cidDescricao: a.cidDescricao ?? "",
         medico: a.medico ?? "", crm: a.crm ?? "", local: a.local ?? "",
         emitidoEm: a.emitidoEm ?? "",
-        emHoras: Boolean(a.horaInicio),
-        horaInicio: a.horaInicio?.slice(0, 5) ?? "",
-        horaFim: a.horaFim?.slice(0, 5) ?? "",
         acompanhado: a.acompanhado ?? "",
       }));
     });
     return () => { vivo = false; };
   }, [linha.id, linha.requiresMedical]);
+
+  // O alerta dos 15 dias vem do banco: a conta precisa do histórico inteiro do
+  // colaborador, e não só do que está nesta tela.
+  useEffect(() => {
+    let vivo = true;
+    getAlertaInss(linha.userId, c.endDate || undefined).then((r) => { if (vivo) setInss(r); });
+    return () => { vivo = false; };
+  }, [linha.userId, c.endDate]);
 
   const salvar = (depois?: () => void) => {
     onErro("");
@@ -611,10 +638,14 @@ function PainelConfirmacao({
         endDate: c.endDate,
         note: c.note,
         parentesco: c.parentesco,
+        acidenteTrabalho: c.acidenteTrabalho,
+        tipoAtestado: c.tipoAtestado,
+        abonada: c.abonada,
+        horaInicio: c.emHoras ? c.horaInicio : "",
+        horaFim: c.emHoras ? c.horaFim : "",
         atestado: tipo?.requiresMedical ? {
           cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
           local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
-          horaInicio: c.emHoras ? c.horaInicio : "", horaFim: c.emHoras ? c.horaFim : "",
         } : undefined,
       });
       if (r.error) { onErro(r.error); return; }
@@ -641,10 +672,14 @@ function PainelConfirmacao({
         endDate: c.endDate,
         note: c.note,
         parentesco: c.parentesco,
+        acidenteTrabalho: c.acidenteTrabalho,
+        tipoAtestado: c.tipoAtestado,
+        abonada: c.abonada,
+        horaInicio: c.emHoras ? c.horaInicio : "",
+        horaFim: c.emHoras ? c.horaFim : "",
         atestado: tipo?.requiresMedical ? {
           cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
           local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
-          horaInicio: c.emHoras ? c.horaInicio : "", horaFim: c.emHoras ? c.horaFim : "",
         } : undefined,
       });
       if (s.error) { onErro(s.error); return; }
@@ -698,7 +733,7 @@ function PainelConfirmacao({
           <input
             type="date" className="input" value={c.endDate}
             disabled={c.emHoras}
-            title={c.emHoras ? "Atestado de horas vale para um único dia." : undefined}
+            title={c.emHoras ? "Ausência de horas vale para um único dia." : undefined}
             onChange={(e) => setC((x) => ({ ...x, endDate: e.target.value }))}
           />
         </div>
@@ -726,6 +761,74 @@ function PainelConfirmacao({
         )}
       </div>
 
+      {/* A ausência de horas vale para QUALQUER motivo: no atestado ela é o
+          meio período no consultório; na falta, é o horário que a folha vai
+          descontar. Por isso ela mora aqui, e não no bloco clínico. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem", alignItems: "end" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
+          <input
+            type="checkbox" checked={c.emHoras}
+            onChange={(e) => {
+              const emHoras = e.target.checked;
+              setC((x) => ({
+                ...x, emHoras,
+                endDate: emHoras ? x.startDate : x.endDate,
+                horaInicio: emHoras ? x.horaInicio : "",
+                horaFim: emHoras ? x.horaFim : "",
+              }));
+            }}
+          />
+          Ausência de horas (não cobre o dia inteiro)
+        </label>
+        {c.emHoras && (
+          <>
+            <div>
+              <label className="label">Das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <input
+                type="time" className="input" value={c.horaInicio}
+                onChange={(e) => setC((x) => ({ ...x, horaInicio: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <input
+                type="time" className="input" value={c.horaFim}
+                onChange={(e) => setC((x) => ({ ...x, horaFim: e.target.value }))}
+              />
+            </div>
+          </>
+        )}
+        {tipo?.kind === "falta" && (
+          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
+            <input
+              type="checkbox" checked={c.abonada}
+              onChange={(e) => setC((x) => ({ ...x, abonada: e.target.checked }))}
+            />
+            Abonar a falta (fica registrada, mas não pesa na remuneração variável)
+          </label>
+        )}
+      </div>
+
+      {c.emHoras && (
+        <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
+          Ausência de horas não entra no cálculo da remuneração variável: ela sai no relatório do
+          RH, com o horário, para o desconto ser feito na folha.
+        </p>
+      )}
+
+      {/* O alerta legal mais importante do processo: passando de 15 dias, quem
+          paga do 16º em diante é o INSS. */}
+      {inss?.atinge && (
+        <p style={{ fontSize: "0.8rem", margin: 0, color: "var(--mh-warning)", background: "var(--mh-warning-soft)", padding: "0.6rem 0.7rem", borderRadius: 8 }}>
+          <strong>Atenção: {inss.dias} dias de atestado.</strong>{" "}
+          {inss.motivo === "mesma_doenca"
+            ? "São períodos da mesma doença dentro de 60 dias, que a lei manda somar."
+            : "São períodos contínuos, que a lei manda somar."}{" "}
+          A empresa paga os 15 primeiros dias; do 16º em diante o pagamento é do INSS. Encaminhe o
+          colaborador para a perícia.
+        </p>
+      )}
+
       {/* O efeito na remuneração variável é POLÍTICA do tipo, definida em
           Configurações, e não escolha de quem lança: se cada gestor marcasse
           por conta, o mesmo atestado descontaria numa equipe e não na outra.
@@ -750,42 +853,33 @@ function PainelConfirmacao({
             Ficam guardados à parte, com acesso restrito a você e ao RH. Não saem em e-mail, não
             entram na planilha exportada e não aparecem em Logs do sistema.
           </p>
-          {/* Atestado de horas: meio período no consultório. Vale para um único
-              dia, então o término acompanha o início enquanto a marcação durar. */}
-          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", marginBottom: "0.7rem", cursor: "pointer" }}>
-            <input
-              type="checkbox" checked={c.emHoras}
-              onChange={(e) => {
-                const emHoras = e.target.checked;
-                setC((x) => ({
-                  ...x, emHoras,
-                  endDate: emHoras ? x.startDate : x.endDate,
-                  horaInicio: emHoras ? x.horaInicio : "",
-                  horaFim: emHoras ? x.horaFim : "",
-                }));
-              }}
-            />
-            Atestado de horas (não cobre o dia inteiro)
-          </label>
+          <div style={{ display: "flex", gap: "1.2rem", flexWrap: "wrap", marginBottom: "0.8rem" }}>
+            <div>
+              <label className="label">Tipo de atestado <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <div style={{ display: "flex", gap: "1rem", alignItems: "center", height: 34 }}>
+                {[["medico", "Médico"], ["odontologico", "Odontológico"]].map(([v, r]) => (
+                  <label key={v} style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem", cursor: "pointer" }}>
+                    <input
+                      type="radio" name={`tipo-atestado-${linha.id}`} value={v}
+                      checked={c.tipoAtestado === v}
+                      onChange={() => setC((x) => ({ ...x, tipoAtestado: v }))}
+                    />
+                    {r}
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* O caso que gera CAT. Fica no lançamento (e não no dado clínico)
+                porque é fato trabalhista: sai no relatório e no indicador. */}
+            <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", alignSelf: "end", height: 34 }}>
+              <input
+                type="checkbox" checked={c.acidenteTrabalho}
+                onChange={(e) => setC((x) => ({ ...x, acidenteTrabalho: e.target.checked }))}
+              />
+              Acidente de trabalho ou de trajeto
+            </label>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
-            {c.emHoras && (
-              <>
-                <div>
-                  <label className="label">Das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-                  <input
-                    type="time" className="input" value={c.horaInicio}
-                    onChange={(e) => setC((x) => ({ ...x, horaInicio: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-                  <input
-                    type="time" className="input" value={c.horaFim}
-                    onChange={(e) => setC((x) => ({ ...x, horaFim: e.target.value }))}
-                  />
-                </div>
-              </>
-            )}
             <div>
               <label className="label">CID</label>
               <BuscaCid
@@ -1076,6 +1170,17 @@ function Ficha({
           valor={linha.discountsRv === null ? null : linha.discountsRv ? "Sim" : "Não"}
         />
         {linha.kinship && <Campo rotulo="Parentesco do falecido" valor={linha.kinship} />}
+        {linha.hoursStart && (
+          <Campo
+            rotulo="Horário da ausência"
+            valor={`${linha.hoursStart.slice(0, 5)} às ${linha.hoursEnd?.slice(0, 5) ?? "?"}`}
+          />
+        )}
+        {linha.certificateKind && (
+          <Campo rotulo="Tipo de atestado" valor={linha.certificateKind === "medico" ? "Médico" : "Odontológico"} />
+        )}
+        {linha.workAccident && <Campo rotulo="Acidente de trabalho" valor="Sim" />}
+        {linha.waived && <Campo rotulo="Falta abonada" valor="Sim" />}
       </div>
       {linha.note && <Campo rotulo="Observação" valor={linha.note} />}
 
@@ -1100,9 +1205,7 @@ function Ficha({
               <Campo rotulo="CRM ou registro" valor={medico?.crm ?? null} />
               <Campo rotulo="Local" valor={medico?.local ?? null} />
               <Campo rotulo="Emitido em" valor={medico?.emitidoEm ? formatDate(medico.emitidoEm) : null} />
-              {medico?.horaInicio
-                ? <Campo rotulo="Período do atestado" valor={`${medico.horaInicio.slice(0, 5)} às ${medico.horaFim?.slice(0, 5) ?? "?"}`} />
-                : <Campo rotulo="Dias de afastamento" valor={medico?.diasAfastamento?.toString() ?? null} />}
+              <Campo rotulo="Dias de afastamento" valor={medico?.diasAfastamento?.toString() ?? null} />
             </div>
           )}
         </div>

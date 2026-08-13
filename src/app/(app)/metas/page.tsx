@@ -165,8 +165,8 @@ export default async function GoalsPage() {
     // dias mesmo com a marcação desligada — que é justamente como esses dois
     // tipos nascem.
     admin
-      ? admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { user_id: string; kind: string; start_date: string; end_date: string; discounts_rv: boolean }[] }),
+      ? admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { user_id: string; kind: string; start_date: string; end_date: string; discounts_rv: boolean; waived: boolean }[] }),
     // Punições: service client pelo mesmo motivo das ausências, e o que chega ao
     // NAVEGADOR é só a contagem por mês dentro do fator. A lista de punições, com
     // tipo e observação, não sai daqui.
@@ -271,6 +271,9 @@ export default async function GoalsPage() {
       return {
         ownerId,
         ausencias: minhas
+          // abonada não pesa nem na proporcionalidade nem na faixa: é isso que
+          // "abonar" quer dizer
+          .filter((a) => !a.waived)
           .filter((a) => a.discounts_rv || kindsPorFaixa.has(a.kind))
           .map((a) => ({ inicio: a.start_date, fim: a.end_date, kind: a.kind })),
         sancoes: (sancoes ?? [])

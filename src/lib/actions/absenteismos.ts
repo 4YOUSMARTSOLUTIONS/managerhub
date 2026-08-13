@@ -359,6 +359,20 @@ export type ConfirmacaoInput = {
   note: string;
   /** grau de parentesco do falecido; só quando o tipo exige (licença nojo) */
   parentesco?: string;
+  /** acidente de trabalho ou de trajeto (o caso que gera CAT) */
+  acidenteTrabalho?: boolean;
+  /** "medico" | "odontologico"; só quando o tipo exige dados do atestado */
+  tipoAtestado?: string;
+  /** falta abonada: fica no histórico, mas não pesa na remuneração variável */
+  abonada?: boolean;
+  /**
+   * Ausência de horas: entrada e saída no dia (vazio = ausência de dias).
+   *
+   * Vale para QUALQUER tipo, não só atestado: é assim que a falta parcial diz
+   * o horário que a folha vai descontar.
+   */
+  horaInicio?: string;
+  horaFim?: string;
   /** só quando o tipo exige */
   atestado?: {
     cid: string;
@@ -369,9 +383,6 @@ export type ConfirmacaoInput = {
     emitidoEm: string;
     /** nome de quem foi acompanhado; só quando o tipo exige */
     acompanhado: string;
-    /** atestado de horas: entrada e saída no dia (vazio = atestado de dias) */
-    horaInicio: string;
-    horaFim: string;
   };
 };
 
@@ -400,6 +411,10 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
       .maybeSingle();
     if (!tipo) return { error: "Tipo de absenteísmo não encontrado." };
 
+    // A ausência de horas vale para qualquer motivo: é assim que a falta
+    // parcial informa o horário que a folha vai descontar.
+    const emHoras = Boolean(input.horaInicio?.trim() && input.horaFim?.trim());
+
     const { error } = await supabase
       .from("absenteismo_lancamentos")
       .update({
@@ -416,6 +431,12 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         discounts_rv: tipo.discounts_rv_default,
         note: input.note.trim() || null,
         kinship_of_deceased: tipo.requires_kinship ? (input.parentesco?.trim() || null) : null,
+        work_accident: Boolean(input.acidenteTrabalho),
+        certificate_kind: tipo.requires_medical ? (input.tipoAtestado || null) : null,
+        // abono só existe para falta: nas demais o motivo já diz o efeito
+        waived: tipo.kind === "falta" ? Boolean(input.abonada) : false,
+        hours_start: emHoras ? input.horaInicio! : null,
+        hours_end: emHoras ? input.horaFim! : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.id);
@@ -425,13 +446,12 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
     // exija, se o gestor digitou, o lugar é o mesmo.
     if (input.atestado) {
       const a = input.atestado;
-      const temAlgo = [a.cid, a.cidDescricao, a.medico, a.crm, a.local, a.emitidoEm, a.acompanhado, a.horaInicio, a.horaFim]
+      const temAlgo = [a.cid, a.cidDescricao, a.medico, a.crm, a.local, a.emitidoEm, a.acompanhado]
         .some((v) => v.trim());
       if (temAlgo) {
         // Os dias de afastamento são CALCULADOS do período, nunca digitados: o
         // número na filha não pode divergir das datas que o RH vai aprovar.
-        // Atestado de horas não conta dia nenhum; ele carrega o intervalo.
-        const emHoras = Boolean(a.horaInicio.trim() && a.horaFim.trim());
+        // Ausência de horas não conta dia nenhum.
         const diasCorridos =
           Math.round((Date.parse(input.endDate) - Date.parse(input.startDate)) / 86400000) + 1;
         const { error: e2 } = await supabase
@@ -447,8 +467,6 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
             issued_on: a.emitidoEm || null,
             days_off: emHoras || !Number.isFinite(diasCorridos) ? null : diasCorridos,
             companion_name: a.acompanhado.trim() || null,
-            hours_start: emHoras ? a.horaInicio : null,
-            hours_end: emHoras ? a.horaFim : null,
             updated_by: userId,
             updated_at: new Date().toISOString(),
           });
@@ -575,8 +593,6 @@ export type AtestadoLido = {
   emitidoEm: string | null;
   diasAfastamento: number | null;
   acompanhado: string | null;
-  horaInicio: string | null;
-  horaFim: string | null;
 };
 
 export async function getAtestado(id: string): Promise<AtestadoLido | null> {
@@ -606,6 +622,78 @@ export async function buscarCid(q: string): Promise<{ code: string; description:
     .order("code")
     .limit(20);
   return data ?? [];
+}
+
+/**
+ * O alerta dos 15 dias.
+ *
+ * Art. 60, §3º da Lei 8.213/91: a empresa paga os 15 primeiros dias e, do 16º
+ * em diante, o benefício é do INSS. Quem soma os dias é o banco, porque a conta
+ * precisa enxergar o histórico inteiro do colaborador, e não só o que está na
+ * tela.
+ */
+export type AlertaInss = {
+  dias: number;
+  diasMesmaDoenca: number;
+  diasContinuo: number;
+  motivo: "mesma_doenca" | "continuo" | null;
+  atinge: boolean;
+};
+
+export async function getAlertaInss(userId: string, ate?: string): Promise<AlertaInss | null> {
+  if (!userId) return null;
+  const { supabase, tenantId } = await actionContext();
+  const { data } = await supabase.rpc("absenteismo_inss", {
+    p_tenant: tenantId, p_user: userId, p_ate: ate ?? null,
+  });
+  return (data ?? null) as AlertaInss | null;
+}
+
+/**
+ * O relatório do RH.
+ *
+ * É a única saída que junta CPF e dado clínico na mesma linha, então a guarda
+ * de papel está no corpo da RPC e o botão só aparece para quem decide. A
+ * planilha é montada no cliente a partir daqui, no mesmo caminho do
+ * `ExportButton`.
+ */
+export type LinhaRelatorio = Record<string, string | number | null>;
+
+export async function gerarRelatorioAbsenteismo(
+  de: string, ate: string, unidades?: string[],
+): Promise<{ error?: string; headers?: string[]; rows?: (string | number | null)[][] }> {
+  try {
+    if (!de || !ate) return { error: "Informe o período do relatório." };
+    if (ate < de) return { error: "O fim do período não pode ser antes do início." };
+    const { supabase, tenantId } = await actionContext();
+    const { data, error } = await supabase.rpc("absenteismo_relatorio", {
+      p_tenant: tenantId,
+      p_de: de,
+      p_ate: ate,
+      p_units: unidades && unidades.length ? unidades : null,
+    });
+    if (error) return { error: error.message };
+
+    const headers = [
+      "Unidade", "Setor", "Subsetor", "Data", "Mês", "Código do colaborador", "CPF",
+      "Nome do colaborador", "Data início", "Data fim", "Dias de atestado", "Data retorno",
+      "Tipo de afastamento", "Observação", "CID", "Descrição do CID", "Categoria CID",
+      "Descrição da categoria", "Nome do médico", "CRM", "Hospital", "Horário",
+      "Acidente de trabalho", "Tipo de atestado", "Falta abonada", "Acompanhado",
+      "Parentesco do falecido", "Alerta INSS", "Situação",
+    ];
+    const rows = (data ?? []).map((r) => [
+      r.unidade, r.setor, r.subsetor, r.data, r.mes, r.matricula, r.cpf, r.colaborador,
+      r.inicio, r.fim, r.dias, r.retorno, r.tipo, r.observacao,
+      r.cid, r.cid_descricao, r.cid_categoria, r.cid_categoria_descricao,
+      r.medico, r.crm, r.hospital, r.horario,
+      r.acidente_trabalho, r.tipo_atestado, r.abonada, r.acompanhado,
+      r.parentesco, r.alerta_inss, r.situacao,
+    ]);
+    return { headers, rows };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function confirmarAbsenteismo(formData: FormData): Promise<ActionState> {
