@@ -20,6 +20,8 @@ export type TipoAbsenteismoRow = {
   kind: Enums<"absence_kind">;
   requiresDocument: boolean;
   requiresMedical: boolean;
+  requiresCompanion: boolean;
+  requiresKinship: boolean;
   discountsRvDefault: boolean;
   countsAsAbsenteeism: boolean;
   active: boolean;
@@ -32,6 +34,8 @@ type Rascunho = {
   kind: Enums<"absence_kind">;
   requiresDocument: boolean;
   requiresMedical: boolean;
+  requiresCompanion: boolean;
+  requiresKinship: boolean;
   discountsRvDefault: boolean;
   countsAsAbsenteeism: boolean;
 };
@@ -39,6 +43,7 @@ type Rascunho = {
 const vazio: Rascunho = {
   name: "", description: "", kind: "atestado",
   requiresDocument: true, requiresMedical: true,
+  requiresCompanion: false, requiresKinship: false,
   discountsRvDefault: false, countsAsAbsenteeism: true,
 };
 
@@ -87,6 +92,8 @@ export function AbsenceTypesManager({
         kind: rascunho.kind,
         requiresDocument: rascunho.requiresDocument,
         requiresMedical: rascunho.requiresMedical,
+        requiresCompanion: rascunho.requiresCompanion,
+        requiresKinship: rascunho.requiresKinship,
         discountsRvDefault: rascunho.discountsRvDefault,
         countsAsAbsenteeism: rascunho.countsAsAbsenteeism,
       });
@@ -119,9 +126,13 @@ export function AbsenceTypesManager({
   // Dito em termos de OBRIGAÇÃO, porque anexar sempre é possível: o que o
   // catálogo decide é se dá para enviar ao RH sem o documento.
   const exigencias = (t: TipoAbsenteismoRow) => {
-    if (t.requiresMedical) return "Anexo e dados do atestado obrigatórios";
-    if (t.requiresDocument) return "Anexo obrigatório";
-    return "Anexo opcional";
+    const partes: string[] = [];
+    if (t.requiresMedical) partes.push("Anexo e dados do atestado obrigatórios");
+    else if (t.requiresDocument) partes.push("Anexo obrigatório");
+    else partes.push("Anexo opcional");
+    if (t.requiresCompanion) partes.push("pede quem foi o acompanhado");
+    if (t.requiresKinship) partes.push("pede o parentesco do falecido");
+    return partes.join("; ");
   };
 
   return (
@@ -215,6 +226,20 @@ export function AbsenceTypesManager({
             </label>
             <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.82rem" }}>
               <input
+                type="checkbox" checked={rascunho.requiresCompanion}
+                onChange={(e) => setRascunho((r) => (r ? { ...r, requiresCompanion: e.target.checked } : r))}
+              />
+              Pede quem foi o acompanhado (atestado de acompanhamento)
+            </label>
+            <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.82rem" }}>
+              <input
+                type="checkbox" checked={rascunho.requiresKinship}
+                onChange={(e) => setRascunho((r) => (r ? { ...r, requiresKinship: e.target.checked } : r))}
+              />
+              Pede o grau de parentesco do falecido (licença nojo)
+            </label>
+            <label style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.82rem" }}>
+              <input
                 type="checkbox" checked={rascunho.discountsRvDefault}
                 onChange={(e) => setRascunho((r) => (r ? { ...r, discountsRvDefault: e.target.checked } : r))}
               />
@@ -292,6 +317,8 @@ export function AbsenceTypesManager({
                             id: t.id, name: t.name, description: t.description ?? "",
                             kind: t.kind, requiresDocument: t.requiresDocument,
                             requiresMedical: t.requiresMedical,
+                            requiresCompanion: t.requiresCompanion,
+                            requiresKinship: t.requiresKinship,
                             discountsRvDefault: t.discountsRvDefault,
                             countsAsAbsenteeism: t.countsAsAbsenteeism,
                           });

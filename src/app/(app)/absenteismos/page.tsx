@@ -75,7 +75,7 @@ export default async function AbsenteismosPage() {
     getMembers(tenant.id),
     supabase
       .from("absence_types")
-      .select("id, name, description, kind, requires_document, requires_medical, discounts_rv_default, active")
+      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, active")
       .eq("tenant_id", tenant.id)
       .order("sort").order("name"),
     supabase
@@ -142,6 +142,7 @@ export default async function AbsenteismosPage() {
     endDate: l.end_date,
     discountsRv: l.discounts_rv,
     note: l.note,
+    kinship: l.kinship_of_deceased,
     fullName: l.snap_full_name,
     employeeCode: l.snap_employee_code,
     departmentName: l.snap_department_name,
@@ -184,6 +185,7 @@ export default async function AbsenteismosPage() {
         tipos={(tipos ?? []).map((t) => ({
           id: t.id, name: t.name, description: t.description, kind: t.kind,
           requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
+          requiresCompanion: t.requires_companion, requiresKinship: t.requires_kinship,
           discountsRvDefault: t.discounts_rv_default, active: t.active,
         }))}
         kindsComRedutor={kindsComRedutor}

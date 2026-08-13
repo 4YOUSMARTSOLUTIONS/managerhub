@@ -75,6 +75,8 @@ export type TipoAbsenteismoInput = {
   kind: Enums<"absence_kind">;
   requiresDocument: boolean;
   requiresMedical: boolean;
+  requiresCompanion: boolean;
+  requiresKinship: boolean;
   discountsRvDefault: boolean;
   countsAsAbsenteeism: boolean;
 };
@@ -97,6 +99,8 @@ export async function saveAbsenceType(input: TipoAbsenteismoInput): Promise<Acti
       kind: input.kind,
       requires_document: requiresDocument,
       requires_medical: input.requiresMedical,
+      requires_companion: input.requiresCompanion,
+      requires_kinship: input.requiresKinship,
       discounts_rv_default: input.discountsRvDefault,
       counts_as_absenteeism: input.countsAsAbsenteeism,
       updated_at: new Date().toISOString(),
@@ -353,6 +357,8 @@ export type ConfirmacaoInput = {
   startDate: string;
   endDate: string;
   note: string;
+  /** grau de parentesco do falecido; só quando o tipo exige (licença nojo) */
+  parentesco?: string;
   /** só quando o tipo exige */
   atestado?: {
     cid: string;
@@ -361,7 +367,11 @@ export type ConfirmacaoInput = {
     crm: string;
     local: string;
     emitidoEm: string;
-    dias: string;
+    /** nome de quem foi acompanhado; só quando o tipo exige */
+    acompanhado: string;
+    /** atestado de horas: entrada e saída no dia (vazio = atestado de dias) */
+    horaInicio: string;
+    horaFim: string;
   };
 };
 
@@ -385,7 +395,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
 
     const { data: tipo } = await supabase
       .from("absence_types")
-      .select("id, name, kind, requires_document, requires_medical, discounts_rv_default")
+      .select("id, name, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default")
       .eq("id", input.absenceTypeId)
       .maybeSingle();
     if (!tipo) return { error: "Tipo de absenteísmo não encontrado." };
@@ -398,11 +408,14 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         snap_kind: tipo.kind,
         snap_requires_document: tipo.requires_document,
         snap_requires_medical: tipo.requires_medical,
+        snap_requires_companion: tipo.requires_companion,
+        snap_requires_kinship: tipo.requires_kinship,
         snap_discounts_rv_default: tipo.discounts_rv_default,
         start_date: input.startDate,
         end_date: input.endDate,
         discounts_rv: tipo.discounts_rv_default,
         note: input.note.trim() || null,
+        kinship_of_deceased: tipo.requires_kinship ? (input.parentesco?.trim() || null) : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.id);
@@ -412,10 +425,15 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
     // exija, se o gestor digitou, o lugar é o mesmo.
     if (input.atestado) {
       const a = input.atestado;
-      const temAlgo = [a.cid, a.cidDescricao, a.medico, a.crm, a.local, a.emitidoEm, a.dias]
+      const temAlgo = [a.cid, a.cidDescricao, a.medico, a.crm, a.local, a.emitidoEm, a.acompanhado, a.horaInicio, a.horaFim]
         .some((v) => v.trim());
       if (temAlgo) {
-        const dias = Number(a.dias);
+        // Os dias de afastamento são CALCULADOS do período, nunca digitados: o
+        // número na filha não pode divergir das datas que o RH vai aprovar.
+        // Atestado de horas não conta dia nenhum; ele carrega o intervalo.
+        const emHoras = Boolean(a.horaInicio.trim() && a.horaFim.trim());
+        const diasCorridos =
+          Math.round((Date.parse(input.endDate) - Date.parse(input.startDate)) / 86400000) + 1;
         const { error: e2 } = await supabase
           .from("absenteismo_atestados")
           .upsert({
@@ -427,7 +445,10 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
             doctor_crm: a.crm.trim() || null,
             facility: a.local.trim() || null,
             issued_on: a.emitidoEm || null,
-            days_off: Number.isFinite(dias) && a.dias.trim() ? Math.round(dias) : null,
+            days_off: emHoras || !Number.isFinite(diasCorridos) ? null : diasCorridos,
+            companion_name: a.acompanhado.trim() || null,
+            hours_start: emHoras ? a.horaInicio : null,
+            hours_end: emHoras ? a.horaFim : null,
             updated_by: userId,
             updated_at: new Date().toISOString(),
           });
@@ -553,12 +574,38 @@ export type AtestadoLido = {
   local: string | null;
   emitidoEm: string | null;
   diasAfastamento: number | null;
+  acompanhado: string | null;
+  horaInicio: string | null;
+  horaFim: string | null;
 };
 
 export async function getAtestado(id: string): Promise<AtestadoLido | null> {
   const { supabase } = await actionContext();
   const { data } = await supabase.rpc("absenteismo_atestado", { p_id: id });
   return (data ?? null) as AtestadoLido | null;
+}
+
+/**
+ * Busca na tabela CID-10 oficial (catálogo global, carregado do DATASUS).
+ *
+ * A descrição deixa de ser digitada: quem digita descrição erra, e o RH recebe
+ * "gripe" onde o documento diz outra coisa. O gestor busca pelo código ou por
+ * um pedaço da descrição e a tela preenche o resto.
+ */
+export async function buscarCid(q: string): Promise<{ code: string; description: string }[]> {
+  const termo = q.trim();
+  if (termo.length < 2) return [];
+  const { supabase } = await actionContext();
+  // vírgula e parêntese quebrariam a sintaxe do `.or()` do PostgREST
+  const escapado = termo.replace(/[%_\\]/g, "\\$&").replace(/[,()]/g, " ").trim();
+  if (escapado.length < 2) return [];
+  const { data } = await supabase
+    .from("cid10")
+    .select("code, description")
+    .or(`code.ilike.${escapado}%,description.ilike.%${escapado}%`)
+    .order("code")
+    .limit(20);
+  return data ?? [];
 }
 
 export async function confirmarAbsenteismo(formData: FormData): Promise<ActionState> {

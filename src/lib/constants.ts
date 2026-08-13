@@ -276,6 +276,26 @@ export const ABSENCE_KIND_TONE: Record<Enums<"absence_kind">, Tone> = {
 };
 
 /**
+ * Graus de parentesco para a licença nojo (falecimento). Lista fechada de
+ * propósito: campo livre viraria "tio", "TIO", "meu tio" e o RH não filtraria
+ * nada depois. "Outro" cobre o resto sem abrir o campo.
+ */
+export const GRAUS_PARENTESCO = [
+  "Cônjuge ou companheiro(a)",
+  "Pai",
+  "Mãe",
+  "Filho(a)",
+  "Irmão(ã)",
+  "Avô/Avó",
+  "Neto(a)",
+  "Sogro(a)",
+  "Padrasto/Madrasta",
+  "Enteado(a)",
+  "Dependente legal",
+  "Outro",
+] as const;
+
+/**
  * Se o tipo vem marcado como "desconta da remuneração variável" ao abrir o
  * formulário. É só o PADRÃO: a marcação é gravada por lançamento e pode ser
  * trocada, porque um atestado de um dia e um de trinta não merecem o mesmo

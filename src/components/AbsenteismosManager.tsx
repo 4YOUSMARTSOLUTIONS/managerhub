@@ -14,12 +14,12 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { formatDate, normalizar } from "@/lib/format";
 import {
   ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE,
-  ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE,
+  ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO,
 } from "@/lib/constants";
 import {
-  anexarDocumentoAbsenteismo, cancelarAbsenteismo, confirmarAbsenteismo, decidirAbsenteismo,
-  getAtestado, getDocumentoAbsenteismoUrl, lancarNaoComparecimento, reenviarComunicado,
-  removerDocumentoAbsenteismo, salvarConfirmacao,
+  anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, confirmarAbsenteismo,
+  decidirAbsenteismo, getAtestado, getDocumentoAbsenteismoUrl, lancarNaoComparecimento,
+  reenviarComunicado, removerDocumentoAbsenteismo, salvarConfirmacao,
   type AtestadoLido,
 } from "@/lib/actions/absenteismos";
 import type { Enums } from "@/types/database";
@@ -39,6 +39,7 @@ export type AbsenteismoRow = {
   endDate: string | null;
   discountsRv: boolean | null;
   note: string | null;
+  kinship: string | null;
   fullName: string | null;
   employeeCode: string | null;
   departmentName: string | null;
@@ -78,6 +79,8 @@ type Tipo = {
   kind: Enums<"absence_kind">;
   requiresDocument: boolean;
   requiresMedical: boolean;
+  requiresCompanion: boolean;
+  requiresKinship: boolean;
   discountsRvDefault: boolean;
   active: boolean;
 };
@@ -87,14 +90,25 @@ type Confirmacao = {
   startDate: string;
   endDate: string;
   note: string;
+  parentesco: string;
   cid: string;
   cidDescricao: string;
   medico: string;
   crm: string;
   local: string;
   emitidoEm: string;
-  dias: string;
+  emHoras: boolean;
+  horaInicio: string;
+  horaFim: string;
+  acompanhado: string;
 };
+
+/** Dias corridos do período, contando os dois extremos. */
+function diasDoPeriodo(inicio: string, fim: string): number | null {
+  if (!inicio || !fim) return null;
+  const n = Math.round((Date.parse(fim) - Date.parse(inicio)) / 86400000) + 1;
+  return Number.isFinite(n) && n >= 1 ? n : null;
+}
 
 /** O dia de HOJE do navegador. No servidor, em UTC, viraria amanhã às 21h. */
 const hoje = () => {
@@ -463,6 +477,78 @@ function Dialogo({ titulo, children, onFechar }: { titulo: string; children: Rea
 }
 
 /**
+ * Busca na tabela CID-10 oficial (DATASUS), no servidor: são ~14 mil códigos,
+ * e mandar o catálogo inteiro ao navegador por causa de um campo não faz
+ * sentido. Escolher preenche código E descrição; digitada, a descrição chegava
+ * errada ao RH.
+ */
+function BuscaCid({
+  code, onEscolha,
+}: {
+  code: string;
+  onEscolha: (code: string, descricao: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [opcoes, setOpcoes] = useState<{ code: string; description: string }[]>([]);
+  const [aberto, setAberto] = useState(false);
+
+  useEffect(() => {
+    const termo = q.trim();
+    if (termo.length < 2) return;
+    let vivo = true;
+    const h = setTimeout(() => {
+      buscarCid(termo).then((r) => { if (vivo) setOpcoes(r); });
+    }, 250);
+    return () => { vivo = false; clearTimeout(h); };
+  }, [q]);
+
+  const visiveis = q.trim().length >= 2 ? opcoes : [];
+
+  const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) { setAberto(false); setQ(""); }
+  };
+
+  return (
+    <div onBlur={handleBlur} style={{ position: "relative" }}>
+      {code ? (
+        <div className="input" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", overflow: "hidden" }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{code}</span>
+          <button
+            type="button" onClick={() => onEscolha("", "")} aria-label="Limpar"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem", lineHeight: 1, flexShrink: 0 }}
+          >
+            ×
+          </button>
+        </div>
+      ) : (
+        <input
+          className="input"
+          value={q}
+          placeholder="Código ou doença…"
+          onFocus={() => setAberto(true)}
+          onChange={(e) => { setQ(e.target.value); setAberto(true); }}
+        />
+      )}
+      {aberto && !code && visiveis.length > 0 && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, minWidth: 260, zIndex: 20, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9, boxShadow: "var(--mh-shadow-e3)", maxHeight: 240, overflowY: "auto" }}>
+          {visiveis.map((o) => (
+            <button
+              key={o.code}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onEscolha(o.code, o.description); setQ(""); setAberto(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "0.45rem 0.7rem", background: "none", border: "none", borderBottom: "1px solid var(--border)", cursor: "pointer", fontSize: "0.85rem" }}
+            >
+              <strong>{o.code}</strong> <span className="soft">{o.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * O que a confirmação descobriu.
  *
  * As exigências vêm do tipo escolhido, e não da tela: escolher "Atestado" abre o
@@ -484,7 +570,9 @@ function PainelConfirmacao({
     startDate: linha.startDate ?? linha.occurredOn,
     endDate: linha.endDate ?? linha.occurredOn,
     note: linha.note ?? "",
-    cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "", dias: "",
+    parentesco: linha.kinship ?? "",
+    cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
+    emHoras: false, horaInicio: "", horaFim: "", acompanhado: "",
   });
   const [temDoc, setTemDoc] = useState(Boolean(linha.docPath));
   const [pendente, iniciar] = useTransition();
@@ -503,7 +591,11 @@ function PainelConfirmacao({
         ...x,
         cid: a.cid ?? "", cidDescricao: a.cidDescricao ?? "",
         medico: a.medico ?? "", crm: a.crm ?? "", local: a.local ?? "",
-        emitidoEm: a.emitidoEm ?? "", dias: a.diasAfastamento?.toString() ?? "",
+        emitidoEm: a.emitidoEm ?? "",
+        emHoras: Boolean(a.horaInicio),
+        horaInicio: a.horaInicio?.slice(0, 5) ?? "",
+        horaFim: a.horaFim?.slice(0, 5) ?? "",
+        acompanhado: a.acompanhado ?? "",
       }));
     });
     return () => { vivo = false; };
@@ -518,9 +610,11 @@ function PainelConfirmacao({
         startDate: c.startDate,
         endDate: c.endDate,
         note: c.note,
+        parentesco: c.parentesco,
         atestado: tipo?.requiresMedical ? {
           cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
-          local: c.local, emitidoEm: c.emitidoEm, dias: c.dias,
+          local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
+          horaInicio: c.emHoras ? c.horaInicio : "", horaFim: c.emHoras ? c.horaFim : "",
         } : undefined,
       });
       if (r.error) { onErro(r.error); return; }
@@ -546,9 +640,11 @@ function PainelConfirmacao({
         startDate: c.startDate,
         endDate: c.endDate,
         note: c.note,
+        parentesco: c.parentesco,
         atestado: tipo?.requiresMedical ? {
           cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
-          local: c.local, emitidoEm: c.emitidoEm, dias: c.dias,
+          local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
+          horaInicio: c.emHoras ? c.horaInicio : "", horaFim: c.emHoras ? c.horaFim : "",
         } : undefined,
       });
       if (s.error) { onErro(s.error); return; }
@@ -594,16 +690,40 @@ function PainelConfirmacao({
           <label className="label">Início <span style={{ color: "var(--mh-danger)" }}>*</span></label>
           <input
             type="date" className="input" value={c.startDate}
-            onChange={(e) => setC((x) => ({ ...x, startDate: e.target.value }))}
+            onChange={(e) => setC((x) => ({ ...x, startDate: e.target.value, endDate: x.emHoras ? e.target.value : x.endDate }))}
           />
         </div>
         <div>
           <label className="label">Término <span style={{ color: "var(--mh-danger)" }}>*</span></label>
           <input
             type="date" className="input" value={c.endDate}
+            disabled={c.emHoras}
+            title={c.emHoras ? "Atestado de horas vale para um único dia." : undefined}
             onChange={(e) => setC((x) => ({ ...x, endDate: e.target.value }))}
           />
         </div>
+        {/* A conta é feita aqui e gravada pelo servidor: dias digitados à mão
+            divergiam das datas que o RH aprova. */}
+        <div>
+          <label className="label">Dias de afastamento</label>
+          <div className="input" style={{ display: "flex", alignItems: "center", background: "var(--surface-2)" }}>
+            {c.emHoras
+              ? "Em horas"
+              : (() => { const d = diasDoPeriodo(c.startDate, c.endDate); return d === null ? "…" : `${d} dia${d === 1 ? "" : "s"}`; })()}
+          </div>
+        </div>
+        {tipo?.requiresKinship && (
+          <div style={{ gridColumn: "span 2", minWidth: 0 }}>
+            <label className="label">Parentesco do falecido <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+            <select
+              className="select" value={c.parentesco}
+              onChange={(e) => setC((x) => ({ ...x, parentesco: e.target.value }))}
+            >
+              <option value="">Selecione…</option>
+              {GRAUS_PARENTESCO.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* O efeito na remuneração variável é POLÍTICA do tipo, definida em
@@ -630,21 +750,66 @@ function PainelConfirmacao({
             Ficam guardados à parte, com acesso restrito a você e ao RH. Não saem em e-mail, não
             entram na planilha exportada e não aparecem em Logs do sistema.
           </p>
+          {/* Atestado de horas: meio período no consultório. Vale para um único
+              dia, então o término acompanha o início enquanto a marcação durar. */}
+          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", marginBottom: "0.7rem", cursor: "pointer" }}>
+            <input
+              type="checkbox" checked={c.emHoras}
+              onChange={(e) => {
+                const emHoras = e.target.checked;
+                setC((x) => ({
+                  ...x, emHoras,
+                  endDate: emHoras ? x.startDate : x.endDate,
+                  horaInicio: emHoras ? x.horaInicio : "",
+                  horaFim: emHoras ? x.horaFim : "",
+                }));
+              }}
+            />
+            Atestado de horas (não cobre o dia inteiro)
+          </label>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
+            {c.emHoras && (
+              <>
+                <div>
+                  <label className="label">Das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <input
+                    type="time" className="input" value={c.horaInicio}
+                    onChange={(e) => setC((x) => ({ ...x, horaInicio: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <input
+                    type="time" className="input" value={c.horaFim}
+                    onChange={(e) => setC((x) => ({ ...x, horaFim: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
             <div>
-              <label className="label">CID <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-              <input
-                className="input" value={c.cid} placeholder="J11"
-                onChange={(e) => setC((x) => ({ ...x, cid: e.target.value }))}
+              <label className="label">CID</label>
+              <BuscaCid
+                code={c.cid}
+                onEscolha={(code, descricao) => setC((x) => ({ ...x, cid: code, cidDescricao: descricao }))}
               />
             </div>
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
               <label className="label">Descrição do CID</label>
-              <input
-                className="input" value={c.cidDescricao} placeholder="Influenza"
-                onChange={(e) => setC((x) => ({ ...x, cidDescricao: e.target.value }))}
-              />
+              {/* Vem da tabela oficial junto com o código; digitada, ela chegava
+                  errada ao RH ("gripe" onde o documento diz outra coisa). */}
+              <div className="input" style={{ background: "var(--surface-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.cidDescricao || undefined}>
+                {c.cidDescricao || <span className="soft">Preenchida ao escolher o CID</span>}
+              </div>
             </div>
+            {tipo?.requiresCompanion && (
+              <div style={{ gridColumn: "span 2", minWidth: 0 }}>
+                <label className="label">Acompanhado (quem foi acompanhado) <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                <input
+                  className="input" value={c.acompanhado} placeholder="Ex.: filho, Pedro, 4 anos"
+                  onChange={(e) => setC((x) => ({ ...x, acompanhado: e.target.value }))}
+                />
+              </div>
+            )}
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
               <label className="label">Profissional <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input
@@ -671,13 +836,6 @@ function PainelConfirmacao({
               <input
                 type="date" className="input" value={c.emitidoEm}
                 onChange={(e) => setC((x) => ({ ...x, emitidoEm: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="label">Dias de afastamento</label>
-              <input
-                type="number" min={0} className="input" value={c.dias}
-                onChange={(e) => setC((x) => ({ ...x, dias: e.target.value }))}
               />
             </div>
           </div>
@@ -917,6 +1075,7 @@ function Ficha({
           rotulo="Desconta remuneração variável"
           valor={linha.discountsRv === null ? null : linha.discountsRv ? "Sim" : "Não"}
         />
+        {linha.kinship && <Campo rotulo="Parentesco do falecido" valor={linha.kinship} />}
       </div>
       {linha.note && <Campo rotulo="Observação" valor={linha.note} />}
 
@@ -936,11 +1095,14 @@ function Ficha({
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem", marginTop: "0.7rem" }}>
               <Campo rotulo="CID" valor={medico?.cid ?? null} />
               <Campo rotulo="Descrição" valor={medico?.cidDescricao ?? null} />
+              {medico?.acompanhado && <Campo rotulo="Acompanhado" valor={medico.acompanhado} />}
               <Campo rotulo="Profissional" valor={medico?.medico ?? null} />
               <Campo rotulo="CRM ou registro" valor={medico?.crm ?? null} />
               <Campo rotulo="Local" valor={medico?.local ?? null} />
               <Campo rotulo="Emitido em" valor={medico?.emitidoEm ? formatDate(medico.emitidoEm) : null} />
-              <Campo rotulo="Dias de afastamento" valor={medico?.diasAfastamento?.toString() ?? null} />
+              {medico?.horaInicio
+                ? <Campo rotulo="Período do atestado" valor={`${medico.horaInicio.slice(0, 5)} às ${medico.horaFim?.slice(0, 5) ?? "?"}`} />
+                : <Campo rotulo="Dias de afastamento" valor={medico?.diasAfastamento?.toString() ?? null} />}
             </div>
           )}
         </div>

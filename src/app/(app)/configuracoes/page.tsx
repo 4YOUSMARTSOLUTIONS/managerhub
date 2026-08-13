@@ -27,6 +27,7 @@ import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManage
 import { InfractionTypesManager, type InfracaoRow } from "@/components/InfractionTypesManager";
 import { AbsenceTypesManager, type TipoAbsenteismoRow } from "@/components/AbsenceTypesManager";
 import { AbsenteismoRecipientsManager, type DestinatarioRow } from "@/components/AbsenteismoRecipientsManager";
+import { CidTableViewer } from "@/components/CidTableViewer";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -174,7 +175,7 @@ export default async function SettingsPage() {
     supabase.from("punicao_lancamentos").select("sanction_id").eq("tenant_id", tenant.id).not("sanction_id", "is", null),
     supabase
       .from("absence_types")
-      .select("id, name, description, kind, requires_document, requires_medical, discounts_rv_default, counts_as_absenteeism, active")
+      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, counts_as_absenteeism, active")
       .eq("tenant_id", tenant.id)
       .order("sort").order("name"),
     // a lista de destinatários é do DP: a policy é `owner/admin/hr`, e para o
@@ -373,9 +374,14 @@ export default async function SettingsPage() {
     description: i.description, severity: i.severity, active: i.active,
   }));
   const integrationFlags = await flagsP;
+  // só o número, para a aba Tabela CID dizer o tamanho sem carregar 14 mil linhas
+  const { count: cidTotal } = await supabase
+    .from("cid10")
+    .select("code", { count: "exact", head: true });
   const absenceTypeRows: TipoAbsenteismoRow[] = (absenceTypesData ?? []).map((t) => ({
     id: t.id, name: t.name, description: t.description, kind: t.kind,
     requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
+    requiresCompanion: t.requires_companion, requiresKinship: t.requires_kinship,
     discountsRvDefault: t.discounts_rv_default,
     countsAsAbsenteeism: t.counts_as_absenteeism, active: t.active,
   }));
@@ -1246,6 +1252,11 @@ export default async function SettingsPage() {
                   temChaveDeEmail={integrationFlags.hasResend}
                 />
               ),
+            },
+            {
+              id: "abs-cid",
+              label: "Tabela CID",
+              content: <CidTableViewer total={cidTotal ?? 0} />,
             },
           ]}
         />
