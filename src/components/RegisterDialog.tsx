@@ -211,14 +211,17 @@ export function RegisterDialog({
     setAiActionsLoading(true);
     const presentIds = attendees.filter((id) => present[id]);
     const candidates = people.map((p) => ({ id: p.id, name: p.name }));
-    // catálogo SDPO numerado: itens com seção/pilar resolvidos; bloco é opcional
+    // catálogo SDPO numerado: só itens ATIVOS com seção/pilar (ativos)
+    // resolvidos, o mesmo filtro do ActionDialog. Sem ele, a IA da reunião
+    // podia sugerir item desativado, que a tela manual nem oferece.
     const sdpoItens = itens
       .map((it) => {
+        if (it.active === false) return null;
         const s = secoes.find((x) => x.id === it.secaoId);
         const p = pilares.find((x) => x.id === it.pilarId);
-        if (!s || !p) return null;
+        if (!s || !p || s.active === false || p.active === false) return null;
         const b = it.blocoId ? blocos.find((x) => x.id === it.blocoId) : undefined;
-        if (it.blocoId && !b) return null;
+        if (it.blocoId && (!b || b.active === false)) return null;
         const label = b ? `${p.name} > ${s.name} > ${b.name} > ${it.name}` : `${p.name} > ${s.name} > ${it.name}`;
         return { item_id: it.id, secao_id: s.id, bloco_id: b?.id ?? "", pilar_id: p.id, label };
       })
@@ -233,6 +236,8 @@ export function RegisterDialog({
       sdpoItens,
       kpis,
       tools,
+      departments: departments.map((d) => ({ id: d.id, name: d.name })),
+      subdepartments: subdepartments.map((s) => ({ id: s.id, name: s.name, departmentId: s.departmentId })),
       today,
     });
     setAiActionsLoading(false);
@@ -246,6 +251,11 @@ export function RegisterDialog({
         payload: {
           is_sdpo: p.is_sdpo, pilar_id: p.pilar_id, secao_id: p.secao_id, bloco_id: p.bloco_id, item_id: p.item_id,
           meeting_series_id: series.id, kpi_id: p.kpi_id, tool_id: p.tool_id,
+          // A tela manual trata Unidade como obrigatória; a ação gerada pela IA
+          // não pode nascer sem ela quando a série tem uma unidade só. Com mais
+          // de uma, fica vazio e o gestor completa na edição, como antes.
+          unit_id: seriesUnits.length === 1 ? seriesUnits[0].id : "",
+          department_id: p.department_id, subdepartment_id: p.subdepartment_id,
           requester_id: p.requester_id || defaultRequester,
           problem_statement: p.problem_statement,
           due_date: p.due_date, priority: p.priority, cc: p.cc,
@@ -373,8 +383,10 @@ export function RegisterDialog({
                 <span style={{ fontSize: "0.72rem" }}>
                   Ao descrever as anotações, cite quando fizer sentido:
                   <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.1rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+                    <li><strong>Problema</strong> (a situação que motivou a ação)</li>
                     <li><strong>Prioridade</strong> (baixa, média, alta, urgente)</li>
                     <li><strong>Prazo</strong> (ex.: “até sexta”, “em 15 dias”, “30/09/2026”)</li>
+                    <li><strong>Setor</strong> e <strong>subsetor</strong> responsáveis</li>
                     <li><strong>Pilar / Bloco / Item</strong> (SDPO)</li>
                     <li><strong>KPI</strong> relacionado</li>
                     <li><strong>Ferramenta de gestão</strong> (ex.: PDCA, 5W2H)</li>

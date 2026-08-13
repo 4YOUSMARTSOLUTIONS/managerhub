@@ -21,6 +21,10 @@ export type ActionPayload = {
   requester_id: string;
   /** Problema/diagnóstico que motivou a ação. Do cabeçalho: vale para todas as demandas. */
   problem_statement: string;
+  priority: string;
+  unit_id: string;
+  department_id: string;
+  subdepartment_id: string;
   due_date: string;
   cc: string[];
   demandas: { description: string; assignees: string[] }[];

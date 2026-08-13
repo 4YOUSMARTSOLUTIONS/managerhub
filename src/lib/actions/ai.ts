@@ -207,6 +207,10 @@ export type GenerateActionsInput = {
   sdpoItens?: { item_id: string; secao_id: string; bloco_id: string; pilar_id: string; label: string }[];
   kpis?: { id: string; name: string }[];
   tools?: { id: string; name: string }[];
+  // Setor e subsetor entraram na ação em 11/08 (migração 20260811190000) e a IA
+  // precisa conhecê-los para o formulário não ficar pela metade na geração.
+  departments?: { id: string; name: string }[];
+  subdepartments?: { id: string; name: string; departmentId: string }[];
   series?: { id: string; name: string }[];
   occurrences?: { id: string; seriesId: string; occurredOn: string }[];
   today?: string; // YYYY-MM-DD (calculado no cliente para respeitar o fuso local)
@@ -223,6 +227,8 @@ export type SuggestedActionPayload = {
   occurrence_id: string;
   kpi_id: string;
   tool_id: string;
+  department_id: string;
+  subdepartment_id: string;
   requester_id: string;
   problem_statement: string;
   due_date: string;
@@ -256,6 +262,8 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
     const sdpoItens = input.sdpoItens ?? [];
     const kpis = input.kpis ?? [];
     const tools = input.tools ?? [];
+    const departments = input.departments ?? [];
+    const subdepartments = input.subdepartments ?? [];
     const seriesList = input.series ?? [];
     const occurrences = input.occurrences ?? [];
     const today =
@@ -273,6 +281,13 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
         : null,
       kpis.length ? "KPIs (use o índice em \"kpi_index\"):\n" + numbered(kpis) : null,
       tools.length ? "Ferramentas de gestão (use o índice em \"ferramenta_index\"):\n" + numbered(tools) : null,
+      departments.length ? "Setores (use o índice em \"setor_index\"):\n" + numbered(departments) : null,
+      // o setor pai vai no rótulo para o modelo não casar subsetor de outro setor
+      subdepartments.length
+        ? "Subsetores (use o índice em \"subsetor_index\"):\n" + subdepartments
+            .map((s, i) => `[${i}] ${s.name} (setor: ${departments.find((d) => d.id === s.departmentId)?.name ?? "?"})`)
+            .join("\n")
+        : null,
       seriesList.length ? "Reuniões (use o índice em \"reuniao_index\"):\n" + numbered(seriesList) : null,
     ]
       .filter(Boolean)
@@ -288,6 +303,8 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       "\"item_index\" (índice do Catálogo SDPO, ou null), " +
       "\"kpi_index\" (índice da lista de KPIs, ou null), " +
       "\"ferramenta_index\" (índice da lista de Ferramentas de gestão, ou null), " +
+      "\"setor_index\" (índice da lista de Setores responsáveis pela ação, ou null), " +
+      "\"subsetor_index\" (índice da lista de Subsetores, ou null; use apenas subsetor que pertença ao setor escolhido), " +
       "\"reuniao_index\" (índice da lista de Reuniões, ou null), " +
       "\"referencia_data\" (data YYYY-MM-DD de uma ocorrência específica da reunião citada, ou null), " +
       "\"solicitante\" (nome de quem pediu a ação, da lista de Pessoas, ou null), " +
@@ -360,10 +377,17 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
       const partial = byNorm.find((c) => c.n.includes(q) || q.includes(c.n));
       return partial ? partial.id : null;
     };
+    // lê um índice vindo do modelo; null/ausente NÃO é índice
+    // (Number(null) === 0 transformava "não citado" no primeiro item do catálogo)
+    const intAt = (raw: unknown): number | null => {
+      if (typeof raw === "number" && Number.isInteger(raw)) return raw;
+      if (typeof raw === "string" && /^\d+$/.test(raw.trim())) return Number(raw.trim());
+      return null;
+    };
     // resolve um índice de catálogo em id, com limites
     const idAt = (raw: unknown, arr: { id: string }[]): string => {
-      const i = Number(raw);
-      return Number.isInteger(i) && i >= 0 && i < arr.length ? arr[i].id : "";
+      const i = intAt(raw);
+      return i !== null && i >= 0 && i < arr.length ? arr[i].id : "";
     };
 
     // normaliza (minúsculas, sem acento) para checar menção literal no texto
@@ -400,16 +424,25 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
         const priorityRaw = toText(obj.prioridade ?? obj.priority).toLowerCase();
         const priority = (VALID_PRIORITIES as readonly string[]).includes(priorityRaw) ? priorityRaw : "medium";
 
-        const prazoDias = Number(obj.prazo_dias);
-        const due_date = addDaysISO(today, Number.isFinite(prazoDias) ? prazoDias : 7);
+        const prazoDias = intAt(obj.prazo_dias);
+        const due_date = addDaysISO(today, prazoDias !== null ? prazoDias : 7);
 
-        const idx = Number(obj.item_index);
-        const sdpo =
-          Number.isInteger(idx) && idx >= 0 && idx < sdpoItens.length ? sdpoItens[idx] : null;
+        const idx = intAt(obj.item_index);
+        const sdpo = idx !== null && idx >= 0 && idx < sdpoItens.length ? sdpoItens[idx] : null;
 
         const kpi_id = idAt(obj.kpi_index, kpis);
         const tool_id = toolIdIfMentioned(obj.ferramenta_index);
         const meeting_series_id = idAt(obj.reuniao_index, seriesList);
+
+        // Setor/subsetor: o modelo recebe o setor pai no rótulo, mas quem
+        // garante a coerência é o código. Subsetor de outro setor derruba os
+        // dois, porque meio certo aqui viraria dado errado gravado.
+        const department_id = idAt(obj.setor_index, departments);
+        let subdepartment_id = idAt(obj.subsetor_index, subdepartments);
+        if (subdepartment_id) {
+          const sub = subdepartments.find((s) => s.id === subdepartment_id);
+          if (!sub || !department_id || sub.departmentId !== department_id) subdepartment_id = "";
+        }
 
         // referência da reunião: casa a data informada com uma ocorrência da reunião escolhida
         let occurrence_id = "";
@@ -438,6 +471,8 @@ export async function generateActionsAI(input: GenerateActionsInput): Promise<Ge
           occurrence_id,
           kpi_id,
           tool_id,
+          department_id,
+          subdepartment_id,
           requester_id,
           problem_statement: toText(obj.problema),
           due_date,

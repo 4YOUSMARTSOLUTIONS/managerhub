@@ -215,6 +215,8 @@ export function ActionDialog({
       sdpoItens,
       kpis,
       tools,
+      departments: departments.map((d) => ({ id: d.id, name: d.name })),
+      subdepartments: subdepartments.map((s) => ({ id: s.id, name: s.name, departmentId: s.departmentId })),
       series,
       occurrences,
       today,
@@ -229,7 +231,13 @@ export function ActionDialog({
     setIsSdpo(p.is_sdpo);
     setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
     setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setOccurrenceId(lockedSeries ? "" : p.occurrence_id);
-    setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(defaultUnitId ?? "");
+    setKpiId(p.kpi_id); setToolId(p.tool_id);
+    // A IA não sabe a unidade, então NÃO mexe no que o usuário já escolheu.
+    // Antes este apply zerava a seleção e obrigava a reescolher depois de gerar.
+    setUnitId((atual) => atual || (defaultUnitId ?? ""));
+    // Setor/subsetor só entram quando a IA os identificou: sobrescrever com
+    // vazio apagaria uma escolha manual, o mesmo defeito da unidade.
+    if (p.department_id) { setDepartmentId(p.department_id); setSubdepartmentId(p.subdepartment_id); }
     setRequesterId(p.requester_id); setCc(p.cc);
     setPriority(p.priority); setDueDate(p.due_date); setProblema(p.problem_statement);
     const allDemandas = res.actions.flatMap((a) => a.payload.demandas);
@@ -362,8 +370,10 @@ export function ActionDialog({
                     </p>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.3rem 1.1rem", marginTop: "0.55rem", fontSize: "0.72rem" }}>
                       {[
+                        <><strong>Problema</strong> <span className="soft">(a situação que motivou a ação)</span></>,
                         <><strong>Prioridade</strong> <span className="soft">(baixa, média, alta, urgente)</span></>,
                         <><strong>Prazo</strong> <span className="soft">(ex.: “até sexta”, “30/09/2026”)</span></>,
+                        <><strong>Setor</strong> <span className="soft">e</span> <strong>subsetor</strong> <span className="soft">responsáveis</span></>,
                         <><strong>Pilar / Seção / Item</strong> <span className="soft">(SDPO)</span></>,
                         <><strong>KPI</strong> <span className="soft">relacionado</span></>,
                         <><strong>Ferramenta de gestão</strong> <span className="soft">(ex.: PDCA, 5W2H)</span></>,
