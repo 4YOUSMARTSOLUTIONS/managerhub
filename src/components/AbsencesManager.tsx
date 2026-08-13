@@ -36,6 +36,15 @@ export type AbsenceRow = {
   endDate: string;
   discountsRv: boolean;
   note: string | null;
+  /**
+   * Veio de um lançamento aprovado em Absenteísmos?
+   *
+   * Se veio, editar ou excluir por aqui faria o processo e o fato divergirem: o
+   * lançamento continuaria exibindo o período aprovado, com o atestado
+   * anexado. A FK e o trigger recusam de qualquer jeito; a tela desliga os
+   * botões antes, para a recusa não chegar como erro cru.
+   */
+  fromLancamento?: boolean;
 };
 
 const TIPOS: Enums<"absence_kind">[] = ["ferias", "licenca", "afastamento", "atestado", "falta"];
@@ -51,16 +60,19 @@ type Rascunho = {
   note: string;
 };
 
-const novo = (): Rascunho => ({
+const novo = (kind: Enums<"absence_kind">): Rascunho => ({
   userId: "",
-  kind: "ferias",
+  kind,
   startDate: hoje(),
   endDate: hoje(),
-  discountsRv: ABSENCE_DESCONTA_PADRAO.ferias,
+  discountsRv: ABSENCE_DESCONTA_PADRAO[kind],
   note: "",
 });
 
-export function AbsencesManager({ members, alvos, unidades, absences, canEdit = true }: {
+export function AbsencesManager({
+  members, alvos, unidades, absences, canEdit = true,
+  kinds = TIPOS, title = "Férias e afastamentos", description, exportFilename,
+}: {
   /** quadro ATIVO: alimenta o formulário de lançamento */
   members: { id: string; name: string }[];
   /** quem a importação alcança: ativos + desligados + contratos anteriores */
@@ -69,6 +81,15 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
   absences: AbsenceRow[];
   /** `false` deixa em consulta: busca, filtro, lista e exportação ficam; lançar, editar e excluir somem. */
   canEdit?: boolean;
+  /**
+   * Quais tipos esta instância lança e lista. A mesma tabela serve à aba de
+   * Férias e à de Absenteísmos e afastamentos: o que muda é o recorte, não o
+   * dado. A lista `absences` já deve vir filtrada pela página.
+   */
+  kinds?: Enums<"absence_kind">[];
+  title?: string;
+  description?: React.ReactNode;
+  exportFilename?: string;
 }) {
   const [busca, setBusca] = useState("");
   const [ano, setAno] = useState("");
@@ -94,7 +115,7 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
       .sort((a, b) => b.startDate.localeCompare(a.startDate) || (nomePorId.get(a.userId) ?? "").localeCompare(nomePorId.get(b.userId) ?? "", "pt-BR"));
   }, [absences, termo, ano, nomePorId]);
 
-  const abrirNovo = () => { setErro(""); setRascunho(novo()); };
+  const abrirNovo = () => { setErro(""); setRascunho(novo(kinds[0] ?? "ferias")); };
   const abrirEdicao = (a: AbsenceRow) => {
     setErro("");
     setRascunho({ id: a.id, userId: a.userId, kind: a.kind, startDate: a.startDate, endDate: a.endDate, discountsRv: a.discountsRv, note: a.note ?? "" });
@@ -143,11 +164,15 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
-        <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Férias e afastamentos</h3>
+        <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.2rem" }}>{title}</h3>
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-          Períodos em que o colaborador não trabalhou. Quando o lançamento <strong>desconta</strong>, a remuneração
-          variável dos meses atingidos passa a ser proporcional aos dias trabalhados, em dias corridos. Julho tem 31
-          dias: quem saiu de férias no dia 16 recebe 15/31 do valor.
+          {description ?? (
+            <>
+              Períodos em que o colaborador não trabalhou. Quando o lançamento <strong>desconta</strong>, a remuneração
+              variável dos meses atingidos passa a ser proporcional aos dias trabalhados, em dias corridos. Julho tem 31
+              dias: quem saiu de férias no dia 16 recebe 15/31 do valor.
+            </>
+          )}
         </p>
       </div>
 
@@ -162,7 +187,7 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
           {/* exporta o que está EM VISTA, e no mesmo formato que a importação lê:
               dá para exportar, corrigir na planilha e reimportar por cima */}
           <ExportButton
-            filename="ferias_e_afastamentos.xlsx"
+            filename={exportFilename ?? "ferias_e_afastamentos.xlsx"}
             sheetName="Ausências"
             headers={["Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"]}
             rows={lista.map((a) => [
@@ -198,7 +223,7 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
             <div>
               <label className="label">Tipo</label>
               <select className="select" value={rascunho.kind} onChange={(e) => trocarTipo(e.target.value as Enums<"absence_kind">)}>
-                {TIPOS.map((t) => <option key={t} value={t}>{ABSENCE_KIND_LABEL[t]}</option>)}
+                {kinds.map((t) => <option key={t} value={t}>{ABSENCE_KIND_LABEL[t]}</option>)}
               </select>
             </div>
             <div>
@@ -237,13 +262,14 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
             <th>Período</th>
             <th style={{ textAlign: "right" }}>Dias</th>
             <th>Remuneração variável</th>
+            <th style={{ width: 130 }}>Origem</th>
             {canEdit && <th style={{ textAlign: "right" }}></th>}
           </tr>
         </thead>
         <tbody>
           {lista.length === 0 ? (
             <tr>
-              <td colSpan={canEdit ? 6 : 5} className="soft" style={{ textAlign: "center", padding: "1rem" }}>
+              <td colSpan={canEdit ? 7 : 6} className="soft" style={{ textAlign: "center", padding: "1rem" }}>
                 {absences.length === 0 ? "Nenhum período lançado ainda." : "Nenhum período com esse filtro."}
               </td>
             </tr>
@@ -261,12 +287,25 @@ export function AbsencesManager({ members, alvos, unidades, absences, canEdit = 
                   ? <span style={{ fontSize: "0.8rem" }}>Proporcional aos dias trabalhados</span>
                   : <span className="soft" style={{ fontSize: "0.8rem" }}>Valor cheio, sem desconto</span>}
               </td>
+              <td>
+                {a.fromLancamento
+                  ? <span className="muted" style={{ fontSize: "0.78rem" }}>Lançamento aprovado</span>
+                  : <span className="soft" style={{ fontSize: "0.78rem" }}>Registro direto</span>}
+              </td>
               {canEdit && (
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                  <button type="button" className="icon-btn" title="Editar" disabled={pendente} onClick={() => abrirEdicao(a)}>
+                  <button
+                    type="button" className="icon-btn"
+                    title={a.fromLancamento ? "Editada em Absenteísmos" : "Editar"}
+                    disabled={pendente || a.fromLancamento} onClick={() => abrirEdicao(a)}
+                  >
                     <Pencil size={14} />
                   </button>
-                  <button type="button" className="icon-btn icon-btn-danger" title="Excluir" disabled={pendente} onClick={() => remover(a)}>
+                  <button
+                    type="button" className="icon-btn icon-btn-danger"
+                    title={a.fromLancamento ? "Para desfazer, cancele o lançamento em Absenteísmos" : "Excluir"}
+                    disabled={pendente || a.fromLancamento} onClick={() => remover(a)}
+                  >
                     <Trash2 size={14} />
                   </button>
                 </td>

@@ -25,6 +25,9 @@ import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
 import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManager";
 import { InfractionTypesManager, type InfracaoRow } from "@/components/InfractionTypesManager";
+import { AbsenceTypesManager, type TipoAbsenteismoRow } from "@/components/AbsenceTypesManager";
+import { AbsenteismoRecipientsManager, type DestinatarioRow } from "@/components/AbsenteismoRecipientsManager";
+import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
   createSanctionType, deleteSanctionType, setSanctionTypeActive,
@@ -89,6 +92,10 @@ export default async function SettingsPage() {
   const seEdita = (node: React.ReactNode) => (canEdit ? node : null);
 
   const supabase = await createClient();
+  // A aba de Absenteísmos precisa saber se a integração de e-mail existe, para
+  // dizer que nenhum comunicado sairá em vez de deixar o silêncio parecer falha.
+  // Sai junto com o resto, sem onda própria.
+  const flagsP = getPlatformIntegrationFlags();
   // Tudo o que a tela precisa numa rodada só. Antes eram 6 ondas em sequência, e
   // como nenhuma dependia da anterior, a espera era pura soma de latência: com o
   // banco em São Paulo, cada onda custava um ida e volta que não precisava existir.
@@ -99,7 +106,8 @@ export default async function SettingsPage() {
     { data: ticketSectors }, { data: ticketCategories }, { data: ticketSlas }, { data: rvConfigsData }, { data: fbCompsData }, { data: fbCadenceRules },
     { data: usoData }, { data: profilesData }, { data: pessoaisData }, { data: muData }, { data: contratosData }, { data: absencesData },
     { data: sanctionTypesData }, { data: infractionTypesData }, { data: sanctionsData }, { data: reducerRulesData }, { data: reducerBandsData },
-    { data: sancoesDeLancamento },
+    { data: sancoesDeLancamento }, { data: absenceTypesData }, { data: recipientsData },
+    { data: absenteismosAprovados },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -164,6 +172,21 @@ export default async function SettingsPage() {
     // quais punições nasceram de um lançamento aprovado: essas não se editam nem
     // se excluem por aqui, para o processo e o fato não passarem a divergir
     supabase.from("punicao_lancamentos").select("sanction_id").eq("tenant_id", tenant.id).not("sanction_id", "is", null),
+    supabase
+      .from("absence_types")
+      .select("id, name, description, kind, requires_document, requires_medical, discounts_rv_default, counts_as_absenteeism, active")
+      .eq("tenant_id", tenant.id)
+      .order("sort").order("name"),
+    // a lista de destinatários é do DP: a policy é `owner/admin/hr`, e para o
+    // Gerencial esta consulta volta vazia em vez de erro
+    supabase
+      .from("absenteismo_email_recipients")
+      .select("id, email, name, unit_id, active")
+      .eq("tenant_id", tenant.id)
+      .order("email"),
+    // quais ausências nasceram de um lançamento aprovado: essas não se editam
+    // nem se excluem por aqui, para o processo e o fato não divergirem
+    supabase.from("absenteismo_lancamentos").select("absence_id").eq("tenant_id", tenant.id).not("absence_id", "is", null),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -349,6 +372,19 @@ export default async function SettingsPage() {
     id: i.id, code: i.code, name: i.name,
     description: i.description, severity: i.severity, active: i.active,
   }));
+  const integrationFlags = await flagsP;
+  const absenceTypeRows: TipoAbsenteismoRow[] = (absenceTypesData ?? []).map((t) => ({
+    id: t.id, name: t.name, description: t.description, kind: t.kind,
+    requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
+    discountsRvDefault: t.discounts_rv_default,
+    countsAsAbsenteeism: t.counts_as_absenteeism, active: t.active,
+  }));
+  const nomeUnidade = new Map((units ?? []).map((u) => [u.id, u.name]));
+  const recipientRows: DestinatarioRow[] = (recipientsData ?? []).map((d) => ({
+    id: d.id, email: d.email, name: d.name, unitId: d.unit_id,
+    unitName: d.unit_id ? nomeUnidade.get(d.unit_id) ?? null : null,
+    active: d.active,
+  }));
   const sanctionTypeName = new Map(sanctionTypeOpts.map((t) => [t.id, t.name]));
   const vindasDeLancamento = new Set((sancoesDeLancamento ?? []).map((l) => l.sanction_id).filter(Boolean) as string[]);
   const sanctionRows: SanctionRow[] = (sanctionsData ?? []).map((s2) => ({
@@ -373,7 +409,17 @@ export default async function SettingsPage() {
   }));
   // se nenhum motivo ativo observa punição, registrar uma não muda valor nenhum
   const punicaoCortaRv = reducerRules.some((r) => r.ativa && r.fonte === "sanction" && r.faixas.length > 0);
+  // comportamentos de ausência que já cortam por faixa: o catálogo de
+  // absenteísmos avisa que o desconto por dia não se acumula com eles
+  const kindsComRedutorAtivo = [...new Set(
+    reducerRules
+      .filter((r) => r.ativa && r.fonte === "absence" && r.absenceKind && r.faixas.length > 0)
+      .map((r) => r.absenceKind as NonNullable<typeof r.absenceKind>),
+  )];
 
+  const ausenciasDeLancamento = new Set(
+    (absenteismosAprovados ?? []).map((l) => l.absence_id).filter(Boolean) as string[],
+  );
   const absenceRows: AbsenceRow[] = (absencesData ?? []).map((a) => ({
     id: a.id,
     userId: a.user_id,
@@ -382,6 +428,7 @@ export default async function SettingsPage() {
     endDate: a.end_date,
     discountsRv: a.discounts_rv,
     note: a.note,
+    fromLancamento: ausenciasDeLancamento.has(a.id),
   }));
 
   // ---------- Conteúdo das abas ----------
@@ -425,10 +472,44 @@ export default async function SettingsPage() {
             />
           ),
         },
+        // Duas abas sobre a MESMA tabela (`employee_absences`), com recortes
+        // diferentes. Férias é programada e tem tela própria; o resto é o que o
+        // módulo de Absenteísmos alimenta ao aprovar, mais o registro direto do
+        // DP. A separação é de leitura, não de dado: a constraint de
+        // sobreposição continua valendo entre as duas.
         {
           id: "ausencias",
-          label: "Férias e afastamentos",
-          content: <AbsencesManager members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} absences={absenceRows} canEdit={canEditDP} />,
+          label: "Férias",
+          content: (
+            <AbsencesManager
+              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+              alvos={importTargets}
+              unidades={(units ?? []).map((u) => u.name)}
+              absences={absenceRows.filter((a) => a.kind === "ferias")}
+              canEdit={canEditDP}
+              kinds={["ferias"]}
+              title="Férias"
+              description="Períodos de férias programadas. Quando o lançamento desconta, a remuneração variável dos meses atingidos passa a ser proporcional aos dias trabalhados."
+              exportFilename="ferias.xlsx"
+            />
+          ),
+        },
+        {
+          id: "afastamentos",
+          label: "Absenteísmos e afastamentos",
+          content: (
+            <AbsencesManager
+              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+              alvos={importTargets}
+              unidades={(units ?? []).map((u) => u.name)}
+              absences={absenceRows.filter((a) => a.kind !== "ferias")}
+              canEdit={canEditDP}
+              kinds={["licenca", "afastamento", "atestado", "falta"]}
+              title="Absenteísmos e afastamentos"
+              description="Licenças, afastamentos, atestados e faltas. As linhas com origem em lançamento vieram do módulo de Absenteísmos, já aprovadas pelo RH, e são editadas por lá. O registro direto serve para o histórico e para quem não usa o módulo."
+              exportFilename="absenteismos_e_afastamentos.xlsx"
+            />
+          ),
         },
       ]}
     />
@@ -1136,6 +1217,40 @@ export default async function SettingsPage() {
         />
       ),
     },
+    {
+      id: "absenteismos",
+      label: "Absenteísmos",
+      content: (
+        <Tabs
+          variant="sub"
+          tabs={[
+            {
+              id: "abs-tipos",
+              label: "Tipos de absenteísmo",
+              content: (
+                <AbsenceTypesManager
+                  rows={absenceTypeRows}
+                  canEdit={canEditDP}
+                  kindsComRedutor={kindsComRedutorAtivo}
+                />
+              ),
+            },
+            {
+              id: "abs-comunicado",
+              label: "Comunicado por e-mail",
+              content: (
+                <AbsenteismoRecipientsManager
+                  rows={recipientRows}
+                  unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
+                  canEdit={canEditDP}
+                  temChaveDeEmail={integrationFlags.hasResend}
+                />
+              ),
+            },
+          ]}
+        />
+      ),
+    },
     { id: "salas", label: "Salas", content: salasTab },
     { id: "feriados", label: "Calendário e Feriados", content: feriadosTab },
   ];
@@ -1144,7 +1259,7 @@ export default async function SettingsPage() {
   // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
   // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as duas
   // abas que SÃO o departamento pessoal.
-  const DP_TABS = new Set(["usuarios", "rv", "punicoes"]);
+  const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos"]);
   const tabsVisiveis = isHr ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
 
   return (

@@ -17,7 +17,7 @@ export type ModuleKey =
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
   | "chamados" | "venda_interna"
-  | "metas" | "feedbacks" | "punicoes" | "treinamentos"
+  | "metas" | "feedbacks" | "punicoes" | "absenteismos" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
   | "cinco_s" | "padroes"
@@ -78,6 +78,9 @@ export const MODULES: ModuleDef[] = [
   // Quem lança é o gestor da pessoa; quem aprova é o RH. Daí o minRole próprio:
   // a tela não faz sentido para quem não faz nem uma coisa nem outra.
   { key: "punicoes", label: "Punições", href: "/punicoes", group: "g_pessoas", minRole: "team_lead_hr" },
+  // Mesmo arranjo de Punições: o gestor lança o não comparecimento e o RH
+  // aprova, então nenhum dos dois pode ficar sem o item de menu.
+  { key: "absenteismos", label: "Absenteísmos", href: "/absenteismos", group: "g_pessoas", minRole: "team_lead_hr" },
 
   // Módulo próprio, e não mais um item de Gestão de pessoas: ele vai crescer
   // com estrutura de trilhas, turmas e presença, que não cabe dentro de um

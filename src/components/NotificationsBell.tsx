@@ -37,6 +37,7 @@ export function NotificationsBell() {
     // e uma coluna a mais em `notifications` custaria uma migração por módulo
     else if (n.type.startsWith("training_")) router.push("/treinamentos");
     else if (n.type.startsWith("punicao_")) router.push("/punicoes");
+    else if (n.type.startsWith("absenteismo_")) router.push("/absenteismos");
   };
 
   return (
