@@ -758,9 +758,9 @@ export type Database = {
       // `chat_messages` e `chat_members` ficam fora do audit_trigger (volume e
       // privacidade); `fts` é generated e não entra nos tipos de escrita.
       chat_channels: {
-        Row: { id: string; tenant_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]; name: string | null; dm_key: string | null; created_by: string; closed_at: string | null; closed_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]; name?: string | null; dm_key?: string | null; created_by: string; closed_at?: string | null; closed_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; kind?: Database["public"]["Enums"]["chat_channel_kind"]; name?: string | null; dm_key?: string | null; created_by?: string; closed_at?: string | null; closed_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]; name: string | null; avatar_path: string | null; dm_key: string | null; created_by: string; closed_at: string | null; closed_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]; name?: string | null; avatar_path?: string | null; dm_key?: string | null; created_by: string; closed_at?: string | null; closed_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; kind?: Database["public"]["Enums"]["chat_channel_kind"]; name?: string | null; avatar_path?: string | null; dm_key?: string | null; created_by?: string; closed_at?: string | null; closed_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       chat_members: {
@@ -1801,17 +1801,19 @@ export type Database = {
         Args: { p_tenant: string }
         Returns: {
           channel_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]
-          name: string | null; closed_at: string | null
+          name: string | null; avatar_path: string | null; closed_at: string | null
           membros: Json
           last_body: string | null; last_author: string | null
           last_at: string | null; last_deleted: boolean
         }[]
       }
+      // foto do grupo: grava/limpa o path (dono do grupo ou administração)
+      chat_definir_foto: { Args: { p_id: string; p_path: string | null }; Returns: undefined }
       chat_overview: {
         Args: Record<string, never>
         Returns: {
           channel_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]
-          name: string | null; closed_at: string | null
+          name: string | null; avatar_path: string | null; closed_at: string | null
           role: Database["public"]["Enums"]["chat_member_role"]; muted: boolean
           last_read_at: string; unread: number; membros: Json
           last_body: string | null; last_author: string | null

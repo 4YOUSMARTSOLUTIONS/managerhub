@@ -22,6 +22,8 @@ export type ConversaResumo = {
   channelId: string;
   kind: Enums<"chat_channel_kind">;
   name: string | null;
+  /** foto do grupo (caminho no bucket público chat-grupo-fotos) */
+  avatarPath: string | null;
   closedAt: string | null;
   role: Enums<"chat_member_role">;
   muted: boolean;
@@ -68,6 +70,7 @@ export async function getConversas(): Promise<ConversaResumo[]> {
     channelId: r.channel_id,
     kind: r.kind,
     name: r.name,
+    avatarPath: r.avatar_path,
     closedAt: r.closed_at,
     role: r.role,
     muted: r.muted,
@@ -340,6 +343,57 @@ export async function gerirMembros(
   return rpcSimples((s) => s.rpc("chat_gerir_membros", { p_id: channelId, p_adicionar: adicionar, p_remover: remover }));
 }
 
+/**
+ * Foto do grupo: sobe a imagem no bucket público e grava o caminho pela RPC
+ * (dono do grupo ou administração). A foto anterior é removida em seguida,
+ * best effort: se a limpeza falhar fica um órfão inofensivo no bucket.
+ */
+export async function definirFotoGrupo(formData: FormData): Promise<ActionState & { avatarPath?: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const channelId = String(formData.get("channelId") ?? "");
+    const anterior = String(formData.get("anterior") ?? "");
+    const file = formData.get("file");
+    if (!channelId) return { error: "Grupo inválido." };
+    if (!(file instanceof File)) return { error: "Escolha a imagem." };
+
+    const recusa = recusaDeUpload(file, 2 * 1024 * 1024, ["image/jpeg", "image/png", "image/webp"]);
+    if (recusa) return { error: recusa };
+
+    const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    const path = `${tenantId}/${channelId}/${Date.now()}.${ext}`;
+    const up = await supabase.storage.from("chat-grupo-fotos").upload(path, file, {
+      contentType: file.type, upsert: false,
+    });
+    if (up.error) return { error: "Não foi possível subir a imagem. Verifique seu acesso ao grupo." };
+
+    const { error } = await supabase.rpc("chat_definir_foto", { p_id: channelId, p_path: path });
+    if (error) {
+      await supabase.storage.from("chat-grupo-fotos").remove([path]);
+      return { error: error.message };
+    }
+    if (anterior) await supabase.storage.from("chat-grupo-fotos").remove([anterior]);
+
+    revalidatePath(RP_CHAT);
+    return { ok: true, avatarPath: path };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function removerFotoGrupo(channelId: string, anterior: string | null): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("chat_definir_foto", { p_id: channelId, p_path: null });
+    if (error) return { error: error.message };
+    if (anterior) await supabase.storage.from("chat-grupo-fotos").remove([anterior]);
+    revalidatePath(RP_CHAT);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function apagarMensagemAdmin(id: string): Promise<ActionState> {
   try {
     const { supabase } = await actionContext();
@@ -413,6 +467,7 @@ export async function getConversasAdmin(): Promise<ConversaResumo[]> {
     channelId: r.channel_id,
     kind: r.kind,
     name: r.name,
+    avatarPath: r.avatar_path,
     closedAt: r.closed_at,
     role: "membro" as const,
     muted: false,

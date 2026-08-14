@@ -13,14 +13,16 @@ import { normalizar } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import {
   apagarMensagem, apagarMensagemAdmin, banirDoChat, buscarChat, carregarMensagens, criarDm,
-  criarGrupo, desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo, enviarMensagem,
-  gerirMembros, getBloqueados, getConversasAdmin, renomearGrupo, transferirDono, urlAnexoChat,
+  criarGrupo, definirFotoGrupo, desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo,
+  enviarMensagem, gerirMembros, getBloqueados, getConversasAdmin, removerFotoGrupo,
+  renomearGrupo, transferirDono, urlAnexoChat,
   type BloqueadoChat, type ConversaResumo, type MensagemChat, type ResultadoBusca,
 } from "@/lib/actions/chat";
 import { type StatusPresenca } from "./useChatRealtime";
 import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "./ChatPresenceProvider";
 import { useChatVivo } from "./ChatLiveProvider";
 import { EmojiPicker } from "./EmojiPicker";
+import { GrupoAvatar } from "./GrupoAvatar";
 
 /**
  * A tela cheia do chat: lista de conversas à esquerda, conversa à direita.
@@ -207,11 +209,7 @@ export function ChatManager({
                       />
                     </span>
                   )
-                  : (
-                    <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Users size={16} />
-                    </span>
-                  )}
+                  : <GrupoAvatar path={c.avatarPath} name={c.name} size={34} />}
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: "flex", justifyContent: "space-between", gap: "0.4rem" }}>
                     <span style={{ fontWeight: c.unread > 0 ? 700 : 500, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -485,11 +483,7 @@ function Thread({
       <div style={{ padding: "0.7rem 1rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.6rem", alignItems: "center" }}>
         {conversa.kind === "dm"
           ? <Avatar name={titulo} userId={conversa.membros.find((m) => m.id !== meuId)?.id} size={30} />
-          : (
-            <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Users size={15} />
-            </span>
-          )}
+          : <GrupoAvatar path={conversa.avatarPath} name={titulo} size={30} />}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: "0.9rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
           {conversa.kind === "grupo" ? (
@@ -864,9 +858,39 @@ function GroupAdminDialog({
   const [membroIds, setMembroIds] = useState<string[]>(conversa.membros.map((m) => m.id));
   const [novoDono, setNovoDono] = useState("");
   const [encerrado, setEncerrado] = useState(Boolean(conversa.closedAt));
+  const [foto, setFoto] = useState(conversa.avatarPath);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const [pendente, iniciar] = useTransition();
+  const fotoRef = useRef<HTMLInputElement>(null);
+
+  const trocarFoto = (file: File) => {
+    setErro("");
+    setAviso("");
+    iniciar(async () => {
+      const fd = new FormData();
+      fd.set("channelId", conversa.channelId);
+      fd.set("anterior", foto ?? "");
+      fd.set("file", file);
+      const r = await definirFotoGrupo(fd);
+      if (r.error || !r.avatarPath) { setErro(r.error ?? "Não foi possível trocar a foto."); return; }
+      setFoto(r.avatarPath);
+      setAviso("Foto atualizada.");
+      onFeito();
+    });
+  };
+
+  const limparFoto = () => {
+    setErro("");
+    setAviso("");
+    iniciar(async () => {
+      const r = await removerFotoGrupo(conversa.channelId, foto);
+      if (r.error) { setErro(r.error); return; }
+      setFoto(null);
+      setAviso("Foto removida.");
+      onFeito();
+    });
+  };
 
   const rodar = (fn: () => Promise<{ error?: string }>, feito: string) => {
     setErro("");
@@ -922,6 +946,32 @@ function GroupAdminDialog({
           </button>
         </div>
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div>
+            <label className="label">Foto do grupo</label>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
+              <GrupoAvatar path={foto} name={nome} size={48} />
+              <input
+                ref={fotoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) trocarFoto(f);
+                }}
+              />
+              <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => fotoRef.current?.click()}>
+                {foto ? "Trocar" : "Escolher"}
+              </button>
+              {foto && (
+                <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={limparFoto}>
+                  Remover
+                </button>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="label">Nome do grupo</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>

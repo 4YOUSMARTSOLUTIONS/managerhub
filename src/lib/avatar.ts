@@ -28,3 +28,14 @@ export function avatarSrc(path: string | null | undefined): string | null {
   if (!base) return null;
   return `${base}/storage/v1/object/public/${AVATAR_BUCKET}/${p}`;
 }
+
+/** Foto de GRUPO do chat: segundo bucket público, mesma régua do avatar. */
+export const GRUPO_FOTO_BUCKET = "chat-grupo-fotos";
+
+export function grupoFotoSrc(path: string | null | undefined): string | null {
+  const p = path?.trim();
+  if (!p) return null;
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return null;
+  return `${base}/storage/v1/object/public/${GRUPO_FOTO_BUCKET}/${p}`;
+}

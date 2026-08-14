@@ -9,6 +9,7 @@ import { carregarMensagens, enviarMensagem, type ConversaResumo, type MensagemCh
 import { useChatVivo } from "./ChatLiveProvider";
 import { STATUS_COR, useChatStatus } from "./ChatPresenceProvider";
 import { EmojiPicker } from "./EmojiPicker";
+import { GrupoAvatar } from "./GrupoAvatar";
 
 /**
  * O balão do chat no canto direito: a conversa vem até você, em vez de você ir
@@ -162,7 +163,9 @@ function MiniLista({
             }}
           >
             <span style={{ position: "relative", display: "flex", flexShrink: 0 }}>
-              <Avatar name={outro?.name ?? c.name} userId={outro?.id} size={30} />
+              {c.kind === "grupo"
+                ? <GrupoAvatar path={c.avatarPath} name={c.name} size={30} />
+                : <Avatar name={outro?.name} userId={outro?.id} size={30} />}
               {outro && (
                 <span
                   aria-hidden
