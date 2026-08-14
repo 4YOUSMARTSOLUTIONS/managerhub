@@ -16,7 +16,7 @@ export type ModuleKey =
   // vendáveis
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
-  | "chamados" | "venda_interna"
+  | "chamados" | "venda_interna" | "chat"
   | "metas" | "feedbacks" | "punicoes" | "absenteismos" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
@@ -67,6 +67,8 @@ export const MODULES: ModuleDef[] = [
   { key: "planner", label: "Planner", href: "/planner", group: "g_rotina" },
 
   { key: "chamados", label: "Chamados", href: "/chamados", group: null },
+
+  { key: "chat", label: "Chat interno", href: "/chat", group: null },
 
   { key: "venda_interna", label: "Venda Interna", href: "/venda-interna", group: null },
 

@@ -751,6 +751,42 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; kind?: Database["public"]["Enums"]["absence_kind"]; requires_document?: boolean; requires_medical?: boolean; requires_companion?: boolean; requires_kinship?: boolean; discounts_rv_default?: boolean; counts_as_absenteeism?: boolean; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // ---- chat interno ----
+      // Mensagens são IMUTÁVEIS para o cliente (sem grant de update/delete):
+      // editar e apagar saem só por RPC. O select de admin (owner/admin/hr)
+      // alcança qualquer conversa por decisão explícita do dono do produto.
+      // `chat_messages` e `chat_members` ficam fora do audit_trigger (volume e
+      // privacidade); `fts` é generated e não entra nos tipos de escrita.
+      chat_channels: {
+        Row: { id: string; tenant_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]; name: string | null; dm_key: string | null; created_by: string; closed_at: string | null; closed_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]; name?: string | null; dm_key?: string | null; created_by: string; closed_at?: string | null; closed_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; kind?: Database["public"]["Enums"]["chat_channel_kind"]; name?: string | null; dm_key?: string | null; created_by?: string; closed_at?: string | null; closed_by?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      chat_members: {
+        Row: { channel_id: string; user_id: string; tenant_id: string; role: Database["public"]["Enums"]["chat_member_role"]; muted: boolean; last_read_at: string; added_by: string | null; created_at: string }
+        Insert: { channel_id: string; user_id: string; tenant_id: string; role?: Database["public"]["Enums"]["chat_member_role"]; muted?: boolean; last_read_at?: string; added_by?: string | null; created_at?: string }
+        Update: { channel_id?: string; user_id?: string; tenant_id?: string; role?: Database["public"]["Enums"]["chat_member_role"]; muted?: boolean; last_read_at?: string; added_by?: string | null; created_at?: string }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: { id: string; tenant_id: string; channel_id: string; author_id: string; body: string | null; anexo_path: string | null; anexo_nome: string | null; anexo_mime: string | null; edited_at: string | null; deleted_at: string | null; deleted_by: string | null; deleted_admin: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; channel_id: string; author_id: string; body?: string | null; anexo_path?: string | null; anexo_nome?: string | null; anexo_mime?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; channel_id?: string; author_id?: string; body?: string | null; anexo_path?: string | null; anexo_nome?: string | null; anexo_mime?: string | null; created_at?: string }
+        Relationships: []
+      }
+      chat_settings: {
+        Row: { user_id: string; tenant_id: string; notificacoes: boolean; status: Database["public"]["Enums"]["chat_user_status"]; updated_at: string }
+        Insert: { user_id: string; tenant_id: string; notificacoes?: boolean; status?: Database["public"]["Enums"]["chat_user_status"]; updated_at?: string }
+        Update: { user_id?: string; tenant_id?: string; notificacoes?: boolean; status?: Database["public"]["Enums"]["chat_user_status"]; updated_at?: string }
+        Relationships: []
+      }
+      chat_bans: {
+        Row: { id: string; tenant_id: string; user_id: string; banned_by: string; reason: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; banned_by: string; reason?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; banned_by?: string; reason?: string | null; created_at?: string }
+        Relationships: []
+      }
       // Tabela CID-10 oficial (DATASUS), catálogo GLOBAL sem tenant: J11.0
       // significa a mesma coisa em qualquer empresa. Somente leitura pelo app;
       // a carga vem de supabase/seed/cid10.sql.
@@ -1951,6 +1987,9 @@ export type Database = {
       infraction_severity: "leve" | "media" | "grave"
       punicao_status: "rascunho" | "pendente" | "aprovada" | "reprovada" | "cancelada"
       absenteismo_status: "aberto" | "pendente" | "aprovado" | "reprovado" | "cancelado"
+      chat_channel_kind: "dm" | "grupo"
+      chat_member_role: "dono" | "membro"
+      chat_user_status: "disponivel" | "ocupado" | "ausente"
       feedback_type: "reconhecimento" | "construtivo" | "neutro"
       feedback_visibility: "compartilhado" | "privado"
       feedback_channel: "presencial" | "reuniao_1a1" | "videochamada" | "mensagem" | "outro"

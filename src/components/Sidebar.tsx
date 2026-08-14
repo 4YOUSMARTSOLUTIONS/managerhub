@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AlertTriangle, CalendarCheck, ChevronDown, ClipboardCheck, DoorOpen, Lock,
-  LayoutDashboard, LayoutGrid, Layers, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
+  LayoutDashboard, LayoutGrid, Layers, MessageCircle, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
   Boxes, BookMarked, Presentation, Store,
 } from "lucide-react";
 import { BrandLogo, BrandWordmark, BrandOwnerSignature, SHOW_BRAND_OWNER } from "./BrandLogo";
@@ -32,6 +32,7 @@ const GROUP_ICONS: Record<GroupKey, React.ReactNode> = {
 const MODULE_ICONS: Partial<Record<ModuleKey, React.ReactNode>> = {
   dashboard: <LayoutDashboard size={SZ} />,
   chamados: <Headset size={SZ} />,
+  chat: <MessageCircle size={SZ} />,
   venda_interna: <Store size={SZ} />,
   // cavalete de sala de aula: o módulo é de capacitação, não de diploma
   treinamentos: <Presentation size={SZ} />,
