@@ -167,7 +167,7 @@ export function ChatManager({
           </select>
           <button
             type="button" className="btn btn-ghost btn-sm"
-            title={notificacoes ? "Desativar notificações" : "Ativar notificações"}
+            title={notificacoes ? "Desligar a prévia da mensagem" : "Ligar a prévia da mensagem"}
             onClick={alternarNotificacoes}
           >
             {notificacoes ? <Bell size={15} /> : <BellOff size={15} />}

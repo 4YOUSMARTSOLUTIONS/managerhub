@@ -62,7 +62,7 @@ export function ChatDock({ meuId }: { meuId: string }) {
             </span>
             <button
               type="button" className="muted"
-              title={notificacoes ? "Desativar notificações" : "Ativar notificações"}
+              title={notificacoes ? "Desligar a prévia da mensagem" : "Ligar a prévia da mensagem"}
               onClick={alternarNotificacoes}
               style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 2 }}
             >

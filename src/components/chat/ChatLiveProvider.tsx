@@ -69,8 +69,12 @@ type ValorChatVivo = {
   balaoAberto: boolean;
   setBalaoAberto: (v: boolean) => void;
   recarregar: () => void;
+  /** a PRÉVIA que sobe (toast/aviso do navegador) */
   notificacoes: boolean;
   alternarNotificacoes: () => void;
+  /** o alerta sonoro, independente da prévia */
+  som: boolean;
+  alternarSom: () => void;
   /** false quando não há chat (sem empresa ou módulo desligado) */
   ativo: boolean;
 };
@@ -86,6 +90,8 @@ const Ctx = createContext<ValorChatVivo>({
   recarregar: () => {},
   notificacoes: true,
   alternarNotificacoes: () => {},
+  som: true,
+  alternarSom: () => {},
   ativo: false,
 });
 
@@ -97,12 +103,14 @@ export function ChatLiveProvider({
   meuId,
   conversasIniciais,
   notificacoesIniciais,
+  somInicial,
   children,
 }: {
   /** null desliga tudo: sem empresa, ou chat não contratado */
   meuId: string | null;
   conversasIniciais: ConversaResumo[];
   notificacoesIniciais: boolean;
+  somInicial: boolean;
   children: React.ReactNode;
 }) {
   const [conversas, setConversas] = useState(conversasIniciais);
@@ -110,12 +118,15 @@ export function ChatLiveProvider({
   const [canalAberto, setCanalAberto] = useState<string | null>(null);
   const [balaoAberto, setBalaoAberto] = useState(false);
   const [notificacoes, setNotificacoes] = useState(notificacoesIniciais);
+  const [som, setSom] = useState(somInicial);
 
   // refs para o handler do websocket enxergar o estado novo sem reassinar
   const abertoRef = useRef(canalAberto);
   useEffect(() => { abertoRef.current = canalAberto; }, [canalAberto]);
   const notifRef = useRef(notificacoes);
   useEffect(() => { notifRef.current = notificacoes; }, [notificacoes]);
+  const somRef = useRef(som);
+  useEffect(() => { somRef.current = som; }, [som]);
   const conversasRef = useRef(conversas);
   useEffect(() => { conversasRef.current = conversas; }, [conversas]);
 
@@ -140,6 +151,15 @@ export function ChatLiveProvider({
       if (novo && typeof Notification !== "undefined" && Notification.permission === "default") {
         void Notification.requestPermission();
       }
+      return novo;
+    });
+  }, []);
+
+  const alternarSom = useCallback(() => {
+    setSom((v) => {
+      const novo = !v;
+      void salvarPreferencias({ som: novo });
+      if (novo) tocarSomDeMensagem(); // ligar já demonstra o som (e destrava o áudio)
       return novo;
     });
   }, []);
@@ -169,14 +189,17 @@ export function ChatLiveProvider({
     const conversa = conversasRef.current.find((c) => c.channelId === m.channelId);
     // canal ainda desconhecido = conversa recém-criada por outra pessoa
     if (!conversa) recarregar();
-    if (!notifRef.current || conversa?.muted) return;
+    if (conversa?.muted) return;
+
+    // som e prévia são escolhas separadas: qualquer combinação vale, e com os
+    // dois desligados fica só o contador do balão
+    if (somRef.current) tocarSomDeMensagem();
+    if (!notifRef.current) return;
 
     const quem = conversa?.kind === "grupo"
       ? conversa.name ?? "Grupo"
       : conversa?.membros.find((x) => x.id === m.authorId)?.name ?? "Nova mensagem";
     const texto = m.body ?? "Anexo";
-
-    tocarSomDeMensagem();
 
     // aba em segundo plano: aviso do navegador, que aparece fora da janela
     if (typeof document !== "undefined" && document.hidden
@@ -224,7 +247,7 @@ export function ChatLiveProvider({
       value={{
         conversas, aoVivo, naoLidas, canalAberto, abrirCanal,
         balaoAberto, setBalaoAberto, recarregar,
-        notificacoes, alternarNotificacoes, ativo: Boolean(meuId),
+        notificacoes, alternarNotificacoes, som, alternarSom, ativo: Boolean(meuId),
       }}
     >
       {children}

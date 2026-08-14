@@ -125,6 +125,7 @@ export default async function AppLayout({
       chatStatus={prefsChat.status}
       chatConversas={chatConversas}
       chatNotificacoes={prefsChat.notificacoes}
+      chatSom={prefsChat.som}
     >
       {children}
     </AppShell>

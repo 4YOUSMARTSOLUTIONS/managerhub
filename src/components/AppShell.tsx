@@ -32,6 +32,7 @@ export function AppShell({
   chatStatus = "disponivel",
   chatConversas = [],
   chatNotificacoes = true,
+  chatSom = true,
   children,
 }: {
   role: Enums<"member_role">;
@@ -60,6 +61,7 @@ export function AppShell({
   /** conversas do usuário, carregadas no layout: alimentam o balão e a tela */
   chatConversas?: ConversaResumo[];
   chatNotificacoes?: boolean;
+  chatSom?: boolean;
   children: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -69,7 +71,7 @@ export function AppShell({
   return (
     <AvatarProvider byUser={avatars} currentUserId={currentUserId}>
     <ChatPresenceProvider tenantId={chatTenantId} meuId={chatId} statusInicial={chatStatus}>
-    <ChatLiveProvider meuId={chatId} conversasIniciais={chatConversas} notificacoesIniciais={chatNotificacoes}>
+    <ChatLiveProvider meuId={chatId} conversasIniciais={chatConversas} notificacoesIniciais={chatNotificacoes} somInicial={chatSom}>
     <div className="app-root">
       <EscToClose />
       <Sidebar

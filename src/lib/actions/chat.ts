@@ -263,7 +263,10 @@ export async function marcarLido(channelId: string): Promise<void> {
 }
 
 export type PreferenciasChat = {
+  /** a PRÉVIA: toast na tela e, com a aba oculta, aviso do navegador */
   notificacoes: boolean;
+  /** o alerta sonoro, independente da prévia */
+  som: boolean;
   status: Enums<"chat_user_status">;
 };
 
@@ -272,11 +275,12 @@ export async function getPreferencias(): Promise<PreferenciasChat> {
   const { supabase, userId } = await actionContext();
   const { data } = await supabase
     .from("chat_settings")
-    .select("notificacoes, status")
+    .select("notificacoes, som, status")
     .eq("user_id", userId)
     .maybeSingle();
   return {
     notificacoes: data?.notificacoes ?? true,
+    som: data?.som ?? true,
     status: data?.status ?? "disponivel",
   };
 }
@@ -291,6 +295,7 @@ export async function salvarPreferencias(p: Partial<PreferenciasChat>): Promise<
     user_id: userId,
     tenant_id: tenantId,
     ...(p.notificacoes !== undefined ? { notificacoes: p.notificacoes } : {}),
+    ...(p.som !== undefined ? { som: p.som } : {}),
     ...(p.status ? { status: p.status } : {}),
     updated_at: new Date().toISOString(),
   });

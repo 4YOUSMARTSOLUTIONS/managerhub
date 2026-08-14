@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { Bell, BellOff, ChevronDown, LogOut, Moon, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAvatars } from "@/components/AvatarProvider";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "@/components/chat/ChatPresenceProvider";
+import { useChatVivo } from "@/components/chat/ChatLiveProvider";
 import { setTheme } from "@/lib/actions/theme";
 import { signOut } from "@/lib/actions/auth";
 import { ROLE } from "@/lib/constants";
@@ -34,9 +35,10 @@ export function UserMenu({
   const ref = useRef<HTMLDivElement>(null);
   const next: Theme = theme === "dark" ? "light" : "dark";
   const { currentUserId } = useAvatars();
-  // presença do chat: a bolinha no avatar e a troca de status valem em
-  // qualquer tela, não só dentro do /chat
+  // presença e alertas do chat: bolinha no avatar, troca de status e os
+  // liga/desliga de som e prévia valem em qualquer tela, não só no /chat
   const { meuStatus, mudarStatus, ativo: chatAtivo } = useChatStatus();
+  const { som, alternarSom, notificacoes, alternarNotificacoes } = useChatVivo();
 
   useEffect(() => {
     if (!open) return;
@@ -155,6 +157,38 @@ export function UserMenu({
                   {STATUS_ROTULO[s]}
                 </button>
               ))}
+
+              <div className="soft" style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em", padding: "0.35rem 0.75rem 0.15rem" }}>
+                Alertas do chat
+              </div>
+              {/* som e prévia independentes: qualquer combinação, e com os
+                  dois desligados fica só o contador do balão */}
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={som}
+                style={itemStyle}
+                onClick={alternarSom}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+              >
+                {som ? <Volume2 size={16} /> : <VolumeX size={16} style={{ color: "var(--mh-text-3)" }} />}
+                <span style={{ flex: 1 }}>Som de mensagem</span>
+                <span className="soft" style={{ fontSize: "0.72rem" }}>{som ? "Ligado" : "Desligado"}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={notificacoes}
+                style={itemStyle}
+                onClick={alternarNotificacoes}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+              >
+                {notificacoes ? <Bell size={16} /> : <BellOff size={16} style={{ color: "var(--mh-text-3)" }} />}
+                <span style={{ flex: 1 }}>Prévia da mensagem</span>
+                <span className="soft" style={{ fontSize: "0.72rem" }}>{notificacoes ? "Ligada" : "Desligada"}</span>
+              </button>
               <div style={{ borderTop: "1px solid var(--mh-border)", margin: "0.2rem 0" }} />
             </>
           )}

@@ -775,10 +775,11 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; channel_id?: string; author_id?: string; body?: string | null; anexo_path?: string | null; anexo_nome?: string | null; anexo_mime?: string | null; created_at?: string }
         Relationships: []
       }
+      // notificacoes = PRÉVIA (toast/aviso do navegador); som é separado
       chat_settings: {
-        Row: { user_id: string; tenant_id: string; notificacoes: boolean; status: Database["public"]["Enums"]["chat_user_status"]; updated_at: string }
-        Insert: { user_id: string; tenant_id: string; notificacoes?: boolean; status?: Database["public"]["Enums"]["chat_user_status"]; updated_at?: string }
-        Update: { user_id?: string; tenant_id?: string; notificacoes?: boolean; status?: Database["public"]["Enums"]["chat_user_status"]; updated_at?: string }
+        Row: { user_id: string; tenant_id: string; notificacoes: boolean; som: boolean; status: Database["public"]["Enums"]["chat_user_status"]; updated_at: string }
+        Insert: { user_id: string; tenant_id: string; notificacoes?: boolean; som?: boolean; status?: Database["public"]["Enums"]["chat_user_status"]; updated_at?: string }
+        Update: { user_id?: string; tenant_id?: string; notificacoes?: boolean; som?: boolean; status?: Database["public"]["Enums"]["chat_user_status"]; updated_at?: string }
         Relationships: []
       }
       chat_bans: {
