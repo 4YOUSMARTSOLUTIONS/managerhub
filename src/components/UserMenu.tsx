@@ -54,19 +54,22 @@ export function UserMenu({
     };
   }, [open]);
 
+  // compacto de propósito: no sidebar o menu abre para cima e não pode
+  // engolir a navegação inteira
   const itemStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
-    gap: "0.6rem",
+    gap: "0.5rem",
     width: "100%",
-    padding: "0.55rem 0.75rem",
+    padding: "0.35rem 0.6rem",
     background: "none",
     border: "none",
     borderRadius: "var(--mh-radius-sm)",
-    fontSize: "0.86rem",
+    fontSize: "0.78rem",
     color: "var(--mh-text-1)",
     cursor: "pointer",
     textAlign: "left",
+    whiteSpace: "nowrap",
   };
 
   return (
@@ -124,43 +127,52 @@ export function UserMenu({
             border: "1px solid var(--mh-border)",
             boxShadow: "var(--mh-shadow-e2)",
             borderRadius: "var(--mh-radius-md)",
-            padding: "0.35rem",
+            padding: "0.3rem",
             display: "flex",
             flexDirection: "column",
-            gap: "0.1rem",
+            gap: "0.05rem",
           }}
         >
-          <div style={{ padding: "0.4rem 0.75rem 0.55rem", borderBottom: "1px solid var(--mh-border)", marginBottom: "0.2rem" }}>
-            <div style={{ fontSize: "0.86rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {userName ?? "Usuário"}
+          {/* no sidebar o gatilho logo abaixo já mostra nome e papel; repetir
+              aqui só empurrava o menu para cima da navegação */}
+          {!isSidebar && (
+            <div style={{ padding: "0.3rem 0.6rem 0.45rem", borderBottom: "1px solid var(--mh-border)", marginBottom: "0.15rem" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {userName ?? "Usuário"}
+              </div>
+              <div className="soft" style={{ fontSize: "0.68rem" }}>{ROLE[role]}</div>
             </div>
-            <div className="soft" style={{ fontSize: "0.72rem" }}>{ROLE[role]}</div>
-          </div>
+          )}
 
           {chatAtivo && (
             <>
-              <div className="soft" style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em", padding: "0.25rem 0.75rem 0.15rem" }}>
+              <div className="soft" style={{ fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", padding: "0.15rem 0.6rem 0.1rem" }}>
                 Status no chat
               </div>
-              {(["disponivel", "ocupado", "ausente"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={meuStatus === s}
-                  style={{ ...itemStyle, fontWeight: meuStatus === s ? 600 : 400 }}
-                  onClick={() => { mudarStatus(s); setOpen(false); }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-                >
-                  <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_COR[s], flexShrink: 0, marginLeft: 3 }} />
-                  {STATUS_ROTULO[s]}
-                </button>
-              ))}
-
-              <div className="soft" style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em", padding: "0.35rem 0.75rem 0.15rem" }}>
-                Alertas do chat
+              {/* os três status numa linha só: um clique, sem empilhar */}
+              <div role="radiogroup" style={{ display: "flex", gap: "0.25rem", padding: "0 0.4rem 0.15rem" }}>
+                {(["disponivel", "ocupado", "ausente"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    role="radio"
+                    aria-checked={meuStatus === s}
+                    onClick={() => { mudarStatus(s); setOpen(false); }}
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem",
+                      padding: "0.3rem 0.2rem", fontSize: "0.72rem", cursor: "pointer",
+                      background: meuStatus === s ? "var(--mh-surface-2)" : "none",
+                      border: "1px solid " + (meuStatus === s ? "var(--mh-border)" : "transparent"),
+                      borderRadius: "var(--mh-radius-sm)", color: "var(--mh-text-1)",
+                      fontWeight: meuStatus === s ? 600 : 400, whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COR[s], flexShrink: 0 }} />
+                    {STATUS_ROTULO[s]}
+                  </button>
+                ))}
               </div>
+
               {/* som e prévia independentes: qualquer combinação, e com os
                   dois desligados fica só o contador do balão */}
               <button
@@ -172,9 +184,9 @@ export function UserMenu({
                 onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
               >
-                {som ? <Volume2 size={16} /> : <VolumeX size={16} style={{ color: "var(--mh-text-3)" }} />}
+                {som ? <Volume2 size={14} /> : <VolumeX size={14} style={{ color: "var(--mh-text-3)" }} />}
                 <span style={{ flex: 1 }}>Som de mensagem</span>
-                <span className="soft" style={{ fontSize: "0.72rem" }}>{som ? "Ligado" : "Desligado"}</span>
+                <span className="soft" style={{ fontSize: "0.68rem" }}>{som ? "Ligado" : "Desligado"}</span>
               </button>
               <button
                 type="button"
@@ -185,11 +197,11 @@ export function UserMenu({
                 onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
               >
-                {notificacoes ? <Bell size={16} /> : <BellOff size={16} style={{ color: "var(--mh-text-3)" }} />}
+                {notificacoes ? <Bell size={14} /> : <BellOff size={14} style={{ color: "var(--mh-text-3)" }} />}
                 <span style={{ flex: 1 }}>Prévia da mensagem</span>
-                <span className="soft" style={{ fontSize: "0.72rem" }}>{notificacoes ? "Ligada" : "Desligada"}</span>
+                <span className="soft" style={{ fontSize: "0.68rem" }}>{notificacoes ? "Ligada" : "Desligada"}</span>
               </button>
-              <div style={{ borderTop: "1px solid var(--mh-border)", margin: "0.2rem 0" }} />
+              <div style={{ borderTop: "1px solid var(--mh-border)", margin: "0.15rem 0" }} />
             </>
           )}
 
@@ -201,7 +213,7 @@ export function UserMenu({
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
           >
-            <UserRound size={16} />
+            <UserRound size={14} />
             Meu perfil
           </button>
 
@@ -214,7 +226,7 @@ export function UserMenu({
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
           >
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
             {next === "dark" ? "Tema escuro" : "Tema claro"}
           </button>
 
@@ -226,7 +238,7 @@ export function UserMenu({
               onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
             >
-              <LogOut size={16} />
+              <LogOut size={14} />
               Sair
             </button>
           </form>
