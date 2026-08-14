@@ -88,8 +88,9 @@ export function useChatRealtime(
       este.subscribe((estado, err) => {
         // canal trocado por uma reassinatura: o CLOSED do velho não interessa
         if (canal !== este) return;
-        // canal privado recusado logo de cara = policy errada em
-        // realtime.messages; sem este log o sintoma é só "nada chega"
+        // uma linha de vida no console: é o que permite diagnosticar "nada
+        // chega" olhando a aba da pessoa, sem adivinhar
+        if (estado === "SUBSCRIBED") console.info("chat: canal de mensagens conectado");
         if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") {
           console.error("chat realtime:", estado, err?.message);
           reassinarDepois();

@@ -10,19 +10,26 @@ import { useChatRealtime } from "./useChatRealtime";
 
 /**
  * O "pop" de mensagem nova, gerado na hora pela Web Audio API: dois tons
- * curtos, sem arquivo de áudio para servir. Navegador só deixa tocar depois
- * do primeiro gesto do usuário na página; antes disso o try engole o bloqueio
- * e a notificação segue muda, sem erro.
+ * curtos, sem arquivo de áudio para servir.
+ *
+ * UM AudioContext para a página inteira, reutilizado. Criar um por mensagem
+ * era um vazamento: o que nasce antes do primeiro gesto do usuário fica
+ * "suspended" para sempre, e depois de meia dúzia pendurados o navegador
+ * recusa contextos novos, o som funciona algumas vezes e morre. Com um só,
+ * cada toque tenta um resume() e segue.
  */
+let audioCtx: AudioContext | null = null;
+
 function tocarSomDeMensagem() {
   try {
-    const ctx = new AudioContext();
-    const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    audioCtx ??= new AudioContext();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
     osc.type = "sine";
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(audioCtx.destination);
     osc.frequency.setValueAtTime(740, t);
     osc.frequency.setValueAtTime(988, t + 0.11);
     gain.gain.setValueAtTime(0.0001, t);
@@ -30,7 +37,7 @@ function tocarSomDeMensagem() {
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
     osc.start(t);
     osc.stop(t + 0.35);
-    osc.onended = () => { void ctx.close(); };
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
   } catch {
     // sem áudio disponível: a notificação visual basta
   }
