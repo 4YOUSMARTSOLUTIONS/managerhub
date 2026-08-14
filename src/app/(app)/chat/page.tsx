@@ -1,7 +1,7 @@
 import { moduleGate } from "@/lib/module-gate";
 import { requireContext, getMembers } from "@/lib/tenant";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { getConversas } from "@/lib/actions/chat";
+import { getConversas, getPreferencias } from "@/lib/actions/chat";
 import { ChatManager } from "@/components/chat/ChatManager";
 
 /**
@@ -9,7 +9,8 @@ import { ChatManager } from "@/components/chat/ChatManager";
  *
  * Conversas 1 a 1 e grupos entre os usuários da empresa. A lista e o histórico
  * chegam por server action (RLS decide o alcance; owner/admin/hr enxergam tudo
- * pela política de auditoria); o tempo real entra na leva seguinte.
+ * pela política de auditoria); mensagens novas, presença e toasts chegam por
+ * Supabase Realtime dentro do ChatManager.
  */
 export default async function ChatPage() {
   const gate = await moduleGate("chat");
@@ -17,9 +18,10 @@ export default async function ChatPage() {
 
   const { tenant, user } = await requireContext();
 
-  const [membros, conversas] = await Promise.all([
+  const [membros, conversas, prefs] = await Promise.all([
     getMembers(tenant.id),
     getConversas(),
+    getPreferencias(),
   ]);
 
   const pessoas = membros
@@ -33,7 +35,7 @@ export default async function ChatPage() {
         title="Chat interno"
         subtitle="Conversas entre as pessoas da empresa, com histórico centralizado"
       />
-      <ChatManager conversas={conversas} pessoas={pessoas} meuId={user.id} />
+      <ChatManager conversas={conversas} pessoas={pessoas} meuId={user.id} tenantId={tenant.id} prefs={prefs} />
     </div>
   );
 }

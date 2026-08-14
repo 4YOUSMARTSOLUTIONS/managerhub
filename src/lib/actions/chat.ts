@@ -171,6 +171,40 @@ export async function marcarLido(channelId: string): Promise<void> {
     .eq("user_id", userId);
 }
 
+export type PreferenciasChat = {
+  notificacoes: boolean;
+  status: Enums<"chat_user_status">;
+};
+
+/** As preferências do próprio usuário; quem nunca mexeu leva o padrão. */
+export async function getPreferencias(): Promise<PreferenciasChat> {
+  const { supabase, userId } = await actionContext();
+  const { data } = await supabase
+    .from("chat_settings")
+    .select("notificacoes, status")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return {
+    notificacoes: data?.notificacoes ?? true,
+    status: data?.status ?? "disponivel",
+  };
+}
+
+/**
+ * O liga/desliga do toast e o status manual (disponível/ocupado/ausente).
+ * Upsert na própria linha; a RLS de `chat_settings` só deixa mexer nela mesmo.
+ */
+export async function salvarPreferencias(p: Partial<PreferenciasChat>): Promise<void> {
+  const { supabase, tenantId, userId } = await actionContext();
+  await supabase.from("chat_settings").upsert({
+    user_id: userId,
+    tenant_id: tenantId,
+    ...(p.notificacoes !== undefined ? { notificacoes: p.notificacoes } : {}),
+    ...(p.status ? { status: p.status } : {}),
+    updated_at: new Date().toISOString(),
+  });
+}
+
 export async function alternarMute(channelId: string, muted: boolean): Promise<void> {
   const { supabase, userId } = await actionContext();
   await supabase

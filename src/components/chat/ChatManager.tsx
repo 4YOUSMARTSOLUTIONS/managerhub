@@ -1,17 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, Plus, Send, Users, X } from "lucide-react";
+import { Bell, BellOff, MessageCircle, Plus, Send, Users, X } from "lucide-react";
+import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { normalizar } from "@/lib/format";
+import type { Enums } from "@/types/database";
 import {
-  carregarMensagens, criarDm, criarGrupo, enviarMensagem, marcarLido,
-  type ConversaResumo, type MensagemChat,
+  carregarMensagens, criarDm, criarGrupo, enviarMensagem, marcarLido, salvarPreferencias,
+  type ConversaResumo, type MensagemChat, type PreferenciasChat,
 } from "@/lib/actions/chat";
+import { useChatPresence, useChatRealtime, type StatusPresenca } from "./useChatRealtime";
+
+const STATUS_ROTULO: Record<StatusPresenca, string> = {
+  disponivel: "Disponível",
+  ocupado: "Ocupado",
+  ausente: "Ausente",
+  offline: "Offline",
+};
+const STATUS_COR: Record<StatusPresenca, string> = {
+  disponivel: "var(--mh-success)",
+  ocupado: "var(--mh-danger)",
+  ausente: "var(--mh-warning)",
+  offline: "var(--text-muted)",
+};
 
 /**
  * O chat interno: lista de conversas à esquerda, a conversa aberta à direita.
@@ -20,11 +36,18 @@ import {
  * refresh, presença, toasts) entra na leva seguinte por Supabase Realtime.
  */
 export function ChatManager({
-  conversas, pessoas, meuId,
+  conversas, pessoas, meuId, tenantId, prefs,
 }: {
   conversas: ConversaResumo[];
   pessoas: { id: string; name: string }[];
   meuId: string;
+  /**
+   * Primeira exposição consciente do tenantId ao cliente: ele vira só o NOME
+   * do tópico de presença (`chat:presenca:{tenantId}`), autorizado por policy
+   * em realtime.messages. Nenhum dado viaja por ele.
+   */
+  tenantId: string;
+  prefs: PreferenciasChat;
 }) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [lista, setLista] = useState(conversas);
@@ -32,7 +55,60 @@ export function ChatManager({
   const [novoGrupo, setNovoGrupo] = useState(false);
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
+  const [minhasPrefs, setMinhasPrefs] = useState(prefs);
+  // mensagens chegadas pelo websocket, por canal; a Thread funde com o
+  // histórico DURANTE o render (dedup por id), sem setState em effect
+  const [aoVivo, setAoVivo] = useState<Record<string, MensagemChat[]>>({});
   const router = useRouter();
+
+  const abertaRef = useRef(aberta);
+  useEffect(() => { abertaRef.current = aberta; }, [aberta]);
+  const prefsRef = useRef(minhasPrefs);
+  useEffect(() => { prefsRef.current = minhasPrefs; }, [minhasPrefs]);
+  const listaRef = useRef(lista);
+  useEffect(() => { listaRef.current = lista; }, [lista]);
+
+  const presencas = useChatPresence(tenantId, meuId, minhasPrefs.status);
+
+  const abrir = useCallback((id: string) => {
+    setAberta(id);
+    setErro("");
+    // zera o badge localmente na hora; o banco confirma em seguida
+    setLista((xs) => xs.map((c) => (c.channelId === id ? { ...c, unread: 0 } : c)));
+    void marcarLido(id);
+  }, []);
+
+  const receber = useCallback((m: MensagemChat, evento: "INSERT" | "UPDATE") => {
+    setAoVivo((atual) => {
+      const doCanal = atual[m.channelId] ?? [];
+      const semEla = doCanal.filter((x) => x.id !== m.id);
+      return { ...atual, [m.channelId]: [...semEla, m] };
+    });
+    if (evento !== "INSERT" || m.authorId === meuId) return;
+
+    const abertaAgora = abertaRef.current;
+    if (m.channelId === abertaAgora) {
+      // já está lendo: confirma a leitura e não incomoda
+      void marcarLido(m.channelId);
+      return;
+    }
+    setLista((xs) => xs.map((c) => (c.channelId === m.channelId
+      ? { ...c, unread: c.unread + 1, lastBody: m.body, lastAuthor: m.authorId, lastAt: m.createdAt, lastDeleted: false }
+      : c)));
+    const conversa = listaRef.current.find((c) => c.channelId === m.channelId);
+    // canal que ainda não está na lista = conversa recém-criada por outra
+    // pessoa; o refresh traz o resumo pelo chat_overview
+    if (!conversa) router.refresh();
+    if (prefsRef.current.notificacoes && !(conversa?.muted)) {
+      const quem = pessoas.find((p) => p.id === m.authorId)?.name ?? "Nova mensagem";
+      toast(quem, {
+        description: m.body ?? "Anexo",
+        action: { label: "Abrir", onClick: () => abrir(m.channelId) },
+      });
+    }
+  }, [meuId, pessoas, router, abrir]);
+
+  useChatRealtime(meuId, receber);
 
   // props novas (revalidate) atualizam a lista sem perder a conversa aberta;
   // ajuste DURANTE o render (padrão do React para estado derivado), e não em
@@ -59,20 +135,23 @@ export function ChatManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista, busca, meuId]);
 
-  const abrir = (id: string) => {
-    setAberta(id);
-    setErro("");
-    // zera o badge localmente na hora; o banco confirma em seguida
-    setLista((xs) => xs.map((c) => (c.channelId === id ? { ...c, unread: 0 } : c)));
-    void marcarLido(id);
-  };
-
   const aoCriar = (r: { error?: string; channelId?: string }) => {
     if (r.error) { setErro(r.error); return; }
     setNovaDm(false);
     setNovoGrupo(false);
     if (r.channelId) setAberta(r.channelId);
     router.refresh();
+  };
+
+  const mudarStatus = (status: Enums<"chat_user_status">) => {
+    setMinhasPrefs((p) => ({ ...p, status }));
+    void salvarPreferencias({ status });
+  };
+
+  const alternarNotificacoes = () => {
+    const ligar = !minhasPrefs.notificacoes;
+    setMinhasPrefs((p) => ({ ...p, notificacoes: ligar }));
+    void salvarPreferencias({ notificacoes: ligar });
   };
 
   return (
@@ -97,6 +176,28 @@ export function ChatManager({
             <Users size={15} />
           </button>
         </div>
+        {/* meu status + liga/desliga das notificações */}
+        <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_COR[minhasPrefs.status], flexShrink: 0 }} />
+          <select
+            className="input"
+            aria-label="Meu status"
+            value={minhasPrefs.status}
+            onChange={(e) => mudarStatus(e.target.value as Enums<"chat_user_status">)}
+            style={{ flex: 1, minWidth: 0, fontSize: "0.8rem", padding: "0.25rem 0.4rem" }}
+          >
+            <option value="disponivel">Disponível</option>
+            <option value="ocupado">Ocupado</option>
+            <option value="ausente">Ausente</option>
+          </select>
+          <button
+            type="button" className="btn btn-ghost btn-sm"
+            title={minhasPrefs.notificacoes ? "Desativar notificações" : "Ativar notificações"}
+            onClick={alternarNotificacoes}
+          >
+            {minhasPrefs.notificacoes ? <Bell size={15} /> : <BellOff size={15} />}
+          </button>
+        </div>
         <div style={{ overflowY: "auto", flex: 1 }}>
           {visiveis.length === 0 && (
             <p className="soft" style={{ fontSize: "0.8rem", padding: "1rem" }}>
@@ -117,7 +218,20 @@ export function ChatManager({
                 }}
               >
                 {c.kind === "dm"
-                  ? <Avatar name={outro?.name} userId={outro?.id} size={34} />
+                  ? (
+                    <span style={{ position: "relative", display: "flex", flexShrink: 0 }}>
+                      <Avatar name={outro?.name} userId={outro?.id} size={34} />
+                      <span
+                        aria-hidden
+                        title={STATUS_ROTULO[presencas[outro?.id ?? ""] ?? "offline"]}
+                        style={{
+                          position: "absolute", right: -1, bottom: -1, width: 11, height: 11,
+                          borderRadius: "50%", border: "2px solid var(--surface)",
+                          background: STATUS_COR[presencas[outro?.id ?? ""] ?? "offline"],
+                        }}
+                      />
+                    </span>
+                  )
                   : (
                     <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <Users size={16} />
@@ -148,7 +262,16 @@ export function ChatManager({
       {/* ---- a conversa aberta ---- */}
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         {conversaAberta ? (
-          <Thread key={conversaAberta.channelId} conversa={conversaAberta} meuId={meuId} nomePorId={nomePorId} />
+          <Thread
+            key={conversaAberta.channelId}
+            conversa={conversaAberta}
+            meuId={meuId}
+            nomePorId={nomePorId}
+            extras={aoVivo[conversaAberta.channelId] ?? []}
+            presenca={conversaAberta.kind === "dm"
+              ? presencas[conversaAberta.membros.find((m) => m.id !== meuId)?.id ?? ""] ?? "offline"
+              : null}
+          />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <EmptyState
@@ -184,13 +307,17 @@ export function ChatManager({
   );
 }
 
-/** A conversa aberta: histórico paginado + campo de envio. */
+/** A conversa aberta: histórico paginado + tempo real + campo de envio. */
 function Thread({
-  conversa, meuId, nomePorId,
+  conversa, meuId, nomePorId, extras, presenca,
 }: {
   conversa: ConversaResumo;
   meuId: string;
   nomePorId: Map<string, string>;
+  /** mensagens chegadas pelo websocket para este canal (INSERT e UPDATE) */
+  extras: MensagemChat[];
+  /** presença do outro lado numa DM; null em grupo */
+  presenca: StatusPresenca | null;
 }) {
   const [mensagens, setMensagens] = useState<MensagemChat[] | null>(null);
   const [texto, setTexto] = useState("");
@@ -209,9 +336,19 @@ function Thread({
     return () => { vivo = false; };
   }, [conversa.channelId]);
 
+  // histórico + tempo real fundidos DURANTE o render: dedup por id (o eco do
+  // próprio envio chega também pelo websocket) e UPDATE substitui a versão
+  // antiga (edição/tombstone da leva seguinte já aparecem ao vivo)
+  const todas = useMemo(() => {
+    if (mensagens === null) return null;
+    const porId = new Map(mensagens.map((m) => [m.id, m] as const));
+    for (const m of extras) porId.set(m.id, m);
+    return [...porId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }, [mensagens, extras]);
+
   useEffect(() => {
     fimRef.current?.scrollIntoView({ block: "end" });
-  }, [mensagens?.length]);
+  }, [todas?.length]);
 
   const maisAntigas = () => {
     const primeira = mensagens?.[0];
@@ -252,9 +389,14 @@ function Thread({
           )}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: "0.9rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
-          {conversa.kind === "grupo" && (
+          {conversa.kind === "grupo" ? (
             <div className="soft" style={{ fontSize: "0.72rem" }}>
               {conversa.membros.length} participante{conversa.membros.length === 1 ? "" : "s"}
+            </div>
+          ) : presenca && (
+            <div className="soft" style={{ fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <span aria-hidden style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_COR[presenca] }} />
+              {STATUS_ROTULO[presenca]}
             </div>
           )}
         </div>
@@ -262,18 +404,18 @@ function Thread({
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-        {mensagens === null && <p className="soft" style={{ fontSize: "0.8rem" }}>Carregando…</p>}
-        {mensagens !== null && temMais && (
+        {todas === null && <p className="soft" style={{ fontSize: "0.8rem" }}>Carregando…</p>}
+        {todas !== null && temMais && (
           <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: "center" }} disabled={pendente} onClick={maisAntigas}>
             Carregar mensagens anteriores
           </button>
         )}
-        {mensagens?.map((m, i) => (
+        {todas?.map((m, i) => (
           <Bolha
             key={m.id}
             m={m}
             minha={m.authorId === meuId}
-            autor={conversa.kind === "grupo" && m.authorId !== meuId && mensagens[i - 1]?.authorId !== m.authorId
+            autor={conversa.kind === "grupo" && m.authorId !== meuId && todas[i - 1]?.authorId !== m.authorId
               ? nomePorId.get(m.authorId) ?? "" : ""}
           />
         ))}
