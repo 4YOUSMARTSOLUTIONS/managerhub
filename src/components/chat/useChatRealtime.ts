@@ -175,6 +175,9 @@ export function useChatPresence(
           if (estado === "SUBSCRIBED") void este.track({ status });
           if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") {
             console.error("chat presenca:", estado, err?.message);
+            // canal caído = foto velha: melhor todo mundo offline do que
+            // alguém "online fantasma" congelado até a reassinatura
+            setPresencas({});
             reassinarDepois();
           }
         });
@@ -187,11 +190,17 @@ export function useChatPresence(
     document.addEventListener("visibilitychange", aoVoltar);
     window.addEventListener("online", aoVoltar);
 
+    // fechar a aba: untrack explícito acelera o "saiu" para os colegas (o
+    // fechamento do websocket cobre quando este aviso não chega a sair)
+    const aoFechar = () => { void canal?.untrack(); };
+    window.addEventListener("pagehide", aoFechar);
+
     return () => {
       ativo = false;
       if (tentativa) clearTimeout(tentativa);
       document.removeEventListener("visibilitychange", aoVoltar);
       window.removeEventListener("online", aoVoltar);
+      window.removeEventListener("pagehide", aoFechar);
       if (canal) void supabase.removeChannel(canal);
     };
     // status nas dependências de propósito: trocar de status reassina e
