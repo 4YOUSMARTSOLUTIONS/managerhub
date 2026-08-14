@@ -2,16 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, MessageCircle, Plus, Send, Users, X } from "lucide-react";
+import { Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Send, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { confirmDialog } from "@/components/ui/confirm";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { normalizar } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import {
-  carregarMensagens, criarDm, criarGrupo, enviarMensagem, marcarLido, salvarPreferencias,
+  apagarMensagem, carregarMensagens, criarDm, criarGrupo, editarMensagem, enviarAnexo,
+  enviarMensagem, marcarLido, salvarPreferencias, urlAnexoChat,
   type ConversaResumo, type MensagemChat, type PreferenciasChat,
 } from "@/lib/actions/chat";
 import { useChatPresence, useChatRealtime, type StatusPresenca } from "./useChatRealtime";
@@ -323,8 +325,11 @@ function Thread({
   const [texto, setTexto] = useState("");
   const [temMais, setTemMais] = useState(false);
   const [erro, setErro] = useState("");
+  // id da mensagem em edição; o composer vira o campo de edição
+  const [editando, setEditando] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
   const fimRef = useRef<HTMLDivElement>(null);
+  const arquivoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -365,11 +370,61 @@ function Thread({
     if (!corpo || pendente) return;
     setErro("");
     setTexto("");
+    if (editando) {
+      const id = editando;
+      setEditando(null);
+      iniciar(async () => {
+        const r = await editarMensagem(id, corpo);
+        if (r.error) { setErro(r.error); setTexto(corpo); setEditando(id); return; }
+        // o eco do broadcast confirma; aqui só a resposta imediata local
+        setMensagens((atual) => (atual ?? []).map((m) => (m.id === id
+          ? { ...m, body: corpo, editedAt: new Date().toISOString() } : m)));
+      });
+      return;
+    }
     iniciar(async () => {
       const r = await enviarMensagem(conversa.channelId, corpo);
       if (r.error || !r.mensagem) { setErro(r.error ?? "Não foi possível enviar."); setTexto(corpo); return; }
       const nova = r.mensagem;
       setMensagens((atual) => ((atual ?? []).some((m) => m.id === nova.id) ? atual : [...(atual ?? []), nova]));
+    });
+  };
+
+  const anexar = (file: File) => {
+    setErro("");
+    iniciar(async () => {
+      const fd = new FormData();
+      fd.set("channelId", conversa.channelId);
+      fd.set("body", texto.trim());
+      fd.set("file", file);
+      const r = await enviarAnexo(fd);
+      if (r.error || !r.mensagem) { setErro(r.error ?? "Não foi possível enviar o anexo."); return; }
+      setTexto("");
+      const nova = r.mensagem;
+      setMensagens((atual) => ((atual ?? []).some((m) => m.id === nova.id) ? atual : [...(atual ?? []), nova]));
+    });
+  };
+
+  const comecarEdicao = (m: MensagemChat) => {
+    setEditando(m.id);
+    setTexto(m.body ?? "");
+    setErro("");
+  };
+
+  const apagar = async (m: MensagemChat) => {
+    const ok = await confirmDialog({
+      title: "Apagar mensagem",
+      message: "A mensagem vira “Mensagem apagada” para todos na conversa. Apagar?",
+      confirmLabel: "Apagar",
+      tone: "danger",
+    });
+    if (!ok) return;
+    iniciar(async () => {
+      const r = await apagarMensagem(m.id);
+      if (r.error) { setErro(r.error); return; }
+      setMensagens((atual) => (atual ?? []).map((x) => (x.id === m.id
+        ? { ...x, body: null, anexoPath: null, anexoNome: null, anexoMime: null, deletedAt: new Date().toISOString() }
+        : x)));
     });
   };
 
@@ -417,14 +472,45 @@ function Thread({
             minha={m.authorId === meuId}
             autor={conversa.kind === "grupo" && m.authorId !== meuId && todas[i - 1]?.authorId !== m.authorId
               ? nomePorId.get(m.authorId) ?? "" : ""}
+            onEditar={m.authorId === meuId && !m.deletedAt && m.body !== null && !conversa.closedAt ? comecarEdicao : undefined}
+            onApagar={m.authorId === meuId && !m.deletedAt ? apagar : undefined}
           />
         ))}
         <div ref={fimRef} />
       </div>
 
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: "0 1rem 0.4rem" }}>{erro}</p>}
+      {editando && (
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", margin: "0 1rem 0.3rem" }}>
+          <Badge tone="purple">Editando</Badge>
+          <button
+            type="button" className="btn btn-ghost btn-sm"
+            onClick={() => { setEditando(null); setTexto(""); }}
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       <div style={{ padding: "0.7rem 1rem", borderTop: "1px solid var(--border)", display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
+        <input
+          ref={arquivoRef}
+          type="file"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) anexar(f);
+          }}
+        />
+        <button
+          type="button" className="btn btn-ghost btn-sm"
+          disabled={pendente || Boolean(conversa.closedAt) || Boolean(editando)}
+          onClick={() => arquivoRef.current?.click()}
+          title="Anexar arquivo (até 10 MB); o texto vira a legenda"
+        >
+          <Paperclip size={15} />
+        </button>
         <textarea
           className="input"
           rows={1}
@@ -435,13 +521,14 @@ function Thread({
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); }
+            if (e.key === "Escape" && editando) { setEditando(null); setTexto(""); }
           }}
         />
         <button
           type="button" className="btn btn-primary btn-sm"
           disabled={pendente || !texto.trim() || Boolean(conversa.closedAt)}
           onClick={enviar}
-          title="Enviar (Enter)"
+          title={editando ? "Salvar edição (Enter)" : "Enviar (Enter)"}
         >
           <Send size={15} />
         </button>
@@ -450,29 +537,110 @@ function Thread({
   );
 }
 
-function Bolha({ m, minha, autor }: { m: MensagemChat; minha: boolean; autor: string }) {
+function Bolha({
+  m, minha, autor, onEditar, onApagar,
+}: {
+  m: MensagemChat;
+  minha: boolean;
+  autor: string;
+  onEditar?: (m: MensagemChat) => void;
+  onApagar?: (m: MensagemChat) => void;
+}) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: minha ? "flex-end" : "flex-start" }}>
       {autor && <span className="soft" style={{ fontSize: "0.7rem", margin: "0.25rem 0 0.1rem" }}>{autor}</span>}
-      <div
-        style={{
-          maxWidth: "72%", padding: "0.45rem 0.7rem", borderRadius: 12, fontSize: "0.86rem",
-          whiteSpace: "pre-wrap", overflowWrap: "break-word",
-          background: minha ? "var(--mh-primary-soft)" : "var(--surface-2)",
-          border: "1px solid var(--border)",
-        }}
-      >
-        {m.deletedAt
-          ? (
-            <span className="soft" style={{ fontStyle: "italic" }}>
-              {m.deletedAdmin ? "Mensagem removida pela administração" : "Mensagem apagada"}
-            </span>
-          )
-          : m.body}
-        <span className="soft" style={{ fontSize: "0.65rem", marginLeft: "0.5rem" }}>
-          {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
-        </span>
+      <div style={{ display: "flex", gap: "0.25rem", alignItems: "center", maxWidth: "72%", flexDirection: minha ? "row-reverse" : "row" }}>
+        <div
+          style={{
+            padding: "0.45rem 0.7rem", borderRadius: 12, fontSize: "0.86rem",
+            whiteSpace: "pre-wrap", overflowWrap: "break-word", minWidth: 0,
+            background: minha ? "var(--mh-primary-soft)" : "var(--surface-2)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {m.deletedAt
+            ? (
+              <span className="soft" style={{ fontStyle: "italic" }}>
+                {m.deletedAdmin ? "Mensagem removida pela administração" : "Mensagem apagada"}
+              </span>
+            )
+            : m.body}
+          {!m.deletedAt && <AnexoChat m={m} />}
+          <span className="soft" style={{ fontSize: "0.65rem", marginLeft: "0.5rem" }}>
+            {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
+          </span>
+        </div>
+        {(onEditar || onApagar) && (
+          <span style={{ display: "flex", gap: "0.1rem", flexShrink: 0 }}>
+            {onEditar && (
+              <button
+                type="button" className="muted" title="Editar" aria-label="Editar mensagem"
+                onClick={() => onEditar(m)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {onApagar && (
+              <button
+                type="button" className="muted" title="Apagar" aria-label="Apagar mensagem"
+                onClick={() => onApagar(m)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </span>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * O anexo da mensagem: imagem entra inline (URL assinada carregada na hora);
+ * o resto vira um botão com o nome do arquivo que abre em outra aba. A URL
+ * dura 10 minutos, então o clique pede outra sempre.
+ */
+function AnexoChat({ m }: { m: MensagemChat }) {
+  const ehImagem = (m.anexoMime ?? "").startsWith("image/");
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!m.anexoPath || !ehImagem) return;
+    let vivo = true;
+    urlAnexoChat(m.anexoPath).then((r) => { if (vivo && r.url) setUrl(r.url); });
+    return () => { vivo = false; };
+  }, [m.anexoPath, ehImagem]);
+
+  if (!m.anexoPath) return null;
+
+  const abrirAnexo = async () => {
+    if (!m.anexoPath) return;
+    const r = await urlAnexoChat(m.anexoPath);
+    if (r.url) window.open(r.url, "_blank", "noopener");
+  };
+
+  return (
+    <div style={{ marginTop: m.body ? "0.35rem" : 0 }}>
+      {ehImagem && url
+        ? (
+          <img
+            src={url}
+            alt={m.anexoNome ?? "Anexo"}
+            onClick={abrirAnexo}
+            style={{ maxWidth: "100%", maxHeight: 240, borderRadius: 8, cursor: "pointer", display: "block" }}
+          />
+        )
+        : (
+          <button
+            type="button" className="btn btn-ghost btn-sm" onClick={abrirAnexo}
+            style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", maxWidth: "100%" }}
+          >
+            <Paperclip size={13} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.anexoNome ?? "Anexo"}</span>
+          </button>
+        )}
     </div>
   );
 }

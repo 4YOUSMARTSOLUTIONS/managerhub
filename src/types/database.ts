@@ -1772,6 +1772,10 @@ export type Database = {
       // chama (a de administração é outra função).
       chat_criar_dm: { Args: { p_tenant: string; p_alvo: string }; Returns: string }
       chat_criar_grupo: { Args: { p_tenant: string; p_nome: string; p_membros: string[] }; Returns: string }
+      // editar e apagar são o ÚNICO caminho de mutação de chat_messages (a
+      // tabela não tem grant nem policy de update); apagar é tombstone
+      chat_editar_mensagem: { Args: { p_id: string; p_body: string }; Returns: undefined }
+      chat_apagar_mensagem: { Args: { p_id: string }; Returns: undefined }
       chat_overview: {
         Args: Record<string, never>
         Returns: {

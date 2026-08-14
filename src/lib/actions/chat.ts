@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
+import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
@@ -141,6 +142,96 @@ export async function enviarMensagem(
       .eq("user_id", userId);
 
     return { ok: true, mensagem: mapMensagem(data) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+const BUCKET_ANEXOS = "chat-anexos";
+
+/**
+ * Mensagem com arquivo (e legenda opcional). O upload sobe pela policy do
+ * bucket (membro do canal, canal aberto) e o insert pela policy da tabela; se
+ * o insert falhar depois do upload, o objeto fica órfão no bucket, sem
+ * caminho apontando para ele (não há policy de delete de propósito).
+ */
+export async function enviarAnexo(formData: FormData): Promise<ActionState & { mensagem?: MensagemChat }> {
+  try {
+    const { supabase, tenantId, userId } = await actionContext();
+    const channelId = String(formData.get("channelId") ?? "");
+    const legenda = String(formData.get("body") ?? "").trim();
+    const file = formData.get("file");
+    if (!channelId) return { error: "Conversa inválida." };
+    if (!(file instanceof File)) return { error: "Escolha o arquivo." };
+    if (legenda.length > TAMANHO_MENSAGEM) {
+      return { error: `A mensagem passou de ${TAMANHO_MENSAGEM} caracteres.` };
+    }
+
+    const recusa = recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO);
+    if (recusa) return { error: recusa };
+
+    const safe = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${tenantId}/${channelId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
+    const up = await supabase.storage.from(BUCKET_ANEXOS).upload(path, file, {
+      contentType: file.type || undefined, upsert: false,
+    });
+    if (up.error) {
+      console.error("chat anexo: upload recusado:", up.error.message);
+      return { error: "Não foi possível subir o arquivo. Verifique seu acesso à conversa." };
+    }
+
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .insert({
+        tenant_id: tenantId, channel_id: channelId, author_id: userId,
+        body: legenda || null, anexo_path: path, anexo_nome: file.name, anexo_mime: file.type || null,
+      })
+      .select("id, channel_id, author_id, body, anexo_path, anexo_nome, anexo_mime, edited_at, deleted_at, deleted_admin, created_at")
+      .single();
+    if (error) return { error: mensagemDoChat(error) };
+
+    await supabase
+      .from("chat_members")
+      .update({ last_read_at: new Date().toISOString() })
+      .eq("channel_id", channelId)
+      .eq("user_id", userId);
+
+    return { ok: true, mensagem: mapMensagem(data) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** URL assinada de 10 minutos; a policy de select do bucket decide quem pode. */
+export async function urlAnexoChat(path: string): Promise<ActionState & { url?: string }> {
+  const { supabase } = await actionContext();
+  const { data, error } = await supabase.storage.from(BUCKET_ANEXOS).createSignedUrl(path, 600);
+  if (error || !data?.signedUrl) return { error: "Não foi possível abrir o anexo." };
+  return { ok: true, url: data.signedUrl };
+}
+
+export async function editarMensagem(id: string, body: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const texto = body.trim();
+    if (!texto) return { error: "Escreva a mensagem." };
+    if (texto.length > TAMANHO_MENSAGEM) {
+      return { error: `A mensagem passou de ${TAMANHO_MENSAGEM} caracteres.` };
+    }
+    const { error } = await supabase.rpc("chat_editar_mensagem", { p_id: id, p_body: texto });
+    if (error) return { error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function apagarMensagem(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("chat_apagar_mensagem", { p_id: id });
+    if (error) return { error: error.message };
+    return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }
