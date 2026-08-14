@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { EscToClose } from "@/components/EscToClose";
 import { AvatarProvider } from "@/components/AvatarProvider";
+import { ChatPresenceProvider } from "@/components/chat/ChatPresenceProvider";
 import type { Enums } from "@/types/database";
 import type { UnitScope, CompanyScope } from "@/lib/tenant";
 import type { Theme } from "@/lib/theme";
@@ -24,6 +25,8 @@ export function AppShell({
   companyScope = null,
   avatars = {},
   currentUserId = null,
+  chatTenantId = null,
+  chatStatus = "disponivel",
   children,
 }: {
   role: Enums<"member_role">;
@@ -42,12 +45,20 @@ export function AppShell({
   /** user_id -> caminho da foto, carregado uma vez por request no layout */
   avatars?: Record<string, string>;
   currentUserId?: string | null;
+  /**
+   * Empresa do canal de presença do chat, ou null para não abrir canal (sem
+   * empresa, ou chat não contratado). É o tenantId chegando ao cliente, e
+   * continua sendo só nome de tópico, como na tela do chat.
+   */
+  chatTenantId?: string | null;
+  chatStatus?: Enums<"chat_user_status">;
   children: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <AvatarProvider byUser={avatars} currentUserId={currentUserId}>
+    <ChatPresenceProvider tenantId={chatTenantId} meuId={currentUserId} statusInicial={chatStatus}>
     <div className="app-root">
       <EscToClose />
       <Sidebar
@@ -97,6 +108,7 @@ export function AppShell({
         </main>
       </div>
     </div>
+    </ChatPresenceProvider>
     </AvatarProvider>
   );
 }

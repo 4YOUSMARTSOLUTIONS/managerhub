@@ -96,13 +96,15 @@ export type StatusPresenca = Enums<"chat_user_status"> | "offline";
  * status escolhido (disponível/ocupado/ausente) no payload do track().
  */
 export function useChatPresence(
-  tenantId: string,
-  meuId: string,
+  /** null desliga o canal: super admin sem empresa, ou chat não contratado */
+  tenantId: string | null,
+  meuId: string | null,
   status: Enums<"chat_user_status">,
 ): Record<string, StatusPresenca> {
   const [presencas, setPresencas] = useState<Record<string, StatusPresenca>>({});
 
   useEffect(() => {
+    if (!tenantId || !meuId) return;
     const supabase = createClient();
     let canal: RealtimeChannel | null = null;
     let ativo = true;

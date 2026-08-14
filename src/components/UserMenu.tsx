@@ -6,6 +6,7 @@ import { ChevronDown, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAvatars } from "@/components/AvatarProvider";
 import { ProfileDialog } from "@/components/ProfileDialog";
+import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "@/components/chat/ChatPresenceProvider";
 import { setTheme } from "@/lib/actions/theme";
 import { signOut } from "@/lib/actions/auth";
 import { ROLE } from "@/lib/constants";
@@ -33,6 +34,9 @@ export function UserMenu({
   const ref = useRef<HTMLDivElement>(null);
   const next: Theme = theme === "dark" ? "light" : "dark";
   const { currentUserId } = useAvatars();
+  // presença do chat: a bolinha no avatar e a troca de status valem em
+  // qualquer tela, não só dentro do /chat
+  const { meuStatus, mudarStatus, ativo: chatAtivo } = useChatStatus();
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +85,20 @@ export function UserMenu({
           padding: "0.2rem 0.3rem", borderRadius: "var(--mh-radius-md)", color: "inherit",
         }}
       >
-        <Avatar name={userName} userId={currentUserId} />
+        <span style={{ position: "relative", display: "flex", flexShrink: 0 }}>
+          <Avatar name={userName} userId={currentUserId} />
+          {chatAtivo && (
+            <span
+              aria-hidden
+              title={`Chat: ${STATUS_ROTULO[meuStatus]}`}
+              style={{
+                position: "absolute", right: -1, bottom: -1, width: 11, height: 11,
+                borderRadius: "50%", border: "2px solid var(--mh-surface-1)",
+                background: STATUS_COR[meuStatus],
+              }}
+            />
+          )}
+        </span>
         {isSidebar && (
           <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
             <span style={{ display: "block", fontSize: "0.83rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{userName ?? "Usuário"}</span>
@@ -117,6 +134,30 @@ export function UserMenu({
             </div>
             <div className="soft" style={{ fontSize: "0.72rem" }}>{ROLE[role]}</div>
           </div>
+
+          {chatAtivo && (
+            <>
+              <div className="soft" style={{ fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.04em", padding: "0.25rem 0.75rem 0.15rem" }}>
+                Status no chat
+              </div>
+              {(["disponivel", "ocupado", "ausente"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={meuStatus === s}
+                  style={{ ...itemStyle, fontWeight: meuStatus === s ? 600 : 400 }}
+                  onClick={() => { mudarStatus(s); setOpen(false); }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                >
+                  <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_COR[s], flexShrink: 0, marginLeft: 3 }} />
+                  {STATUS_ROTULO[s]}
+                </button>
+              ))}
+              <div style={{ borderTop: "1px solid var(--mh-border)", margin: "0.2rem 0" }} />
+            </>
+          )}
 
           <button
             type="button"

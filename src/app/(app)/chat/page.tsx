@@ -37,11 +37,11 @@ export default async function ChatPage() {
         title="Chat interno"
         subtitle="Conversas entre as pessoas da empresa, com histórico centralizado"
       />
+      {/* a presença (e o tenantId do tópico) vive no shell, em ChatPresenceProvider */}
       <ChatManager
         conversas={conversas}
         pessoas={pessoas}
         meuId={user.id}
-        tenantId={tenant.id}
         prefs={prefs}
         souAdminChat={souAdminChat}
       />

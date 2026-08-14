@@ -21,20 +21,9 @@ import {
   type BloqueadoChat, type ConversaResumo, type MensagemChat, type PreferenciasChat,
   type ResultadoBusca,
 } from "@/lib/actions/chat";
-import { useChatPresence, useChatRealtime, type StatusPresenca } from "./useChatRealtime";
-
-const STATUS_ROTULO: Record<StatusPresenca, string> = {
-  disponivel: "Disponível",
-  ocupado: "Ocupado",
-  ausente: "Ausente",
-  offline: "Offline",
-};
-const STATUS_COR: Record<StatusPresenca, string> = {
-  disponivel: "var(--mh-success)",
-  ocupado: "var(--mh-danger)",
-  ausente: "var(--mh-warning)",
-  offline: "var(--text-muted)",
-};
+import { useChatRealtime, type StatusPresenca } from "./useChatRealtime";
+import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "./ChatPresenceProvider";
+import { EmojiPicker } from "./EmojiPicker";
 
 /**
  * O chat interno: lista de conversas à esquerda, a conversa aberta à direita.
@@ -43,17 +32,11 @@ const STATUS_COR: Record<StatusPresenca, string> = {
  * refresh, presença, toasts) entra na leva seguinte por Supabase Realtime.
  */
 export function ChatManager({
-  conversas, pessoas, meuId, tenantId, prefs, souAdminChat,
+  conversas, pessoas, meuId, prefs, souAdminChat,
 }: {
   conversas: ConversaResumo[];
   pessoas: { id: string; name: string }[];
   meuId: string;
-  /**
-   * Primeira exposição consciente do tenantId ao cliente: ele vira só o NOME
-   * do tópico de presença (`chat:presenca:{tenantId}`), autorizado por policy
-   * em realtime.messages. Nenhum dado viaja por ele.
-   */
-  tenantId: string;
   prefs: PreferenciasChat;
   /** owner/admin/hr: aba "Todas", gestão de qualquer grupo, remoção e bloqueio */
   souAdminChat: boolean;
@@ -83,7 +66,9 @@ export function ChatManager({
   const listaRef = useRef(lista);
   useEffect(() => { listaRef.current = lista; }, [lista]);
 
-  const presencas = useChatPresence(tenantId, meuId, minhasPrefs.status);
+  // presença e status vêm do provider do shell: um canal para o app inteiro,
+  // e quem está em outra tela continua conectado para os colegas
+  const { presencas, meuStatus, mudarStatus } = useChatStatus();
 
   const abrir = useCallback((id: string) => {
     setAberta(id);
@@ -173,11 +158,6 @@ export function ChatManager({
     router.refresh();
   };
 
-  const mudarStatus = (status: Enums<"chat_user_status">) => {
-    setMinhasPrefs((p) => ({ ...p, status }));
-    void salvarPreferencias({ status });
-  };
-
   const alternarNotificacoes = () => {
     const ligar = !minhasPrefs.notificacoes;
     setMinhasPrefs((p) => ({ ...p, notificacoes: ligar }));
@@ -236,11 +216,11 @@ export function ChatManager({
         )}
         {/* meu status + liga/desliga das notificações */}
         <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_COR[minhasPrefs.status], flexShrink: 0 }} />
+          <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_COR[meuStatus], flexShrink: 0 }} />
           <select
             className="input"
             aria-label="Meu status"
-            value={minhasPrefs.status}
+            value={meuStatus}
             onChange={(e) => mudarStatus(e.target.value as Enums<"chat_user_status">)}
             style={{ flex: 1, minWidth: 0, fontSize: "0.8rem", padding: "0.25rem 0.4rem" }}
           >
@@ -426,6 +406,7 @@ function Thread({
   const [pendente, iniciar] = useTransition();
   const fimRef = useRef<HTMLDivElement>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
+  const campoRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -498,6 +479,20 @@ function Thread({
       setTexto("");
       const nova = r.mensagem;
       setMensagens((atual) => ((atual ?? []).some((m) => m.id === nova.id) ? atual : [...(atual ?? []), nova]));
+    });
+  };
+
+  /** insere na posição do cursor (e não no fim), como qualquer editor */
+  const inserirEmoji = (emoji: string) => {
+    const campo = campoRef.current;
+    const inicio = campo?.selectionStart ?? texto.length;
+    const fim = campo?.selectionEnd ?? texto.length;
+    const novo = texto.slice(0, inicio) + emoji + texto.slice(fim);
+    setTexto(novo);
+    requestAnimationFrame(() => {
+      campo?.focus();
+      const pos = inicio + emoji.length;
+      campo?.setSelectionRange(pos, pos);
     });
   };
 
@@ -634,7 +629,9 @@ function Thread({
         >
           <Paperclip size={15} />
         </button>
+        <EmojiPicker onEscolher={inserirEmoji} disabled={Boolean(conversa.closedAt) || !souMembro} />
         <textarea
+          ref={campoRef}
           className="input"
           rows={1}
           value={texto}

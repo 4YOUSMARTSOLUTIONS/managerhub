@@ -6,6 +6,7 @@ import { getTheme } from "@/lib/theme";
 import { getModuleAccess } from "@/lib/module-access";
 import { getAvatarMap } from "@/lib/avatars";
 import { getAuthUser, getOwnIdentity, trocaDeSenhaPendente } from "@/lib/auth-cache";
+import { getPreferencias } from "@/lib/actions/chat";
 import { AppShell } from "@/components/AppShell";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
@@ -84,11 +85,16 @@ export default async function AppLayout({
   const ctx = await requireContext();
 
   // 3º estágio: o que depende só do tenant/usuário, tudo junto.
-  const [{ state: moduleState, construction }, avatars, perfil] = await Promise.all([
+  const [{ state: moduleState, construction }, avatars, perfil, prefsChat] = await Promise.all([
     getModuleAccess(),
     getAvatarMap(ctx.tenant.id),
     getOwnIdentity(user.id),
+    getPreferencias(),
   ]);
+
+  // presença no shell (e não só na tela do chat): quem está em outra tela
+  // continua conectado para os colegas, e o menu mostra o próprio status
+  const chatLigado = moduleState.chat === "on";
 
   // o nome real vem do cadastro; o prefixo do e-mail é só a reserva de quem ainda
   // não tem full_name (e rende uma inicial só: "luiz.nobre" vira "l")
@@ -109,6 +115,8 @@ export default async function AppLayout({
       // é membro, e sem isto some do mapa e perde a própria foto no menu
       avatars={{ ...avatars, ...proprioAvatar(user.id, perfil?.avatar_url) }}
       currentUserId={user.id}
+      chatTenantId={chatLigado ? ctx.tenant.id : null}
+      chatStatus={prefsChat.status}
     >
       {children}
     </AppShell>
