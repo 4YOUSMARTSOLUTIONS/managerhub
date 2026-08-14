@@ -1767,6 +1767,22 @@ export type Database = {
       absenteismo_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
       absenteismo_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
       absenteismo_atestado: { Args: { p_id: string }; Returns: Json }
+      // Chat interno. Criar conversa mexe em canal + membros na mesma
+      // transação, com dedup de DM; a visão geral devolve só os canais de quem
+      // chama (a de administração é outra função).
+      chat_criar_dm: { Args: { p_tenant: string; p_alvo: string }; Returns: string }
+      chat_criar_grupo: { Args: { p_tenant: string; p_nome: string; p_membros: string[] }; Returns: string }
+      chat_overview: {
+        Args: Record<string, never>
+        Returns: {
+          channel_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]
+          name: string | null; closed_at: string | null
+          role: Database["public"]["Enums"]["chat_member_role"]; muted: boolean
+          last_read_at: string; unread: number; membros: Json
+          last_body: string | null; last_author: string | null
+          last_at: string | null; last_deleted: boolean
+        }[]
+      }
       // Alerta dos 15 dias (art. 60 §3º da Lei 8.213/91): soma por categoria de
       // CID em 60 dias e por períodos encadeados.
       absenteismo_inss: { Args: { p_tenant: string; p_user: string; p_ate?: string | null }; Returns: Json }
