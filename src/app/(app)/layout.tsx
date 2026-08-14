@@ -6,7 +6,7 @@ import { getTheme } from "@/lib/theme";
 import { getModuleAccess } from "@/lib/module-access";
 import { getAvatarMap } from "@/lib/avatars";
 import { getAuthUser, getOwnIdentity, trocaDeSenhaPendente } from "@/lib/auth-cache";
-import { getPreferencias } from "@/lib/actions/chat";
+import { getConversas, getPreferencias } from "@/lib/actions/chat";
 import { AppShell } from "@/components/AppShell";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
@@ -92,9 +92,15 @@ export default async function AppLayout({
     getPreferencias(),
   ]);
 
-  // presença no shell (e não só na tela do chat): quem está em outra tela
-  // continua conectado para os colegas, e o menu mostra o próprio status
+  /**
+   * O chat inteiro (presença, tempo real e o balão do canto) vive no shell, e
+   * não só na tela dele: quem está em outra tela continua conectado para os
+   * colegas, o menu mostra o próprio status e a mensagem nova chega em
+   * qualquer lugar do sistema. Por isso a lista de conversas é carregada aqui,
+   * na mesma leva das outras consultas do layout.
+   */
   const chatLigado = moduleState.chat === "on";
+  const chatConversas = chatLigado ? await getConversas() : [];
 
   // o nome real vem do cadastro; o prefixo do e-mail é só a reserva de quem ainda
   // não tem full_name (e rende uma inicial só: "luiz.nobre" vira "l")
@@ -117,6 +123,8 @@ export default async function AppLayout({
       currentUserId={user.id}
       chatTenantId={chatLigado ? ctx.tenant.id : null}
       chatStatus={prefsChat.status}
+      chatConversas={chatConversas}
+      chatNotificacoes={prefsChat.notificacoes}
     >
       {children}
     </AppShell>

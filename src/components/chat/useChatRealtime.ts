@@ -39,7 +39,8 @@ function paraMensagem(r: LinhaBroadcast): MensagemChat {
  * aberta, os badges e os toasts.
  */
 export function useChatRealtime(
-  meuId: string,
+  /** null desliga a assinatura: sem empresa, ou chat não contratado */
+  meuId: string | null,
   onMensagem: (m: MensagemChat, evento: "INSERT" | "UPDATE") => void,
 ) {
   // ref para o callback: o efeito assina UMA vez e o handler sempre enxerga o
@@ -48,6 +49,7 @@ export function useChatRealtime(
   useEffect(() => { aoReceber.current = onMensagem; }, [onMensagem]);
 
   useEffect(() => {
+    if (!meuId) return;
     const supabase = createClient();
     let canal: RealtimeChannel | null = null;
     let ativo = true;

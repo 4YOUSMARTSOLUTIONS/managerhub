@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Search, Send, Settings, Shield, ShieldX, Trash2, Users, X,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,108 +14,53 @@ import type { Enums } from "@/types/database";
 import {
   apagarMensagem, apagarMensagemAdmin, banirDoChat, buscarChat, carregarMensagens, criarDm,
   criarGrupo, desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo, enviarMensagem,
-  gerirMembros, getBloqueados, getConversasAdmin, marcarLido, renomearGrupo,
-  salvarPreferencias, transferirDono, urlAnexoChat,
-  type BloqueadoChat, type ConversaResumo, type MensagemChat, type PreferenciasChat,
-  type ResultadoBusca,
+  gerirMembros, getBloqueados, getConversasAdmin, renomearGrupo, transferirDono, urlAnexoChat,
+  type BloqueadoChat, type ConversaResumo, type MensagemChat, type ResultadoBusca,
 } from "@/lib/actions/chat";
-import { useChatRealtime, type StatusPresenca } from "./useChatRealtime";
+import { type StatusPresenca } from "./useChatRealtime";
 import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "./ChatPresenceProvider";
+import { useChatVivo } from "./ChatLiveProvider";
 import { EmojiPicker } from "./EmojiPicker";
 
 /**
- * O chat interno: lista de conversas à esquerda, a conversa aberta à direita.
+ * A tela cheia do chat: lista de conversas à esquerda, conversa à direita.
  *
- * Nesta leva tudo chega por server action; o tempo real (novas mensagens sem
- * refresh, presença, toasts) entra na leva seguinte por Supabase Realtime.
+ * A lista, as mensagens ao vivo e a conversa aberta vêm do ChatLiveProvider,
+ * que mora no shell: é a MESMA assinatura de websocket que alimenta o balão do
+ * canto e os avisos nas outras telas. Aqui não se assina nada de novo, senão
+ * cada mensagem chegaria duas vezes; e abrir uma conversa no balão e vir para
+ * cá continua na mesma conversa.
  */
 export function ChatManager({
-  conversas, pessoas, meuId, prefs, souAdminChat,
+  pessoas, meuId, souAdminChat,
 }: {
-  conversas: ConversaResumo[];
   pessoas: { id: string; name: string }[];
   meuId: string;
-  prefs: PreferenciasChat;
   /** owner/admin/hr: aba "Todas", gestão de qualquer grupo, remoção e bloqueio */
   souAdminChat: boolean;
 }) {
-  const [aberta, setAberta] = useState<string | null>(null);
-  const [lista, setLista] = useState(conversas);
   const [novaDm, setNovaDm] = useState(false);
   const [novoGrupo, setNovoGrupo] = useState(false);
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
-  const [minhasPrefs, setMinhasPrefs] = useState(prefs);
   // administração: aba "Todas as conversas" (carregada ao abrir) e diálogos
   const [verTodas, setVerTodas] = useState(false);
   const [listaAdmin, setListaAdmin] = useState<ConversaResumo[] | null>(null);
   const [grupoAdmin, setGrupoAdmin] = useState<ConversaResumo | null>(null);
   const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
   const [mostrarBusca, setMostrarBusca] = useState(false);
-  // mensagens chegadas pelo websocket, por canal; a Thread funde com o
-  // histórico DURANTE o render (dedup por id), sem setState em effect
-  const [aoVivo, setAoVivo] = useState<Record<string, MensagemChat[]>>({});
-  const router = useRouter();
 
-  const abertaRef = useRef(aberta);
-  useEffect(() => { abertaRef.current = aberta; }, [aberta]);
-  const prefsRef = useRef(minhasPrefs);
-  useEffect(() => { prefsRef.current = minhasPrefs; }, [minhasPrefs]);
-  const listaRef = useRef(lista);
-  useEffect(() => { listaRef.current = lista; }, [lista]);
-
-  // presença e status vêm do provider do shell: um canal para o app inteiro,
-  // e quem está em outra tela continua conectado para os colegas
+  // presença, lista e tempo real vêm dos providers do shell
   const { presencas, meuStatus, mudarStatus } = useChatStatus();
+  const {
+    conversas: lista, aoVivo, canalAberto: aberta, abrirCanal,
+    recarregar, notificacoes, alternarNotificacoes,
+  } = useChatVivo();
 
   const abrir = useCallback((id: string) => {
-    setAberta(id);
+    abrirCanal(id);
     setErro("");
-    // zera o badge localmente na hora; o banco confirma em seguida
-    setLista((xs) => xs.map((c) => (c.channelId === id ? { ...c, unread: 0 } : c)));
-    void marcarLido(id);
-  }, []);
-
-  const receber = useCallback((m: MensagemChat, evento: "INSERT" | "UPDATE") => {
-    setAoVivo((atual) => {
-      const doCanal = atual[m.channelId] ?? [];
-      const semEla = doCanal.filter((x) => x.id !== m.id);
-      return { ...atual, [m.channelId]: [...semEla, m] };
-    });
-    if (evento !== "INSERT" || m.authorId === meuId) return;
-
-    const abertaAgora = abertaRef.current;
-    if (m.channelId === abertaAgora) {
-      // já está lendo: confirma a leitura e não incomoda
-      void marcarLido(m.channelId);
-      return;
-    }
-    setLista((xs) => xs.map((c) => (c.channelId === m.channelId
-      ? { ...c, unread: c.unread + 1, lastBody: m.body, lastAuthor: m.authorId, lastAt: m.createdAt, lastDeleted: false }
-      : c)));
-    const conversa = listaRef.current.find((c) => c.channelId === m.channelId);
-    // canal que ainda não está na lista = conversa recém-criada por outra
-    // pessoa; o refresh traz o resumo pelo chat_overview
-    if (!conversa) router.refresh();
-    if (prefsRef.current.notificacoes && !(conversa?.muted)) {
-      const quem = pessoas.find((p) => p.id === m.authorId)?.name ?? "Nova mensagem";
-      toast(quem, {
-        description: m.body ?? "Anexo",
-        action: { label: "Abrir", onClick: () => abrir(m.channelId) },
-      });
-    }
-  }, [meuId, pessoas, router, abrir]);
-
-  useChatRealtime(meuId, receber);
-
-  // props novas (revalidate) atualizam a lista sem perder a conversa aberta;
-  // ajuste DURANTE o render (padrão do React para estado derivado), e não em
-  // effect, que dispararia um segundo render em cascata
-  const [propsAnteriores, setPropsAnteriores] = useState(conversas);
-  if (propsAnteriores !== conversas) {
-    setPropsAnteriores(conversas);
-    setLista(conversas);
-  }
+  }, [abrirCanal]);
 
   const nomePorId = useMemo(() => new Map(pessoas.map((p) => [p.id, p.name])), [pessoas]);
   const conversaAberta = (verTodas ? listaAdmin ?? [] : lista).find((c) => c.channelId === aberta)
@@ -144,7 +87,7 @@ export function ChatManager({
 
   const trocarAba = (todas: boolean) => {
     setVerTodas(todas);
-    setAberta(null);
+    abrirCanal(null);
     if (todas && listaAdmin === null) {
       void getConversasAdmin().then(setListaAdmin);
     }
@@ -154,14 +97,8 @@ export function ChatManager({
     if (r.error) { setErro(r.error); return; }
     setNovaDm(false);
     setNovoGrupo(false);
-    if (r.channelId) setAberta(r.channelId);
-    router.refresh();
-  };
-
-  const alternarNotificacoes = () => {
-    const ligar = !minhasPrefs.notificacoes;
-    setMinhasPrefs((p) => ({ ...p, notificacoes: ligar }));
-    void salvarPreferencias({ notificacoes: ligar });
+    recarregar();
+    if (r.channelId) abrirCanal(r.channelId);
   };
 
   return (
@@ -230,10 +167,10 @@ export function ChatManager({
           </select>
           <button
             type="button" className="btn btn-ghost btn-sm"
-            title={minhasPrefs.notificacoes ? "Desativar notificações" : "Ativar notificações"}
+            title={notificacoes ? "Desativar notificações" : "Ativar notificações"}
             onClick={alternarNotificacoes}
           >
-            {minhasPrefs.notificacoes ? <Bell size={15} /> : <BellOff size={15} />}
+            {notificacoes ? <Bell size={15} /> : <BellOff size={15} />}
           </button>
         </div>
         <div style={{ overflowY: "auto", flex: 1 }}>
@@ -352,7 +289,7 @@ export function ChatManager({
           pessoas={pessoas}
           onFechar={() => setGrupoAdmin(null)}
           onFeito={() => {
-            router.refresh();
+            recarregar();
             if (verTodas) void getConversasAdmin().then(setListaAdmin);
           }}
         />

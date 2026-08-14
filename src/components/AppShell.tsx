@@ -7,6 +7,9 @@ import { Topbar } from "@/components/Topbar";
 import { EscToClose } from "@/components/EscToClose";
 import { AvatarProvider } from "@/components/AvatarProvider";
 import { ChatPresenceProvider } from "@/components/chat/ChatPresenceProvider";
+import { ChatLiveProvider } from "@/components/chat/ChatLiveProvider";
+import { ChatDock } from "@/components/chat/ChatDock";
+import type { ConversaResumo } from "@/lib/actions/chat";
 import type { Enums } from "@/types/database";
 import type { UnitScope, CompanyScope } from "@/lib/tenant";
 import type { Theme } from "@/lib/theme";
@@ -27,6 +30,8 @@ export function AppShell({
   currentUserId = null,
   chatTenantId = null,
   chatStatus = "disponivel",
+  chatConversas = [],
+  chatNotificacoes = true,
   children,
 }: {
   role: Enums<"member_role">;
@@ -52,13 +57,19 @@ export function AppShell({
    */
   chatTenantId?: string | null;
   chatStatus?: Enums<"chat_user_status">;
+  /** conversas do usuário, carregadas no layout: alimentam o balão e a tela */
+  chatConversas?: ConversaResumo[];
+  chatNotificacoes?: boolean;
   children: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // o chat só liga com empresa E módulo contratado; sem isso, nada de canal
+  const chatId = chatTenantId ? currentUserId : null;
 
   return (
     <AvatarProvider byUser={avatars} currentUserId={currentUserId}>
-    <ChatPresenceProvider tenantId={chatTenantId} meuId={currentUserId} statusInicial={chatStatus}>
+    <ChatPresenceProvider tenantId={chatTenantId} meuId={chatId} statusInicial={chatStatus}>
+    <ChatLiveProvider meuId={chatId} conversasIniciais={chatConversas} notificacoesIniciais={chatNotificacoes}>
     <div className="app-root">
       <EscToClose />
       <Sidebar
@@ -107,7 +118,9 @@ export function AppShell({
           <Suspense fallback={<SkeletonPage />}>{children}</Suspense>
         </main>
       </div>
+      {chatId && <ChatDock meuId={chatId} />}
     </div>
+    </ChatLiveProvider>
     </ChatPresenceProvider>
     </AvatarProvider>
   );

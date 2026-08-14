@@ -1,16 +1,15 @@
 import { moduleGate } from "@/lib/module-gate";
 import { requireContext, getMembers } from "@/lib/tenant";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { getConversas, getPreferencias } from "@/lib/actions/chat";
 import { ChatManager } from "@/components/chat/ChatManager";
 
 /**
  * Chat interno.
  *
- * Conversas 1 a 1 e grupos entre os usuários da empresa. A lista e o histórico
- * chegam por server action (RLS decide o alcance; owner/admin/hr enxergam tudo
- * pela política de auditoria); mensagens novas, presença e toasts chegam por
- * Supabase Realtime dentro do ChatManager.
+ * A página só resolve o que é dela: quem são as pessoas da empresa (para
+ * iniciar conversa) e se quem entrou administra o chat. A lista de conversas,
+ * as mensagens ao vivo, a presença e as preferências vêm dos providers do
+ * shell, que valem em todas as telas (e alimentam o balão do canto).
  */
 export default async function ChatPage() {
   const gate = await moduleGate("chat");
@@ -20,12 +19,7 @@ export default async function ChatPage() {
   // mesma régua de is_chat_admin no banco: owner/admin/hr administram o chat
   const souAdminChat = role === "owner" || role === "admin" || role === "hr";
 
-  const [membros, conversas, prefs] = await Promise.all([
-    getMembers(tenant.id),
-    getConversas(),
-    getPreferencias(),
-  ]);
-
+  const membros = await getMembers(tenant.id);
   const pessoas = membros
     .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? "" }))
     .filter((p) => p.id && p.name)
@@ -37,14 +31,7 @@ export default async function ChatPage() {
         title="Chat interno"
         subtitle="Conversas entre as pessoas da empresa, com histórico centralizado"
       />
-      {/* a presença (e o tenantId do tópico) vive no shell, em ChatPresenceProvider */}
-      <ChatManager
-        conversas={conversas}
-        pessoas={pessoas}
-        meuId={user.id}
-        prefs={prefs}
-        souAdminChat={souAdminChat}
-      />
+      <ChatManager pessoas={pessoas} meuId={user.id} souAdminChat={souAdminChat} />
     </div>
   );
 }
