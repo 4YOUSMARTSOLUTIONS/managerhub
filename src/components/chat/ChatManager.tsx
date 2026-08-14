@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Send, Settings, Shield, ShieldX, Trash2, Users, X,
+  Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Search, Send, Settings, Shield, ShieldX, Trash2, Users, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
@@ -14,11 +14,12 @@ import { PeoplePicker } from "@/components/PeoplePicker";
 import { normalizar } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import {
-  apagarMensagem, apagarMensagemAdmin, banirDoChat, carregarMensagens, criarDm, criarGrupo,
-  desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo, enviarMensagem, gerirMembros,
-  getBloqueados, getConversasAdmin, marcarLido, renomearGrupo, salvarPreferencias,
-  transferirDono, urlAnexoChat,
+  apagarMensagem, apagarMensagemAdmin, banirDoChat, buscarChat, carregarMensagens, criarDm,
+  criarGrupo, desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo, enviarMensagem,
+  gerirMembros, getBloqueados, getConversasAdmin, marcarLido, renomearGrupo,
+  salvarPreferencias, transferirDono, urlAnexoChat,
   type BloqueadoChat, type ConversaResumo, type MensagemChat, type PreferenciasChat,
+  type ResultadoBusca,
 } from "@/lib/actions/chat";
 import { useChatPresence, useChatRealtime, type StatusPresenca } from "./useChatRealtime";
 
@@ -69,6 +70,7 @@ export function ChatManager({
   const [listaAdmin, setListaAdmin] = useState<ConversaResumo[] | null>(null);
   const [grupoAdmin, setGrupoAdmin] = useState<ConversaResumo | null>(null);
   const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
+  const [mostrarBusca, setMostrarBusca] = useState(false);
   // mensagens chegadas pelo websocket, por canal; a Thread funde com o
   // histórico DURANTE o render (dedup por id), sem setState em effect
   const [aoVivo, setAoVivo] = useState<Record<string, MensagemChat[]>>({});
@@ -202,6 +204,9 @@ export function ChatManager({
           </button>
           <button type="button" className="btn btn-ghost btn-sm" title="Novo grupo" onClick={() => { setErro(""); setNovoGrupo(true); }}>
             <Users size={15} />
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" title="Busca avançada no histórico" onClick={() => setMostrarBusca(true)}>
+            <Search size={15} />
           </button>
           {souAdminChat && (
             <button type="button" className="btn btn-ghost btn-sm" title="Bloqueados no chat" onClick={() => setMostrarBloqueados(true)}>
@@ -376,6 +381,19 @@ export function ChatManager({
         <BloqueadosDialog
           pessoas={pessoas.filter((p) => p.id !== meuId)}
           onFechar={() => setMostrarBloqueados(false)}
+        />
+      )}
+      {mostrarBusca && (
+        <BuscaDialog
+          pessoas={pessoas}
+          conversas={(verTodas ? listaAdmin ?? [] : lista).map((c) => ({ id: c.channelId, nome: rotulo(c) }))}
+          nomePorId={nomePorId}
+          rotuloPorCanal={new Map((verTodas ? listaAdmin ?? [] : lista).map((c) => [c.channelId, rotulo(c)]))}
+          onFechar={() => setMostrarBusca(false)}
+          onAbrir={(channelId) => {
+            setMostrarBusca(false);
+            abrir(channelId);
+          }}
         />
       )}
     </div>
@@ -1070,6 +1088,125 @@ function BloqueadosDialog({
               <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>Fechar</button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Busca avançada no histórico: texto (websearch: aspas para frase, -palavra
+ * exclui), autor, conversa e período. Cada um só encontra o que a RLS deixa
+ * ler; clicar no resultado abre a conversa.
+ */
+function BuscaDialog({
+  pessoas, conversas, nomePorId, rotuloPorCanal, onFechar, onAbrir,
+}: {
+  pessoas: { id: string; name: string }[];
+  conversas: { id: string; nome: string }[];
+  nomePorId: Map<string, string>;
+  rotuloPorCanal: Map<string, string>;
+  onFechar: () => void;
+  onAbrir: (channelId: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [autorId, setAutorId] = useState("");
+  const [channelId, setChannelId] = useState("");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+  const [resultados, setResultados] = useState<ResultadoBusca[] | null>(null);
+  const [pendente, iniciar] = useTransition();
+
+  const buscar = () => {
+    iniciar(async () => {
+      setResultados(await buscarChat({
+        q: q.trim(), autorId: autorId || undefined, channelId: channelId || undefined,
+        de: de || undefined, ate: ate || undefined,
+      }));
+    });
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
+        backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "8vh 1rem", zIndex: 50, overflowY: "auto",
+      }}
+    >
+      <div className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--mh-shadow-e3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Busca no histórico</h2>
+          <button type="button" onClick={onFechar} className="muted" aria-label="Fechar"
+            style={{ background: "none", border: "none", cursor: "pointer", lineHeight: 1, display: "flex" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <input
+            className="input" placeholder="O que procura? Aspas buscam a frase; -palavra exclui" value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") buscar(); }}
+          />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+            <div>
+              <label className="label">Quem escreveu</label>
+              <select className="input" value={autorId} onChange={(e) => setAutorId(e.target.value)}>
+                <option value="">Qualquer pessoa</option>
+                {pessoas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Conversa</label>
+              <select className="input" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+                <option value="">Todas</option>
+                {conversas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">De</label>
+              <input type="date" className="input" value={de} onChange={(e) => setDe(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Até</label>
+              <input type="date" className="input" value={ate} onChange={(e) => setAte(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={buscar}>
+              {pendente ? "Buscando…" : "Buscar"}
+            </button>
+          </div>
+
+          {resultados !== null && (
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.2rem", maxHeight: 320, overflowY: "auto" }}>
+              {resultados.length === 0 && (
+                <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Nada encontrado com esses filtros.</p>
+              )}
+              {resultados.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => onAbrir(r.channelId)}
+                  style={{
+                    textAlign: "left", background: "none", border: "none", cursor: "pointer",
+                    padding: "0.45rem 0.5rem", borderRadius: 8, borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <span style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.72rem" }} className="soft">
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {nomePorId.get(r.authorId) ?? "Alguém"} · {rotuloPorCanal.get(r.channelId) ?? "Conversa"}
+                    </span>
+                    <span style={{ flexShrink: 0 }}>{horaCurta(r.createdAt)}</span>
+                  </span>
+                  <span style={{ display: "block", fontSize: "0.83rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {r.body ?? "Anexo"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

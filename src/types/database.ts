@@ -1785,6 +1785,17 @@ export type Database = {
       chat_apagar_mensagem_admin: { Args: { p_id: string }; Returns: undefined }
       chat_banir: { Args: { p_tenant: string; p_user: string; p_motivo?: string | null }; Returns: undefined }
       chat_desbanir: { Args: { p_tenant: string; p_user: string }; Returns: undefined }
+      // busca no histórico: SECURITY INVOKER, a RLS de select dá o alcance
+      chat_buscar: {
+        Args: {
+          p_q: string; p_autor?: string | null; p_canal?: string | null
+          p_de?: string | null; p_ate?: string | null; p_lim?: number
+        }
+        Returns: {
+          id: string; channel_id: string; author_id: string
+          body: string | null; created_at: string
+        }[]
+      }
       chat_overview_admin: {
         Args: { p_tenant: string }
         Returns: {

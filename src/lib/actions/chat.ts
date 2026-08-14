@@ -422,6 +422,42 @@ export async function getConversasAdmin(): Promise<ConversaResumo[]> {
   }));
 }
 
+export type FiltrosBusca = {
+  q: string;
+  autorId?: string;
+  channelId?: string;
+  de?: string;   // yyyy-mm-dd
+  ate?: string;  // yyyy-mm-dd
+};
+
+export type ResultadoBusca = {
+  id: string;
+  channelId: string;
+  authorId: string;
+  body: string | null;
+  createdAt: string;
+};
+
+/**
+ * Busca avançada no histórico. SECURITY INVOKER no banco: cada um só encontra
+ * o que a RLS deixa ler (membro = seus canais; administração = tudo).
+ */
+export async function buscarChat(f: FiltrosBusca): Promise<ResultadoBusca[]> {
+  const { supabase } = await actionContext();
+  const { data } = await supabase.rpc("chat_buscar", {
+    p_q: f.q,
+    p_autor: f.autorId || null,
+    p_canal: f.channelId || null,
+    p_de: f.de || null,
+    p_ate: f.ate || null,
+    p_lim: 50,
+  });
+  return (data ?? []).map((r) => ({
+    id: r.id, channelId: r.channel_id, authorId: r.author_id,
+    body: r.body, createdAt: r.created_at,
+  }));
+}
+
 export async function alternarMute(channelId: string, muted: boolean): Promise<void> {
   const { supabase, userId } = await actionContext();
   await supabase
