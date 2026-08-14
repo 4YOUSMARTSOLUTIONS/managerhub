@@ -8,6 +8,7 @@ import { useAvatars } from "@/components/AvatarProvider";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "@/components/chat/ChatPresenceProvider";
 import { useChatVivo } from "@/components/chat/ChatLiveProvider";
+import { StatusDropdown } from "@/components/chat/StatusDropdown";
 import { setTheme } from "@/lib/actions/theme";
 import { signOut } from "@/lib/actions/auth";
 import { ROLE } from "@/lib/constants";
@@ -146,31 +147,11 @@ export function UserMenu({
 
           {chatAtivo && (
             <>
-              <div className="soft" style={{ fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", padding: "0.15rem 0.6rem 0.1rem" }}>
-                Status no chat
-              </div>
-              {/* os três status numa linha só: um clique, sem empilhar */}
-              <div role="radiogroup" style={{ display: "flex", gap: "0.25rem", padding: "0 0.4rem 0.15rem" }}>
-                {(["disponivel", "ocupado", "ausente"] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    role="radio"
-                    aria-checked={meuStatus === s}
-                    onClick={() => { mudarStatus(s); setOpen(false); }}
-                    style={{
-                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem",
-                      padding: "0.3rem 0.2rem", fontSize: "0.72rem", cursor: "pointer",
-                      background: meuStatus === s ? "var(--mh-surface-2)" : "none",
-                      border: "1px solid " + (meuStatus === s ? "var(--mh-border)" : "transparent"),
-                      borderRadius: "var(--mh-radius-sm)", color: "var(--mh-text-1)",
-                      fontWeight: meuStatus === s ? 600 : 400, whiteSpace: "nowrap",
-                    }}
-                  >
-                    <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COR[s], flexShrink: 0 }} />
-                    {STATUS_ROTULO[s]}
-                  </button>
-                ))}
+              {/* o status num dropdown: rótulo à esquerda, pílula colorida à
+                  direita, o mesmo controle da coluna do chat */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.2rem 0.6rem 0.3rem" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600 }}>Status no chat</span>
+                <StatusDropdown status={meuStatus} onMudar={mudarStatus} />
               </div>
 
               {/* som e prévia independentes: qualquer combinação, e com os

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  Bell, BellOff, ChevronDown, MessageCircle, MoreVertical, Paperclip, Pencil, Plus, Search, Send, Settings, Shield, ShieldX, Trash2, Users, X,
+  Bell, BellOff, MessageCircle, MoreVertical, Paperclip, Pencil, Plus, Search, Send, Settings, Shield, ShieldX, Trash2, Users, X,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { confirmDialog } from "@/components/ui/confirm";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { normalizar } from "@/lib/format";
-import type { Enums } from "@/types/database";
 import {
   apagarMensagem, apagarMensagemAdmin, banirDoChat, buscarChat, carregarMensagens, criarDm,
   criarGrupo, definirFotoGrupo, desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo,
@@ -23,6 +22,7 @@ import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "./ChatPresenceProvider
 import { useChatVivo } from "./ChatLiveProvider";
 import { EmojiPicker } from "./EmojiPicker";
 import { GrupoAvatar } from "./GrupoAvatar";
+import { StatusDropdown } from "./StatusDropdown";
 
 /**
  * A tela cheia do chat: lista de conversas à esquerda, conversa à direita.
@@ -149,7 +149,7 @@ export function ChatManager({
         )}
         {/* disponibilidade + liga/desliga da prévia */}
         <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Disponibilidade</span>
+          <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Status no chat</span>
           <span style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
             <StatusDropdown status={meuStatus} onMudar={mudarStatus} />
             <button
@@ -633,90 +633,6 @@ function Bolha({
           {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
         </span>
       </div>
-    </div>
-  );
-}
-
-/**
- * O dropdown de disponibilidade: pílula com a bolinha da cor do status e as
- * opções coloridas dentro, no lugar do select nativo (que não aceita cor).
- */
-function StatusDropdown({
-  status, onMudar,
-}: {
-  status: Enums<"chat_user_status">;
-  onMudar: (s: Enums<"chat_user_status">) => void;
-}) {
-  const [aberto, setAberto] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!aberto) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAberto(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [aberto]);
-
-  return (
-    <div ref={ref} style={{ position: "relative", display: "flex" }}>
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={aberto}
-        aria-label="Disponibilidade"
-        onClick={() => setAberto((v) => !v)}
-        style={{
-          display: "flex", alignItems: "center", gap: "0.4rem",
-          padding: "0.3rem 0.55rem", fontSize: "0.8rem", cursor: "pointer",
-          background: "var(--mh-surface-2)", border: "1px solid var(--mh-border)",
-          borderRadius: "var(--mh-radius-md)", color: "var(--mh-text-1)", whiteSpace: "nowrap",
-        }}
-      >
-        <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COR[status], flexShrink: 0 }} />
-        {STATUS_ROTULO[status]}
-        <ChevronDown size={13} style={{ color: "var(--mh-text-3)", transform: aberto ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-      </button>
-
-      {aberto && (
-        <div
-          role="listbox"
-          style={{
-            position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 60, minWidth: 150,
-            background: "var(--mh-surface-1)", border: "1px solid var(--mh-border)",
-            borderRadius: "var(--mh-radius-md)", boxShadow: "var(--mh-shadow-e2)",
-            padding: "0.3rem", display: "flex", flexDirection: "column", gap: "0.05rem",
-          }}
-        >
-          {(["disponivel", "ocupado", "ausente"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="option"
-              aria-selected={status === s}
-              onClick={() => { setAberto(false); onMudar(s); }}
-              style={{
-                display: "flex", alignItems: "center", gap: "0.5rem", width: "100%",
-                padding: "0.4rem 0.6rem", background: "none", border: "none",
-                borderRadius: "var(--mh-radius-sm)", fontSize: "0.8rem", cursor: "pointer",
-                textAlign: "left", color: "var(--mh-text-1)", whiteSpace: "nowrap",
-                fontWeight: status === s ? 600 : 400,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-            >
-              <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COR[s], flexShrink: 0 }} />
-              {STATUS_ROTULO[s]}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
