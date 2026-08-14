@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
-  Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Search, Send, Settings, Shield, ShieldX, Trash2, Users, X,
+  Bell, BellOff, MessageCircle, MoreVertical, Paperclip, Pencil, Plus, Search, Send, Settings, Shield, ShieldX, Trash2, Users, X,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -113,25 +113,19 @@ export function ChatManager({
     >
       {/* ---- coluna das conversas ---- */}
       <div style={{ borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+        {/* um botão só de opções: o campo de busca precisa do espaço */}
         <div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.4rem" }}>
           <input
             className="input" placeholder="Buscar conversa…" value={busca}
             onChange={(e) => setBusca(e.target.value)} style={{ flex: 1, minWidth: 0 }}
           />
-          <button type="button" className="btn btn-ghost btn-sm" title="Nova conversa" onClick={() => { setErro(""); setNovaDm(true); }}>
-            <Plus size={15} />
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" title="Novo grupo" onClick={() => { setErro(""); setNovoGrupo(true); }}>
-            <Users size={15} />
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" title="Busca avançada no histórico" onClick={() => setMostrarBusca(true)}>
-            <Search size={15} />
-          </button>
-          {souAdminChat && (
-            <button type="button" className="btn btn-ghost btn-sm" title="Bloqueados no chat" onClick={() => setMostrarBloqueados(true)}>
-              <Shield size={15} />
-            </button>
-          )}
+          <MenuOpcoesChat
+            souAdminChat={souAdminChat}
+            onNovaConversa={() => { setErro(""); setNovaDm(true); }}
+            onNovoGrupo={() => { setErro(""); setNovoGrupo(true); }}
+            onBuscar={() => setMostrarBusca(true)}
+            onBloqueados={() => setMostrarBloqueados(true)}
+          />
         </div>
         {souAdminChat && (
           <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
@@ -647,6 +641,88 @@ function Bolha({
           {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
         </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * O menu de opções da coluna de conversas (três pontinhos): nova conversa,
+ * novo grupo, busca no histórico e, para a administração, os bloqueados.
+ * Consolidado num botão só para o campo de busca não ficar espremido.
+ */
+function MenuOpcoesChat({
+  souAdminChat, onNovaConversa, onNovoGrupo, onBuscar, onBloqueados,
+}: {
+  souAdminChat: boolean;
+  onNovaConversa: () => void;
+  onNovoGrupo: () => void;
+  onBuscar: () => void;
+  onBloqueados: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAberto(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [aberto]);
+
+  const itens = [
+    { rotulo: "Nova conversa", icone: <Plus size={14} />, acao: onNovaConversa },
+    { rotulo: "Novo grupo", icone: <Users size={14} />, acao: onNovoGrupo },
+    { rotulo: "Buscar no histórico", icone: <Search size={14} />, acao: onBuscar },
+    ...(souAdminChat ? [{ rotulo: "Bloqueados no chat", icone: <Shield size={14} />, acao: onBloqueados }] : []),
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "flex", flexShrink: 0 }}>
+      <button
+        type="button" className="btn btn-ghost btn-sm" title="Opções"
+        aria-haspopup="menu" aria-expanded={aberto}
+        onClick={() => setAberto((v) => !v)}
+      >
+        <MoreVertical size={15} />
+      </button>
+      {aberto && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 60, minWidth: 195,
+            background: "var(--mh-surface-1)", border: "1px solid var(--mh-border)",
+            borderRadius: "var(--mh-radius-md)", boxShadow: "var(--mh-shadow-e2)",
+            padding: "0.3rem", display: "flex", flexDirection: "column", gap: "0.05rem",
+          }}
+        >
+          {itens.map((it) => (
+            <button
+              key={it.rotulo}
+              type="button"
+              role="menuitem"
+              onClick={() => { setAberto(false); it.acao(); }}
+              style={{
+                display: "flex", alignItems: "center", gap: "0.5rem", width: "100%",
+                padding: "0.4rem 0.6rem", background: "none", border: "none",
+                borderRadius: "var(--mh-radius-sm)", fontSize: "0.8rem", cursor: "pointer",
+                textAlign: "left", color: "var(--mh-text-1)", whiteSpace: "nowrap",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              {it.icone}
+              {it.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
