@@ -296,6 +296,132 @@ export async function salvarPreferencias(p: Partial<PreferenciasChat>): Promise<
   });
 }
 
+// ============================================================================
+// Administração (dono do grupo ou owner/admin/hr; as guardas moram nas RPCs)
+// ============================================================================
+
+async function rpcSimples(
+  chamada: (supabase: Awaited<ReturnType<typeof actionContext>>["supabase"]) => PromiseLike<{ error: { message: string } | null }>,
+): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await chamada(supabase);
+    if (error) return { error: error.message };
+    revalidatePath(RP_CHAT);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function renomearGrupo(channelId: string, nome: string): Promise<ActionState> {
+  if (!nome.trim()) return { error: "Dê um nome ao grupo." };
+  return rpcSimples((s) => s.rpc("chat_renomear_grupo", { p_id: channelId, p_nome: nome.trim() }));
+}
+
+export async function encerrarGrupo(channelId: string, encerrar: boolean): Promise<ActionState> {
+  return rpcSimples((s) => s.rpc("chat_encerrar_grupo", { p_id: channelId, p_encerrar: encerrar }));
+}
+
+export async function transferirDono(channelId: string, novoDonoId: string): Promise<ActionState> {
+  if (!novoDonoId) return { error: "Escolha a pessoa." };
+  return rpcSimples((s) => s.rpc("chat_transferir_dono", { p_id: channelId, p_novo: novoDonoId }));
+}
+
+export async function gerirMembros(
+  channelId: string, adicionar: string[], remover: string[],
+): Promise<ActionState> {
+  if (adicionar.length === 0 && remover.length === 0) return { ok: true };
+  return rpcSimples((s) => s.rpc("chat_gerir_membros", { p_id: channelId, p_adicionar: adicionar, p_remover: remover }));
+}
+
+export async function apagarMensagemAdmin(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("chat_apagar_mensagem_admin", { p_id: id });
+    if (error) return { error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function banirDoChat(userId: string, motivo?: string): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { error } = await supabase.rpc("chat_banir", {
+      p_tenant: tenantId, p_user: userId, p_motivo: motivo?.trim() || null,
+    });
+    if (error) return { error: error.message };
+    revalidatePath(RP_CHAT);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function desbanirDoChat(userId: string): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { error } = await supabase.rpc("chat_desbanir", { p_tenant: tenantId, p_user: userId });
+    if (error) return { error: error.message };
+    revalidatePath(RP_CHAT);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type BloqueadoChat = { userId: string; name: string; reason: string | null; createdAt: string };
+
+export async function getBloqueados(): Promise<BloqueadoChat[]> {
+  const { supabase, tenantId } = await actionContext();
+  const { data } = await supabase
+    .from("chat_bans")
+    .select("user_id, reason, created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
+  const bans = data ?? [];
+  if (bans.length === 0) return [];
+  const { data: nomes } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("id", bans.map((b) => b.user_id));
+  const nomePorId = new Map((nomes ?? []).map((p) => [p.id, p.full_name ?? ""]));
+  return bans.map((r) => ({
+    userId: r.user_id,
+    name: nomePorId.get(r.user_id) ?? "",
+    reason: r.reason,
+    createdAt: r.created_at,
+  }));
+}
+
+/**
+ * Todas as conversas da empresa (aba de administração). Mapeada para o mesmo
+ * formato da lista comum, com os campos de membro neutros e a marca de
+ * leitura pura: quem não participa não escreve, só lê.
+ */
+export async function getConversasAdmin(): Promise<ConversaResumo[]> {
+  const { supabase, tenantId } = await actionContext();
+  const { data } = await supabase.rpc("chat_overview_admin", { p_tenant: tenantId });
+  return (data ?? []).map((r) => ({
+    channelId: r.channel_id,
+    kind: r.kind,
+    name: r.name,
+    closedAt: r.closed_at,
+    role: "membro" as const,
+    muted: false,
+    lastReadAt: "",
+    unread: 0,
+    membros: ((r.membros ?? []) as unknown as { id: string; name: string | null }[])
+      .map((m) => ({ id: m.id, name: m.name ?? "" })),
+    lastBody: r.last_body,
+    lastAuthor: r.last_author,
+    lastAt: r.last_at,
+    lastDeleted: r.last_deleted,
+  }));
+}
+
 export async function alternarMute(channelId: string, muted: boolean): Promise<void> {
   const { supabase, userId } = await actionContext();
   await supabase

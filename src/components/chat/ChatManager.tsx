@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Send, Trash2, Users, X } from "lucide-react";
+import {
+  Bell, BellOff, MessageCircle, Paperclip, Pencil, Plus, Send, Settings, Shield, ShieldX, Trash2, Users, X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -12,9 +14,11 @@ import { PeoplePicker } from "@/components/PeoplePicker";
 import { normalizar } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import {
-  apagarMensagem, carregarMensagens, criarDm, criarGrupo, editarMensagem, enviarAnexo,
-  enviarMensagem, marcarLido, salvarPreferencias, urlAnexoChat,
-  type ConversaResumo, type MensagemChat, type PreferenciasChat,
+  apagarMensagem, apagarMensagemAdmin, banirDoChat, carregarMensagens, criarDm, criarGrupo,
+  desbanirDoChat, editarMensagem, encerrarGrupo, enviarAnexo, enviarMensagem, gerirMembros,
+  getBloqueados, getConversasAdmin, marcarLido, renomearGrupo, salvarPreferencias,
+  transferirDono, urlAnexoChat,
+  type BloqueadoChat, type ConversaResumo, type MensagemChat, type PreferenciasChat,
 } from "@/lib/actions/chat";
 import { useChatPresence, useChatRealtime, type StatusPresenca } from "./useChatRealtime";
 
@@ -38,7 +42,7 @@ const STATUS_COR: Record<StatusPresenca, string> = {
  * refresh, presença, toasts) entra na leva seguinte por Supabase Realtime.
  */
 export function ChatManager({
-  conversas, pessoas, meuId, tenantId, prefs,
+  conversas, pessoas, meuId, tenantId, prefs, souAdminChat,
 }: {
   conversas: ConversaResumo[];
   pessoas: { id: string; name: string }[];
@@ -50,6 +54,8 @@ export function ChatManager({
    */
   tenantId: string;
   prefs: PreferenciasChat;
+  /** owner/admin/hr: aba "Todas", gestão de qualquer grupo, remoção e bloqueio */
+  souAdminChat: boolean;
 }) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [lista, setLista] = useState(conversas);
@@ -58,6 +64,11 @@ export function ChatManager({
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
   const [minhasPrefs, setMinhasPrefs] = useState(prefs);
+  // administração: aba "Todas as conversas" (carregada ao abrir) e diálogos
+  const [verTodas, setVerTodas] = useState(false);
+  const [listaAdmin, setListaAdmin] = useState<ConversaResumo[] | null>(null);
+  const [grupoAdmin, setGrupoAdmin] = useState<ConversaResumo | null>(null);
+  const [mostrarBloqueados, setMostrarBloqueados] = useState(false);
   // mensagens chegadas pelo websocket, por canal; a Thread funde com o
   // histórico DURANTE o render (dedup por id), sem setState em effect
   const [aoVivo, setAoVivo] = useState<Record<string, MensagemChat[]>>({});
@@ -122,20 +133,35 @@ export function ChatManager({
   }
 
   const nomePorId = useMemo(() => new Map(pessoas.map((p) => [p.id, p.name])), [pessoas]);
-  const conversaAberta = lista.find((c) => c.channelId === aberta) ?? null;
+  const conversaAberta = (verTodas ? listaAdmin ?? [] : lista).find((c) => c.channelId === aberta)
+    ?? lista.find((c) => c.channelId === aberta)
+    ?? null;
 
   const rotulo = (c: ConversaResumo) => {
     if (c.kind === "grupo") return c.name ?? "Grupo";
+    // na aba de administração a DM pode não me incluir: mostra o par completo
+    if (!c.membros.some((m) => m.id === meuId)) {
+      return c.membros.map((m) => m.name).filter(Boolean).join(" e ") || "Conversa";
+    }
     const outro = c.membros.find((m) => m.id !== meuId);
     return outro?.name ?? "Conversa";
   };
 
   const visiveis = useMemo(() => {
+    const base = verTodas ? listaAdmin ?? [] : lista;
     const q = normalizar(busca.trim());
-    if (!q) return lista;
-    return lista.filter((c) => normalizar(rotulo(c)).includes(q));
+    if (!q) return base;
+    return base.filter((c) => normalizar(rotulo(c)).includes(q));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lista, busca, meuId]);
+  }, [lista, listaAdmin, verTodas, busca, meuId]);
+
+  const trocarAba = (todas: boolean) => {
+    setVerTodas(todas);
+    setAberta(null);
+    if (todas && listaAdmin === null) {
+      void getConversasAdmin().then(setListaAdmin);
+    }
+  };
 
   const aoCriar = (r: { error?: string; channelId?: string }) => {
     if (r.error) { setErro(r.error); return; }
@@ -177,7 +203,32 @@ export function ChatManager({
           <button type="button" className="btn btn-ghost btn-sm" title="Novo grupo" onClick={() => { setErro(""); setNovoGrupo(true); }}>
             <Users size={15} />
           </button>
+          {souAdminChat && (
+            <button type="button" className="btn btn-ghost btn-sm" title="Bloqueados no chat" onClick={() => setMostrarBloqueados(true)}>
+              <Shield size={15} />
+            </button>
+          )}
         </div>
+        {souAdminChat && (
+          <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
+            {([[false, "Minhas"], [true, "Todas as conversas"]] as const).map(([todas, nome]) => (
+              <button
+                key={nome}
+                type="button"
+                onClick={() => trocarAba(todas)}
+                style={{
+                  flex: 1, padding: "0.45rem 0", fontSize: "0.78rem", cursor: "pointer",
+                  background: "none", border: "none",
+                  borderBottom: verTodas === todas ? "2px solid var(--mh-primary)" : "2px solid transparent",
+                  color: verTodas === todas ? "var(--text)" : "var(--text-muted)",
+                  fontWeight: verTodas === todas ? 600 : 400,
+                }}
+              >
+                {nome}
+              </button>
+            ))}
+          </div>
+        )}
         {/* meu status + liga/desliga das notificações */}
         <div style={{ padding: "0.5rem 0.75rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <span aria-hidden style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_COR[minhasPrefs.status], flexShrink: 0 }} />
@@ -273,6 +324,11 @@ export function ChatManager({
             presenca={conversaAberta.kind === "dm"
               ? presencas[conversaAberta.membros.find((m) => m.id !== meuId)?.id ?? ""] ?? "offline"
               : null}
+            souMembro={conversaAberta.membros.some((m) => m.id === meuId)}
+            souAdminChat={souAdminChat}
+            onGerir={conversaAberta.kind === "grupo" && (conversaAberta.role === "dono" || souAdminChat)
+              ? () => setGrupoAdmin(conversaAberta)
+              : undefined}
           />
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -305,13 +361,30 @@ export function ChatManager({
           comNome
         />
       )}
+      {grupoAdmin && (
+        <GroupAdminDialog
+          conversa={grupoAdmin}
+          pessoas={pessoas}
+          onFechar={() => setGrupoAdmin(null)}
+          onFeito={() => {
+            router.refresh();
+            if (verTodas) void getConversasAdmin().then(setListaAdmin);
+          }}
+        />
+      )}
+      {mostrarBloqueados && (
+        <BloqueadosDialog
+          pessoas={pessoas.filter((p) => p.id !== meuId)}
+          onFechar={() => setMostrarBloqueados(false)}
+        />
+      )}
     </div>
   );
 }
 
 /** A conversa aberta: histórico paginado + tempo real + campo de envio. */
 function Thread({
-  conversa, meuId, nomePorId, extras, presenca,
+  conversa, meuId, nomePorId, extras, presenca, souMembro, souAdminChat, onGerir,
 }: {
   conversa: ConversaResumo;
   meuId: string;
@@ -320,6 +393,11 @@ function Thread({
   extras: MensagemChat[];
   /** presença do outro lado numa DM; null em grupo */
   presenca: StatusPresenca | null;
+  /** false = leitura da administração: sem composer, sem editar/apagar próprio */
+  souMembro: boolean;
+  souAdminChat: boolean;
+  /** presente quando quem olha pode gerir o grupo (dono ou administração) */
+  onGerir?: () => void;
 }) {
   const [mensagens, setMensagens] = useState<MensagemChat[] | null>(null);
   const [texto, setTexto] = useState("");
@@ -428,6 +506,23 @@ function Thread({
     });
   };
 
+  const apagarAdmin = async (m: MensagemChat) => {
+    const ok = await confirmDialog({
+      title: "Remover pela administração",
+      message: "A mensagem vira “Mensagem removida pela administração” para todos. Remover?",
+      confirmLabel: "Remover",
+      tone: "danger",
+    });
+    if (!ok) return;
+    iniciar(async () => {
+      const r = await apagarMensagemAdmin(m.id);
+      if (r.error) { setErro(r.error); return; }
+      setMensagens((atual) => (atual ?? []).map((x) => (x.id === m.id
+        ? { ...x, body: null, anexoPath: null, anexoNome: null, anexoMime: null, deletedAt: new Date().toISOString(), deletedAdmin: true }
+        : x)));
+    });
+  };
+
   const titulo = conversa.kind === "grupo"
     ? conversa.name ?? "Grupo"
     : conversa.membros.find((m) => m.id !== meuId)?.name ?? "Conversa";
@@ -456,6 +551,15 @@ function Thread({
           )}
         </div>
         {conversa.closedAt && <Badge tone="gray">Encerrado</Badge>}
+        {!souMembro && <Badge tone="purple">Leitura da administração</Badge>}
+        {onGerir && (
+          <button
+            type="button" className="btn btn-ghost btn-sm" title="Gerenciar grupo"
+            onClick={onGerir} style={{ marginLeft: "auto" }}
+          >
+            <Settings size={15} />
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
@@ -470,10 +574,11 @@ function Thread({
             key={m.id}
             m={m}
             minha={m.authorId === meuId}
-            autor={conversa.kind === "grupo" && m.authorId !== meuId && todas[i - 1]?.authorId !== m.authorId
+            autor={(conversa.kind === "grupo" || !souMembro) && m.authorId !== meuId && todas[i - 1]?.authorId !== m.authorId
               ? nomePorId.get(m.authorId) ?? "" : ""}
-            onEditar={m.authorId === meuId && !m.deletedAt && m.body !== null && !conversa.closedAt ? comecarEdicao : undefined}
-            onApagar={m.authorId === meuId && !m.deletedAt ? apagar : undefined}
+            onEditar={souMembro && m.authorId === meuId && !m.deletedAt && m.body !== null && !conversa.closedAt ? comecarEdicao : undefined}
+            onApagar={souMembro && m.authorId === meuId && !m.deletedAt ? apagar : undefined}
+            onApagarAdmin={souAdminChat && !m.deletedAt && !(souMembro && m.authorId === meuId) ? apagarAdmin : undefined}
           />
         ))}
         <div ref={fimRef} />
@@ -505,7 +610,7 @@ function Thread({
         />
         <button
           type="button" className="btn btn-ghost btn-sm"
-          disabled={pendente || Boolean(conversa.closedAt) || Boolean(editando)}
+          disabled={pendente || Boolean(conversa.closedAt) || Boolean(editando) || !souMembro}
           onClick={() => arquivoRef.current?.click()}
           title="Anexar arquivo (até 10 MB); o texto vira a legenda"
         >
@@ -515,8 +620,10 @@ function Thread({
           className="input"
           rows={1}
           value={texto}
-          disabled={Boolean(conversa.closedAt)}
-          placeholder={conversa.closedAt ? "Este grupo foi encerrado." : "Escreva uma mensagem…"}
+          disabled={Boolean(conversa.closedAt) || !souMembro}
+          placeholder={!souMembro
+            ? "Você não participa desta conversa; a administração só lê."
+            : conversa.closedAt ? "Este grupo foi encerrado." : "Escreva uma mensagem…"}
           style={{ flex: 1, resize: "none", maxHeight: 120 }}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
@@ -526,7 +633,7 @@ function Thread({
         />
         <button
           type="button" className="btn btn-primary btn-sm"
-          disabled={pendente || !texto.trim() || Boolean(conversa.closedAt)}
+          disabled={pendente || !texto.trim() || Boolean(conversa.closedAt) || !souMembro}
           onClick={enviar}
           title={editando ? "Salvar edição (Enter)" : "Enviar (Enter)"}
         >
@@ -538,13 +645,15 @@ function Thread({
 }
 
 function Bolha({
-  m, minha, autor, onEditar, onApagar,
+  m, minha, autor, onEditar, onApagar, onApagarAdmin,
 }: {
   m: MensagemChat;
   minha: boolean;
   autor: string;
   onEditar?: (m: MensagemChat) => void;
   onApagar?: (m: MensagemChat) => void;
+  /** remoção pela administração (tombstone com outro texto) */
+  onApagarAdmin?: (m: MensagemChat) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: minha ? "flex-end" : "flex-start" }}>
@@ -570,7 +679,7 @@ function Bolha({
             {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
           </span>
         </div>
-        {(onEditar || onApagar) && (
+        {(onEditar || onApagar || onApagarAdmin) && (
           <span style={{ display: "flex", gap: "0.1rem", flexShrink: 0 }}>
             {onEditar && (
               <button
@@ -588,6 +697,15 @@ function Bolha({
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
               >
                 <Trash2 size={13} />
+              </button>
+            )}
+            {onApagarAdmin && (
+              <button
+                type="button" className="muted" title="Remover pela administração" aria-label="Remover pela administração"
+                onClick={() => onApagarAdmin(m)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
+              >
+                <ShieldX size={13} />
               </button>
             )}
           </span>
@@ -699,6 +817,258 @@ function DialogoNovaConversa({
               {pendente ? "Criando…" : "Começar conversa"}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Gestão do grupo: nome, participantes, dono e encerramento. Aparece para o
+ * dono do grupo e para a administração; cada seção salva por si e o diálogo
+ * fecha só pelo X ou Fechar.
+ */
+function GroupAdminDialog({
+  conversa, pessoas, onFechar, onFeito,
+}: {
+  conversa: ConversaResumo;
+  pessoas: { id: string; name: string }[];
+  onFechar: () => void;
+  onFeito: () => void;
+}) {
+  const [nome, setNome] = useState(conversa.name ?? "");
+  const [membroIds, setMembroIds] = useState<string[]>(conversa.membros.map((m) => m.id));
+  const [novoDono, setNovoDono] = useState("");
+  const [encerrado, setEncerrado] = useState(Boolean(conversa.closedAt));
+  const [erro, setErro] = useState("");
+  const [aviso, setAviso] = useState("");
+  const [pendente, iniciar] = useTransition();
+
+  const rodar = (fn: () => Promise<{ error?: string }>, feito: string) => {
+    setErro("");
+    setAviso("");
+    iniciar(async () => {
+      const r = await fn();
+      if (r.error) { setErro(r.error); return; }
+      setAviso(feito);
+      onFeito();
+    });
+  };
+
+  const salvarMembros = () => {
+    const atuais = conversa.membros.map((m) => m.id);
+    const adicionar = membroIds.filter((id) => !atuais.includes(id));
+    const remover = atuais.filter((id) => !membroIds.includes(id));
+    rodar(() => gerirMembros(conversa.channelId, adicionar, remover), "Participantes atualizados.");
+  };
+
+  const alternarEncerrado = async () => {
+    const encerrar = !encerrado;
+    const ok = await confirmDialog({
+      title: encerrar ? "Encerrar grupo" : "Reabrir grupo",
+      message: encerrar
+        ? "Ninguém mais escreve neste grupo; o histórico continua visível. Encerrar?"
+        : "O grupo volta a aceitar mensagens. Reabrir?",
+      confirmLabel: encerrar ? "Encerrar" : "Reabrir",
+      tone: encerrar ? "danger" : "primary",
+    });
+    if (!ok) return;
+    rodar(async () => {
+      const r = await encerrarGrupo(conversa.channelId, encerrar);
+      if (!r.error) setEncerrado(encerrar);
+      return r;
+    }, encerrar ? "Grupo encerrado." : "Grupo reaberto.");
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
+        backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "8vh 1rem", zIndex: 50, overflowY: "auto",
+      }}
+    >
+      <div className="card" style={{ width: "100%", maxWidth: 460, boxShadow: "var(--mh-shadow-e3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Gerenciar grupo</h2>
+          <button type="button" onClick={onFechar} className="muted" aria-label="Fechar"
+            style={{ background: "none", border: "none", cursor: "pointer", lineHeight: 1, display: "flex" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div>
+            <label className="label">Nome do grupo</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} style={{ flex: 1 }} />
+              <button
+                type="button" className="btn btn-ghost btn-sm"
+                disabled={pendente || !nome.trim() || nome.trim() === (conversa.name ?? "")}
+                onClick={() => rodar(() => renomearGrupo(conversa.channelId, nome), "Nome atualizado.")}
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Participantes</label>
+            <PeoplePicker people={pessoas} selected={membroIds} onChange={setMembroIds} />
+            <button
+              type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.4rem" }}
+              disabled={pendente} onClick={salvarMembros}
+            >
+              Salvar participantes
+            </button>
+          </div>
+
+          <div>
+            <label className="label">Transferir dono</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <select className="input" value={novoDono} onChange={(e) => setNovoDono(e.target.value)} style={{ flex: 1 }}>
+                <option value="">Escolha o participante…</option>
+                {conversa.membros.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+              <button
+                type="button" className="btn btn-ghost btn-sm"
+                disabled={pendente || !novoDono}
+                onClick={() => rodar(() => transferirDono(conversa.channelId, novoDono), "Dono transferido.")}
+              >
+                Transferir
+              </button>
+            </div>
+          </div>
+
+          {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: 0 }}>{erro}</p>}
+          {aviso && !erro && <p style={{ color: "var(--mh-success)", fontSize: "0.8rem", margin: 0 }}>{aviso}</p>}
+
+          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
+            <button
+              type="button"
+              className={encerrado ? "btn btn-primary btn-sm" : "btn btn-danger btn-sm"}
+              disabled={pendente}
+              onClick={alternarEncerrado}
+            >
+              {encerrado ? "Reabrir grupo" : "Encerrar grupo"}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Bloqueados no chat (só administração): lista, desbloqueio e novo bloqueio. */
+function BloqueadosDialog({
+  pessoas, onFechar,
+}: {
+  pessoas: { id: string; name: string }[];
+  onFechar: () => void;
+}) {
+  const [bloqueados, setBloqueados] = useState<BloqueadoChat[] | null>(null);
+  const [alvo, setAlvo] = useState<string[]>([]);
+  const [motivo, setMotivo] = useState("");
+  const [erro, setErro] = useState("");
+  const [pendente, iniciar] = useTransition();
+
+  useEffect(() => {
+    let vivo = true;
+    getBloqueados().then((xs) => { if (vivo) setBloqueados(xs); });
+    return () => { vivo = false; };
+  }, []);
+
+  const bloquear = async () => {
+    const id = alvo[0];
+    if (!id) return;
+    const nome = pessoas.find((p) => p.id === id)?.name ?? "esta pessoa";
+    const ok = await confirmDialog({
+      title: "Bloquear no chat",
+      message: `${nome} continua acessando o sistema, mas perde a leitura e a escrita do chat. Bloquear?`,
+      confirmLabel: "Bloquear",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setErro("");
+    iniciar(async () => {
+      const r = await banirDoChat(id, motivo);
+      if (r.error) { setErro(r.error); return; }
+      setAlvo([]);
+      setMotivo("");
+      setBloqueados(await getBloqueados());
+    });
+  };
+
+  const desbloquear = (userId: string) => {
+    setErro("");
+    iniciar(async () => {
+      const r = await desbanirDoChat(userId);
+      if (r.error) { setErro(r.error); return; }
+      setBloqueados(await getBloqueados());
+    });
+  };
+
+  const idsBloqueados = (bloqueados ?? []).map((b) => b.userId);
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
+        backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "8vh 1rem", zIndex: 50, overflowY: "auto",
+      }}
+    >
+      <div className="card" style={{ width: "100%", maxWidth: 460, boxShadow: "var(--mh-shadow-e3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Bloqueados no chat</h2>
+          <button type="button" onClick={onFechar} className="muted" aria-label="Fechar"
+            style={{ background: "none", border: "none", cursor: "pointer", lineHeight: 1, display: "flex" }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+          {bloqueados === null && <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Carregando…</p>}
+          {bloqueados !== null && bloqueados.length === 0 && (
+            <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Ninguém está bloqueado.</p>
+          )}
+          {bloqueados?.map((b) => (
+            <div key={b.userId} style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <Avatar name={b.name} userId={b.userId} size={28} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: "0.85rem", fontWeight: 600 }}>{b.name}</span>
+                {b.reason && <span className="soft" style={{ fontSize: "0.75rem" }}>{b.reason}</span>}
+              </span>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => desbloquear(b.userId)}>
+                Desbloquear
+              </button>
+            </div>
+          ))}
+
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
+            <label className="label">Bloquear alguém</label>
+            <PeoplePicker
+              people={pessoas.filter((p) => !idsBloqueados.includes(p.id))}
+              selected={alvo}
+              onChange={setAlvo}
+              single
+            />
+            <input
+              className="input" style={{ marginTop: "0.4rem" }}
+              placeholder="Motivo (opcional)" value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+            {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: "0.4rem 0 0" }}>{erro}</p>}
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem" }}>
+              <button type="button" className="btn btn-danger btn-sm" disabled={pendente || alvo.length === 0} onClick={bloquear}>
+                Bloquear
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>Fechar</button>
+            </div>
           </div>
         </div>
       </div>

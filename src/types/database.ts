@@ -1776,6 +1776,25 @@ export type Database = {
       // tabela não tem grant nem policy de update); apagar é tombstone
       chat_editar_mensagem: { Args: { p_id: string; p_body: string }; Returns: undefined }
       chat_apagar_mensagem: { Args: { p_id: string }; Returns: undefined }
+      // administração: gestão de grupo (dono OU owner/admin/hr), remoção de
+      // mensagem pela administração, bloqueio no chat e visão de todas as conversas
+      chat_renomear_grupo: { Args: { p_id: string; p_nome: string }; Returns: undefined }
+      chat_encerrar_grupo: { Args: { p_id: string; p_encerrar: boolean }; Returns: undefined }
+      chat_transferir_dono: { Args: { p_id: string; p_novo: string }; Returns: undefined }
+      chat_gerir_membros: { Args: { p_id: string; p_adicionar: string[]; p_remover: string[] }; Returns: undefined }
+      chat_apagar_mensagem_admin: { Args: { p_id: string }; Returns: undefined }
+      chat_banir: { Args: { p_tenant: string; p_user: string; p_motivo?: string | null }; Returns: undefined }
+      chat_desbanir: { Args: { p_tenant: string; p_user: string }; Returns: undefined }
+      chat_overview_admin: {
+        Args: { p_tenant: string }
+        Returns: {
+          channel_id: string; kind: Database["public"]["Enums"]["chat_channel_kind"]
+          name: string | null; closed_at: string | null
+          membros: Json
+          last_body: string | null; last_author: string | null
+          last_at: string | null; last_deleted: boolean
+        }[]
+      }
       chat_overview: {
         Args: Record<string, never>
         Returns: {

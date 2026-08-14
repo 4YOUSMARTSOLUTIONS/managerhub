@@ -16,7 +16,9 @@ export default async function ChatPage() {
   const gate = await moduleGate("chat");
   if (gate) return gate;
 
-  const { tenant, user } = await requireContext();
+  const { tenant, user, role } = await requireContext();
+  // mesma régua de is_chat_admin no banco: owner/admin/hr administram o chat
+  const souAdminChat = role === "owner" || role === "admin" || role === "hr";
 
   const [membros, conversas, prefs] = await Promise.all([
     getMembers(tenant.id),
@@ -35,7 +37,14 @@ export default async function ChatPage() {
         title="Chat interno"
         subtitle="Conversas entre as pessoas da empresa, com histórico centralizado"
       />
-      <ChatManager conversas={conversas} pessoas={pessoas} meuId={user.id} tenantId={tenant.id} prefs={prefs} />
+      <ChatManager
+        conversas={conversas}
+        pessoas={pessoas}
+        meuId={user.id}
+        tenantId={tenant.id}
+        prefs={prefs}
+        souAdminChat={souAdminChat}
+      />
     </div>
   );
 }
