@@ -341,6 +341,8 @@ function Thread({
   const [erro, setErro] = useState("");
   // id da mensagem em edição; o composer vira o campo de edição
   const [editando, setEditando] = useState<string | null>(null);
+  // menu de contexto (botão direito na mensagem): posição + a mensagem alvo
+  const [menu, setMenu] = useState<{ x: number; y: number; m: MensagemChat } | null>(null);
   const [pendente, iniciar] = useTransition();
   const fimRef = useRef<HTMLDivElement>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
@@ -520,20 +522,40 @@ function Thread({
             Carregar mensagens anteriores
           </button>
         )}
-        {todas?.map((m, i) => (
-          <Bolha
-            key={m.id}
-            m={m}
-            minha={m.authorId === meuId}
-            autor={(conversa.kind === "grupo" || !souMembro) && m.authorId !== meuId && todas[i - 1]?.authorId !== m.authorId
-              ? nomePorId.get(m.authorId) ?? "" : ""}
-            onEditar={souMembro && m.authorId === meuId && !m.deletedAt && m.body !== null && !conversa.closedAt ? comecarEdicao : undefined}
-            onApagar={souMembro && m.authorId === meuId && !m.deletedAt ? apagar : undefined}
-            onApagarAdmin={souAdminChat && !m.deletedAt && !(souMembro && m.authorId === meuId) ? apagarAdmin : undefined}
-          />
-        ))}
+        {todas?.map((m, i) => {
+          // as ações moram no menu do botão direito, para a tela ficar limpa
+          const podeEditar = souMembro && m.authorId === meuId && !m.deletedAt && m.body !== null && !conversa.closedAt;
+          const podeApagar = souMembro && m.authorId === meuId && !m.deletedAt;
+          const podeRemoverAdmin = souAdminChat && !m.deletedAt && !(souMembro && m.authorId === meuId);
+          return (
+            <Bolha
+              key={m.id}
+              m={m}
+              minha={m.authorId === meuId}
+              autor={(conversa.kind === "grupo" || !souMembro) && m.authorId !== meuId && todas[i - 1]?.authorId !== m.authorId
+                ? nomePorId.get(m.authorId) ?? "" : ""}
+              onMenu={podeEditar || podeApagar || podeRemoverAdmin
+                ? (e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, m }); }
+                : undefined}
+            />
+          );
+        })}
         <div ref={fimRef} />
       </div>
+
+      {menu && (
+        <MenuMensagem
+          x={menu.x}
+          y={menu.y}
+          podeEditar={souMembro && menu.m.authorId === meuId && !menu.m.deletedAt && menu.m.body !== null && !conversa.closedAt}
+          podeApagar={souMembro && menu.m.authorId === meuId && !menu.m.deletedAt}
+          podeRemoverAdmin={souAdminChat && !menu.m.deletedAt && !(souMembro && menu.m.authorId === meuId)}
+          onEditar={() => { setMenu(null); comecarEdicao(menu.m); }}
+          onApagar={() => { setMenu(null); void apagar(menu.m); }}
+          onRemoverAdmin={() => { setMenu(null); void apagarAdmin(menu.m); }}
+          onFechar={() => setMenu(null)}
+        />
+      )}
 
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: "0 1rem 0.4rem" }}>{erro}</p>}
       {editando && (
@@ -598,72 +620,120 @@ function Thread({
 }
 
 function Bolha({
-  m, minha, autor, onEditar, onApagar, onApagarAdmin,
+  m, minha, autor, onMenu,
 }: {
   m: MensagemChat;
   minha: boolean;
   autor: string;
-  onEditar?: (m: MensagemChat) => void;
-  onApagar?: (m: MensagemChat) => void;
-  /** remoção pela administração (tombstone com outro texto) */
-  onApagarAdmin?: (m: MensagemChat) => void;
+  /** botão direito na bolha abre o menu de ações (editar/apagar/remover) */
+  onMenu?: (e: React.MouseEvent) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: minha ? "flex-end" : "flex-start" }}>
       {autor && <span className="soft" style={{ fontSize: "0.7rem", margin: "0.25rem 0 0.1rem" }}>{autor}</span>}
-      <div style={{ display: "flex", gap: "0.25rem", alignItems: "center", maxWidth: "72%", flexDirection: minha ? "row-reverse" : "row" }}>
-        <div
-          style={{
-            padding: "0.45rem 0.7rem", borderRadius: 12, fontSize: "0.86rem",
-            whiteSpace: "pre-wrap", overflowWrap: "break-word", minWidth: 0,
-            background: minha ? "var(--mh-primary-soft)" : "var(--surface-2)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          {m.deletedAt
-            ? (
-              <span className="soft" style={{ fontStyle: "italic" }}>
-                {m.deletedAdmin ? "Mensagem removida pela administração" : "Mensagem apagada"}
-              </span>
-            )
-            : m.body}
-          {!m.deletedAt && <AnexoChat m={m} />}
-          <span className="soft" style={{ fontSize: "0.65rem", marginLeft: "0.5rem" }}>
-            {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
-          </span>
-        </div>
-        {(onEditar || onApagar || onApagarAdmin) && (
-          <span style={{ display: "flex", gap: "0.1rem", flexShrink: 0 }}>
-            {onEditar && (
-              <button
-                type="button" className="muted" title="Editar" aria-label="Editar mensagem"
-                onClick={() => onEditar(m)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
-              >
-                <Pencil size={13} />
-              </button>
-            )}
-            {onApagar && (
-              <button
-                type="button" className="muted" title="Apagar" aria-label="Apagar mensagem"
-                onClick={() => onApagar(m)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-            {onApagarAdmin && (
-              <button
-                type="button" className="muted" title="Remover pela administração" aria-label="Remover pela administração"
-                onClick={() => onApagarAdmin(m)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 3, display: "flex" }}
-              >
-                <ShieldX size={13} />
-              </button>
-            )}
-          </span>
-        )}
+      <div
+        onContextMenu={onMenu}
+        title={onMenu ? "Botão direito para opções" : undefined}
+        style={{
+          maxWidth: "72%", padding: "0.45rem 0.7rem", borderRadius: 12, fontSize: "0.86rem",
+          whiteSpace: "pre-wrap", overflowWrap: "break-word", minWidth: 0,
+          background: minha ? "var(--mh-primary-soft)" : "var(--surface-2)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        {m.deletedAt
+          ? (
+            <span className="soft" style={{ fontStyle: "italic" }}>
+              {m.deletedAdmin ? "Mensagem removida pela administração" : "Mensagem apagada"}
+            </span>
+          )
+          : m.body}
+        {!m.deletedAt && <AnexoChat m={m} />}
+        <span className="soft" style={{ fontSize: "0.65rem", marginLeft: "0.5rem" }}>
+          {horaCurta(m.createdAt)}{m.editedAt && !m.deletedAt ? " · editada" : ""}
+        </span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * O menu do botão direito na mensagem. Nasce na posição do clique (recuando
+ * quando encostaria na borda), fecha por clique fora, Esc ou rolagem.
+ */
+function MenuMensagem({
+  x, y, podeEditar, podeApagar, podeRemoverAdmin, onEditar, onApagar, onRemoverAdmin, onFechar,
+}: {
+  x: number;
+  y: number;
+  podeEditar: boolean;
+  podeApagar: boolean;
+  podeRemoverAdmin: boolean;
+  onEditar: () => void;
+  onApagar: () => void;
+  onRemoverAdmin: () => void;
+  onFechar: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onFechar();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("scroll", onFechar, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("scroll", onFechar, true);
+    };
+  }, [onFechar]);
+
+  const itens = [
+    podeEditar && { rotulo: "Editar", icone: <Pencil size={14} />, acao: onEditar, perigo: false },
+    podeApagar && { rotulo: "Apagar", icone: <Trash2 size={14} />, acao: onApagar, perigo: true },
+    podeRemoverAdmin && { rotulo: "Remover pela administração", icone: <ShieldX size={14} />, acao: onRemoverAdmin, perigo: true },
+  ].filter(Boolean) as { rotulo: string; icone: React.ReactNode; acao: () => void; perigo: boolean }[];
+
+  if (itens.length === 0) return null;
+
+  const LARGURA = 240;
+  const ALTURA = itens.length * 36 + 12;
+  const esq = Math.min(x, (typeof window !== "undefined" ? window.innerWidth : 9999) - LARGURA - 8);
+  const topo = Math.min(y, (typeof window !== "undefined" ? window.innerHeight : 9999) - ALTURA - 8);
+
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      style={{
+        position: "fixed", left: esq, top: topo, zIndex: 70, minWidth: LARGURA,
+        background: "var(--mh-surface-1)", border: "1px solid var(--mh-border)",
+        borderRadius: "var(--mh-radius-md)", boxShadow: "var(--mh-shadow-e2)",
+        padding: "0.3rem", display: "flex", flexDirection: "column", gap: "0.05rem",
+      }}
+    >
+      {itens.map((it) => (
+        <button
+          key={it.rotulo}
+          type="button"
+          role="menuitem"
+          onClick={it.acao}
+          style={{
+            display: "flex", alignItems: "center", gap: "0.55rem", width: "100%",
+            padding: "0.45rem 0.65rem", background: "none", border: "none",
+            borderRadius: "var(--mh-radius-sm)", fontSize: "0.84rem", cursor: "pointer",
+            textAlign: "left", color: it.perigo ? "var(--mh-danger)" : "var(--mh-text-1)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+        >
+          {it.icone}
+          {it.rotulo}
+        </button>
+      ))}
     </div>
   );
 }
