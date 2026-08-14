@@ -53,12 +53,28 @@ export function useChatRealtime(
     const supabase = createClient();
     let canal: RealtimeChannel | null = null;
     let ativo = true;
+    let tentativa: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * O canal PRECISA se reerguer sozinho. Token que venceu, rede que caiu ou
+     * computador que dormiu derrubam o websocket em silêncio: a tela continua
+     * aberta parecendo viva, mas surda, e nenhuma mensagem chega até um F5.
+     * Por isso todo estado de queda agenda uma reassinatura, e voltar o foco
+     * para a aba confere o canal na hora.
+     */
+    const reassinarDepois = () => {
+      if (!ativo || tentativa) return;
+      tentativa = setTimeout(() => { tentativa = null; void assinar(); }, 5000);
+    };
 
     const assinar = async () => {
+      if (!ativo) return;
+      if (canal) { void supabase.removeChannel(canal); canal = null; }
       const { data: { session } } = await supabase.auth.getSession();
-      if (!ativo || !session) return;
+      if (!ativo) return;
+      if (!session) { reassinarDepois(); return; }
       await supabase.realtime.setAuth(session.access_token);
-      canal = supabase
+      const este = supabase
         .channel(`chat:u:${meuId}`, { config: { private: true } })
         .on("broadcast", { event: "INSERT" }, (msg) => {
           const linha = (msg.payload as { record?: LinhaBroadcast }).record;
@@ -67,14 +83,18 @@ export function useChatRealtime(
         .on("broadcast", { event: "UPDATE" }, (msg) => {
           const linha = (msg.payload as { record?: LinhaBroadcast }).record;
           if (linha) aoReceber.current(paraMensagem(linha), "UPDATE");
-        })
-        .subscribe((estado, err) => {
-          // canal privado recusado = policy errada em realtime.messages; sem
-          // este log o sintoma é só "nada chega"
-          if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
-            console.error("chat realtime:", estado, err?.message);
-          }
         });
+      canal = este;
+      este.subscribe((estado, err) => {
+        // canal trocado por uma reassinatura: o CLOSED do velho não interessa
+        if (canal !== este) return;
+        // canal privado recusado logo de cara = policy errada em
+        // realtime.messages; sem este log o sintoma é só "nada chega"
+        if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") {
+          console.error("chat realtime:", estado, err?.message);
+          reassinarDepois();
+        }
+      });
     };
     void assinar();
 
@@ -82,8 +102,17 @@ export function useChatRealtime(
       if (session) void supabase.realtime.setAuth(session.access_token);
     });
 
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible" && canal?.state !== "joined") void assinar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("online", aoVoltar);
+
     return () => {
       ativo = false;
+      if (tentativa) clearTimeout(tentativa);
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("online", aoVoltar);
       escuta.subscription.unsubscribe();
       if (canal) void supabase.removeChannel(canal);
     };
@@ -110,18 +139,30 @@ export function useChatPresence(
     const supabase = createClient();
     let canal: RealtimeChannel | null = null;
     let ativo = true;
+    let tentativa: ReturnType<typeof setTimeout> | null = null;
+
+    // mesma resiliência do canal de mensagens: queda agenda reassinatura,
+    // e voltar o foco para a aba confere o canal na hora
+    const reassinarDepois = () => {
+      if (!ativo || tentativa) return;
+      tentativa = setTimeout(() => { tentativa = null; void assinar(); }, 5000);
+    };
 
     const assinar = async () => {
+      if (!ativo) return;
+      if (canal) { void supabase.removeChannel(canal); canal = null; }
       const { data: { session } } = await supabase.auth.getSession();
-      if (!ativo || !session) return;
+      if (!ativo) return;
+      if (!session) { reassinarDepois(); return; }
       await supabase.realtime.setAuth(session.access_token);
-      canal = supabase.channel(`chat:presenca:${tenantId}`, {
+      const este = supabase.channel(`chat:presenca:${tenantId}`, {
         config: { private: true, presence: { key: meuId } },
       });
-      canal
+      canal = este;
+      este
         .on("presence", { event: "sync" }, () => {
-          if (!canal) return;
-          const estado = canal.presenceState<{ status?: StatusPresenca }>();
+          if (canal !== este) return;
+          const estado = este.presenceState<{ status?: StatusPresenca }>();
           const mapa: Record<string, StatusPresenca> = {};
           for (const [uid, metas] of Object.entries(estado)) {
             mapa[uid] = metas[0]?.status ?? "disponivel";
@@ -129,16 +170,27 @@ export function useChatPresence(
           setPresencas(mapa);
         })
         .subscribe((estado, err) => {
-          if (estado === "SUBSCRIBED") void canal?.track({ status });
-          if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
+          if (canal !== este) return;
+          if (estado === "SUBSCRIBED") void este.track({ status });
+          if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") {
             console.error("chat presenca:", estado, err?.message);
+            reassinarDepois();
           }
         });
     };
     void assinar();
 
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible" && canal?.state !== "joined") void assinar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("online", aoVoltar);
+
     return () => {
       ativo = false;
+      if (tentativa) clearTimeout(tentativa);
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("online", aoVoltar);
       if (canal) void supabase.removeChannel(canal);
     };
     // status nas dependências de propósito: trocar de status reassina e

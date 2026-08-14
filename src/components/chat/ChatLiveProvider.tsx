@@ -9,6 +9,34 @@ import {
 import { useChatRealtime } from "./useChatRealtime";
 
 /**
+ * O "pop" de mensagem nova, gerado na hora pela Web Audio API: dois tons
+ * curtos, sem arquivo de áudio para servir. Navegador só deixa tocar depois
+ * do primeiro gesto do usuário na página; antes disso o try engole o bloqueio
+ * e a notificação segue muda, sem erro.
+ */
+function tocarSomDeMensagem() {
+  try {
+    const ctx = new AudioContext();
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(740, t);
+    osc.frequency.setValueAtTime(988, t + 0.11);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    osc.start(t);
+    osc.stop(t + 0.35);
+    osc.onended = () => { void ctx.close(); };
+  } catch {
+    // sem áudio disponível: a notificação visual basta
+  }
+}
+
+/**
  * O tempo real do chat mora no SHELL, não na tela do chat.
  *
  * Antes a assinatura do websocket vivia dentro do ChatManager: quem estava em
@@ -141,6 +169,8 @@ export function ChatLiveProvider({
       : conversa?.membros.find((x) => x.id === m.authorId)?.name ?? "Nova mensagem";
     const texto = m.body ?? "Anexo";
 
+    tocarSomDeMensagem();
+
     // aba em segundo plano: aviso do navegador, que aparece fora da janela
     if (typeof document !== "undefined" && document.hidden
       && typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -164,6 +194,21 @@ export function ChatLiveProvider({
   }, [meuId, recarregar, abrirCanal]);
 
   useChatRealtime(meuId, receber);
+
+  // rede de segurança: voltar o foco para a aba ressincroniza a lista com o
+  // banco (não lidas e prévias), cobrindo qualquer buraco de websocket caído
+  useEffect(() => {
+    if (!meuId) return;
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") recarregar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+    window.addEventListener("online", aoVoltar);
+    return () => {
+      document.removeEventListener("visibilitychange", aoVoltar);
+      window.removeEventListener("online", aoVoltar);
+    };
+  }, [meuId, recarregar]);
 
   const naoLidas = conversas.reduce((n, c) => n + c.unread, 0);
 

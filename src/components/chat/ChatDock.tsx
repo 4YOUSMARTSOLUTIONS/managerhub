@@ -147,7 +147,7 @@ function MiniLista({
   }
 
   return (
-    <div style={{ flex: 1, overflowY: "auto" }}>
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
       {conversas.map((c) => {
         const outro = c.kind === "dm" ? c.membros.find((m) => m.id !== meuId) : null;
         return (
@@ -256,7 +256,8 @@ function MiniConversa({ conversa, meuId }: { conversa: ConversaResumo; meuId: st
 
   return (
     <>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0.7rem", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+      {/* minHeight: 0 é o que deixa o filho com overflow rolar dentro do flex */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.7rem", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
         {mensagens === null && <p className="soft" style={{ fontSize: "0.78rem" }}>Carregando…</p>}
         {mensagens?.length === 0 && (
           <p className="soft" style={{ fontSize: "0.78rem" }}>Nenhuma mensagem ainda. Diga olá.</p>

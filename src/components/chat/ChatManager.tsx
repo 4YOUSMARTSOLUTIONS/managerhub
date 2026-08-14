@@ -110,7 +110,7 @@ export function ChatManager({
       }}
     >
       {/* ---- coluna das conversas ---- */}
-      <div style={{ borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={{ borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
         <div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border)", display: "flex", gap: "0.4rem" }}>
           <input
             className="input" placeholder="Buscar conversa…" value={busca}
@@ -235,7 +235,8 @@ export function ChatManager({
       </div>
 
       {/* ---- a conversa aberta ---- */}
-      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+      {/* minHeight: 0 é o que deixa o filho com overflow rolar dentro do flex */}
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
         {conversaAberta ? (
           <Thread
             key={conversaAberta.channelId}
@@ -512,7 +513,7 @@ function Thread({
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
         {todas === null && <p className="soft" style={{ fontSize: "0.8rem" }}>Carregando…</p>}
         {todas !== null && temMais && (
           <button type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: "center" }} disabled={pendente} onClick={maisAntigas}>
