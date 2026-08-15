@@ -26,7 +26,7 @@ const CLASSES: Enums<"seg_acidente_class">[] = ["fai", "mti", "mdi", "lti", "sif
  * mesma do módulo de absenteísmo, e o que se grava é o par código+descrição.
  */
 export function SegAcidenteDialog({
-  onClose, editando, pessoas, locais, areas,
+  onClose, editando, pessoas, locais, areas, causas,
 }: {
   onClose: () => void;
   /** null = novo registro. O pai monta este componente com `key`, então cada
@@ -35,6 +35,7 @@ export function SegAcidenteDialog({
   pessoas: Person[];
   locais: { id: string; name: string; active: boolean }[];
   areas: { id: string; name: string; localId: string | null; active: boolean }[];
+  causas: { id: string; name: string; active: boolean }[];
 }) {
   const [pessoa, setPessoa] = useState<string[]>(editando ? [editando.userId] : []);
   // `hojeYmd` e não `toISOString`: o segundo é UTC e abriria o formulário com
@@ -51,6 +52,7 @@ export function SegAcidenteDialog({
   const [agente, setAgente] = useState(editando?.agenteCausador ?? "");
   const [natureza, setNatureza] = useState(editando?.naturezaLesao ?? "");
   const [analise, setAnalise] = useState(editando?.analiseCausa ?? "");
+  const [causa, setCausa] = useState(editando?.causaId ?? "");
   const [catNumero, setCatNumero] = useState(editando?.catNumero ?? "");
   const [catData, setCatData] = useState(editando?.catEmitidaEm ?? "");
   const [cid, setCid] = useState<{ code: string; description: string } | null>(
@@ -103,6 +105,7 @@ export function SegAcidenteDialog({
         agenteCausador: agente,
         naturezaLesao: natureza,
         analiseCausa: analise,
+        causaId: causa || null,
         catNumero,
         catEmitidaEm: catData || null,
         cidCode: cid?.code ?? null,
@@ -323,6 +326,18 @@ export function SegAcidenteDialog({
                 <input className="input" type="date" value={retorno} onChange={(e) => setRetorno(e.target.value)} />
               </div>
             </div>
+          </div>
+
+          <div>
+            {/* a causa do catálogo é o que empilha em gráfico; o texto abaixo é
+                a análise por extenso, que serve ao laudo mas não à tendência */}
+            <label className="label">Causa-raiz</label>
+            <select className="select" value={causa} onChange={(e) => setCausa(e.target.value)}>
+              <option value="">Ainda não apontada</option>
+              {causas.filter((c) => c.active || c.id === editando?.causaId).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
 
           <div>

@@ -1681,6 +1681,16 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; local_id?: string | null; name?: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // O "por que" do relato, escolhido na TRIAGEM (o relator viu o fato;
+      // dizer a causa é análise). O acidente aponta para o mesmo catálogo, e é
+      // isso que permite ver a mesma causa gerando desvio hoje e acidente
+      // amanhã.
+      seg_causas: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       // Quem tria relato e cadastra acidente. Não é papel do sistema: o técnico
       // de segurança costuma ser um `member` comum.
       seg_equipe: {
@@ -1696,9 +1706,9 @@ export type Database = {
       // Insert é `never`: abrir relato é pela RPC `seg_criar_relato`, que
       // grava relato e envolvidos na mesma transação e avisa a equipe.
       seg_relatos: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; tipo_id: string; snap_natureza: Database["public"]["Enums"]["seg_relato_natureza"]; local_id: string | null; area_id: string | null; descricao: string; status: Database["public"]["Enums"]["seg_relato_status"]; triado_por: string | null; triado_em: string | null; nota_triagem: string | null; duplicado_de: string | null; created_by: string; created_at: string; updated_at: string }
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; tipo_id: string; snap_natureza: Database["public"]["Enums"]["seg_relato_natureza"]; local_id: string | null; area_id: string | null; causa_id: string | null; descricao: string; status: Database["public"]["Enums"]["seg_relato_status"]; triado_por: string | null; triado_em: string | null; nota_triagem: string | null; duplicado_de: string | null; created_by: string; created_at: string; updated_at: string }
         Insert: never
-        Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null }
+        Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null; causa_id?: string | null }
         Relationships: []
       }
       // O acidente de trabalho. A linha carrega CID, que é dado de saúde, e
@@ -1706,9 +1716,9 @@ export type Database = {
       // nem a própria pessoa acidentada lê por aqui (precedente:
       // `absenteismo_atestados`). Os `snap_*` são carimbados por trigger.
       seg_acidentes: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; occurred_at: string | null; turno: string | null; classe: Database["public"]["Enums"]["seg_acidente_class"]; status: Database["public"]["Enums"]["seg_acidente_status"]; user_id: string; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; local_id: string | null; area_id: string | null; descricao: string; testemunhas: string | null; parte_corpo: string | null; agente_causador: string | null; natureza_lesao: string | null; analise_causa: string | null; cat_numero: string | null; cat_emitida_em: string | null; cid_code: string | null; cid_descricao: string | null; dias_afastamento: number | null; afastamento_de: string | null; retorno_em: string | null; encerrado_por: string | null; encerrado_em: string | null; created_by: string; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; unit_id?: string | null; occurred_on: string; occurred_at?: string | null; turno?: string | null; classe: Database["public"]["Enums"]["seg_acidente_class"]; user_id: string; local_id?: string | null; area_id?: string | null; descricao: string; testemunhas?: string | null; parte_corpo?: string | null; agente_causador?: string | null; natureza_lesao?: string | null; analise_causa?: string | null; cat_numero?: string | null; cat_emitida_em?: string | null; cid_code?: string | null; cid_descricao?: string | null; dias_afastamento?: number | null; afastamento_de?: string | null; retorno_em?: string | null; created_by?: string }
-        Update: { unit_id?: string | null; occurred_on?: string; occurred_at?: string | null; turno?: string | null; classe?: Database["public"]["Enums"]["seg_acidente_class"]; local_id?: string | null; area_id?: string | null; descricao?: string; testemunhas?: string | null; parte_corpo?: string | null; agente_causador?: string | null; natureza_lesao?: string | null; analise_causa?: string | null; cat_numero?: string | null; cat_emitida_em?: string | null; cid_code?: string | null; cid_descricao?: string | null; dias_afastamento?: number | null; afastamento_de?: string | null; retorno_em?: string | null }
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; occurred_at: string | null; turno: string | null; classe: Database["public"]["Enums"]["seg_acidente_class"]; status: Database["public"]["Enums"]["seg_acidente_status"]; user_id: string; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; local_id: string | null; area_id: string | null; descricao: string; testemunhas: string | null; parte_corpo: string | null; agente_causador: string | null; natureza_lesao: string | null; analise_causa: string | null; causa_id: string | null; cat_numero: string | null; cat_emitida_em: string | null; cid_code: string | null; cid_descricao: string | null; dias_afastamento: number | null; afastamento_de: string | null; retorno_em: string | null; encerrado_por: string | null; encerrado_em: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; occurred_on: string; occurred_at?: string | null; turno?: string | null; classe: Database["public"]["Enums"]["seg_acidente_class"]; user_id: string; local_id?: string | null; area_id?: string | null; descricao: string; testemunhas?: string | null; parte_corpo?: string | null; agente_causador?: string | null; natureza_lesao?: string | null; analise_causa?: string | null; causa_id?: string | null; cat_numero?: string | null; cat_emitida_em?: string | null; cid_code?: string | null; cid_descricao?: string | null; dias_afastamento?: number | null; afastamento_de?: string | null; retorno_em?: string | null; created_by?: string }
+        Update: { unit_id?: string | null; occurred_on?: string; occurred_at?: string | null; turno?: string | null; classe?: Database["public"]["Enums"]["seg_acidente_class"]; local_id?: string | null; area_id?: string | null; descricao?: string; testemunhas?: string | null; parte_corpo?: string | null; agente_causador?: string | null; natureza_lesao?: string | null; analise_causa?: string | null; causa_id?: string | null; cat_numero?: string | null; cat_emitida_em?: string | null; cid_code?: string | null; cid_descricao?: string | null; dias_afastamento?: number | null; afastamento_de?: string | null; retorno_em?: string | null }
         Relationships: []
       }
       seg_acidente_anexos: {
@@ -2096,7 +2106,7 @@ export type Database = {
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
       // só o autor, e só enquanto o relato está `aberto`
       seg_editar_relato: { Args: { p_id: string; p_data: Json }; Returns: undefined }
-      seg_triar_relato: { Args: { p_id: string; p_status: Database["public"]["Enums"]["seg_relato_status"]; p_nota?: string | null; p_duplicado_de?: string | null }; Returns: undefined }
+      seg_triar_relato: { Args: { p_id: string; p_status: Database["public"]["Enums"]["seg_relato_status"]; p_nota?: string | null; p_duplicado_de?: string | null; p_causa_id?: string | null }; Returns: undefined }
       seg_alertar_gestor: { Args: { p_id: string }; Returns: number }
       seg_vincular_acao: { Args: { p_relato_id: string; p_action_id: string }; Returns: undefined }
       seg_encerrar_acidente: { Args: { p_id: string; p_retorno?: string | null }; Returns: undefined }

@@ -33,9 +33,9 @@ function revalidar() {
 }
 
 /** As três tabelas de catálogo do módulo. A tela manda o nome; aqui ele é validado. */
-export type CatalogoSeg = "seg_tipos_relato" | "seg_locais" | "seg_areas";
+export type CatalogoSeg = "seg_tipos_relato" | "seg_locais" | "seg_areas" | "seg_causas";
 
-const CATALOGOS: CatalogoSeg[] = ["seg_tipos_relato", "seg_locais", "seg_areas"];
+const CATALOGOS: CatalogoSeg[] = ["seg_tipos_relato", "seg_locais", "seg_areas", "seg_causas"];
 
 function catalogoValido(valor: unknown): CatalogoSeg | null {
   const t = String(valor ?? "") as CatalogoSeg;
@@ -48,6 +48,7 @@ function mensagem(e: { message?: string }): string {
   if (msg.includes("seg_tipos_relato_nome_unico")) return "Já existe um tipo de relato com esse nome.";
   if (msg.includes("seg_locais_nome_unico")) return "Já existe um local com esse nome.";
   if (msg.includes("seg_areas_nome_unico")) return "Já existe uma área com esse nome nesse local.";
+  if (msg.includes("seg_causas_nome_unico")) return "Já existe uma causa com esse nome.";
   if (msg.includes("_nome_nao_vazio")) return "Informe o nome.";
   if (msg.includes("row-level security")) return "Você não tem permissão para alterar este cadastro.";
   return msg || "Não foi possível salvar.";
@@ -140,6 +141,28 @@ export async function saveSegArea(input: SegAreaInput): Promise<ActionState> {
   }
 }
 
+export type SegCausaInput = { id?: string; name: string; description?: string };
+
+export async function saveSegCausa(input: SegCausaInput): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    const name = input.name.trim();
+    if (!name) return { error: "Informe o nome da causa." };
+
+    const campos = { tenant_id: tenantId, name, description: input.description?.trim() || null };
+
+    const { error } = input.id
+      ? await supabase.from("seg_causas").update(campos).eq("id", input.id)
+      : await supabase.from("seg_causas").insert(campos);
+    if (error) return { error: mensagem(error) };
+
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 /** Liga e desliga o item no formulário sem apagar o histórico que já o cita. */
 export async function setSegCatalogoAtivo(formData: FormData): Promise<void> {
   const tabela = catalogoValido(formData.get("tabela"));
@@ -153,6 +176,8 @@ export async function setSegCatalogoAtivo(formData: FormData): Promise<void> {
     await supabase.from("seg_tipos_relato").update({ active }).eq("id", id);
   } else if (tabela === "seg_locais") {
     await supabase.from("seg_locais").update({ active }).eq("id", id);
+  } else if (tabela === "seg_causas") {
+    await supabase.from("seg_causas").update({ active }).eq("id", id);
   } else {
     await supabase.from("seg_areas").update({ active }).eq("id", id);
   }
@@ -179,13 +204,17 @@ export async function deleteSegCatalogo(formData: FormData): Promise<void> {
       ? await supabase.from("seg_tipos_relato").delete().eq("id", id)
       : tabela === "seg_locais"
         ? await supabase.from("seg_locais").delete().eq("id", id)
-        : await supabase.from("seg_areas").delete().eq("id", id);
+        : tabela === "seg_causas"
+          ? await supabase.from("seg_causas").delete().eq("id", id)
+          : await supabase.from("seg_areas").delete().eq("id", id);
 
   if (apagou.error) {
     if (tabela === "seg_tipos_relato") {
       await supabase.from("seg_tipos_relato").update({ active: false }).eq("id", id);
     } else if (tabela === "seg_locais") {
       await supabase.from("seg_locais").update({ active: false }).eq("id", id);
+    } else if (tabela === "seg_causas") {
+      await supabase.from("seg_causas").update({ active: false }).eq("id", id);
     } else {
       await supabase.from("seg_areas").update({ active: false }).eq("id", id);
     }
@@ -210,6 +239,8 @@ async function lerIcone(
   tabela: CatalogoSeg,
   id: string,
 ): Promise<string | null> {
+  // causa não tem figura: é vocabulário de análise, não botão de formulário
+  if (tabela === "seg_causas") return null;
   const q =
     tabela === "seg_tipos_relato"
       ? await supabase.from("seg_tipos_relato").select("image_path").eq("id", id).maybeSingle()
@@ -230,6 +261,9 @@ async function gravarIcone(
   }
   if (tabela === "seg_locais") {
     return supabase.from("seg_locais").update({ image_path: path }).eq("id", id);
+  }
+  if (tabela === "seg_causas") {
+    return { error: { message: "Causa não tem figura." } };
   }
   return supabase.from("seg_areas").update({ image_path: path }).eq("id", id);
 }
@@ -379,6 +413,7 @@ export async function triarRelato(input: {
   status: Enums<"seg_relato_status">;
   nota?: string;
   duplicadoDe?: string | null;
+  causaId?: string | null;
 }): Promise<ActionState> {
   try {
     const { supabase } = await actionContext();
@@ -387,6 +422,7 @@ export async function triarRelato(input: {
       p_status: input.status,
       p_nota: input.nota?.trim() || null,
       p_duplicado_de: input.duplicadoDe || null,
+      p_causa_id: input.causaId || null,
     });
     if (error) return { error: error.message };
 
@@ -528,6 +564,7 @@ export type AcidenteInput = {
   agenteCausador?: string | null;
   naturezaLesao?: string | null;
   analiseCausa?: string | null;
+  causaId?: string | null;
   catNumero?: string | null;
   catEmitidaEm?: string | null;
   cidCode?: string | null;
@@ -573,6 +610,7 @@ export async function salvarAcidente(input: AcidenteInput): Promise<ActionState>
       agente_causador: input.agenteCausador?.trim() || null,
       natureza_lesao: input.naturezaLesao?.trim() || null,
       analise_causa: input.analiseCausa?.trim() || null,
+      causa_id: input.causaId || null,
       cat_numero: input.catNumero?.trim() || null,
       cat_emitida_em: input.catEmitidaEm || null,
       cid_code: input.cidCode || null,

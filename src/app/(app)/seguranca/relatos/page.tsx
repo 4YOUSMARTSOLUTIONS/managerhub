@@ -43,7 +43,7 @@ export default async function SegurancaRelatosPage() {
   const [
     { data: relatos }, { data: souSeguranca }, membros,
     { data: tipos }, { data: locais }, { data: areas }, { data: units },
-    { data: programa },
+    { data: programa }, { data: causas },
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_tratar_seguranca", { p_tenant: tenant.id }),
@@ -57,6 +57,8 @@ export default async function SegurancaRelatosPage() {
     supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
     // a que item do Programa as ações de tratamento serão amarradas
     supabase.rpc("seg_item_do_programa"),
+    supabase.from("seg_causas").select("id, name, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
   ]);
 
   const ehSeguranca = souSeguranca === true;
@@ -134,6 +136,7 @@ export default async function SegurancaRelatosPage() {
     unitId: r.unit_id,
     descricao: r.descricao,
     status: r.status,
+    causaId: r.causa_id,
     notaTriagem: r.nota_triagem,
     triadoEm: r.triado_em,
     triadoPor: r.triado_por ? nomeDoUser.get(r.triado_por) ?? null : null,
@@ -170,6 +173,7 @@ export default async function SegurancaRelatosPage() {
           id: a.id, name: a.name, localId: a.local_id, imagePath: a.image_path, active: a.active,
         }))}
         unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
+        causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}
         itemPrograma={(programa ?? null) as
           | { item: string; bloco: string; secao: string | null; pilar: string | null }
           | null}

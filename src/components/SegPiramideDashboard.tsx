@@ -13,6 +13,7 @@ export type PainelSeguranca = {
   relatos: {
     total: number; validos: number; positivos: number;
     aguardando: number; improcedentes: number; duplicados: number;
+    triados: number; com_causa: number;
   };
   acidentes: {
     total: number; abertos: number; dias_perdidos: number;
@@ -22,10 +23,12 @@ export type PainelSeguranca = {
   por_local: { nome: string; relatos: number; acidentes: number }[];
   por_area: { nome: string; relatos: number; acidentes: number }[];
   por_tipo: { nome: string; total: number }[];
+  por_causa: { nome: string; relatos: number; acidentes: number }[];
   restrito?: {
     taxa_tratamento: number | null;
     por_setor: { nome: string; relatos: number; acidentes: number }[];
     por_gestor: { nome: string; relatos: number; acidentes: number }[];
+    causa_por_area: { area: string; causa: string; total: number }[];
   };
 };
 
@@ -224,6 +227,22 @@ export function SegPiramideDashboard({
         <StatCard label="Dias perdidos" value={painel.acidentes.dias_perdidos} tone="red" />
         {painel.restrito && (
           <StatCard
+            label="Com causa apontada"
+            value={
+              painel.relatos.triados === 0
+                ? "—"
+                : `${Math.round((painel.relatos.com_causa / painel.relatos.triados) * 100)}%`
+            }
+            tone={
+              painel.relatos.triados === 0 ? "gray"
+                : painel.relatos.com_causa / painel.relatos.triados >= 0.8 ? "green"
+                  : "amber"
+            }
+            hint="Dos relatos já analisados"
+          />
+        )}
+        {painel.restrito && (
+          <StatCard
             label="Relatos tratados"
             value={painel.restrito.taxa_tratamento != null ? `${painel.restrito.taxa_tratamento}%` : "—"}
             tone={
@@ -302,11 +321,39 @@ export function SegPiramideDashboard({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1rem" }}>
         <Barras titulo="Por local" dados={painel.por_local} vazio="Nenhum local informado no período." />
         <Barras titulo="Por área" dados={painel.por_area} vazio="Nenhuma área informada no período." />
+        <Barras
+          titulo="Por causa-raiz"
+          dados={painel.por_causa}
+          vazio="Nenhuma causa apontada ainda. A equipe escolhe a causa na triagem."
+        />
         {painel.restrito && (
           <>
             <Barras titulo="Por setor" dados={painel.restrito.por_setor} vazio="Nenhum envolvido com setor cadastrado." />
             <Barras titulo="Por gestor" dados={painel.restrito.por_gestor} vazio="Nenhum envolvido com gestor cadastrado." />
           </>
+        )}
+
+        {painel.restrito && painel.restrito.causa_por_area.length > 0 && (
+          <div className="card card-pad">
+            <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Causa por área</h3>
+            <p className="soft" style={{ fontSize: "0.76rem", margin: "0 0 0.6rem" }}>
+              O cruzamento que vira conversa com a liderança: o que mais causa desvio em cada área.
+            </p>
+            <table className="table">
+              <thead>
+                <tr><th>Área</th><th>Causa</th><th style={{ textAlign: "right", width: 60 }}>Total</th></tr>
+              </thead>
+              <tbody>
+                {painel.restrito.causa_por_area.slice(0, 12).map((c) => (
+                  <tr key={`${c.area}-${c.causa}`}>
+                    <td>{c.area}</td>
+                    <td className="muted" style={{ fontSize: "0.83rem" }}>{c.causa}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>{c.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         <div className="card card-pad">

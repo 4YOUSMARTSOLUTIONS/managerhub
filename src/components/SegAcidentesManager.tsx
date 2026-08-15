@@ -47,6 +47,7 @@ export type AcidenteRow = {
   agenteCausador: string | null;
   naturezaLesao: string | null;
   analiseCausa: string | null;
+  causaId: string | null;
   catNumero: string | null;
   catEmitidaEm: string | null;
   cidCode: string | null;
@@ -71,12 +72,13 @@ function dataBr(iso: string | null) {
  * conta que vai alimentar a pirâmide.
  */
 export function SegAcidentesManager({
-  rows, pessoas, locais, areas,
+  rows, pessoas, locais, areas, causas,
 }: {
   rows: AcidenteRow[];
   pessoas: Person[];
   locais: { id: string; name: string; active: boolean }[];
   areas: { id: string; name: string; localId: string | null; active: boolean }[];
+  causas: { id: string; name: string; active: boolean }[];
 }) {
   const [form, setForm] = useState<{ open: boolean; editando: AcidenteRow | null }>({ open: false, editando: null });
   const [aberto, setAberto] = useState<string | null>(null);
@@ -90,6 +92,7 @@ export function SegAcidentesManager({
 
   const nomeLocal = useMemo(() => new Map(locais.map((l) => [l.id, l.name])), [locais]);
   const nomeArea = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
+  const nomeCausa = useMemo(() => new Map(causas.map((c) => [c.id, c.name])), [causas]);
 
   const lista = useMemo(() => {
     const q = normalizar(busca.trim());
@@ -308,6 +311,7 @@ export function SegAcidentesManager({
                 <div><dt className="soft">Agente causador</dt><dd style={{ margin: 0 }}>{detalhe.agenteCausador ?? "—"}</dd></div>
                 <div><dt className="soft">Natureza da lesão</dt><dd style={{ margin: 0 }}>{detalhe.naturezaLesao ?? "—"}</dd></div>
                 <div><dt className="soft">CAT</dt><dd style={{ margin: 0 }}>{detalhe.catNumero ? `${detalhe.catNumero} · ${dataBr(detalhe.catEmitidaEm)}` : "—"}</dd></div>
+                <div><dt className="soft">Causa-raiz</dt><dd style={{ margin: 0 }}>{(detalhe.causaId && nomeCausa.get(detalhe.causaId)) || "Não apontada"}</dd></div>
                 <div><dt className="soft">CID-10</dt><dd style={{ margin: 0 }}>{detalhe.cidCode ? `${detalhe.cidCode} ${detalhe.cidDescricao ?? ""}` : "—"}</dd></div>
                 <div><dt className="soft">Afastamento</dt><dd style={{ margin: 0 }}>{detalhe.diasAfastamento ? `${detalhe.diasAfastamento} dias, retorno ${dataBr(detalhe.retornoEm)}` : "—"}</dd></div>
               </dl>
@@ -396,7 +400,7 @@ export function SegAcidentesManager({
         <SegAcidenteDialog
           key={form.editando?.id ?? "novo"}
           onClose={() => setForm({ open: false, editando: null })}
-          editando={form.editando} pessoas={pessoas} locais={locais} areas={areas}
+          editando={form.editando} pessoas={pessoas} locais={locais} areas={areas} causas={causas}
         />
       )}
 

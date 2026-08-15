@@ -113,7 +113,7 @@ export default async function SettingsPage() {
     { data: sancoesDeLancamento }, { data: absenceTypesData }, { data: recipientsData },
     { data: absenteismosAprovados },
     { data: segTiposData }, { data: segLocaisData }, { data: segAreasData }, { data: segEquipeData },
-    { data: segSettingsData },
+    { data: segSettingsData }, { data: segCausasData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -214,6 +214,8 @@ export default async function SettingsPage() {
     supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id),
     // a que item do Programa as ações de relato se amarram
     supabase.from("seg_settings").select("relato_item_id").eq("tenant_id", tenant.id).maybeSingle(),
+    supabase.from("seg_causas").select("id, name, description, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -1334,6 +1336,20 @@ export default async function SettingsPage() {
                     image_path: r.image_path, active: r.active,
                   }))}
                   locais={(segLocaisData ?? []).filter((l) => l.active).map((l) => ({ id: l.id, name: l.name }))}
+                  canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-causas",
+              label: "Causas-raiz",
+              content: (
+                <SegCatalogoManager
+                  kind="causa"
+                  rows={(segCausasData ?? []).map((r) => ({
+                    id: r.id, name: r.name, description: r.description,
+                    image_path: null, active: r.active,
+                  }))}
                   canEdit={canEdit}
                 />
               ),

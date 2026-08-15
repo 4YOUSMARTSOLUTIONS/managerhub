@@ -11,7 +11,7 @@ import { normalizar } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
 import {
   definirIconeSeg, deleteSegCatalogo, removerIconeSeg,
-  saveSegArea, saveSegLocal, saveSegTipoRelato, setSegCatalogoAtivo,
+  saveSegArea, saveSegCausa, saveSegLocal, saveSegTipoRelato, setSegCatalogoAtivo,
   type CatalogoSeg,
 } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
@@ -28,7 +28,7 @@ export type SegCatalogoRow = {
   local_id?: string | null;
 };
 
-export type SegCatalogoKind = "tipo" | "local" | "area";
+export type SegCatalogoKind = "tipo" | "local" | "area" | "causa";
 
 type Rascunho = {
   id?: string;
@@ -44,6 +44,12 @@ const TABELA: Record<SegCatalogoKind, CatalogoSeg> = {
   tipo: "seg_tipos_relato",
   local: "seg_locais",
   area: "seg_areas",
+  causa: "seg_causas",
+};
+
+// causa é vocabulário de análise, não botão de formulário: não tem figura
+const COM_FIGURA: Record<SegCatalogoKind, boolean> = {
+  tipo: true, local: true, area: true, causa: false,
 };
 
 const TEXTOS: Record<SegCatalogoKind, { titulo: string; ajuda: string; singular: string; novo: string; vazio: string; arquivo: string }> = {
@@ -62,6 +68,14 @@ const TEXTOS: Record<SegCatalogoKind, { titulo: string; ajuda: string; singular:
     novo: "+ Novo local",
     vazio: "Nenhum local cadastrado. O relato pede o local do ocorrido.",
     arquivo: "locais-de-seguranca.xlsx",
+  },
+  causa: {
+    titulo: "Causas-raiz",
+    ajuda: "O porquê do relato, escolhido pela equipe na triagem. É o cruzamento causa x área que vira conversa com o gestor, em vez de só o número de desvios.",
+    singular: "causa",
+    novo: "+ Nova causa",
+    vazio: "Nenhuma causa cadastrada. Sem elas a triagem não consegue apontar tendência.",
+    arquivo: "causas-de-seguranca.xlsx",
   },
   area: {
     titulo: "Áreas do ocorrido",
@@ -144,7 +158,9 @@ export function SegCatalogoManager({
             })
           : kind === "local"
             ? await saveSegLocal({ id: rascunho.id, name: rascunho.name, description: rascunho.description })
-            : await saveSegArea({
+            : kind === "causa"
+              ? await saveSegCausa({ id: rascunho.id, name: rascunho.name, description: rascunho.description })
+              : await saveSegArea({
                 id: rascunho.id, name: rascunho.name,
                 local_id: rascunho.local_id || null, description: rascunho.description,
               });
@@ -257,7 +273,7 @@ export function SegCatalogoManager({
               <label className="label">Nome <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input
                 className="input" value={rascunho.name}
-                placeholder={kind === "tipo" ? "Condição insegura no PDV" : kind === "local" ? "Armazém" : "Área de descarga"}
+                placeholder={kind === "tipo" ? "Condição insegura no PDV" : kind === "local" ? "Armazém" : kind === "causa" ? "Pressa por produtividade" : "Área de descarga"}
                 onChange={(e) => setRascunho((r) => (r ? { ...r, name: e.target.value } : r))}
               />
             </div>
@@ -306,7 +322,7 @@ export function SegCatalogoManager({
               {pendente ? "Salvando…" : "Salvar"}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRascunho(null)}>Cancelar</button>
-            {!rascunho.id && (
+            {!rascunho.id && COM_FIGURA[kind] && (
               <span className="soft" style={{ fontSize: "0.75rem" }}>
                 A figura é escolhida depois de salvar, pelo botão da lista.
               </span>
@@ -323,7 +339,7 @@ export function SegCatalogoManager({
         <table className="table">
           <thead>
             <tr>
-              <th style={{ width: 52 }}></th>
+              {COM_FIGURA[kind] && <th style={{ width: 52 }}></th>}
               <th>Nome</th>
               {kind === "tipo" && <th style={{ width: 190 }}>Natureza</th>}
               {kind === "area" && <th style={{ width: 190 }}>Local</th>}
@@ -334,7 +350,7 @@ export function SegCatalogoManager({
           <tbody>
             {lista.map((i) => (
               <tr key={i.id} style={{ opacity: i.active ? 1 : 0.6 }}>
-                <td><Figura path={i.image_path} nome={i.name} /></td>
+                {COM_FIGURA[kind] && <td><Figura path={i.image_path} nome={i.name} /></td>}
                 <td>
                   <span style={{ fontWeight: 600 }}>{i.name}</span>
                   {i.description && <div className="soft" style={{ fontSize: "0.74rem" }}>{i.description}</div>}
@@ -353,14 +369,16 @@ export function SegCatalogoManager({
                 {canEdit && (
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <span style={{ display: "inline-flex", gap: "0.3rem" }}>
-                      <button
-                        type="button" className="icon-btn" disabled={pendente}
-                        title={i.image_path ? "Trocar figura" : "Escolher figura"}
-                        onClick={() => escolherFigura(i.id)}
-                      >
-                        <ImagePlus size={15} />
-                      </button>
-                      {i.image_path && (
+                      {COM_FIGURA[kind] && (
+                        <button
+                          type="button" className="icon-btn" disabled={pendente}
+                          title={i.image_path ? "Trocar figura" : "Escolher figura"}
+                          onClick={() => escolherFigura(i.id)}
+                        >
+                          <ImagePlus size={15} />
+                        </button>
+                      )}
+                      {COM_FIGURA[kind] && i.image_path && (
                         <button
                           type="button" className="icon-btn" disabled={pendente}
                           title="Remover figura" onClick={() => limparFigura(i)}

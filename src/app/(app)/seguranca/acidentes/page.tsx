@@ -48,12 +48,13 @@ export default async function SegurancaAcidentesPage() {
   // a lista de unidades saiu da carga: o formulário não pergunta mais a
   // unidade (ela vem do vínculo do acidentado) e o filtro é o do topo
   const [
-    { data: acidentes }, membros, { data: locais }, { data: areas },
+    { data: acidentes }, membros, { data: locais }, { data: areas }, { data: causas },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
     supabase.from("seg_locais").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("seg_areas").select("id, name, local_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_causas").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
   ]);
 
   const ids = (acidentes ?? []).map((a) => a.id);
@@ -101,6 +102,7 @@ export default async function SegurancaAcidentesPage() {
     agenteCausador: a.agente_causador,
     naturezaLesao: a.natureza_lesao,
     analiseCausa: a.analise_causa,
+    causaId: a.causa_id,
     catNumero: a.cat_numero,
     catEmitidaEm: a.cat_emitida_em,
     cidCode: a.cid_code,
@@ -122,6 +124,7 @@ export default async function SegurancaAcidentesPage() {
         pessoas={pessoas}
         locais={(locais ?? []).map((l) => ({ id: l.id, name: l.name, active: l.active }))}
         areas={(areas ?? []).map((a) => ({ id: a.id, name: a.name, localId: a.local_id, active: a.active }))}
+        causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}
       />
     </div>
   );

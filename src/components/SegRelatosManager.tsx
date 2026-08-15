@@ -44,6 +44,7 @@ export type RelatoRow = {
   unitId: string | null;
   descricao: string;
   status: Enums<"seg_relato_status">;
+  causaId: string | null;
   notaTriagem: string | null;
   triadoEm: string | null;
   triadoPor: string | null;
@@ -69,7 +70,7 @@ function dataBr(iso: string) {
  * vem completa e ganha filtros, contadores e o nome de quem relatou.
  */
 export function SegRelatosManager({
-  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, itemPrograma,
+  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, causas, itemPrograma,
 }: {
   rows: RelatoRow[];
   ehSeguranca: boolean;
@@ -78,6 +79,7 @@ export function SegRelatosManager({
   locais: LocalOpt[];
   areas: AreaOpt[];
   unidades: { id: string; name: string }[];
+  causas: { id: string; name: string; active: boolean }[];
   /** item do Programa ao qual as ações de tratamento são amarradas */
   itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
 }) {
@@ -89,6 +91,7 @@ export function SegRelatosManager({
   const [aberto, setAberto] = useState<string | null>(null);
   const [nota, setNota] = useState("");
   const [duplicadoDe, setDuplicadoDe] = useState("");
+  const [causa, setCausa] = useState("");
   const [acao, setAcao] = useState(false);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
@@ -97,6 +100,7 @@ export function SegRelatosManager({
   const nomeLocal = useMemo(() => new Map(locais.map((l) => [l.id, l.name])), [locais]);
   const nomeArea = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const nomeUnidade = useMemo(() => new Map(unidades.map((u) => [u.id, u.name])), [unidades]);
+  const nomeCausa = useMemo(() => new Map(causas.map((c) => [c.id, c.name])), [causas]);
 
   const lista = useMemo(() => {
     const q = normalizar(busca.trim());
@@ -121,7 +125,7 @@ export function SegRelatosManager({
     ? [...new Set(detalhe.envolvidos.map((e) => e.gestorId).filter((id): id is string => !!id))]
     : [];
 
-  const fecharDetalhe = () => { setAberto(null); setNota(""); setDuplicadoDe(""); };
+  const fecharDetalhe = () => { setAberto(null); setNota(""); setDuplicadoDe(""); setCausa(""); };
 
   const triar = (novoStatus: Enums<"seg_relato_status">) => {
     if (!detalhe) return;
@@ -129,6 +133,7 @@ export function SegRelatosManager({
       const r = await triarRelato({
         id: detalhe.id, status: novoStatus, nota,
         duplicadoDe: novoStatus === "duplicado" ? duplicadoDe : null,
+        causaId: causa || null,
       });
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Relato atualizado.");
@@ -250,7 +255,7 @@ export function SegRelatosManager({
           <tbody>
             {lista.map((r) => (
               <tr
-                key={r.id} onClick={() => setAberto(r.id)}
+                key={r.id} onClick={() => { setAberto(r.id); setCausa(r.causaId ?? ""); }}
                 style={{ cursor: "pointer" }}
                 title="Abrir o relato"
               >
@@ -318,6 +323,10 @@ export function SegRelatosManager({
                 <div>
                   <dt className="soft">Área</dt>
                   <dd style={{ margin: 0 }}>{(detalhe.areaId && nomeArea.get(detalhe.areaId)) || "Não informada"}</dd>
+                </div>
+                <div>
+                  <dt className="soft">Causa-raiz</dt>
+                  <dd style={{ margin: 0 }}>{(detalhe.causaId && nomeCausa.get(detalhe.causaId)) || "Não apontada"}</dd>
                 </div>
                 <div>
                   <dt className="soft">Unidade</dt>
@@ -397,6 +406,18 @@ export function SegRelatosManager({
               {ehSeguranca && !encerrado && (
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
                   <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>Triagem</h3>
+
+                  {/* a causa é o que transforma contagem em tendência: sem ela
+                      o painel só sabe dizer quantos, nunca por quê */}
+                  <div>
+                    <label className="label">Causa-raiz</label>
+                    <select className="select" value={causa} onChange={(e) => setCausa(e.target.value)}>
+                      <option value="">Ainda não apontada</option>
+                      {causas.filter((c) => c.active || c.id === detalhe.causaId).map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
                   <textarea
                     className="input" rows={2} value={nota}
