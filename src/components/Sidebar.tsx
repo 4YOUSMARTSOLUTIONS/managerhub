@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   AlertTriangle, CalendarCheck, ChevronDown, ClipboardCheck, DoorOpen, Lock,
   LayoutDashboard, LayoutGrid, Layers, MessageCircle, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
-  Boxes, BookMarked, Presentation, Store,
+  Boxes, BookMarked, Presentation, Store, MessageSquareWarning, HeartPulse, Triangle,
 } from "lucide-react";
 import { BrandLogo, BrandWordmark, BrandOwnerSignature, SHOW_BRAND_OWNER } from "./BrandLogo";
 import { UserMenu } from "./UserMenu";
@@ -43,6 +43,11 @@ const MODULE_ICONS: Partial<Record<ModuleKey, React.ReactNode>> = {
   auditoria: <ClipboardCheck size={SZ} />,
   configuracoes: <Settings size={SZ} />,
   admin: <Layers size={SZ} />,
+  // segurança: o balão é o relato da operação, o pulso é o acidente e o
+  // triângulo é a própria pirâmide
+  seg_relatos: <MessageSquareWarning size={SZ} />,
+  seg_acidentes: <HeartPulse size={SZ} />,
+  seg_piramide: <Triangle size={SZ} />,
 };
 const GROUP_LABEL = Object.fromEntries(MODULE_GROUPS.map((g) => [g.key, g.label])) as Record<GroupKey, string>;
 

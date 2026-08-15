@@ -7,6 +7,7 @@ import { BellRing, ListChecks, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
+import { ExportButton } from "@/components/ui/ExportButton";
 import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
 import {
@@ -189,9 +190,32 @@ export function SegRelatosManager({
           <option value="">Todos os tipos</option>
           {tipos.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <button type="button" className="btn btn-primary" style={{ marginLeft: "auto" }} onClick={() => setNovo(true)}>
-          <Plus size={15} /> Novo relato
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem", marginLeft: "auto", flexWrap: "wrap" }}>
+          {ehSeguranca && (
+            // O arquivo circula por e-mail e pen drive, então ele sai SEM o
+            // relator. A promessa de anonimato não pode depender de quem abre
+            // a planilha depois.
+            <ExportButton
+              filename="relatos-de-seguranca.xlsx"
+              sheetName="Relatos"
+              headers={["Data", "Tipo", "Natureza", "Local", "Área", "Envolvidos", "Situação", "Triagem", "Descrição"]}
+              rows={lista.map((r) => [
+                dataBr(r.occurredOn),
+                nomeTipo.get(r.tipoId) ?? "",
+                SEG_NATUREZA[r.natureza],
+                (r.localId && nomeLocal.get(r.localId)) || "",
+                (r.areaId && nomeArea.get(r.areaId)) || "",
+                r.envolvidos.map((e) => e.nome ?? "").filter(Boolean).join(", "),
+                SEG_RELATO_STATUS[r.status],
+                r.notaTriagem ?? "",
+                r.descricao,
+              ])}
+            />
+          )}
+          <button type="button" className="btn btn-primary" onClick={() => setNovo(true)}>
+            <Plus size={15} /> Novo relato
+          </button>
+        </div>
       </div>
 
       {rows.length === 0 ? (
