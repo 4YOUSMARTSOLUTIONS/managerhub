@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { actionContext, adminActionContext } from "./context";
 import { wantsActive } from "@/lib/catalogGuard";
-import { recusaDeUpload } from "@/lib/uploads";
+import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
@@ -447,6 +447,214 @@ export async function criarAcaoDoRelato(input: {
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+// ============================================================================
+// Acidentes
+// ============================================================================
+//
+// Escrita e leitura são da equipe de segurança e da administração, e isso está
+// na RLS. Aqui a trava é repetida em `souDaSeguranca` só para a recusa sair em
+// português: um insert fora da policy volta como erro cru, e um update afeta
+// zero linhas em silêncio.
+
+const BUCKET_ACIDENTE = "seg-acidentes";
+
+type Ctx = Awaited<ReturnType<typeof actionContext>>;
+
+async function souDaSeguranca(ctx: Ctx): Promise<boolean> {
+  if (ctx.role === "owner" || ctx.role === "admin") return true;
+  const { data } = await ctx.supabase.rpc("pode_tratar_seguranca", { p_tenant: ctx.tenantId });
+  return data === true;
+}
+
+export type AcidenteInput = {
+  id?: string;
+  userId: string;
+  occurredOn: string;
+  occurredAt?: string | null;
+  turno?: string | null;
+  classe: Enums<"seg_acidente_class">;
+  unitId?: string | null;
+  localId?: string | null;
+  areaId?: string | null;
+  descricao: string;
+  testemunhas?: string | null;
+  parteCorpo?: string | null;
+  agenteCausador?: string | null;
+  naturezaLesao?: string | null;
+  analiseCausa?: string | null;
+  catNumero?: string | null;
+  catEmitidaEm?: string | null;
+  cidCode?: string | null;
+  cidDescricao?: string | null;
+  diasAfastamento?: number | null;
+  afastamentoDe?: string | null;
+  retornoEm?: string | null;
+};
+
+/** Traduz as constraints do acidente para a linguagem de quem preenche. */
+function mensagemAcidente(e: { message?: string }): string {
+  const msg = e.message ?? "";
+  if (msg.includes("seg_acidente_lti_tem_afastamento")) {
+    return "LTI é acidente com afastamento: informe quantos dias.";
+  }
+  if (msg.includes("seg_acidente_afastamento_positivo")) return "Os dias de afastamento não podem ser negativos.";
+  if (msg.includes("seg_acidente_descricao_nao_vazia")) return "Descreva o acidente.";
+  if (msg.includes("row-level security")) return "Só a equipe de segurança pode registrar acidentes.";
+  return msg || "Não foi possível salvar o acidente.";
+}
+
+export async function salvarAcidente(input: AcidenteInput): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    if (!(await souDaSeguranca(ctx))) {
+      return { error: "Só a equipe de segurança pode registrar acidentes." };
+    }
+    if (!input.userId) return { error: "Informe quem se acidentou." };
+    if (!input.occurredOn) return { error: "Informe a data do acidente." };
+    if (!input.descricao.trim()) return { error: "Descreva o acidente." };
+
+    const campos = {
+      unit_id: input.unitId || null,
+      occurred_on: input.occurredOn,
+      occurred_at: input.occurredAt || null,
+      turno: input.turno?.trim() || null,
+      classe: input.classe,
+      local_id: input.localId || null,
+      area_id: input.areaId || null,
+      descricao: input.descricao.trim(),
+      testemunhas: input.testemunhas?.trim() || null,
+      parte_corpo: input.parteCorpo?.trim() || null,
+      agente_causador: input.agenteCausador?.trim() || null,
+      natureza_lesao: input.naturezaLesao?.trim() || null,
+      analise_causa: input.analiseCausa?.trim() || null,
+      cat_numero: input.catNumero?.trim() || null,
+      cat_emitida_em: input.catEmitidaEm || null,
+      cid_code: input.cidCode || null,
+      cid_descricao: input.cidDescricao || null,
+      dias_afastamento: input.diasAfastamento ?? null,
+      afastamento_de: input.afastamentoDe || null,
+      retorno_em: input.retornoEm || null,
+    };
+
+    const { error } = input.id
+      // a pessoa acidentada não muda na edição: se errou quem foi, é outro
+      // registro, e o carimbo do vínculo já foi tirado
+      ? await ctx.supabase.from("seg_acidentes").update(campos).eq("id", input.id)
+      : await ctx.supabase.from("seg_acidentes").insert({
+          ...campos,
+          tenant_id: ctx.tenantId,
+          user_id: input.userId,
+          created_by: ctx.userId,
+        });
+    if (error) return { error: mensagemAcidente(error) };
+
+    revalidar();
+    return { ok: true, message: input.id ? "Acidente atualizado." : "Acidente registrado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function encerrarAcidente(id: string, retorno?: string | null): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_encerrar_acidente", {
+      p_id: id, p_retorno: retorno || null,
+    });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Acidente encerrado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function reabrirAcidente(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_reabrir_acidente", { p_id: id });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Acidente reaberto." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Sobe CAT digitalizada, laudo ou foto do local. Bucket privado. */
+export async function anexarAoAcidente(formData: FormData): Promise<ActionState> {
+  try {
+    const id = String(formData.get("id") ?? "");
+    const file = formData.get("file");
+    if (!id) return { error: "Acidente inválido." };
+    if (!(file instanceof File)) return { error: "Escolha um arquivo." };
+
+    const recusa = recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO);
+    if (recusa) return { error: recusa };
+
+    const ctx = await actionContext();
+    if (!(await souDaSeguranca(ctx))) {
+      return { error: "Só a equipe de segurança pode anexar documentos ao acidente." };
+    }
+
+    const limpo = file.name.replace(/[^\w.\- ]+/g, "_");
+    const caminho = `${ctx.tenantId}/${id}/${Date.now()}-${limpo}`;
+
+    const subida = await ctx.supabase.storage
+      .from(BUCKET_ACIDENTE)
+      .upload(caminho, file, { contentType: file.type || undefined, upsert: false });
+    if (subida.error) return { error: subida.error.message };
+
+    const { error } = await ctx.supabase.from("seg_acidente_anexos").insert({
+      acidente_id: id,
+      tenant_id: ctx.tenantId,
+      path: caminho,
+      filename: file.name,
+      size: file.size,
+      content_type: file.type || null,
+      uploaded_by: ctx.userId,
+    });
+    if (error) {
+      // compensação: sem isso o arquivo fica órfão pagando storage
+      await ctx.supabase.storage.from(BUCKET_ACIDENTE).remove([caminho]);
+      return { error: error.message };
+    }
+
+    revalidar();
+    return { ok: true, message: "Documento anexado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function removerAnexoAcidente(anexoId: string): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    const { data: anexo } = await ctx.supabase
+      .from("seg_acidente_anexos").select("path").eq("id", anexoId).maybeSingle();
+    if (!anexo) return { error: "Anexo não encontrado." };
+
+    const { error } = await ctx.supabase.from("seg_acidente_anexos").delete().eq("id", anexoId);
+    if (error) return { error: error.message };
+
+    await ctx.supabase.storage.from(BUCKET_ACIDENTE).remove([anexo.path]);
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** URL assinada de 10 minutos: o bucket é privado e assim continua. */
+export async function urlAnexoAcidente(anexoId: string): Promise<string | null> {
+  const ctx = await actionContext();
+  const { data: anexo } = await ctx.supabase
+    .from("seg_acidente_anexos").select("path").eq("id", anexoId).maybeSingle();
+  if (!anexo) return null;
+  const { data } = await ctx.supabase.storage.from(BUCKET_ACIDENTE).createSignedUrl(anexo.path, 600);
+  return data?.signedUrl ?? null;
 }
 
 // ============================================================================

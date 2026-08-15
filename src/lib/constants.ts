@@ -657,6 +657,50 @@ export const SEG_RELATO_STATUS_TONE: Record<Enums<"seg_relato_status">, Tone> = 
   duplicado: "gray",
 };
 
+// A sigla é como a equipe fala no dia a dia; o extenso é o que o gestor de
+// outra área entende. Os dois juntos, sempre.
+export const SEG_ACIDENTE_CLASS: Record<Enums<"seg_acidente_class">, string> = {
+  fai: "FAI",
+  mti: "MTI",
+  mdi: "MDI",
+  lti: "LTI",
+  sif: "SIF",
+};
+
+export const SEG_ACIDENTE_CLASS_LONGO: Record<Enums<"seg_acidente_class">, string> = {
+  fai: "FAI, primeiros socorros",
+  mti: "MTI, tratamento médico",
+  mdi: "MDI, com restrição de atividade",
+  lti: "LTI, com afastamento",
+  sif: "SIF, lesão grave ou fatalidade",
+};
+
+export const SEG_ACIDENTE_CLASS_AJUDA: Record<Enums<"seg_acidente_class">, string> = {
+  fai: "Lesão leve, resolvida no local com primeiros socorros.",
+  mti: "Exigiu atendimento médico, sem afastamento e sem restrição.",
+  mdi: "Exigiu atendimento médico e gerou restrição temporária de atividade.",
+  lti: "Houve afastamento de pelo menos um dia ou turno. Exige os dias de afastamento.",
+  sif: "Morte, incapacidade permanente ou lesão que muda a vida da pessoa.",
+};
+
+export const SEG_ACIDENTE_CLASS_TONE: Record<Enums<"seg_acidente_class">, Tone> = {
+  fai: "blue",
+  mti: "amber",
+  mdi: "amber",
+  lti: "red",
+  sif: "dark",
+};
+
+export const SEG_ACIDENTE_STATUS: Record<Enums<"seg_acidente_status">, string> = {
+  aberto: "Em apuração",
+  encerrado: "Encerrado",
+};
+
+export const SEG_ACIDENTE_STATUS_TONE: Record<Enums<"seg_acidente_status">, Tone> = {
+  aberto: "amber",
+  encerrado: "green",
+};
+
 export type Tone =
   | "blue"
   | "green"

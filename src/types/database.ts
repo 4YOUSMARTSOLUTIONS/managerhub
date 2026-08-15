@@ -1701,6 +1701,22 @@ export type Database = {
         Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null }
         Relationships: []
       }
+      // O acidente de trabalho. A linha carrega CID, que é dado de saúde, e
+      // por isso o alcance é só da equipe de segurança e da administração,
+      // nem a própria pessoa acidentada lê por aqui (precedente:
+      // `absenteismo_atestados`). Os `snap_*` são carimbados por trigger.
+      seg_acidentes: {
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; occurred_at: string | null; turno: string | null; classe: Database["public"]["Enums"]["seg_acidente_class"]; status: Database["public"]["Enums"]["seg_acidente_status"]; user_id: string; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; local_id: string | null; area_id: string | null; descricao: string; testemunhas: string | null; parte_corpo: string | null; agente_causador: string | null; natureza_lesao: string | null; analise_causa: string | null; cat_numero: string | null; cat_emitida_em: string | null; cid_code: string | null; cid_descricao: string | null; dias_afastamento: number | null; afastamento_de: string | null; retorno_em: string | null; encerrado_por: string | null; encerrado_em: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; occurred_on: string; occurred_at?: string | null; turno?: string | null; classe: Database["public"]["Enums"]["seg_acidente_class"]; user_id: string; local_id?: string | null; area_id?: string | null; descricao: string; testemunhas?: string | null; parte_corpo?: string | null; agente_causador?: string | null; natureza_lesao?: string | null; analise_causa?: string | null; cat_numero?: string | null; cat_emitida_em?: string | null; cid_code?: string | null; cid_descricao?: string | null; dias_afastamento?: number | null; afastamento_de?: string | null; retorno_em?: string | null; created_by?: string }
+        Update: { unit_id?: string | null; occurred_on?: string; occurred_at?: string | null; turno?: string | null; classe?: Database["public"]["Enums"]["seg_acidente_class"]; local_id?: string | null; area_id?: string | null; descricao?: string; testemunhas?: string | null; parte_corpo?: string | null; agente_causador?: string | null; natureza_lesao?: string | null; analise_causa?: string | null; cat_numero?: string | null; cat_emitida_em?: string | null; cid_code?: string | null; cid_descricao?: string | null; dias_afastamento?: number | null; afastamento_de?: string | null; retorno_em?: string | null }
+        Relationships: []
+      }
+      seg_acidente_anexos: {
+        Row: { id: string; acidente_id: string; tenant_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; acidente_id: string; tenant_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: never
+        Relationships: []
+      }
       // Liga o relato à ação de tratamento. Tabela própria de propósito: uma
       // coluna em `actions` obrigaria a remendar a `create_action`, que é
       // mantida por replace() sobre pg_get_functiondef.
@@ -2071,6 +2087,8 @@ export type Database = {
       seg_triar_relato: { Args: { p_id: string; p_status: Database["public"]["Enums"]["seg_relato_status"]; p_nota?: string | null; p_duplicado_de?: string | null }; Returns: undefined }
       seg_alertar_gestor: { Args: { p_id: string }; Returns: number }
       seg_vincular_acao: { Args: { p_relato_id: string; p_action_id: string }; Returns: undefined }
+      seg_encerrar_acidente: { Args: { p_id: string; p_retorno?: string | null }; Returns: undefined }
+      seg_reabrir_acidente: { Args: { p_id: string }; Returns: undefined }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"
@@ -2168,6 +2186,12 @@ export type Database = {
       // mesmo buraco relatado por cinco pessoas não pode virar cinco desvios
       // na base da pirâmide.
       seg_relato_status: "aberto" | "triado" | "tratado" | "improcedente" | "duplicado"
+      // FAI primeiros socorros; MTI com médico, sem afastar; MDI com médico e
+      // restrição; LTI com afastamento; SIF grave ou fatal. Fixo de propósito:
+      // a pirâmide empilha severidade, e severidade renomeada por cliente não
+      // empilha.
+      seg_acidente_class: "fai" | "mti" | "mdi" | "lti" | "sif"
+      seg_acidente_status: "aberto" | "encerrado"
     }
     CompositeTypes: {
       [_ in never]: never
