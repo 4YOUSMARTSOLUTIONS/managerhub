@@ -1,4 +1,4 @@
-import { requireContext } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -19,23 +19,26 @@ import { SegPiramideDashboard, type PainelSeguranca } from "@/components/SegPira
 export default async function SegurancaPiramidePage({
   searchParams,
 }: {
-  searchParams: Promise<{ ano?: string; unidade?: string }>;
+  searchParams: Promise<{ ano?: string }>;
 }) {
   const gate = await moduleGate("seg_piramide");
   if (gate) return gate;
 
-  const { tenant } = await requireContext();
+  // A unidade vem do seletor DO TOPO, e de lugar nenhum mais: o recorte é um
+  // só na aplicação inteira, e um segundo filtro dentro da tela criaria duas
+  // respostas para a mesma pergunta.
+  const { unitScope } = await requireContext();
   const supabase = await createClient();
   const sp = await searchParams;
 
   const agora = new Date();
   const ano = Number(sp.ano) || agora.getFullYear();
-  const unidade = sp.unidade || "";
+  const unidades = effectiveUnitFilter(unitScope);
 
-  const [{ data: painel }, { data: units }] = await Promise.all([
-    supabase.rpc("seg_dashboard", { p_ano: ano, p_unit_id: unidade || null }),
-    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
-  ]);
+  const { data: painel } = await supabase.rpc("seg_dashboard", {
+    p_ano: ano,
+    p_unit_ids: unidades,
+  });
 
   return (
     <div>
@@ -43,12 +46,7 @@ export default async function SegurancaPiramidePage({
         title="Pirâmide de segurança"
         subtitle="Quanto mais a base é relatada e tratada, menos o topo acontece."
       />
-      <SegPiramideDashboard
-        painel={(painel ?? null) as PainelSeguranca | null}
-        ano={ano}
-        unidade={unidade}
-        unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
-      />
+      <SegPiramideDashboard painel={(painel ?? null) as PainelSeguranca | null} ano={ano} />
     </div>
   );
 }

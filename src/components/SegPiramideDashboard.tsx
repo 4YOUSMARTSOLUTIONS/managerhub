@@ -165,21 +165,20 @@ function Barras({
 }
 
 export function SegPiramideDashboard({
-  painel, ano, unidade, unidades,
+  painel, ano,
 }: {
   painel: PainelSeguranca | null;
   ano: number;
-  unidade: string;
-  unidades: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
 
-  // filtros na URL: o link do painel filtrado pode ser colado numa reunião
-  const trocar = (chave: string, valor: string) => {
+  // O ano viaja na URL, para o painel de um exercício poder ser colado numa
+  // reunião. A UNIDADE não: ela é do seletor do topo, e só de lá.
+  const trocarAno = (valor: string) => {
     const p = new URLSearchParams(params.toString());
-    if (valor) p.set(chave, valor);
-    else p.delete(chave);
+    if (valor) p.set("ano", valor);
+    else p.delete("ano");
     router.push(`/seguranca/piramide?${p.toString()}`);
   };
 
@@ -213,15 +212,9 @@ export function SegPiramideDashboard({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-        <select className="select" value={ano} onChange={(e) => trocar("ano", e.target.value)} style={{ maxWidth: 130 }}>
+        <select className="select" value={ano} onChange={(e) => trocarAno(e.target.value)} style={{ maxWidth: 130 }}>
           {anos.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        {unidades.length > 1 && (
-          <select className="select" value={unidade} onChange={(e) => trocar("unidade", e.target.value)} style={{ maxWidth: 220 }}>
-            <option value="">Todas as unidades</option>
-            {unidades.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.8rem" }}>

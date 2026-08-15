@@ -2089,7 +2089,9 @@ export type Database = {
       seg_vincular_acao: { Args: { p_relato_id: string; p_action_id: string }; Returns: undefined }
       seg_encerrar_acidente: { Args: { p_id: string; p_retorno?: string | null }; Returns: undefined }
       seg_reabrir_acidente: { Args: { p_id: string }; Returns: undefined }
-      seg_dashboard: { Args: { p_ano: number; p_unit_id?: string | null }; Returns: Json }
+      // a unidade vem do seletor do topo, que é uma LISTA (o usuário pode ter
+      // várias permitidas), e não um id só
+      seg_dashboard: { Args: { p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"
