@@ -435,6 +435,8 @@ export async function criarAcaoDoRelato(input: {
   unitId?: string | null;
   departmentId?: string | null;
   subdepartmentId?: string | null;
+  /** false desliga o vínculo com o Programa nesta ação específica */
+  vincularPrograma?: boolean;
 }): Promise<ActionState> {
   try {
     const { supabase, userId } = await actionContext();
@@ -443,9 +445,21 @@ export async function criarAcaoDoRelato(input: {
     if (input.responsaveis.length === 0) return { error: "Escolha ao menos um responsável." };
     if (!input.prazo) return { error: "Informe o prazo." };
 
+    // O vínculo com o Programa é lido do servidor, nunca da tela: o item é
+    // configuração da empresa, e mandar os ids pelo navegador seria abrir a
+    // porta para uma ação nascer pendurada em qualquer item.
+    const programa = input.vincularPrograma === false
+      ? null
+      : ((await supabase.rpc("seg_item_do_programa")).data as {
+          item_id: string; pilar_id: string | null; bloco_id: string;
+        } | null);
+
     const { data, error } = await supabase.rpc("create_action", {
       p_data: {
-        is_sdpo: false,
+        is_sdpo: !!programa,
+        pilar_id: programa?.pilar_id ?? "",
+        bloco_id: programa?.bloco_id ?? "",
+        item_id: programa?.item_id ?? "",
         requester_id: userId,
         problem_statement: input.problema,
         priority: input.prioridade,
@@ -685,6 +699,34 @@ export async function urlAnexoAcidente(anexoId: string): Promise<string | null> 
   if (!anexo) return null;
   const { data } = await ctx.supabase.storage.from(BUCKET_ACIDENTE).createSignedUrl(anexo.path, 600);
   return data?.signedUrl ?? null;
+}
+
+/** O item do Programa hoje configurado, para a tela dizer a que a ação será amarrada. */
+export async function getItemDoPrograma(): Promise<{
+  itemId: string; item: string; bloco: string; secao: string | null; pilar: string | null;
+} | null> {
+  const { supabase } = await actionContext();
+  const { data } = await supabase.rpc("seg_item_do_programa");
+  const v = data as {
+    item_id: string; item: string; bloco: string; secao: string | null; pilar: string | null;
+  } | null;
+  if (!v?.item_id) return null;
+  return { itemId: v.item_id, item: v.item, bloco: v.bloco, secao: v.secao, pilar: v.pilar };
+}
+
+/** Define (ou limpa) o item do Programa das ações de relato. owner/admin. */
+export async function setItemDoPrograma(itemId: string | null): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    const { error } = await supabase
+      .from("seg_settings")
+      .upsert({ tenant_id: tenantId, relato_item_id: itemId || null }, { onConflict: "tenant_id" });
+    if (error) return { error: mensagem(error) };
+    revalidar();
+    return { ok: true, message: itemId ? "Vínculo com o Programa salvo." : "Vínculo removido." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 // ============================================================================

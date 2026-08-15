@@ -69,7 +69,7 @@ function dataBr(iso: string) {
  * vem completa e ganha filtros, contadores e o nome de quem relatou.
  */
 export function SegRelatosManager({
-  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades,
+  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, itemPrograma,
 }: {
   rows: RelatoRow[];
   ehSeguranca: boolean;
@@ -78,6 +78,8 @@ export function SegRelatosManager({
   locais: LocalOpt[];
   areas: AreaOpt[];
   unidades: { id: string; name: string }[];
+  /** item do Programa ao qual as ações de tratamento são amarradas */
+  itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
 }) {
   const [novo, setNovo] = useState(false);
   const [editando, setEditando] = useState<RelatoRow | null>(null);
@@ -483,6 +485,7 @@ export function SegRelatosManager({
               unitId={detalhe.unitId}
               departmentId={detalhe.envolvidos[0]?.setorId ?? null}
               subdepartmentId={detalhe.envolvidos[0]?.subsetorId ?? null}
+              itemPrograma={itemPrograma}
             />
           )}
         </div>

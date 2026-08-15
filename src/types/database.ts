@@ -1717,6 +1717,16 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // Configuração do módulo. Hoje guarda só o item do Programa de
+      // Excelência ao qual as ações de relato são amarradas (o "1.2 Relatos de
+      // Incidentes, Atos e Condições Inseguras" do pilar Segurança), que é
+      // catálogo de cada empresa e por isso não pode morar no código.
+      seg_settings: {
+        Row: { id: string; tenant_id: string; relato_item_id: string | null; updated_at: string }
+        Insert: { id?: string; tenant_id: string; relato_item_id?: string | null; updated_at?: string }
+        Update: { relato_item_id?: string | null; updated_at?: string }
+        Relationships: []
+      }
       // Liga o relato à ação de tratamento. Tabela própria de propósito: uma
       // coluna em `actions` obrigaria a remendar a `create_action`, que é
       // mantida por replace() sobre pg_get_functiondef.
@@ -2094,6 +2104,7 @@ export type Database = {
       // a unidade vem do seletor do topo, que é uma LISTA (o usuário pode ter
       // várias permitidas), e não um id só
       seg_dashboard: { Args: { p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
+      seg_item_do_programa: { Args: Record<PropertyKey, never>; Returns: Json }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"

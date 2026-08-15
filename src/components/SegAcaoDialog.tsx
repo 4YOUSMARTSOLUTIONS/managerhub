@@ -23,7 +23,7 @@ import type { Enums } from "@/types/database";
  */
 export function SegAcaoDialog({
   open, onClose, relatoId, problema, sugestaoResponsaveis, pessoas,
-  unitId, departmentId, subdepartmentId,
+  unitId, departmentId, subdepartmentId, itemPrograma,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,12 +34,15 @@ export function SegAcaoDialog({
   unitId: string | null;
   departmentId: string | null;
   subdepartmentId: string | null;
+  /** o item do Programa configurado; null quando a empresa não usa */
+  itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
 }) {
   const [descricao, setDescricao] = useState("");
   const [responsaveis, setResponsaveis] = useState<string[]>(sugestaoResponsaveis);
   // uma semana é o padrão porque tratamento de segurança não espera o mês virar
   const [prazo, setPrazo] = useState(() => somarDias(hojeYmd(), 7));
   const [prioridade, setPrioridade] = useState<Enums<"priority_level">>("high");
+  const [vincular, setVincular] = useState(true);
   const [erro, setErro] = useState("");
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
@@ -52,6 +55,7 @@ export function SegAcaoDialog({
       const r = await criarAcaoDoRelato({
         relatoId, descricao, responsaveis, prazo, prioridade,
         problema, unitId, departmentId, subdepartmentId,
+        vincularPrograma: vincular,
       });
       if (r.error) { setErro(r.error); return; }
       if (r.warning) toast.warning(r.warning);
@@ -129,6 +133,30 @@ export function SegAcaoDialog({
               </select>
             </div>
           </div>
+
+          {/* O item 1.2 do pilar Segurança cobra registro de relatos COM ações
+              corretivas e preventivas evidenciadas. Nascendo amarrada, a ação
+              vira evidência sozinha, sem ninguém garimpar /acoes depois. */}
+          {itemPrograma && (
+            <label
+              style={{
+                display: "flex", gap: "0.55rem", alignItems: "flex-start", cursor: "pointer",
+                background: "var(--surface-2)", borderRadius: "var(--mh-radius-md)", padding: "0.6rem 0.8rem",
+              }}
+            >
+              <input
+                type="checkbox" checked={vincular} style={{ marginTop: 3 }}
+                onChange={(e) => setVincular(e.target.checked)}
+              />
+              <span style={{ fontSize: "0.8rem" }}>
+                Vincular ao Programa de Excelência
+                <span className="soft" style={{ display: "block", fontSize: "0.75rem" }}>
+                  {[itemPrograma.pilar, itemPrograma.secao, itemPrograma.bloco].filter(Boolean).join(" › ")}
+                  {" › "}{itemPrograma.item}
+                </span>
+              </span>
+            </label>
+          )}
 
           <p className="soft" style={{ fontSize: "0.75rem", margin: 0 }}>
             A ação aparece em Ações para o responsável, sem qualquer referência a quem relatou.

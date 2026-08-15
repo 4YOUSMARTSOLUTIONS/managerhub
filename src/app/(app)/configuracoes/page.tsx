@@ -30,6 +30,7 @@ import { AbsenteismoRecipientsManager, type DestinatarioRow } from "@/components
 import { CidTableViewer } from "@/components/CidTableViewer";
 import { SegCatalogoManager } from "@/components/SegCatalogoManager";
 import { SegEquipeManager } from "@/components/SegEquipeManager";
+import { SegProgramaVinculo } from "@/components/SegProgramaVinculo";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -112,6 +113,7 @@ export default async function SettingsPage() {
     { data: sancoesDeLancamento }, { data: absenceTypesData }, { data: recipientsData },
     { data: absenteismosAprovados },
     { data: segTiposData }, { data: segLocaisData }, { data: segAreasData }, { data: segEquipeData },
+    { data: segSettingsData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -210,6 +212,8 @@ export default async function SettingsPage() {
       .eq("tenant_id", tenant.id)
       .order("sort").order("name"),
     supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id),
+    // a que item do Programa as ações de relato se amarram
+    supabase.from("seg_settings").select("relato_item_id").eq("tenant_id", tenant.id).maybeSingle(),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -1331,6 +1335,33 @@ export default async function SettingsPage() {
                   }))}
                   locais={(segLocaisData ?? []).filter((l) => l.active).map((l) => ({ id: l.id, name: l.name }))}
                   canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-programa",
+              label: "Programa de Excelência",
+              content: (
+                <SegProgramaVinculo
+                  canEdit={canEdit}
+                  atual={segSettingsData?.relato_item_id ?? null}
+                  // só itens ativos, com o caminho inteiro no rótulo: "1.2" sozinho
+                  // se repete em todo pilar, e a pessoa escolheria o errado
+                  itens={itemOpts
+                    .filter((i) => i.active)
+                    .map((i) => {
+                      const bloco = blocoOpts.find((b) => b.id === i.bloco_id);
+                      const pilar = (pilares ?? []).find((p) => p.id === (bloco?.pilar_id ?? i.pilar_id));
+                      const secao = (secoes ?? []).find((s) => s.id === (bloco?.secao_id ?? i.secao_id));
+                      return {
+                        id: i.id,
+                        rotulo: `${pilar?.name ?? "Sem pilar"} · ${i.code ? `${i.code} ` : ""}${i.name}`,
+                        pilar: pilar?.name ?? null,
+                        secao: secao?.name ?? null,
+                        bloco: bloco?.name ?? "",
+                      };
+                    })
+                    .sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"))}
                 />
               ),
             },
