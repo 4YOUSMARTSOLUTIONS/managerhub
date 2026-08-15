@@ -20,7 +20,7 @@ export default async function SegurancaAcidentesPage() {
   const gate = await moduleGate("seg_acidentes");
   if (gate) return gate;
 
-  const { tenant, unitScope } = await requireContext();
+  const { tenant, unitScope, role } = await requireContext();
   const supabase = await createClient();
 
   const { data: pode } = await supabase.rpc("pode_tratar_seguranca", { p_tenant: tenant.id });
@@ -120,6 +120,7 @@ export default async function SegurancaAcidentesPage() {
         subtitle="Registro dos acidentes de trabalho, com o que a empresa precisa e o que a lei pede."
       />
       <SegAcidentesManager
+        ehProprietario={role === "owner"}
         rows={rows}
         pessoas={pessoas}
         locais={(locais ?? []).map((l) => ({ id: l.id, name: l.name, active: l.active }))}

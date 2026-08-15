@@ -27,7 +27,7 @@ export default async function SegurancaRelatosPage() {
 
   // o papel não entra na conta: quem trata é a equipe de segurança mais
   // owner/admin, e quem responde isso é a função `pode_tratar_seguranca`
-  const { tenant, user, unitScope } = await requireContext();
+  const { tenant, user, unitScope, role } = await requireContext();
   const supabase = await createClient();
 
   const unidades = effectiveUnitFilter(unitScope);
@@ -202,6 +202,7 @@ export default async function SegurancaRelatosPage() {
       <SegAlertasGestor alertas={alertas} />
       <SegRelatosManager
         rows={rows}
+        ehProprietario={role === "owner"}
         ehSeguranca={ehSeguranca}
         pessoas={pessoas}
         tipos={(tipos ?? []).map((t) => ({

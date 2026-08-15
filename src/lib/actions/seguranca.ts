@@ -969,6 +969,39 @@ export async function setItemDoPrograma(itemId: string | null): Promise<ActionSt
 }
 
 // ============================================================================
+// Exclusão (proprietário)
+// ============================================================================
+//
+// A alçada mora na RPC. Aqui a única coisa que muda é a mensagem que a pessoa
+// lê quando não pode.
+
+export async function excluirRelato(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_excluir_relato", { p_id: id });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Relato excluído." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function excluirAcidente(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_excluir_acidente", { p_id: id });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Acidente excluído." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ============================================================================
 // Alerta ao gestor e a conversa dele
 // ============================================================================
 

@@ -14,10 +14,11 @@ import {
   SEG_ACIDENTE_CLASS, SEG_ACIDENTE_CLASS_LONGO, SEG_ACIDENTE_CLASS_TONE,
   SEG_ACIDENTE_STATUS, SEG_ACIDENTE_STATUS_TONE,
 } from "@/lib/constants";
-import { normalizar } from "@/lib/format";
+import { normalizar, shortName } from "@/lib/format";
 import { SegAcidenteDialog } from "@/components/SegAcidenteDialog";
 import {
-  anexarAoAcidente, encerrarAcidente, reabrirAcidente, removerAnexoAcidente, urlAnexoAcidente,
+  anexarAoAcidente, encerrarAcidente, excluirAcidente, reabrirAcidente,
+  removerAnexoAcidente, urlAnexoAcidente,
 } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
@@ -72,13 +73,15 @@ function dataBr(iso: string | null) {
  * conta que vai alimentar a pirâmide.
  */
 export function SegAcidentesManager({
-  rows, pessoas, locais, areas, causas,
+  rows, pessoas, locais, areas, causas, ehProprietario,
 }: {
   rows: AcidenteRow[];
   pessoas: Person[];
   locais: { id: string; name: string; active: boolean }[];
   areas: { id: string; name: string; localId: string | null; active: boolean }[];
   causas: { id: string; name: string; active: boolean }[];
+  /** excluir acidente e do proprietario: e registro legal, nao fila de trabalho */
+  ehProprietario: boolean;
 }) {
   const [form, setForm] = useState<{ open: boolean; editando: AcidenteRow | null }>({ open: false, editando: null });
   const [aberto, setAberto] = useState<string | null>(null);
@@ -125,6 +128,24 @@ export function SegAcidentesManager({
       toast.success(r.message ?? "Acidente encerrado.");
       router.refresh();
     });
+  };
+
+  const excluir = () => {
+    if (!detalhe) return;
+    void (async () => {
+      const ok = await confirmDialog({
+        title: "Excluir o acidente?",
+        message: `O registro de ${shortName(detalhe.pessoa)} em ${dataBr(detalhe.occurredOn)} sai da base, junto com os documentos anexados. A pirâmide e os dias perdidos são recalculados, e a exclusão fica nos Logs do sistema.`,
+        confirmLabel: "Excluir",
+        tone: "danger",
+      });
+      if (!ok) return;
+      const r = await excluirAcidente(detalhe.id);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Acidente excluído.");
+      setAberto(null);
+      router.refresh();
+    })();
   };
 
   const reabrir = () => {
@@ -240,7 +261,10 @@ export function SegAcidentesManager({
               <th style={{ width: 100 }}>Data</th>
               <th style={{ width: 80 }}>Classe</th>
               <th>Colaborador</th>
-              <th>Onde</th>
+              <th style={{ width: 130 }}>Setor</th>
+              <th style={{ width: 160 }}>Função</th>
+              <th style={{ width: 120 }}>Local</th>
+              <th style={{ width: 110 }}>Área</th>
               <th style={{ width: 110 }}>Afastamento</th>
               <th style={{ width: 130 }}>Situação</th>
             </tr>
@@ -252,15 +276,14 @@ export function SegAcidentesManager({
                 <td>
                   <Badge tone={SEG_ACIDENTE_CLASS_TONE[r.classe]}>{SEG_ACIDENTE_CLASS[r.classe]}</Badge>
                 </td>
-                <td>
-                  <span style={{ fontWeight: 600 }}>{r.pessoa ?? "—"}</span>
-                  <div className="soft" style={{ fontSize: "0.74rem" }}>
-                    {[r.setor, r.funcao].filter(Boolean).join(" · ") || "Sem setor cadastrado"}
-                  </div>
+                <td style={{ fontWeight: 600 }}>{shortName(r.pessoa)}</td>
+                <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
+                <td className="muted" style={{ fontSize: "0.82rem" }}>{r.funcao ?? "—"}</td>
+                <td className="muted" style={{ fontSize: "0.82rem" }}>
+                  {(r.localId && nomeLocal.get(r.localId)) || "—"}
                 </td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>
-                  {[(r.localId && nomeLocal.get(r.localId)), (r.areaId && nomeArea.get(r.areaId))]
-                    .filter(Boolean).join(" · ") || "Não informado"}
+                  {(r.areaId && nomeArea.get(r.areaId)) || "—"}
                 </td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>
                   {r.diasAfastamento ? `${r.diasAfastamento} dia${r.diasAfastamento > 1 ? "s" : ""}` : "—"}
@@ -284,7 +307,7 @@ export function SegAcidentesManager({
           <div className="card" style={{ width: "100%", maxWidth: 680, boxShadow: "var(--mh-shadow-e3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
               <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>
-                {detalhe.pessoa ?? "Acidente"} · {dataBr(detalhe.occurredOn)}
+                {shortName(detalhe.pessoa)} · {dataBr(detalhe.occurredOn)}
               </h2>
               <button
                 type="button" onClick={() => setAberto(null)} className="muted" aria-label="Fechar"
@@ -305,7 +328,7 @@ export function SegAcidentesManager({
               <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.7rem", margin: 0, fontSize: "0.82rem" }}>
                 <div><dt className="soft">Setor</dt><dd style={{ margin: 0 }}>{detalhe.setor ?? "—"}</dd></div>
                 <div><dt className="soft">Função</dt><dd style={{ margin: 0 }}>{detalhe.funcao ?? "—"}</dd></div>
-                <div><dt className="soft">Gestor</dt><dd style={{ margin: 0 }}>{detalhe.gestor ?? "—"}</dd></div>
+                <div><dt className="soft">Gestor</dt><dd style={{ margin: 0 }}>{shortName(detalhe.gestor)}</dd></div>
                 <div><dt className="soft">Unidade</dt><dd style={{ margin: 0 }}>{detalhe.unidade ?? "—"}</dd></div>
                 <div><dt className="soft">Hora e turno</dt><dd style={{ margin: 0 }}>{[detalhe.occurredAt?.slice(0, 5), detalhe.turno].filter(Boolean).join(" · ") || "—"}</dd></div>
                 <div><dt className="soft">Local e área</dt><dd style={{ margin: 0 }}>{[(detalhe.localId && nomeLocal.get(detalhe.localId)), (detalhe.areaId && nomeArea.get(detalhe.areaId))].filter(Boolean).join(" · ") || "—"}</dd></div>
@@ -387,6 +410,14 @@ export function SegAcidentesManager({
                 {detalhe.status === "encerrado" && (
                   <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={reabrir}>
                     <RotateCcw size={14} /> Reabrir
+                  </button>
+                )}
+                {ehProprietario && (
+                  <button
+                    type="button" className="btn btn-ghost btn-sm" disabled={pendente}
+                    style={{ color: "var(--mh-danger)" }} onClick={excluir}
+                  >
+                    <Trash2 size={14} /> Excluir
                   </button>
                 )}
               </div>

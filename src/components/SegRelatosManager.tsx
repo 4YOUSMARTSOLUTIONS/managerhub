@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BellRing, Check, ExternalLink, ListChecks, Pencil, Plus } from "lucide-react";
+import { BellRing, Check, ExternalLink, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
@@ -14,12 +14,12 @@ import type { Person } from "@/components/PeoplePicker";
 import {
   SEG_NATUREZA, SEG_NATUREZA_TONE, SEG_RELATO_STATUS, SEG_RELATO_STATUS_TONE,
 } from "@/lib/constants";
-import { normalizar } from "@/lib/format";
+import { normalizar, shortName } from "@/lib/format";
 import {
   SegRelatoDialog, type AreaOpt, type FocoOpt, type LocalOpt, type OcorrenciaOpt, type TipoOpt,
 } from "@/components/SegRelatoDialog";
 import { SegAcaoDialog } from "@/components/SegAcaoDialog";
-import { alertarGestor, triarRelato } from "@/lib/actions/seguranca";
+import { alertarGestor, excluirRelato, triarRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
 export type EnvolvidoRow = {
@@ -73,10 +73,13 @@ function dataBr(iso: string) {
  * vem completa e ganha filtros, contadores e o nome de quem relatou.
  */
 export function SegRelatosManager({
-  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, causas, ocorrencias, focos, itemPrograma,
+  rows, ehSeguranca, ehProprietario, pessoas, tipos, locais, areas, unidades, causas,
+  ocorrencias, focos, itemPrograma,
 }: {
   rows: RelatoRow[];
   ehSeguranca: boolean;
+  /** excluir relato e do proprietario, e so dele */
+  ehProprietario: boolean;
   pessoas: Person[];
   tipos: TipoOpt[];
   locais: LocalOpt[];
@@ -149,6 +152,24 @@ export function SegRelatosManager({
       setNota("");
       router.refresh();
     });
+  };
+
+  const excluir = () => {
+    if (!detalhe) return;
+    void (async () => {
+      const ok = await confirmDialog({
+        title: "Excluir o relato?",
+        message: "O relato sai da base e deixa de contar na pirâmide. A ação de tratamento já aberta continua em Ações, com o responsável dela. A exclusão fica nos Logs do sistema.",
+        confirmLabel: "Excluir",
+        tone: "danger",
+      });
+      if (!ok) return;
+      const r = await excluirRelato(detalhe.id);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Relato excluído.");
+      fecharDetalhe();
+      router.refresh();
+    })();
   };
 
   const encerrar = async (novoStatus: Enums<"seg_relato_status">) => {
@@ -250,14 +271,20 @@ export function SegRelatosManager({
       ) : lista.length === 0 ? (
         <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Nenhum relato com esses filtros.</p>
       ) : (
+        // Uma informação por coluna. Ocorrência, classificação, natureza,
+        // local e área empilhados na mesma célula viravam um bloco de texto
+        // que a pessoa tinha que decifrar linha a linha.
         <table className="table">
           <thead>
             <tr>
               <th style={{ width: 100 }}>Data</th>
-              <th>Tipo</th>
-              <th>Onde</th>
-              <th>Envolvidos</th>
-              {ehSeguranca && <th style={{ width: 170 }}>Relator</th>}
+              <th>Ocorrência</th>
+              <th style={{ width: 140 }}>Classificação</th>
+              <th style={{ width: 120 }}>Natureza</th>
+              <th style={{ width: 120 }}>Local</th>
+              <th style={{ width: 110 }}>Área</th>
+              <th style={{ width: 160 }}>Envolvidos</th>
+              {ehSeguranca && <th style={{ width: 140 }}>Relator</th>}
               <th style={{ width: 150 }}>Situação</th>
             </tr>
           </thead>
@@ -269,29 +296,24 @@ export function SegRelatosManager({
                 title="Abrir o relato"
               >
                 <td>{dataBr(r.occurredOn)}</td>
-                <td>
-                  {/* a ocorrência é o rótulo do fato; o tipo vira o subtítulo */}
-                  <span style={{ fontWeight: 600 }}>
-                    {(r.ocorrenciaId && nomeOcorrencia.get(r.ocorrenciaId)) || nomeTipo.get(r.tipoId) || "—"}
-                  </span>
-                  {r.ocorrenciaId && (
-                    <div className="soft" style={{ fontSize: "0.74rem" }}>{nomeTipo.get(r.tipoId) ?? ""}</div>
-                  )}
-                  <div style={{ marginTop: "0.15rem" }}>
-                    <Badge tone={SEG_NATUREZA_TONE[r.natureza]}>{SEG_NATUREZA[r.natureza]}</Badge>
-                  </div>
+                <td style={{ fontWeight: 600 }}>
+                  {(r.ocorrenciaId && nomeOcorrencia.get(r.ocorrenciaId)) || "Não informada"}
+                </td>
+                <td className="muted" style={{ fontSize: "0.82rem" }}>{nomeTipo.get(r.tipoId) ?? "—"}</td>
+                <td><Badge tone={SEG_NATUREZA_TONE[r.natureza]}>{SEG_NATUREZA[r.natureza]}</Badge></td>
+                <td className="muted" style={{ fontSize: "0.82rem" }}>
+                  {(r.localId && nomeLocal.get(r.localId)) || "—"}
                 </td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>
-                  {[r.localId ? nomeLocal.get(r.localId) : null, r.areaId ? nomeArea.get(r.areaId) : null]
-                    .filter(Boolean).join(" · ") || "Não informado"}
+                  {(r.areaId && nomeArea.get(r.areaId)) || "—"}
                 </td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>
                   {r.envolvidos.length === 0
-                    ? "Sem pessoa citada"
-                    : r.envolvidos.map((e) => e.nome ?? "—").join(", ")}
+                    ? "—"
+                    : r.envolvidos.map((e) => shortName(e.nome)).join(", ")}
                 </td>
                 {ehSeguranca && (
-                  <td className="muted" style={{ fontSize: "0.82rem" }}>{r.relator ?? "—"}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>{shortName(r.relator)}</td>
                 )}
                 <td><Badge tone={SEG_RELATO_STATUS_TONE[r.status]}>{SEG_RELATO_STATUS[r.status]}</Badge></td>
               </tr>
@@ -354,7 +376,7 @@ export function SegRelatosManager({
                 {ehSeguranca && (
                   <div>
                     <dt className="soft">Relator</dt>
-                    <dd style={{ margin: 0 }}>{detalhe.relator ?? "—"}</dd>
+                    <dd style={{ margin: 0 }}>{shortName(detalhe.relator)}</dd>
                   </div>
                 )}
               </dl>
@@ -367,10 +389,10 @@ export function SegRelatosManager({
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.45rem" }}>
                     {detalhe.envolvidos.map((e) => (
                       <li key={e.userId} style={{ background: "var(--surface-2)", borderRadius: "var(--mh-radius-md)", padding: "0.5rem 0.7rem" }}>
-                        <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{e.nome ?? "—"}</div>
+                        <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{shortName(e.nome)}</div>
                         <div className="soft" style={{ fontSize: "0.75rem" }}>
                           {[e.setor, e.subsetor, e.funcao].filter(Boolean).join(" · ") || "Sem setor cadastrado"}
-                          {e.gestor ? ` · gestor: ${e.gestor}` : ""}
+                          {e.gestor ? ` · gestor: ${shortName(e.gestor)}` : ""}
                           {e.unidade ? ` · ${e.unidade}` : ""}
                         </div>
                       </li>
@@ -413,7 +435,7 @@ export function SegRelatosManager({
                   <p style={{ margin: 0, fontSize: "0.84rem", whiteSpace: "pre-wrap" }}>{detalhe.notaTriagem}</p>
                   {detalhe.triadoPor && (
                     <p className="soft" style={{ fontSize: "0.74rem", margin: "0.3rem 0 0" }}>
-                      Por {detalhe.triadoPor}
+                      Por {shortName(detalhe.triadoPor)}
                       {detalhe.triadoEm ? ` em ${dataBr(detalhe.triadoEm)}` : ""}
                     </p>
                   )}
@@ -511,7 +533,17 @@ export function SegRelatosManager({
                   <Pencil size={14} /> Editar relato
                 </button>
               ) : <span />}
-              <button type="button" className="btn btn-ghost" onClick={fecharDetalhe}>Fechar</button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {ehProprietario && (
+                  <button
+                    type="button" className="btn btn-ghost btn-sm" disabled={pendente}
+                    style={{ color: "var(--mh-danger)" }} onClick={excluir}
+                  >
+                    <Trash2 size={14} /> Excluir
+                  </button>
+                )}
+                <button type="button" className="btn btn-ghost" onClick={fecharDetalhe}>Fechar</button>
+              </div>
             </div>
           </div>
 
