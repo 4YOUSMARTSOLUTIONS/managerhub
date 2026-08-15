@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SegRelatosManager, type RelatoRow } from "@/components/SegRelatosManager";
+import { getFocosStatus } from "@/lib/actions/seguranca";
 
 /**
  * Relatos de segurança.
@@ -45,6 +46,7 @@ export default async function SegurancaRelatosPage() {
     { data: tipos }, { data: locais }, { data: areas }, { data: units },
     { data: programa }, { data: causas }, { data: ocorrencias },
     { data: vinculoOcorrencia }, { data: vinculoLocal }, { data: vinculoArea },
+    focos,
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_tratar_seguranca", { p_tenant: tenant.id }),
@@ -68,6 +70,9 @@ export default async function SegurancaRelatosPage() {
     supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id),
     supabase.from("seg_local_tipos").select("local_id, tipo_id").eq("tenant_id", tenant.id),
     supabase.from("seg_area_tipos").select("area_id, tipo_id").eq("tenant_id", tenant.id),
+    // o foco vigente de cada área, para o formulário lembrar a orientação na
+    // hora em que a pessoa escolhe onde o fato aconteceu
+    getFocosStatus(),
   ]);
 
   const [{ data: ocorrenciaLocais }, { data: ocorrenciaAreas }] = await Promise.all([
@@ -212,6 +217,9 @@ export default async function SegurancaRelatosPage() {
           tipoIds: tiposDaOcorrencia.get(o.id) ?? [],
           localIds: locaisDaOcorrencia.get(o.id) ?? [],
           areaIds: areasDaOcorrencia.get(o.id) ?? [],
+        }))}
+        focos={focos.vigentes.map((f) => ({
+          areaId: f.area_id, titulo: f.titulo, orientacao: f.orientacao,
         }))}
         unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
         causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}

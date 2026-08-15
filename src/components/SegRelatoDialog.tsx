@@ -25,6 +25,8 @@ export type AreaOpt = {
   id: string; name: string; localId: string | null; imagePath: string | null; active: boolean;
   tipoIds: string[];
 };
+/** O foco vigente da área, para o formulário lembrar a orientação. */
+export type FocoOpt = { areaId: string; titulo: string; orientacao: string | null };
 export type OcorrenciaOpt = {
   id: string; name: string; description: string | null; imagePath: string | null; active: boolean;
   tipoIds: string[]; localIds: string[]; areaIds: string[];
@@ -105,7 +107,7 @@ export type RelatoEmEdicao = {
 };
 
 export function SegRelatoDialog({
-  open, onClose, pessoas, tipos, locais, areas, ocorrencias, editando,
+  open, onClose, pessoas, tipos, locais, areas, ocorrencias, focos, editando,
 }: {
   open: boolean;
   onClose: () => void;
@@ -114,6 +116,7 @@ export function SegRelatoDialog({
   locais: LocalOpt[];
   areas: AreaOpt[];
   ocorrencias: OcorrenciaOpt[];
+  focos: FocoOpt[];
   /** null = novo relato. O pai monta com `key`, então cada abertura começa
    *  no estado certo sem efeito de reset. */
   editando?: RelatoEmEdicao | null;
@@ -133,6 +136,7 @@ export function SegRelatoDialog({
   const router = useRouter();
 
   const tiposAtivos = useMemo(() => tipos.filter((t) => t.active), [tipos]);
+  const foco = useMemo(() => focos.find((f) => f.areaId === areaId) ?? null, [focos, areaId]);
   // A CASCATA. A regra é uma só e vale para os três níveis: item SEM vínculo
   // aparece sempre; item COM vínculo aparece só onde foi amarrado. É o que faz
   // "Comportamento seguro" abrir duas ocorrências em vez de trinta.
@@ -305,6 +309,25 @@ export function SegRelatoDialog({
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* O foco aparece DEPOIS da área escolhida e ANTES da descrição: é o
+              momento em que a orientação ainda muda o que a pessoa vai escrever. */}
+          {foco && (
+            <div
+              style={{
+                border: "1px solid var(--mh-primary-500)", borderRadius: 10,
+                background: "var(--mh-primary-soft)", padding: "0.6rem 0.75rem",
+              }}
+            >
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--mh-primary-600)" }}>
+                Foco de segurança desta área
+              </div>
+              <div style={{ fontWeight: 600, fontSize: "0.88rem" }}>{foco.titulo}</div>
+              {foco.orientacao && (
+                <p style={{ fontSize: "0.8rem", margin: "0.25rem 0 0" }}>{foco.orientacao}</p>
+              )}
             </div>
           )}
 

@@ -16,7 +16,7 @@ import {
 } from "@/lib/constants";
 import { normalizar } from "@/lib/format";
 import {
-  SegRelatoDialog, type AreaOpt, type LocalOpt, type OcorrenciaOpt, type TipoOpt,
+  SegRelatoDialog, type AreaOpt, type FocoOpt, type LocalOpt, type OcorrenciaOpt, type TipoOpt,
 } from "@/components/SegRelatoDialog";
 import { SegAcaoDialog } from "@/components/SegAcaoDialog";
 import { alertarGestor, triarRelato } from "@/lib/actions/seguranca";
@@ -73,7 +73,7 @@ function dataBr(iso: string) {
  * vem completa e ganha filtros, contadores e o nome de quem relatou.
  */
 export function SegRelatosManager({
-  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, causas, ocorrencias, itemPrograma,
+  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, causas, ocorrencias, focos, itemPrograma,
 }: {
   rows: RelatoRow[];
   ehSeguranca: boolean;
@@ -84,6 +84,7 @@ export function SegRelatosManager({
   unidades: { id: string; name: string }[];
   causas: { id: string; name: string; active: boolean }[];
   ocorrencias: OcorrenciaOpt[];
+  focos: FocoOpt[];
   /** item do Programa ao qual as ações de tratamento são amarradas */
   itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
 }) {
@@ -538,6 +539,7 @@ export function SegRelatosManager({
         open={novo || !!editando}
         onClose={() => { setNovo(false); setEditando(null); }}
         pessoas={pessoas} tipos={tipos} locais={locais} areas={areas} ocorrencias={ocorrencias}
+        focos={focos}
         editando={editando && {
           id: editando.id,
           occurredOn: editando.occurredOn,

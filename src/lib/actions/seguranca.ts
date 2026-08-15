@@ -969,6 +969,110 @@ export async function setItemDoPrograma(itemId: string | null): Promise<ActionSt
 }
 
 // ============================================================================
+// Foco da área
+// ============================================================================
+//
+// A alçada mora na RPC (`seg_exige_tratativa`), como no resto do módulo. Aqui
+// só passa o que a tela mandou e devolve a mensagem pronta.
+
+export type FocoInput = {
+  id?: string | null;
+  areaId: string;
+  causaId?: string | null;
+  titulo: string;
+  orientacao?: string | null;
+  inicio: string;
+  fim: string;
+};
+
+export type FocoVigente = {
+  id: string;
+  area_id: string;
+  area_nome: string;
+  causa_id: string | null;
+  causa_nome: string | null;
+  titulo: string;
+  orientacao: string | null;
+  inicio: string;
+  fim: string;
+  relatos: number;
+  na_causa: number;
+  na_causa_antes: number;
+};
+
+export type FocoSugestao = {
+  area_id: string;
+  area_nome: string;
+  causa_id: string;
+  causa_nome: string;
+  qtd: number;
+  total: number;
+};
+
+export type FocosStatus = {
+  podeDefinir: boolean;
+  dias: number;
+  vigentes: FocoVigente[];
+  sugestoes: FocoSugestao[];
+};
+
+export async function getFocosStatus(dias = 90): Promise<FocosStatus> {
+  const vazio: FocosStatus = { podeDefinir: false, dias, vigentes: [], sugestoes: [] };
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("seg_focos_status", { p_dias: dias });
+    if (error || !data) return vazio;
+    const v = data as {
+      pode_definir: boolean; dias: number; vigentes: FocoVigente[]; sugestoes: FocoSugestao[];
+    };
+    return {
+      podeDefinir: !!v.pode_definir,
+      dias: v.dias ?? dias,
+      vigentes: v.vigentes ?? [],
+      sugestoes: v.sugestoes ?? [],
+    };
+  } catch {
+    return vazio;
+  }
+}
+
+export async function salvarFoco(input: FocoInput): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_salvar_foco", {
+      p_data: {
+        id: input.id || null,
+        area_id: input.areaId,
+        causa_id: input.causaId || null,
+        titulo: input.titulo,
+        orientacao: input.orientacao ?? null,
+        inicio: input.inicio,
+        fim: input.fim,
+      },
+    });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: input.id ? "Foco atualizado." : "Foco definido." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function excluirFoco(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_excluir_foco", { p_id: id });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Foco removido." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ============================================================================
 // Equipe de segurança
 // ============================================================================
 

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SegPiramideDashboard, type PainelSeguranca } from "@/components/SegPiramideDashboard";
+import { SegFocosPanel } from "@/components/SegFocosPanel";
+import { getFocosStatus } from "@/lib/actions/seguranca";
 
 /**
  * Pirâmide de Heinrich e painel de segurança.
@@ -35,10 +37,14 @@ export default async function SegurancaPiramidePage({
   const ano = Number(sp.ano) || agora.getFullYear();
   const unidades = effectiveUnitFilter(unitScope);
 
-  const { data: painel } = await supabase.rpc("seg_dashboard", {
-    p_ano: ano,
-    p_unit_ids: unidades,
-  });
+  // O foco não segue o ano do filtro: ele é o que está valendo HOJE. Vem
+  // junto porque é aqui que a causa dominante é lida e a decisão é tomada.
+  const [{ data: painel }, focos, { data: areas }, { data: causas }] = await Promise.all([
+    supabase.rpc("seg_dashboard", { p_ano: ano, p_unit_ids: unidades }),
+    getFocosStatus(),
+    supabase.from("seg_areas").select("id, name").eq("active", true).order("name"),
+    supabase.from("seg_causas").select("id, name").eq("active", true).order("sort").order("name"),
+  ]);
 
   return (
     <div>
@@ -46,6 +52,7 @@ export default async function SegurancaPiramidePage({
         title="Pirâmide de segurança"
         subtitle="Quanto mais a base é relatada e tratada, menos o topo acontece."
       />
+      <SegFocosPanel status={focos} areas={areas ?? []} causas={causas ?? []} />
       <SegPiramideDashboard painel={(painel ?? null) as PainelSeguranca | null} ano={ano} />
     </div>
   );

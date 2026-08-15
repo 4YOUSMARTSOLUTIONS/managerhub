@@ -1740,6 +1740,16 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; created_by?: string | null; created_at?: string }
         Relationships: []
       }
+      // O foco da área: a causa dominante virando orientação com prazo. É a
+      // única tabela do módulo que a empresa inteira lê, porque ela contém
+      // orientação, não fato. Escrita só pela equipe de segurança, e o banco
+      // recusa dois focos sobrepostos na mesma área.
+      seg_focos: {
+        Row: { id: string; tenant_id: string; area_id: string; causa_id: string | null; titulo: string; orientacao: string | null; inicio: string; fim: string; created_by: string | null; created_at: string; updated_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       // O relato. `created_by` é o RELATOR: a linha só é visível para ele
       // mesmo, para a equipe de segurança e para owner/admin. Gestor e
       // relatado não alcançam a linha, que é o único jeito de o anonimato
@@ -2156,6 +2166,10 @@ export type Database = {
       // várias permitidas), e não um id só
       seg_dashboard: { Args: { p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
       seg_item_do_programa: { Args: Record<PropertyKey, never>; Returns: Json }
+      seg_salvar_foco: { Args: { p_data: Json }; Returns: string }
+      seg_excluir_foco: { Args: { p_id: string }; Returns: undefined }
+      // vigentes para todo mundo; sugestões só para quem pode definir foco
+      seg_focos_status: { Args: { p_ref?: string | null; p_dias?: number | null }; Returns: Json }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"
