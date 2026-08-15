@@ -46,49 +46,66 @@ const CAMADAS = [
   { chave: "desvios", titulo: "Desvios relatados", ajuda: "Ato e condição insegura", cor: "var(--mh-primary-500)" },
 ] as const;
 
-/** A pirâmide em SVG. Sem biblioteca: são cinco trapézios e cinco números. */
+/**
+ * A pirâmide em SVG. Sem biblioteca: são cinco trapézios e cinco números.
+ *
+ * O `maxWidth` não é enfeite: um SVG com largura 100% escala TUDO junto, texto
+ * incluído, e num monitor largo a pirâmide vira um pôster de duas dobras de
+ * rolagem. Com o teto ela para de crescer e o desenho inteiro cabe na tela.
+ */
 function Piramide({ dados }: { dados: PainelSeguranca["piramide"] }) {
   const L = 5;
-  const alturaCamada = 62;
-  const vao = 4;
-  const cx = 250;
-  const meioTopo = 34;
-  const passo = 40;
-  const altura = L * alturaCamada + 24;
+  const alturaCamada = 44;
+  const vao = 3;
+  const cx = 145;
+  // topo com meia largura ZERO: a camada de cima é um triângulo, e é ela que
+  // dá a ponta. Com qualquer valor aqui a pirâmide fica decapitada.
+  const meioTopo = 0;
+  const passo = 26;
+  const altura = L * alturaCamada + 16;
 
   return (
     <svg
-      viewBox={`0 0 640 ${altura}`}
+      viewBox={`0 0 500 ${altura}`}
       role="img"
       aria-label="Pirâmide de Heinrich do período"
-      style={{ width: "100%", height: "auto", display: "block" }}
+      style={{ width: "100%", maxWidth: 500, height: "auto", display: "block", margin: "0 auto" }}
     >
       {CAMADAS.map((c, i) => {
-        const yTop = 12 + i * alturaCamada;
+        const yTop = 8 + i * alturaCamada;
         const yBot = yTop + alturaCamada - vao;
         const halfTop = meioTopo + i * passo;
         const halfBot = meioTopo + (i + 1) * passo - (vao * passo) / alturaCamada;
         const valor = dados[c.chave];
         const meioY = yTop + (alturaCamada - vao) / 2;
+        // na ponta o meio da camada é estreito demais para o número: ele desce
+        // para onde o triângulo já abriu
+        const numeroY = i === 0 ? yTop + (alturaCamada - vao) * 0.78 : meioY + 5;
 
         return (
           <g key={c.chave}>
             <polygon
-              points={`${cx - halfTop},${yTop} ${cx + halfTop},${yTop} ${cx + halfBot},${yBot} ${cx - halfBot},${yBot}`}
+              points={
+                halfTop === 0
+                  // a camada do topo é triângulo, e é ela que faz a pirâmide
+                  // ter ponta
+                  ? `${cx},${yTop} ${cx + halfBot},${yBot} ${cx - halfBot},${yBot}`
+                  : `${cx - halfTop},${yTop} ${cx + halfTop},${yTop} ${cx + halfBot},${yBot} ${cx - halfBot},${yBot}`
+              }
               fill={c.cor}
             />
             {/* o número vai dentro da faixa: as cinco cores são saturadas, então
                 branco tem contraste nos dois temas */}
             <text
-              x={cx} y={meioY + 6} textAnchor="middle"
-              fontSize={valor > 999 ? 18 : 21} fontWeight={700} fill="#fff"
+              x={cx} y={numeroY} textAnchor="middle"
+              fontSize={valor > 999 ? 13 : 15} fontWeight={700} fill="#fff"
             >
               {valor}
             </text>
-            <text x={cx + halfBot + 16} y={meioY - 2} fontSize={13} fontWeight={600} fill="var(--mh-text-1)">
+            <text x={cx + halfBot + 12} y={meioY - 1} fontSize={11} fontWeight={600} fill="var(--mh-text-1)">
               {c.titulo}
             </text>
-            <text x={cx + halfBot + 16} y={meioY + 14} fontSize={11} fill="var(--mh-text-3)">
+            <text x={cx + halfBot + 12} y={meioY + 12} fontSize={9} fill="var(--mh-text-3)">
               {c.ajuda}
             </text>
           </g>
@@ -226,53 +243,66 @@ export function SegPiramideDashboard({
         )}
       </div>
 
-      <div className="card card-pad">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+      {/* Pirâmide e série mensal lado a lado: a pirâmide é estreita por
+          natureza, e sozinha numa faixa inteira deixava meia tela vazia. Em
+          telas menores o auto-fit empilha as duas. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
+          gap: "1rem",
+          alignItems: "stretch",
+        }}
+      >
+        <div className="card card-pad">
           <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Pirâmide de Heinrich · {ano}</h3>
-          <span className="soft" style={{ fontSize: "0.78rem" }}>
+          <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
             {totalPiramide === 0
               ? "Nada registrado no período."
-              : "Base larga é sinal bom: significa que a operação está apontando o risco antes do acidente."}
-          </span>
-        </div>
-        <div style={{ marginTop: "0.8rem", overflowX: "auto" }}>
-          <div style={{ minWidth: 560 }}>
-            <Piramide dados={painel.piramide} />
+              : "Base larga é sinal bom: a operação está apontando o risco antes do acidente."}
+          </p>
+          <div style={{ marginTop: "0.7rem", overflowX: "auto" }}>
+            <div style={{ minWidth: 300 }}>
+              <Piramide dados={painel.piramide} />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="card card-pad">
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.8rem" }}>Mês a mês</h3>
-        <div style={{ display: "flex", gap: "0.4rem", alignItems: "flex-end", overflowX: "auto", paddingBottom: "0.3rem" }}>
-          {painel.mensal.map((m) => {
-            const relatos = m.desvios + m.incidentes + m.positivos;
-            const alturaRel = (relatos / maxMes) * 120;
-            const alturaAci = (m.acidentes / maxMes) * 120;
-            return (
-              <div key={m.mes} style={{ flex: "1 1 0", minWidth: 42, textAlign: "center" }}>
-                <div style={{ display: "flex", gap: 3, alignItems: "flex-end", justifyContent: "center", height: 130 }}>
-                  <div
-                    title={`${relatos} relato(s)`}
-                    style={{ width: 14, height: Math.max(relatos ? 3 : 0, alturaRel), background: "var(--mh-primary-500)", borderRadius: "3px 3px 0 0" }}
-                  />
-                  <div
-                    title={`${m.acidentes} acidente(s)`}
-                    style={{ width: 14, height: Math.max(m.acidentes ? 3 : 0, alturaAci), background: "var(--mh-danger)", borderRadius: "3px 3px 0 0" }}
-                  />
+        <div className="card card-pad">
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Mês a mês</h3>
+          <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
+            Relatos e acidentes ao longo de {ano}.
+          </p>
+          <div style={{ display: "flex", gap: "0.3rem", alignItems: "flex-end", overflowX: "auto", paddingBottom: "0.3rem", marginTop: "0.7rem" }}>
+            {painel.mensal.map((m) => {
+              const relatos = m.desvios + m.incidentes + m.positivos;
+              const alturaRel = (relatos / maxMes) * 110;
+              const alturaAci = (m.acidentes / maxMes) * 110;
+              return (
+                <div key={m.mes} style={{ flex: "1 1 0", minWidth: 26, textAlign: "center" }}>
+                  <div style={{ display: "flex", gap: 2, alignItems: "flex-end", justifyContent: "center", height: 118 }}>
+                    <div
+                      title={`${relatos} relato(s)`}
+                      style={{ width: 10, height: Math.max(relatos ? 3 : 0, alturaRel), background: "var(--mh-primary-500)", borderRadius: "3px 3px 0 0" }}
+                    />
+                    <div
+                      title={`${m.acidentes} acidente(s)`}
+                      style={{ width: 10, height: Math.max(m.acidentes ? 3 : 0, alturaAci), background: "var(--mh-danger)", borderRadius: "3px 3px 0 0" }}
+                    />
+                  </div>
+                  <span className="soft" style={{ fontSize: "0.66rem" }}>{MESES[m.mes - 1]}</span>
                 </div>
-                <span className="soft" style={{ fontSize: "0.68rem" }}>{MESES[m.mes - 1]}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", gap: "1rem", marginTop: "0.6rem", fontSize: "0.75rem" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-            <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: "var(--mh-primary-500)" }} /> Relatos
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-            <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: "var(--mh-danger)" }} /> Acidentes
-          </span>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem", fontSize: "0.74rem" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: "var(--mh-primary-500)" }} /> Relatos
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: "var(--mh-danger)" }} /> Acidentes
+            </span>
+          </div>
         </div>
       </div>
 
