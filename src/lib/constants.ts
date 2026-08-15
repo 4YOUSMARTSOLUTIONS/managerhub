@@ -639,6 +639,24 @@ export const SEG_NATUREZA_AJUDA: Record<Enums<"seg_relato_natureza">, string> = 
   positivo: "Reconhecimento. Fica fora da pirâmide e vira indicador próprio.",
 };
 
+// O rótulo diz em que mão está o relato, que é o que o relator quer saber ao
+// abrir a lista dele.
+export const SEG_RELATO_STATUS: Record<Enums<"seg_relato_status">, string> = {
+  aberto: "Aguardando triagem",
+  triado: "Em tratativa",
+  tratado: "Tratado",
+  improcedente: "Improcedente",
+  duplicado: "Duplicado",
+};
+
+export const SEG_RELATO_STATUS_TONE: Record<Enums<"seg_relato_status">, Tone> = {
+  aberto: "amber",
+  triado: "blue",
+  tratado: "green",
+  improcedente: "gray",
+  duplicado: "gray",
+};
+
 export type Tone =
   | "blue"
   | "green"

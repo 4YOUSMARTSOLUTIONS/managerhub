@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { adminActionContext } from "./context";
+import { actionContext, adminActionContext } from "./context";
 import { wantsActive } from "@/lib/catalogGuard";
 import { recusaDeUpload } from "@/lib/uploads";
 import { SEG_ICONE_BUCKET } from "@/lib/avatar";
@@ -287,6 +287,50 @@ export async function removerIconeSeg(formData: FormData): Promise<ActionState> 
 
     revalidar();
     return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ============================================================================
+// Relatos
+// ============================================================================
+//
+// Aqui o contexto é `actionContext`: quem relata é a operação inteira, não a
+// administração. A gravação é pela RPC `seg_criar_relato`, que faz relato e
+// envolvidos na mesma transação, copia a natureza do tipo e avisa a equipe de
+// segurança. Nada disso pode depender da tela.
+
+export type RelatoInput = {
+  occurred_on: string;
+  tipo_id: string;
+  local_id?: string | null;
+  area_id?: string | null;
+  unit_id?: string | null;
+  descricao: string;
+  envolvidos: string[];
+};
+
+export async function criarRelato(input: RelatoInput): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+
+    const { error } = await supabase.rpc("seg_criar_relato", {
+      p_data: {
+        occurred_on: input.occurred_on,
+        tipo_id: input.tipo_id,
+        local_id: input.local_id ?? null,
+        area_id: input.area_id ?? null,
+        unit_id: input.unit_id ?? null,
+        descricao: input.descricao,
+        envolvidos: input.envolvidos,
+      },
+    });
+    // a RPC já fala português; repassar direto evita traduzir duas vezes
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Relato registrado. A equipe de segurança foi avisada." };
   } catch (e) {
     return { error: (e as Error).message };
   }

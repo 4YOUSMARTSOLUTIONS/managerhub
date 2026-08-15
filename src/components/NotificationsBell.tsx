@@ -38,6 +38,8 @@ export function NotificationsBell() {
     else if (n.type.startsWith("training_")) router.push("/treinamentos");
     else if (n.type.startsWith("punicao_")) router.push("/punicoes");
     else if (n.type.startsWith("absenteismo_")) router.push("/absenteismos");
+    else if (n.type.startsWith("seg_relato_")) router.push("/seguranca/relatos");
+    else if (n.type.startsWith("seg_acidente_")) router.push("/seguranca/acidentes");
   };
 
   return (

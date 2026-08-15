@@ -1689,6 +1689,25 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; created_by?: string | null; created_at?: string }
         Relationships: []
       }
+      // O relato. `created_by` é o RELATOR: a linha só é visível para ele
+      // mesmo, para a equipe de segurança e para owner/admin. Gestor e
+      // relatado não alcançam a linha, que é o único jeito de o anonimato
+      // valer também contra o PostgREST.
+      // Insert é `never`: abrir relato é pela RPC `seg_criar_relato`, que
+      // grava relato e envolvidos na mesma transação e avisa a equipe.
+      seg_relatos: {
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; tipo_id: string; snap_natureza: Database["public"]["Enums"]["seg_relato_natureza"]; local_id: string | null; area_id: string | null; descricao: string; status: Database["public"]["Enums"]["seg_relato_status"]; triado_por: string | null; triado_em: string | null; nota_triagem: string | null; duplicado_de: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: never
+        Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null }
+        Relationships: []
+      }
+      // O vínculo da época de cada envolvido, carimbado por trigger no insert.
+      seg_relato_envolvidos: {
+        Row: { id: string; relato_id: string; tenant_id: string; user_id: string; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; created_at: string }
+        Insert: { id?: string; relato_id: string; tenant_id: string; user_id: string; created_at?: string }
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -2039,6 +2058,7 @@ export type Database = {
       // ---- segurança do trabalho ----
       is_safety_member: { Args: { p_tenant: string }; Returns: boolean }
       pode_tratar_seguranca: { Args: { p_tenant: string }; Returns: boolean }
+      seg_criar_relato: { Args: { p_data: Json }; Returns: string }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"
@@ -2132,6 +2152,10 @@ export type Database = {
       // `positivo` (comportamento seguro) fica FORA da pirâmide de propósito:
       // ela conta falha, e o comportamento seguro é card à parte no painel.
       seg_relato_natureza: "desvio" | "incidente" | "positivo"
+      // `improcedente` e `duplicado` existem para a estatística não mentir: o
+      // mesmo buraco relatado por cinco pessoas não pode virar cinco desvios
+      // na base da pirâmide.
+      seg_relato_status: "aberto" | "triado" | "tratado" | "improcedente" | "duplicado"
     }
     CompositeTypes: {
       [_ in never]: never
