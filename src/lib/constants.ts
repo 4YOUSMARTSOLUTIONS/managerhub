@@ -615,6 +615,30 @@ export const USER_TYPE: Partial<Record<Enums<"member_role">, string>> = {
   member: "Funcionário",
 };
 
+// ---------- Segurança do trabalho ----------
+// A natureza é a camada da pirâmide que o tipo de relato alimenta. O tipo tem
+// nome de cliente ("Condição insegura no PDV"); a natureza é o que a estatística
+// conta, e por isso ela é enum e não texto.
+export const SEG_NATUREZA: Record<Enums<"seg_relato_natureza">, string> = {
+  desvio: "Desvio",
+  incidente: "Incidente",
+  positivo: "Comportamento seguro",
+};
+
+export const SEG_NATUREZA_TONE: Record<Enums<"seg_relato_natureza">, Tone> = {
+  desvio: "amber",
+  incidente: "red",
+  positivo: "green",
+};
+
+// A frase que explica a escolha na tela de Configurações, onde o admin decide
+// em que camada da pirâmide cada tipo entra.
+export const SEG_NATUREZA_AJUDA: Record<Enums<"seg_relato_natureza">, string> = {
+  desvio: "Base da pirâmide: ato ou condição insegura, sem lesão.",
+  incidente: "Quase acidente: houve o evento, não houve lesão.",
+  positivo: "Reconhecimento. Fica fora da pirâmide e vira indicador próprio.",
+};
+
 export type Tone =
   | "blue"
   | "green"

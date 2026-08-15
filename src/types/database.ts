@@ -1657,6 +1657,38 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // ---- segurança do trabalho ----
+      // Os catálogos do relato. A NATUREZA do tipo é o que a pirâmide conta;
+      // o nome é do cliente. `image_path` é a figura que o admin sobe em
+      // Configurações (bucket público `seg-icones`), sempre opcional.
+      seg_tipos_relato: {
+        Row: { id: string; tenant_id: string; name: string; natureza: Database["public"]["Enums"]["seg_relato_natureza"]; description: string | null; image_path: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; natureza?: Database["public"]["Enums"]["seg_relato_natureza"]; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; natureza?: Database["public"]["Enums"]["seg_relato_natureza"]; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      seg_locais: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; image_path: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // `local_id` nulo = área que vale para qualquer local (a cascata do
+      // formulário sempre a mostra).
+      seg_areas: {
+        Row: { id: string; tenant_id: string; local_id: string | null; name: string; description: string | null; image_path: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; local_id?: string | null; name: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; local_id?: string | null; name?: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // Quem tria relato e cadastra acidente. Não é papel do sistema: o técnico
+      // de segurança costuma ser um `member` comum.
+      seg_equipe: {
+        Row: { id: string; tenant_id: string; user_id: string; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; created_by?: string | null; created_at?: string }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -2004,6 +2036,9 @@ export type Database = {
       platform_integration_flags: { Args: Record<PropertyKey, never>; Returns: Json }
       ticket_request_conclusion: { Args: { p_ticket: string }; Returns: undefined }
       ticket_decide_conclusion: { Args: { p_ticket: string; p_approve: boolean; p_note: string }; Returns: undefined }
+      // ---- segurança do trabalho ----
+      is_safety_member: { Args: { p_tenant: string }; Returns: boolean }
+      pode_tratar_seguranca: { Args: { p_tenant: string }; Returns: boolean }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"
@@ -2093,6 +2128,10 @@ export type Database = {
         | "semestral"
         | "anual"
         | "sob_demanda"
+      // A camada da pirâmide de Heinrich que o tipo de relato alimenta.
+      // `positivo` (comportamento seguro) fica FORA da pirâmide de propósito:
+      // ela conta falha, e o comportamento seguro é card à parte no painel.
+      seg_relato_natureza: "desvio" | "incidente" | "positivo"
     }
     CompositeTypes: {
       [_ in never]: never

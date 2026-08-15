@@ -39,3 +39,18 @@ export function grupoFotoSrc(path: string | null | undefined): string | null {
   if (!base) return null;
   return `${base}/storage/v1/object/public/${GRUPO_FOTO_BUCKET}/${p}`;
 }
+
+/**
+ * Figura dos catálogos de Segurança (tipo de relato, local, área): terceiro
+ * bucket público. É ilustração de botão numa grade, então vale o mesmo racional
+ * do avatar: signed URL daria uma assinatura por ícone da tela.
+ */
+export const SEG_ICONE_BUCKET = "seg-icones";
+
+export function segIconeSrc(path: string | null | undefined): string | null {
+  const p = path?.trim();
+  if (!p) return null;
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return null;
+  return `${base}/storage/v1/object/public/${SEG_ICONE_BUCKET}/${p}`;
+}

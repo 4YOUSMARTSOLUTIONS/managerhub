@@ -28,6 +28,8 @@ import { InfractionTypesManager, type InfracaoRow } from "@/components/Infractio
 import { AbsenceTypesManager, type TipoAbsenteismoRow } from "@/components/AbsenceTypesManager";
 import { AbsenteismoRecipientsManager, type DestinatarioRow } from "@/components/AbsenteismoRecipientsManager";
 import { CidTableViewer } from "@/components/CidTableViewer";
+import { SegCatalogoManager } from "@/components/SegCatalogoManager";
+import { SegEquipeManager } from "@/components/SegEquipeManager";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -109,6 +111,7 @@ export default async function SettingsPage() {
     { data: sanctionTypesData }, { data: infractionTypesData }, { data: sanctionsData }, { data: reducerRulesData }, { data: reducerBandsData },
     { data: sancoesDeLancamento }, { data: absenceTypesData }, { data: recipientsData },
     { data: absenteismosAprovados },
+    { data: segTiposData }, { data: segLocaisData }, { data: segAreasData }, { data: segEquipeData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -188,6 +191,25 @@ export default async function SettingsPage() {
     // quais ausências nasceram de um lançamento aprovado: essas não se editam
     // nem se excluem por aqui, para o processo e o fato não divergirem
     supabase.from("absenteismo_lancamentos").select("absence_id").eq("tenant_id", tenant.id).not("absence_id", "is", null),
+    // Segurança do trabalho: os três catálogos do relato e a equipe que tria.
+    // Leitura é de qualquer membro (o formulário precisa deles), escrita é
+    // owner/admin — o RH não configura segurança.
+    supabase
+      .from("seg_tipos_relato")
+      .select("id, name, natureza, description, image_path, active")
+      .eq("tenant_id", tenant.id)
+      .order("sort").order("name"),
+    supabase
+      .from("seg_locais")
+      .select("id, name, description, image_path, active")
+      .eq("tenant_id", tenant.id)
+      .order("sort").order("name"),
+    supabase
+      .from("seg_areas")
+      .select("id, name, local_id, description, image_path, active")
+      .eq("tenant_id", tenant.id)
+      .order("sort").order("name"),
+    supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -1257,6 +1279,71 @@ export default async function SettingsPage() {
               id: "abs-cid",
               label: "Tabela CID",
               content: <CidTableViewer total={cidTotal ?? 0} />,
+            },
+          ]}
+        />
+      ),
+    },
+    {
+      id: "seguranca",
+      label: "Segurança",
+      content: (
+        <Tabs
+          variant="sub"
+          tabs={[
+            {
+              id: "seg-tipos",
+              label: "Tipos de relato",
+              content: (
+                <SegCatalogoManager
+                  kind="tipo"
+                  rows={(segTiposData ?? []).map((r) => ({
+                    id: r.id, name: r.name, natureza: r.natureza,
+                    description: r.description, image_path: r.image_path, active: r.active,
+                  }))}
+                  canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-locais",
+              label: "Locais",
+              content: (
+                <SegCatalogoManager
+                  kind="local"
+                  rows={(segLocaisData ?? []).map((r) => ({
+                    id: r.id, name: r.name, description: r.description,
+                    image_path: r.image_path, active: r.active,
+                  }))}
+                  canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-areas",
+              label: "Áreas",
+              content: (
+                <SegCatalogoManager
+                  kind="area"
+                  rows={(segAreasData ?? []).map((r) => ({
+                    id: r.id, name: r.name, local_id: r.local_id, description: r.description,
+                    image_path: r.image_path, active: r.active,
+                  }))}
+                  locais={(segLocaisData ?? []).filter((l) => l.active).map((l) => ({ id: l.id, name: l.name }))}
+                  canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-equipe",
+              label: "Equipe de segurança",
+              content: (
+                <SegEquipeManager
+                  people={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+                  selectedIds={(segEquipeData ?? []).map((e) => e.user_id)}
+                  canEdit={canEdit}
+                />
+              ),
             },
           ]}
         />
