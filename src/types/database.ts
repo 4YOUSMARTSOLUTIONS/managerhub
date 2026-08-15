@@ -1740,6 +1740,16 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; created_by?: string | null; created_at?: string }
         Relationships: []
       }
+      // O alerta ao gestor e a conversa que ele teve. A linha aponta para o
+      // relato, mas NÃO carrega o relator, e o gestor continua sem alcançar a
+      // linha do relato: o que ele lê do fato vem de `seg_meus_alertas`.
+      // Escrita só por RPC (não há policy de update).
+      seg_alertas: {
+        Row: { id: string; tenant_id: string; relato_id: string; gestor_id: string; envolvido_id: string | null; envolvido_nome: string | null; enviado_por: string | null; enviado_em: string; abordagem_em: string | null; abordagem_resumo: string | null; abordagem_acordo: string | null; registrada_em: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       // O foco da área: a causa dominante virando orientação com prazo. É a
       // única tabela do módulo que a empresa inteira lê, porque ela contém
       // orientação, não fato. Escrita só pela equipe de segurança, e o banco
@@ -2170,6 +2180,10 @@ export type Database = {
       seg_excluir_foco: { Args: { p_id: string }; Returns: undefined }
       // vigentes para todo mundo; sugestões só para quem pode definir foco
       seg_focos_status: { Args: { p_ref?: string | null; p_dias?: number | null }; Returns: Json }
+      // projeção sem relator: é a RPC, e não a tela, que escolhe as colunas
+      seg_meus_alertas: { Args: Record<PropertyKey, never>; Returns: Json }
+      seg_registrar_abordagem: { Args: { p_alerta: string; p_em: string; p_resumo: string; p_acordo?: string | null }; Returns: undefined }
+      seg_alertas_resumo: { Args: { p_ano?: number | null }; Returns: Json }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"

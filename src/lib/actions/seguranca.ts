@@ -969,6 +969,77 @@ export async function setItemDoPrograma(itemId: string | null): Promise<ActionSt
 }
 
 // ============================================================================
+// Alerta ao gestor e a conversa dele
+// ============================================================================
+
+export type AlertaDoGestor = {
+  id: string;
+  enviado_em: string;
+  envolvido_nome: string | null;
+  occurred_on: string;
+  tipo: string | null;
+  ocorrencia: string | null;
+  local: string | null;
+  area: string | null;
+  descricao: string;
+  status: Enums<"seg_relato_status">;
+  abordagem_em: string | null;
+  abordagem_resumo: string | null;
+  abordagem_acordo: string | null;
+};
+
+/** Os alertas recebidos por quem está pedindo. Nunca traz o relator. */
+export async function getMeusAlertas(): Promise<AlertaDoGestor[]> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("seg_meus_alertas");
+    if (error || !data) return [];
+    return data as AlertaDoGestor[];
+  } catch {
+    return [];
+  }
+}
+
+export async function registrarAbordagem(input: {
+  alertaId: string;
+  em: string;
+  resumo: string;
+  acordo?: string | null;
+}): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_registrar_abordagem", {
+      p_alerta: input.alertaId,
+      p_em: input.em,
+      p_resumo: input.resumo,
+      p_acordo: input.acordo || null,
+    });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Conversa registrada." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Alertas enviados no ano e quantos viraram conversa. Vazio para quem não trata. */
+export async function getAlertasResumo(ano: number): Promise<{
+  enviados: number; comConversa: number; visivel: boolean;
+}> {
+  const vazio = { enviados: 0, comConversa: 0, visivel: false };
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("seg_alertas_resumo", { p_ano: ano });
+    if (error || !data) return vazio;
+    const v = data as { enviados: number; com_conversa: number; visivel: boolean };
+    return { enviados: v.enviados ?? 0, comConversa: v.com_conversa ?? 0, visivel: !!v.visivel };
+  } catch {
+    return vazio;
+  }
+}
+
+// ============================================================================
 // Foco da área
 // ============================================================================
 //

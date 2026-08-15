@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SegRelatosManager, type RelatoRow } from "@/components/SegRelatosManager";
-import { getFocosStatus } from "@/lib/actions/seguranca";
+import { SegAlertasGestor } from "@/components/SegAlertasGestor";
+import { getFocosStatus, getMeusAlertas } from "@/lib/actions/seguranca";
 
 /**
  * Relatos de segurança.
@@ -46,7 +47,7 @@ export default async function SegurancaRelatosPage() {
     { data: tipos }, { data: locais }, { data: areas }, { data: units },
     { data: programa }, { data: causas }, { data: ocorrencias },
     { data: vinculoOcorrencia }, { data: vinculoLocal }, { data: vinculoArea },
-    focos,
+    focos, alertas,
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_tratar_seguranca", { p_tenant: tenant.id }),
@@ -73,6 +74,9 @@ export default async function SegurancaRelatosPage() {
     // o foco vigente de cada área, para o formulário lembrar a orientação na
     // hora em que a pessoa escolhe onde o fato aconteceu
     getFocosStatus(),
+    // os alertas que ESTE usuário recebeu como gestor. Vêm sem o relator, e
+    // vêm por RPC porque a linha do relato continua fora do alcance dele.
+    getMeusAlertas(),
   ]);
 
   const [{ data: ocorrenciaLocais }, { data: ocorrenciaAreas }] = await Promise.all([
@@ -195,6 +199,7 @@ export default async function SegurancaRelatosPage() {
             : "Aponte um risco que você viu. Quem relata não aparece para o gestor nem para quem foi citado."
         }
       />
+      <SegAlertasGestor alertas={alertas} />
       <SegRelatosManager
         rows={rows}
         ehSeguranca={ehSeguranca}

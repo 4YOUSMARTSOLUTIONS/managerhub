@@ -168,10 +168,13 @@ function Barras({
 }
 
 export function SegPiramideDashboard({
-  painel, ano,
+  painel, ano, alertas,
 }: {
   painel: PainelSeguranca | null;
   ano: number;
+  /** alertas ao gestor no ano e quantos viraram conversa; `visivel` false para
+   *  quem não trata segurança */
+  alertas: { enviados: number; comConversa: number; visivel: boolean };
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -251,6 +254,17 @@ export function SegPiramideDashboard({
                   : painel.restrito.taxa_tratamento >= 50 ? "amber" : "red"
             }
             hint="Improcedentes e duplicados fora da conta"
+          />
+        )}
+        {alertas.visivel && alertas.enviados > 0 && (
+          <StatCard
+            label="Alertas com conversa"
+            value={`${Math.round((alertas.comConversa / alertas.enviados) * 100)}%`}
+            tone={
+              alertas.comConversa / alertas.enviados >= 0.8 ? "green"
+                : alertas.comConversa / alertas.enviados >= 0.5 ? "amber" : "red"
+            }
+            hint={`${alertas.comConversa} de ${alertas.enviados} gestores registraram`}
           />
         )}
       </div>
