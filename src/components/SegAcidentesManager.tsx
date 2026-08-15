@@ -120,8 +120,9 @@ export function SegAcidentesManager({
     iniciar(async () => {
       const r = await encerrarAcidente(detalhe.id, retorno || null);
       if (r.error) { toast.error(r.error); return; }
+      // a data fica: reabrir o caso não desfaz o retorno que já aconteceu, e
+      // limpar o campo faria o próximo encerramento pedir a data de novo
       toast.success(r.message ?? "Acidente encerrado.");
-      setRetorno("");
       router.refresh();
     });
   };
@@ -132,6 +133,7 @@ export function SegAcidentesManager({
       const r = await reabrirAcidente(detalhe.id);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Acidente reaberto.");
+      setRetorno(detalhe.retornoEm ?? "");
       router.refresh();
     });
   };
