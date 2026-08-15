@@ -5,6 +5,7 @@ import { actionContext, adminActionContext } from "./context";
 import { wantsActive } from "@/lib/catalogGuard";
 import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import { SEG_ICONE_BUCKET } from "@/lib/avatar";
+import { normalizar } from "@/lib/format";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
@@ -33,9 +34,9 @@ function revalidar() {
 }
 
 /** As três tabelas de catálogo do módulo. A tela manda o nome; aqui ele é validado. */
-export type CatalogoSeg = "seg_tipos_relato" | "seg_locais" | "seg_areas" | "seg_causas";
+export type CatalogoSeg = "seg_tipos_relato" | "seg_locais" | "seg_areas" | "seg_causas" | "seg_ocorrencias";
 
-const CATALOGOS: CatalogoSeg[] = ["seg_tipos_relato", "seg_locais", "seg_areas", "seg_causas"];
+const CATALOGOS: CatalogoSeg[] = ["seg_tipos_relato", "seg_locais", "seg_areas", "seg_causas", "seg_ocorrencias"];
 
 function catalogoValido(valor: unknown): CatalogoSeg | null {
   const t = String(valor ?? "") as CatalogoSeg;
@@ -49,6 +50,7 @@ function mensagem(e: { message?: string }): string {
   if (msg.includes("seg_locais_nome_unico")) return "Já existe um local com esse nome.";
   if (msg.includes("seg_areas_nome_unico")) return "Já existe uma área com esse nome nesse local.";
   if (msg.includes("seg_causas_nome_unico")) return "Já existe uma causa com esse nome.";
+  if (msg.includes("seg_ocorrencias_nome_unico")) return "Já existe uma ocorrência com esse nome.";
   if (msg.includes("_nome_nao_vazio")) return "Informe o nome.";
   if (msg.includes("row-level security")) return "Você não tem permissão para alterar este cadastro.";
   return msg || "Não foi possível salvar.";
@@ -163,6 +165,191 @@ export async function saveSegCausa(input: SegCausaInput): Promise<ActionState> {
   }
 }
 
+export type SegOcorrenciaInput = {
+  id?: string;
+  name: string;
+  description?: string;
+  /** listas vazias = vale para todos, que é o que evita cadastro braçal */
+  tipoIds: string[];
+  localIds: string[];
+  areaIds: string[];
+};
+
+export async function saveSegOcorrencia(input: SegOcorrenciaInput): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    const name = input.name.trim();
+    if (!name) return { error: "Informe o nome da ocorrência." };
+
+    const campos = { tenant_id: tenantId, name, description: input.description?.trim() || null };
+
+    let id = input.id;
+    if (id) {
+      const { error } = await supabase.from("seg_ocorrencias").update(campos).eq("id", id);
+      if (error) return { error: mensagem(error) };
+    } else {
+      const { data, error } = await supabase.from("seg_ocorrencias").insert(campos).select("id").single();
+      if (error) return { error: mensagem(error) };
+      id = data.id;
+    }
+
+    const erro = await gravarVinculosOcorrencia(supabase, tenantId, id, input);
+    if (erro) return { error: erro };
+
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Substitui os vínculos por inteiro.
+ *
+ * Apagar e reinserir é o padrão da casa para lista pequena (o mesmo de
+ * `setTicketManagerSectors`): mais simples que calcular o diff e sem o risco de
+ * deixar sobra quando a tela manda menos do que existia.
+ */
+async function gravarVinculosOcorrencia(
+  supabase: Awaited<ReturnType<typeof adminActionContext>>["supabase"],
+  tenantId: string,
+  ocorrenciaId: string,
+  input: { tipoIds: string[]; localIds: string[]; areaIds: string[] },
+): Promise<string | null> {
+  await supabase.from("seg_ocorrencia_tipos").delete().eq("ocorrencia_id", ocorrenciaId);
+  await supabase.from("seg_ocorrencia_locais").delete().eq("ocorrencia_id", ocorrenciaId);
+  await supabase.from("seg_ocorrencia_areas").delete().eq("ocorrencia_id", ocorrenciaId);
+
+  if (input.tipoIds.length) {
+    const { error } = await supabase.from("seg_ocorrencia_tipos")
+      .insert(input.tipoIds.map((tipo_id) => ({ tenant_id: tenantId, ocorrencia_id: ocorrenciaId, tipo_id })));
+    if (error) return mensagem(error);
+  }
+  if (input.localIds.length) {
+    const { error } = await supabase.from("seg_ocorrencia_locais")
+      .insert(input.localIds.map((local_id) => ({ tenant_id: tenantId, ocorrencia_id: ocorrenciaId, local_id })));
+    if (error) return mensagem(error);
+  }
+  if (input.areaIds.length) {
+    const { error } = await supabase.from("seg_ocorrencia_areas")
+      .insert(input.areaIds.map((area_id) => ({ tenant_id: tenantId, ocorrencia_id: ocorrenciaId, area_id })));
+    if (error) return mensagem(error);
+  }
+  return null;
+}
+
+/** Restringe um LOCAL a certas classificações. Lista vazia = aparece em todas. */
+export async function setLocalTipos(localId: string, tipoIds: string[]): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    await supabase.from("seg_local_tipos").delete().eq("local_id", localId);
+    if (tipoIds.length) {
+      const { error } = await supabase.from("seg_local_tipos")
+        .insert(tipoIds.map((tipo_id) => ({ tenant_id: tenantId, local_id: localId, tipo_id })));
+      if (error) return { error: mensagem(error) };
+    }
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Restringe uma ÁREA a certas classificações. Lista vazia = aparece em todas. */
+export async function setAreaTipos(areaId: string, tipoIds: string[]): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    await supabase.from("seg_area_tipos").delete().eq("area_id", areaId);
+    if (tipoIds.length) {
+      const { error } = await supabase.from("seg_area_tipos")
+        .insert(tipoIds.map((tipo_id) => ({ tenant_id: tenantId, area_id: areaId, tipo_id })));
+      if (error) return { error: mensagem(error) };
+    }
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type LinhaImportOcorrencia = {
+  nome: string;
+  classificacoes?: string;
+  locais?: string;
+  areas?: string;
+  descricao?: string;
+};
+
+/**
+ * Importa ocorrências de uma planilha.
+ *
+ * Vínculo casa por NOME, e é o único jeito viável numa planilha: quem digita
+ * não tem os ids. O que não casar não vira cadastro novo em silêncio, vira
+ * aviso: catálogo criado por engano de digitação é pior que catálogo faltando.
+ */
+export async function importarOcorrencias(
+  linhas: LinhaImportOcorrencia[],
+): Promise<ActionState & { criadas?: number; atualizadas?: number; avisos?: string[] }> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+
+    const [{ data: tipos }, { data: locais }, { data: areas }, { data: existentes }] = await Promise.all([
+      supabase.from("seg_tipos_relato").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("seg_locais").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("seg_areas").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("seg_ocorrencias").select("id, name").eq("tenant_id", tenantId),
+    ]);
+
+    const porNome = (linha: { id: string; name: string }[] | null) =>
+      new Map((linha ?? []).map((x) => [normalizar(x.name), x.id]));
+    const mapaTipo = porNome(tipos);
+    const mapaLocal = porNome(locais);
+    const mapaArea = porNome(areas);
+    const mapaOcorrencia = porNome(existentes);
+
+    const avisos: string[] = [];
+    let criadas = 0;
+    let atualizadas = 0;
+
+    const separar = (valor: string | undefined) =>
+      (valor ?? "").split(/[;,\n]/).map((s) => s.trim()).filter(Boolean);
+
+    const resolver = (nomes: string[], mapa: Map<string, string>, rotulo: string, linha: number) =>
+      nomes.flatMap((n) => {
+        const id = mapa.get(normalizar(n));
+        if (!id) { avisos.push(`Linha ${linha}: ${rotulo} "${n}" não existe no cadastro e foi ignorado.`); return []; }
+        return [id];
+      });
+
+    for (const [i, l] of linhas.entries()) {
+      const nome = (l.nome ?? "").trim();
+      if (!nome) continue;
+      const numero = i + 2; // a planilha tem cabeçalho na linha 1
+
+      const tipoIds  = resolver(separar(l.classificacoes), mapaTipo, "classificação", numero);
+      const localIds = resolver(separar(l.locais), mapaLocal, "local", numero);
+      const areaIds  = resolver(separar(l.areas), mapaArea, "área", numero);
+
+      const existente = mapaOcorrencia.get(normalizar(nome));
+      const r = await saveSegOcorrencia({
+        id: existente, name: nome, description: l.descricao,
+        tipoIds, localIds, areaIds,
+      });
+      if (r.error) { avisos.push(`Linha ${numero}: ${r.error}`); continue; }
+      if (existente) atualizadas++;
+      else criadas++;
+    }
+
+    revalidar();
+    return {
+      ok: true, criadas, atualizadas, avisos,
+      message: `${criadas} ocorrência(s) criada(s) e ${atualizadas} atualizada(s).`,
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 /** Liga e desliga o item no formulário sem apagar o histórico que já o cita. */
 export async function setSegCatalogoAtivo(formData: FormData): Promise<void> {
   const tabela = catalogoValido(formData.get("tabela"));
@@ -178,6 +365,8 @@ export async function setSegCatalogoAtivo(formData: FormData): Promise<void> {
     await supabase.from("seg_locais").update({ active }).eq("id", id);
   } else if (tabela === "seg_causas") {
     await supabase.from("seg_causas").update({ active }).eq("id", id);
+  } else if (tabela === "seg_ocorrencias") {
+    await supabase.from("seg_ocorrencias").update({ active }).eq("id", id);
   } else {
     await supabase.from("seg_areas").update({ active }).eq("id", id);
   }
@@ -206,7 +395,9 @@ export async function deleteSegCatalogo(formData: FormData): Promise<void> {
         ? await supabase.from("seg_locais").delete().eq("id", id)
         : tabela === "seg_causas"
           ? await supabase.from("seg_causas").delete().eq("id", id)
-          : await supabase.from("seg_areas").delete().eq("id", id);
+          : tabela === "seg_ocorrencias"
+            ? await supabase.from("seg_ocorrencias").delete().eq("id", id)
+            : await supabase.from("seg_areas").delete().eq("id", id);
 
   if (apagou.error) {
     if (tabela === "seg_tipos_relato") {
@@ -215,6 +406,8 @@ export async function deleteSegCatalogo(formData: FormData): Promise<void> {
       await supabase.from("seg_locais").update({ active: false }).eq("id", id);
     } else if (tabela === "seg_causas") {
       await supabase.from("seg_causas").update({ active: false }).eq("id", id);
+    } else if (tabela === "seg_ocorrencias") {
+      await supabase.from("seg_ocorrencias").update({ active: false }).eq("id", id);
     } else {
       await supabase.from("seg_areas").update({ active: false }).eq("id", id);
     }
@@ -246,7 +439,9 @@ async function lerIcone(
       ? await supabase.from("seg_tipos_relato").select("image_path").eq("id", id).maybeSingle()
       : tabela === "seg_locais"
         ? await supabase.from("seg_locais").select("image_path").eq("id", id).maybeSingle()
-        : await supabase.from("seg_areas").select("image_path").eq("id", id).maybeSingle();
+        : tabela === "seg_ocorrencias"
+          ? await supabase.from("seg_ocorrencias").select("image_path").eq("id", id).maybeSingle()
+          : await supabase.from("seg_areas").select("image_path").eq("id", id).maybeSingle();
   return q.data?.image_path ?? null;
 }
 
@@ -264,6 +459,9 @@ async function gravarIcone(
   }
   if (tabela === "seg_causas") {
     return { error: { message: "Causa não tem figura." } };
+  }
+  if (tabela === "seg_ocorrencias") {
+    return supabase.from("seg_ocorrencias").update({ image_path: path }).eq("id", id);
   }
   return supabase.from("seg_areas").update({ image_path: path }).eq("id", id);
 }
@@ -340,6 +538,7 @@ export type RelatoInput = {
   tipo_id: string;
   local_id?: string | null;
   area_id?: string | null;
+  ocorrencia_id?: string | null;
   descricao: string;
   envolvidos: string[];
 };
@@ -354,6 +553,7 @@ export async function criarRelato(input: RelatoInput): Promise<ActionState> {
         tipo_id: input.tipo_id,
         local_id: input.local_id ?? null,
         area_id: input.area_id ?? null,
+        ocorrencia_id: input.ocorrencia_id ?? null,
         // a unidade não vai daqui: a RPC deriva do vínculo do envolvido e,
         // sem envolvido, do vínculo de quem relatou
         descricao: input.descricao,
@@ -387,6 +587,7 @@ export async function editarRelato(id: string, input: RelatoInput): Promise<Acti
         tipo_id: input.tipo_id,
         local_id: input.local_id ?? null,
         area_id: input.area_id ?? null,
+        ocorrencia_id: input.ocorrencia_id ?? null,
         descricao: input.descricao,
         envolvidos: input.envolvidos,
       },

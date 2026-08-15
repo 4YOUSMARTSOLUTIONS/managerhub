@@ -16,8 +16,19 @@ export type TipoOpt = {
   id: string; name: string; natureza: Enums<"seg_relato_natureza">;
   description: string | null; imagePath: string | null; active: boolean;
 };
-export type LocalOpt = { id: string; name: string; imagePath: string | null; active: boolean };
-export type AreaOpt = { id: string; name: string; localId: string | null; imagePath: string | null; active: boolean };
+export type LocalOpt = {
+  id: string; name: string; imagePath: string | null; active: boolean;
+  /** vazio = aparece em qualquer classificacao */
+  tipoIds: string[];
+};
+export type AreaOpt = {
+  id: string; name: string; localId: string | null; imagePath: string | null; active: boolean;
+  tipoIds: string[];
+};
+export type OcorrenciaOpt = {
+  id: string; name: string; description: string | null; imagePath: string | null; active: boolean;
+  tipoIds: string[]; localIds: string[]; areaIds: string[];
+};
 
 /** Cartão de escolha: figura quando o cliente cadastrou, ícone neutro quando não. */
 function Cartao({
@@ -88,12 +99,13 @@ export type RelatoEmEdicao = {
   tipoId: string;
   localId: string | null;
   areaId: string | null;
+  ocorrenciaId: string | null;
   descricao: string;
   envolvidos: string[];
 };
 
 export function SegRelatoDialog({
-  open, onClose, pessoas, tipos, locais, areas, editando,
+  open, onClose, pessoas, tipos, locais, areas, ocorrencias, editando,
 }: {
   open: boolean;
   onClose: () => void;
@@ -101,6 +113,7 @@ export function SegRelatoDialog({
   tipos: TipoOpt[];
   locais: LocalOpt[];
   areas: AreaOpt[];
+  ocorrencias: OcorrenciaOpt[];
   /** null = novo relato. O pai monta com `key`, então cada abertura começa
    *  no estado certo sem efeito de reset. */
   editando?: RelatoEmEdicao | null;
@@ -112,6 +125,7 @@ export function SegRelatoDialog({
   const [tipoId, setTipoId] = useState(editando?.tipoId ?? "");
   const [localId, setLocalId] = useState(editando?.localId ?? "");
   const [areaId, setAreaId] = useState(editando?.areaId ?? "");
+  const [ocorrenciaId, setOcorrenciaId] = useState(editando?.ocorrenciaId ?? "");
   const [envolvidos, setEnvolvidos] = useState<string[]>(editando?.envolvidos ?? []);
   const [descricao, setDescricao] = useState(editando?.descricao ?? "");
   const [erro, setErro] = useState("");
@@ -119,16 +133,34 @@ export function SegRelatoDialog({
   const router = useRouter();
 
   const tiposAtivos = useMemo(() => tipos.filter((t) => t.active), [tipos]);
-  const locaisAtivos = useMemo(() => locais.filter((l) => l.active), [locais]);
+  // A CASCATA. A regra é uma só e vale para os três níveis: item SEM vínculo
+  // aparece sempre; item COM vínculo aparece só onde foi amarrado. É o que faz
+  // "Comportamento seguro" abrir duas ocorrências em vez de trinta.
+  const serve = (ids: string[], escolhido: string) =>
+    ids.length === 0 || (!!escolhido && ids.includes(escolhido));
+
+  const locaisAtivos = useMemo(
+    () => locais.filter((l) => l.active && serve(l.tipoIds, tipoId)),
+    [locais, tipoId],
+  );
   // área sem local vale para qualquer um; com local, só aparece no local dela
   const areasVisiveis = useMemo(
-    () => areas.filter((a) => a.active && (!a.localId || a.localId === localId)),
-    [areas, localId],
+    () => areas.filter((a) => a.active && (!a.localId || a.localId === localId) && serve(a.tipoIds, tipoId)),
+    [areas, localId, tipoId],
+  );
+  const ocorrenciasVisiveis = useMemo(
+    () => ocorrencias.filter((o) =>
+      o.active
+      && serve(o.tipoIds, tipoId)
+      && (o.localIds.length === 0 || (!!localId && o.localIds.includes(localId)))
+      && (o.areaIds.length === 0 || (!!areaId && o.areaIds.includes(areaId)))
+    ),
+    [ocorrencias, tipoId, localId, areaId],
   );
   const tipoEscolhido = tiposAtivos.find((t) => t.id === tipoId);
 
   const limpar = () => {
-    setData(hoje); setTipoId(""); setLocalId(""); setAreaId("");
+    setData(hoje); setTipoId(""); setLocalId(""); setAreaId(""); setOcorrenciaId("");
     setEnvolvidos([]); setDescricao(""); setErro("");
   };
 
@@ -143,6 +175,7 @@ export function SegRelatoDialog({
       tipo_id: tipoId,
       local_id: localId || null,
       area_id: areaId || null,
+      ocorrencia_id: ocorrenciaId || null,
       descricao,
       envolvidos,
     };
@@ -217,7 +250,13 @@ export function SegRelatoDialog({
                   {tiposAtivos.map((t) => (
                     <Cartao
                       key={t.id} nome={t.name} imagePath={t.imagePath}
-                      marcado={tipoId === t.id} onClick={() => setTipoId(t.id)}
+                      marcado={tipoId === t.id}
+                      onClick={() => {
+                        setTipoId(t.id);
+                        // o que estava escolhido pode nao pertencer a nova
+                        // classificacao; limpar evita gravar combinacao invalida
+                        setLocalId(""); setAreaId(""); setOcorrenciaId("");
+                      }}
                     />
                   ))}
                 </div>
@@ -244,8 +283,9 @@ export function SegRelatoDialog({
                     onClick={() => {
                       const novo = localId === l.id ? "" : l.id;
                       setLocalId(novo);
-                      // a área escolhida pode não pertencer ao novo local
-                      setAreaId("");
+                      // área e ocorrência escolhidas podem não pertencer ao
+                      // novo local
+                      setAreaId(""); setOcorrenciaId("");
                     }}
                   />
                 ))}
@@ -261,10 +301,30 @@ export function SegRelatoDialog({
                   <Cartao
                     key={a.id} nome={a.name} imagePath={a.imagePath}
                     marcado={areaId === a.id}
-                    onClick={() => setAreaId(areaId === a.id ? "" : a.id)}
+                    onClick={() => { setAreaId(areaId === a.id ? "" : a.id); setOcorrenciaId(""); }}
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {ocorrenciasVisiveis.length > 0 && (
+            <div>
+              <label className="label">O que aconteceu</label>
+              <div style={grade}>
+                {ocorrenciasVisiveis.map((o) => (
+                  <Cartao
+                    key={o.id} nome={o.name} imagePath={o.imagePath}
+                    marcado={ocorrenciaId === o.id}
+                    onClick={() => setOcorrenciaId(ocorrenciaId === o.id ? "" : o.id)}
+                  />
+                ))}
+              </div>
+              {ocorrenciaId && (
+                <p className="soft" style={{ fontSize: "0.74rem", margin: "0.35rem 0 0" }}>
+                  {ocorrencias.find((o) => o.id === ocorrenciaId)?.description ?? ""}
+                </p>
+              )}
             </div>
           )}
 
@@ -281,7 +341,7 @@ export function SegRelatoDialog({
           </div>
 
           <div>
-            <label className="label">O que aconteceu <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+            <label className="label">Descreva o fato <span style={{ color: "var(--mh-danger)" }}>*</span></label>
             <textarea
               className="input" rows={4} value={descricao}
               placeholder="Descreva o fato como você viu, sem opinião. Ex.: empilhadeira circulando com o garfo elevado na área de picking."

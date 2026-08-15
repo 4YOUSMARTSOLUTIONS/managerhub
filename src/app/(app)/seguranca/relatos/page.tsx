@@ -43,7 +43,8 @@ export default async function SegurancaRelatosPage() {
   const [
     { data: relatos }, { data: souSeguranca }, membros,
     { data: tipos }, { data: locais }, { data: areas }, { data: units },
-    { data: programa }, { data: causas },
+    { data: programa }, { data: causas }, { data: ocorrencias },
+    { data: vinculoOcorrencia }, { data: vinculoLocal }, { data: vinculoArea },
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_tratar_seguranca", { p_tenant: tenant.id }),
@@ -59,7 +60,35 @@ export default async function SegurancaRelatosPage() {
     supabase.rpc("seg_item_do_programa"),
     supabase.from("seg_causas").select("id, name, active")
       .eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_ocorrencias").select("id, name, description, image_path, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
+    // os vínculos que fazem a cascata. São tabelas minúsculas (dezenas de
+    // linhas), então vêm inteiras e o filtro acontece no cliente, sem uma
+    // ida ao banco a cada clique do formulário.
+    supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_local_tipos").select("local_id, tipo_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_area_tipos").select("area_id, tipo_id").eq("tenant_id", tenant.id),
   ]);
+
+  const [{ data: ocorrenciaLocais }, { data: ocorrenciaAreas }] = await Promise.all([
+    supabase.from("seg_ocorrencia_locais").select("ocorrencia_id, local_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_ocorrencia_areas").select("ocorrencia_id, area_id").eq("tenant_id", tenant.id),
+  ]);
+
+  /** Agrupa uma tabela de ligação em `pai -> [filhos]`. Lista vazia = vale para todos. */
+  const agrupar = <T extends Record<string, string>>(linhas: T[] | null, chave: keyof T, valor: keyof T) => {
+    const m = new Map<string, string[]>();
+    for (const l of linhas ?? []) {
+      const k = l[chave];
+      m.set(k, [...(m.get(k) ?? []), l[valor]]);
+    }
+    return m;
+  };
+  const tiposDaOcorrencia = agrupar(vinculoOcorrencia, "ocorrencia_id", "tipo_id");
+  const locaisDaOcorrencia = agrupar(ocorrenciaLocais, "ocorrencia_id", "local_id");
+  const areasDaOcorrencia = agrupar(ocorrenciaAreas, "ocorrencia_id", "area_id");
+  const tiposDoLocal = agrupar(vinculoLocal, "local_id", "tipo_id");
+  const tiposDaArea = agrupar(vinculoArea, "area_id", "tipo_id");
 
   const ehSeguranca = souSeguranca === true;
   const ids = (relatos ?? []).map((r) => r.id);
@@ -137,6 +166,7 @@ export default async function SegurancaRelatosPage() {
     descricao: r.descricao,
     status: r.status,
     causaId: r.causa_id,
+    ocorrenciaId: r.ocorrencia_id,
     notaTriagem: r.nota_triagem,
     triadoEm: r.triado_em,
     triadoPor: r.triado_por ? nomeDoUser.get(r.triado_por) ?? null : null,
@@ -168,9 +198,20 @@ export default async function SegurancaRelatosPage() {
           id: t.id, name: t.name, natureza: t.natureza,
           description: t.description, imagePath: t.image_path, active: t.active,
         }))}
-        locais={(locais ?? []).map((l) => ({ id: l.id, name: l.name, imagePath: l.image_path, active: l.active }))}
+        locais={(locais ?? []).map((l) => ({
+          id: l.id, name: l.name, imagePath: l.image_path, active: l.active,
+          tipoIds: tiposDoLocal.get(l.id) ?? [],
+        }))}
         areas={(areas ?? []).map((a) => ({
           id: a.id, name: a.name, localId: a.local_id, imagePath: a.image_path, active: a.active,
+          tipoIds: tiposDaArea.get(a.id) ?? [],
+        }))}
+        ocorrencias={(ocorrencias ?? []).map((o) => ({
+          id: o.id, name: o.name, description: o.description,
+          imagePath: o.image_path, active: o.active,
+          tipoIds: tiposDaOcorrencia.get(o.id) ?? [],
+          localIds: locaisDaOcorrencia.get(o.id) ?? [],
+          areaIds: areasDaOcorrencia.get(o.id) ?? [],
         }))}
         unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
         causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}

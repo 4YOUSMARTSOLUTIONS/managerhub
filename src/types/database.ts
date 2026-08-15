@@ -1691,6 +1691,47 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
         Relationships: []
       }
+      // O "o quê" padronizado do relato. Descrição livre não empilha em
+      // gráfico (cinco pessoas escrevem o mesmo problema de cinco jeitos);
+      // o rótulo, sim.
+      seg_ocorrencias: {
+        Row: { id: string; tenant_id: string; name: string; description: string | null; image_path: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; description?: string | null; image_path?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      // Ligações do formulário em cascata. A regra que as torna práticas:
+      // SEM VÍNCULO = VALE PARA TODOS. Só se amarra o que precisa de recorte.
+      seg_ocorrencia_tipos: {
+        Row: { tenant_id: string; ocorrencia_id: string; tipo_id: string }
+        Insert: { tenant_id: string; ocorrencia_id: string; tipo_id: string }
+        Update: never
+        Relationships: []
+      }
+      seg_ocorrencia_locais: {
+        Row: { tenant_id: string; ocorrencia_id: string; local_id: string }
+        Insert: { tenant_id: string; ocorrencia_id: string; local_id: string }
+        Update: never
+        Relationships: []
+      }
+      seg_ocorrencia_areas: {
+        Row: { tenant_id: string; ocorrencia_id: string; area_id: string }
+        Insert: { tenant_id: string; ocorrencia_id: string; area_id: string }
+        Update: never
+        Relationships: []
+      }
+      seg_local_tipos: {
+        Row: { tenant_id: string; local_id: string; tipo_id: string }
+        Insert: { tenant_id: string; local_id: string; tipo_id: string }
+        Update: never
+        Relationships: []
+      }
+      seg_area_tipos: {
+        Row: { tenant_id: string; area_id: string; tipo_id: string }
+        Insert: { tenant_id: string; area_id: string; tipo_id: string }
+        Update: never
+        Relationships: []
+      }
       // Quem tria relato e cadastra acidente. Não é papel do sistema: o técnico
       // de segurança costuma ser um `member` comum.
       seg_equipe: {
@@ -1706,9 +1747,9 @@ export type Database = {
       // Insert é `never`: abrir relato é pela RPC `seg_criar_relato`, que
       // grava relato e envolvidos na mesma transação e avisa a equipe.
       seg_relatos: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; tipo_id: string; snap_natureza: Database["public"]["Enums"]["seg_relato_natureza"]; local_id: string | null; area_id: string | null; causa_id: string | null; descricao: string; status: Database["public"]["Enums"]["seg_relato_status"]; triado_por: string | null; triado_em: string | null; nota_triagem: string | null; duplicado_de: string | null; created_by: string; created_at: string; updated_at: string }
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; tipo_id: string; snap_natureza: Database["public"]["Enums"]["seg_relato_natureza"]; local_id: string | null; area_id: string | null; ocorrencia_id: string | null; causa_id: string | null; descricao: string; status: Database["public"]["Enums"]["seg_relato_status"]; triado_por: string | null; triado_em: string | null; nota_triagem: string | null; duplicado_de: string | null; created_by: string; created_at: string; updated_at: string }
         Insert: never
-        Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null; causa_id?: string | null }
+        Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null; causa_id?: string | null; ocorrencia_id?: string | null }
         Relationships: []
       }
       // O acidente de trabalho. A linha carrega CID, que é dado de saúde, e

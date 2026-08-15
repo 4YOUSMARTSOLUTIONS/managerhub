@@ -15,7 +15,9 @@ import {
   SEG_NATUREZA, SEG_NATUREZA_TONE, SEG_RELATO_STATUS, SEG_RELATO_STATUS_TONE,
 } from "@/lib/constants";
 import { normalizar } from "@/lib/format";
-import { SegRelatoDialog, type AreaOpt, type LocalOpt, type TipoOpt } from "@/components/SegRelatoDialog";
+import {
+  SegRelatoDialog, type AreaOpt, type LocalOpt, type OcorrenciaOpt, type TipoOpt,
+} from "@/components/SegRelatoDialog";
 import { SegAcaoDialog } from "@/components/SegAcaoDialog";
 import { alertarGestor, triarRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
@@ -45,6 +47,7 @@ export type RelatoRow = {
   descricao: string;
   status: Enums<"seg_relato_status">;
   causaId: string | null;
+  ocorrenciaId: string | null;
   notaTriagem: string | null;
   triadoEm: string | null;
   triadoPor: string | null;
@@ -70,7 +73,7 @@ function dataBr(iso: string) {
  * vem completa e ganha filtros, contadores e o nome de quem relatou.
  */
 export function SegRelatosManager({
-  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, causas, itemPrograma,
+  rows, ehSeguranca, pessoas, tipos, locais, areas, unidades, causas, ocorrencias, itemPrograma,
 }: {
   rows: RelatoRow[];
   ehSeguranca: boolean;
@@ -80,6 +83,7 @@ export function SegRelatosManager({
   areas: AreaOpt[];
   unidades: { id: string; name: string }[];
   causas: { id: string; name: string; active: boolean }[];
+  ocorrencias: OcorrenciaOpt[];
   /** item do Programa ao qual as ações de tratamento são amarradas */
   itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
 }) {
@@ -101,6 +105,7 @@ export function SegRelatosManager({
   const nomeArea = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
   const nomeUnidade = useMemo(() => new Map(unidades.map((u) => [u.id, u.name])), [unidades]);
   const nomeCausa = useMemo(() => new Map(causas.map((c) => [c.id, c.name])), [causas]);
+  const nomeOcorrencia = useMemo(() => new Map(ocorrencias.map((o) => [o.id, o.name])), [ocorrencias]);
 
   const lista = useMemo(() => {
     const q = normalizar(busca.trim());
@@ -109,12 +114,14 @@ export function SegRelatosManager({
       if (tipo && r.tipoId !== tipo) return false;
       if (!q) return true;
       const campos = [
-        r.descricao, nomeTipo.get(r.tipoId), r.localId ? nomeLocal.get(r.localId) : null,
+        r.descricao, nomeTipo.get(r.tipoId),
+        r.ocorrenciaId ? nomeOcorrencia.get(r.ocorrenciaId) : null,
+        r.localId ? nomeLocal.get(r.localId) : null,
         r.areaId ? nomeArea.get(r.areaId) : null, ...r.envolvidos.map((e) => e.nome),
       ];
       return campos.some((v) => v && normalizar(v).includes(q));
     });
-  }, [rows, busca, status, tipo, nomeTipo, nomeLocal, nomeArea]);
+  }, [rows, busca, status, tipo, nomeTipo, nomeLocal, nomeArea, nomeOcorrencia]);
 
   const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
   const encerrado = detalhe
@@ -209,10 +216,11 @@ export function SegRelatosManager({
             <ExportButton
               filename="relatos-de-seguranca.xlsx"
               sheetName="Relatos"
-              headers={["Data", "Tipo", "Natureza", "Local", "Área", "Envolvidos", "Situação", "Triagem", "Descrição"]}
+              headers={["Data", "Tipo", "Ocorrência", "Natureza", "Local", "Área", "Envolvidos", "Situação", "Triagem", "Descrição"]}
               rows={lista.map((r) => [
                 dataBr(r.occurredOn),
                 nomeTipo.get(r.tipoId) ?? "",
+                (r.ocorrenciaId && nomeOcorrencia.get(r.ocorrenciaId)) || "",
                 SEG_NATUREZA[r.natureza],
                 (r.localId && nomeLocal.get(r.localId)) || "",
                 (r.areaId && nomeArea.get(r.areaId)) || "",
@@ -261,7 +269,13 @@ export function SegRelatosManager({
               >
                 <td>{dataBr(r.occurredOn)}</td>
                 <td>
-                  <span style={{ fontWeight: 600 }}>{nomeTipo.get(r.tipoId) ?? "—"}</span>
+                  {/* a ocorrência é o rótulo do fato; o tipo vira o subtítulo */}
+                  <span style={{ fontWeight: 600 }}>
+                    {(r.ocorrenciaId && nomeOcorrencia.get(r.ocorrenciaId)) || nomeTipo.get(r.tipoId) || "—"}
+                  </span>
+                  {r.ocorrenciaId && (
+                    <div className="soft" style={{ fontSize: "0.74rem" }}>{nomeTipo.get(r.tipoId) ?? ""}</div>
+                  )}
                   <div style={{ marginTop: "0.15rem" }}>
                     <Badge tone={SEG_NATUREZA_TONE[r.natureza]}>{SEG_NATUREZA[r.natureza]}</Badge>
                   </div>
@@ -323,6 +337,10 @@ export function SegRelatosManager({
                 <div>
                   <dt className="soft">Área</dt>
                   <dd style={{ margin: 0 }}>{(detalhe.areaId && nomeArea.get(detalhe.areaId)) || "Não informada"}</dd>
+                </div>
+                <div>
+                  <dt className="soft">Ocorrência</dt>
+                  <dd style={{ margin: 0 }}>{(detalhe.ocorrenciaId && nomeOcorrencia.get(detalhe.ocorrenciaId)) || "Não informada"}</dd>
                 </div>
                 <div>
                   <dt className="soft">Causa-raiz</dt>
@@ -519,13 +537,14 @@ export function SegRelatosManager({
         key={editando?.id ?? "novo"}
         open={novo || !!editando}
         onClose={() => { setNovo(false); setEditando(null); }}
-        pessoas={pessoas} tipos={tipos} locais={locais} areas={areas}
+        pessoas={pessoas} tipos={tipos} locais={locais} areas={areas} ocorrencias={ocorrencias}
         editando={editando && {
           id: editando.id,
           occurredOn: editando.occurredOn,
           tipoId: editando.tipoId,
           localId: editando.localId,
           areaId: editando.areaId,
+          ocorrenciaId: editando.ocorrenciaId,
           descricao: editando.descricao,
           envolvidos: editando.envolvidos.map((e) => e.userId),
         }}

@@ -31,6 +31,7 @@ import { CidTableViewer } from "@/components/CidTableViewer";
 import { SegCatalogoManager } from "@/components/SegCatalogoManager";
 import { SegEquipeManager } from "@/components/SegEquipeManager";
 import { SegProgramaVinculo } from "@/components/SegProgramaVinculo";
+import { SegOcorrenciasManager } from "@/components/SegOcorrenciasManager";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -114,6 +115,7 @@ export default async function SettingsPage() {
     { data: absenteismosAprovados },
     { data: segTiposData }, { data: segLocaisData }, { data: segAreasData }, { data: segEquipeData },
     { data: segSettingsData }, { data: segCausasData },
+    { data: segOcorrenciasData }, { data: segOcTipos }, { data: segOcLocais }, { data: segOcAreas },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -216,6 +218,11 @@ export default async function SettingsPage() {
     supabase.from("seg_settings").select("relato_item_id").eq("tenant_id", tenant.id).maybeSingle(),
     supabase.from("seg_causas").select("id, name, description, active")
       .eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_ocorrencias").select("id, name, description, image_path, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_ocorrencia_locais").select("ocorrencia_id, local_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_ocorrencia_areas").select("ocorrencia_id, area_id").eq("tenant_id", tenant.id),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -1337,6 +1344,25 @@ export default async function SettingsPage() {
                   }))}
                   locais={(segLocaisData ?? []).filter((l) => l.active).map((l) => ({ id: l.id, name: l.name }))}
                   canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-ocorrencias",
+              label: "Ocorrências",
+              content: (
+                <SegOcorrenciasManager
+                  canEdit={canEdit}
+                  rows={(segOcorrenciasData ?? []).map((o) => ({
+                    id: o.id, name: o.name, description: o.description,
+                    image_path: o.image_path, active: o.active,
+                    tipoIds: (segOcTipos ?? []).filter((v) => v.ocorrencia_id === o.id).map((v) => v.tipo_id),
+                    localIds: (segOcLocais ?? []).filter((v) => v.ocorrencia_id === o.id).map((v) => v.local_id),
+                    areaIds: (segOcAreas ?? []).filter((v) => v.ocorrencia_id === o.id).map((v) => v.area_id),
+                  }))}
+                  tipos={(segTiposData ?? []).filter((t) => t.active).map((t) => ({ id: t.id, name: t.name }))}
+                  locais={(segLocaisData ?? []).filter((l) => l.active).map((l) => ({ id: l.id, name: l.name }))}
+                  areas={(segAreasData ?? []).filter((a) => a.active).map((a) => ({ id: a.id, name: a.name }))}
                 />
               ),
             },
