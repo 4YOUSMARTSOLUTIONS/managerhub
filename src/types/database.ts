@@ -2084,6 +2084,8 @@ export type Database = {
       is_safety_member: { Args: { p_tenant: string }; Returns: boolean }
       pode_tratar_seguranca: { Args: { p_tenant: string }; Returns: boolean }
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
+      // só o autor, e só enquanto o relato está `aberto`
+      seg_editar_relato: { Args: { p_id: string; p_data: Json }; Returns: undefined }
       seg_triar_relato: { Args: { p_id: string; p_status: Database["public"]["Enums"]["seg_relato_status"]; p_nota?: string | null; p_duplicado_de?: string | null }; Returns: undefined }
       seg_alertar_gestor: { Args: { p_id: string }; Returns: number }
       seg_vincular_acao: { Args: { p_relato_id: string; p_action_id: string }; Returns: undefined }

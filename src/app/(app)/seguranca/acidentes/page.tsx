@@ -45,15 +45,15 @@ export default async function SegurancaAcidentesPage() {
     .limit(500);
   if (unidades) lista = lista.or(`snap_unit_id.in.(${unidades.join(",")}),snap_unit_id.is.null`);
 
+  // a lista de unidades saiu da carga: o formulário não pergunta mais a
+  // unidade (ela vem do vínculo do acidentado) e o filtro é o do topo
   const [
-    { data: acidentes }, membros,
-    { data: locais }, { data: areas }, { data: units },
+    { data: acidentes }, membros, { data: locais }, { data: areas },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
     supabase.from("seg_locais").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("seg_areas").select("id, name, local_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
   ]);
 
   const ids = (acidentes ?? []).map((a) => a.id);
@@ -122,7 +122,6 @@ export default async function SegurancaAcidentesPage() {
         pessoas={pessoas}
         locais={(locais ?? []).map((l) => ({ id: l.id, name: l.name, active: l.active }))}
         areas={(areas ?? []).map((a) => ({ id: a.id, name: a.name, localId: a.local_id, active: a.active }))}
-        unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
       />
     </div>
   );

@@ -41,19 +41,12 @@ export type EnrollmentForStatus = {
   antecipacaoDias?: number | null;
 };
 
-/** hoje em `YYYY-MM-DD`, no fuso local. Datas aqui são texto o tempo todo, como em rv-proporcional. */
-export function hojeYmd(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/** soma dias a uma data `YYYY-MM-DD` sem passar por fuso */
-export function somarDias(ymd: string, dias: number): string {
-  const [a, m, d] = ymd.split("-").map(Number);
-  const base = new Date(Date.UTC(a, m - 1, d));
-  base.setUTCDate(base.getUTCDate() + dias);
-  return base.toISOString().slice(0, 10);
-}
+// Datas aqui são texto o tempo todo, como em rv-proporcional. As duas funções
+// nasceram neste arquivo e passaram a valer para o sistema inteiro (o módulo de
+// Segurança precisou das mesmas), então moraram para `format.ts`. O re-export
+// mantém quem já importava daqui.
+export { hojeYmd, somarDias } from "./format";
+import { hojeYmd, somarDias } from "./format";
 
 /** diferença em dias entre duas datas `YYYY-MM-DD` (b - a) */
 export function diffDias(a: string, b: string): number {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { PRIORITY } from "@/lib/constants";
+import { hojeYmd, somarDias } from "@/lib/format";
 import { criarAcaoDoRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
@@ -37,11 +38,7 @@ export function SegAcaoDialog({
   const [descricao, setDescricao] = useState("");
   const [responsaveis, setResponsaveis] = useState<string[]>(sugestaoResponsaveis);
   // uma semana é o padrão porque tratamento de segurança não espera o mês virar
-  const [prazo, setPrazo] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
-  });
+  const [prazo, setPrazo] = useState(() => somarDias(hojeYmd(), 7));
   const [prioridade, setPrioridade] = useState<Enums<"priority_level">>("high");
   const [erro, setErro] = useState("");
   const [pendente, iniciar] = useTransition();

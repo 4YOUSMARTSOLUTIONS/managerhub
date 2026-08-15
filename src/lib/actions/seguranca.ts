@@ -306,7 +306,6 @@ export type RelatoInput = {
   tipo_id: string;
   local_id?: string | null;
   area_id?: string | null;
-  unit_id?: string | null;
   descricao: string;
   envolvidos: string[];
 };
@@ -321,7 +320,8 @@ export async function criarRelato(input: RelatoInput): Promise<ActionState> {
         tipo_id: input.tipo_id,
         local_id: input.local_id ?? null,
         area_id: input.area_id ?? null,
-        unit_id: input.unit_id ?? null,
+        // a unidade não vai daqui: a RPC deriva do vínculo do envolvido e,
+        // sem envolvido, do vínculo de quem relatou
         descricao: input.descricao,
         envolvidos: input.envolvidos,
       },
@@ -331,6 +331,36 @@ export async function criarRelato(input: RelatoInput): Promise<ActionState> {
 
     revalidar();
     return { ok: true, message: "Relato registrado. A equipe de segurança foi avisada." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Corrige o próprio relato, enquanto a segurança não pegou.
+ *
+ * A janela e a alçada são conferidas dentro da RPC, que é onde precisam estar:
+ * a policy de update é da equipe de segurança, e o autor não faz parte dela.
+ */
+export async function editarRelato(id: string, input: RelatoInput): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+
+    const { error } = await supabase.rpc("seg_editar_relato", {
+      p_id: id,
+      p_data: {
+        occurred_on: input.occurred_on,
+        tipo_id: input.tipo_id,
+        local_id: input.local_id ?? null,
+        area_id: input.area_id ?? null,
+        descricao: input.descricao,
+        envolvidos: input.envolvidos,
+      },
+    });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Relato atualizado." };
   } catch (e) {
     return { error: (e as Error).message };
   }

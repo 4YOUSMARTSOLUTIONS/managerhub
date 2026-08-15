@@ -68,6 +68,34 @@ export default async function SegurancaRelatosPage() {
         .in("relato_id", ids)
     : { data: [] };
 
+  // ações de tratamento abertas a partir dos relatos: elas vivem no módulo de
+  // Ações, e aqui aparece só o ponteiro (código, prazo e o que falta concluir)
+  const { data: vinculos } = ids.length
+    ? await supabase
+        .from("seg_relato_acoes")
+        .select("relato_id, action_id, actions(code, due_date, problem_statement, action_demandas(status))")
+        .in("relato_id", ids)
+    : { data: [] };
+
+  const acoesPorRelato = new Map<string, RelatoRow["acoes"]>();
+  for (const v of vinculos ?? []) {
+    const a = v.actions as unknown as {
+      code: number; due_date: string | null; problem_statement: string | null;
+      action_demandas: { status: string }[];
+    } | null;
+    if (!a) continue;
+    const demandas = a.action_demandas ?? [];
+    const atual = acoesPorRelato.get(v.relato_id) ?? [];
+    atual.push({
+      id: v.action_id,
+      codigo: a.code,
+      prazo: a.due_date,
+      concluida: demandas.length > 0 && demandas.every((d) => d.status === "done"),
+      pendentes: demandas.filter((d) => d.status !== "done").length,
+    });
+    acoesPorRelato.set(v.relato_id, atual);
+  }
+
   const porRelato = new Map<string, RelatoRow["envolvidos"]>();
   for (const e of envolvidos ?? []) {
     const atual = porRelato.get(e.relato_id) ?? [];
@@ -113,6 +141,7 @@ export default async function SegurancaRelatosPage() {
     souAutor: r.created_by === user.id,
     criadoEm: r.created_at,
     envolvidos: porRelato.get(r.id) ?? [],
+    acoes: acoesPorRelato.get(r.id) ?? [],
   }));
 
   return (

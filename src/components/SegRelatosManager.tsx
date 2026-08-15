@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BellRing, ListChecks, Plus } from "lucide-react";
+import { BellRing, Check, ExternalLink, ListChecks, Pencil, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
@@ -51,6 +52,8 @@ export type RelatoRow = {
   souAutor: boolean;
   criadoEm: string;
   envolvidos: EnvolvidoRow[];
+  /** ações de tratamento abertas a partir deste relato; elas vivem em /acoes */
+  acoes: { id: string; codigo: number; prazo: string | null; concluida: boolean; pendentes: number }[];
 };
 
 function dataBr(iso: string) {
@@ -77,6 +80,7 @@ export function SegRelatosManager({
   unidades: { id: string; name: string }[];
 }) {
   const [novo, setNovo] = useState(false);
+  const [editando, setEditando] = useState<RelatoRow | null>(null);
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
   const [tipo, setTipo] = useState("");
@@ -349,6 +353,30 @@ export function SegRelatosManager({
                 </p>
               </div>
 
+              {detalhe.acoes.length > 0 && (
+                <div>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Ações de tratamento</h3>
+                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    {detalhe.acoes.map((a) => (
+                      <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+                        {/* a ação mora no módulo de Ações: aqui vai o ponteiro,
+                            não uma segunda cópia do acompanhamento */}
+                        <Link href={`/acoes?busca=${a.codigo}`} className="btn btn-ghost btn-sm">
+                          <ExternalLink size={13} /> Ação #{a.codigo}
+                        </Link>
+                        <Badge tone={a.concluida ? "green" : "amber"}>
+                          {a.concluida ? "Concluída" : `${a.pendentes} demanda${a.pendentes === 1 ? "" : "s"} em aberto`}
+                        </Badge>
+                        {a.prazo && <span className="soft">prazo {dataBr(a.prazo)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="soft" style={{ fontSize: "0.72rem", margin: "0.4rem 0 0" }}>
+                    O relato é dado por tratado quando a ação for concluída.
+                  </p>
+                </div>
+              )}
+
               {detalhe.notaTriagem && (
                 <div>
                   <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Triagem</h3>
@@ -378,6 +406,13 @@ export function SegRelatosManager({
                     {detalhe.status === "aberto" && (
                       <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={() => triar("triado")}>
                         <ListChecks size={15} /> Iniciar tratativa
+                      </button>
+                    )}
+                    {/* nem todo relato precisa de ação: muitos se resolvem na
+                        hora, e comportamento seguro é reconhecimento */}
+                    {detalhe.status === "triado" && (
+                      <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={() => triar("tratado")}>
+                        <Check size={15} /> Concluir tratativa
                       </button>
                     )}
                     <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setAcao(true)}>
@@ -422,7 +457,18 @@ export function SegRelatosManager({
               )}
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+              {/* o autor corrige o próprio relato enquanto a segurança não
+                  pegou: sem isso a saída dele seria abrir um segundo relato do
+                  mesmo fato, que a triagem depois marca como duplicado */}
+              {detalhe.souAutor && detalhe.status === "aberto" ? (
+                <button
+                  type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => { setEditando(detalhe); setAberto(null); }}
+                >
+                  <Pencil size={14} /> Editar relato
+                </button>
+              ) : <span />}
               <button type="button" className="btn btn-ghost" onClick={fecharDetalhe}>Fechar</button>
             </div>
           </div>
@@ -442,9 +488,23 @@ export function SegRelatosManager({
         </div>
       )}
 
+      {/* sem `unidades`: a unidade do relato é derivada no servidor, do vínculo
+          do envolvido (ou de quem relatou). `key` por relato para a edição
+          abrir com os dados certos sem efeito de reset. */}
       <SegRelatoDialog
-        open={novo} onClose={() => setNovo(false)}
-        pessoas={pessoas} tipos={tipos} locais={locais} areas={areas} unidades={unidades}
+        key={editando?.id ?? "novo"}
+        open={novo || !!editando}
+        onClose={() => { setNovo(false); setEditando(null); }}
+        pessoas={pessoas} tipos={tipos} locais={locais} areas={areas}
+        editando={editando && {
+          id: editando.id,
+          occurredOn: editando.occurredOn,
+          tipoId: editando.tipoId,
+          localId: editando.localId,
+          areaId: editando.areaId,
+          descricao: editando.descricao,
+          envolvidos: editando.envolvidos.map((e) => e.userId),
+        }}
       />
     </div>
   );

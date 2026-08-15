@@ -1,5 +1,26 @@
 const TZ = "America/Sao_Paulo";
 
+/**
+ * Hoje em `YYYY-MM-DD`, no fuso LOCAL.
+ *
+ * `new Date().toISOString()` devolve UTC, e no Brasil isso vira a data de
+ * amanhã a partir das 21h. Num formulário de "data do ocorrido" o efeito é
+ * péssimo: o campo abre no dia seguinte, e o relato nasce com data que ainda
+ * não aconteceu.
+ */
+export function hojeYmd(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Soma dias a uma data `YYYY-MM-DD` sem passar por fuso. */
+export function somarDias(ymd: string, dias: number): string {
+  const [a, m, d] = ymd.split("-").map(Number);
+  const base = new Date(Date.UTC(a, m - 1, d));
+  base.setUTCDate(base.getUTCDate() + dias);
+  return base.toISOString().slice(0, 10);
+}
+
 /** Encurta um nome completo para "Primeiro Último" (ignora nomes do meio). */
 export function shortName(value: string | null | undefined): string {
   if (!value) return "—";

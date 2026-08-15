@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Search } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { SEG_ACIDENTE_CLASS_AJUDA, SEG_ACIDENTE_CLASS_LONGO, SEG_ACIDENTE_CLASS_TONE } from "@/lib/constants";
+import { hojeYmd } from "@/lib/format";
 import { buscarCid } from "@/lib/actions/absenteismos";
 import { salvarAcidente } from "@/lib/actions/seguranca";
 import type { AcidenteRow } from "@/components/SegAcidentesManager";
@@ -25,7 +26,7 @@ const CLASSES: Enums<"seg_acidente_class">[] = ["fai", "mti", "mdi", "lti", "sif
  * mesma do módulo de absenteísmo, e o que se grava é o par código+descrição.
  */
 export function SegAcidenteDialog({
-  onClose, editando, pessoas, locais, areas, unidades,
+  onClose, editando, pessoas, locais, areas,
 }: {
   onClose: () => void;
   /** null = novo registro. O pai monta este componente com `key`, então cada
@@ -34,14 +35,14 @@ export function SegAcidenteDialog({
   pessoas: Person[];
   locais: { id: string; name: string; active: boolean }[];
   areas: { id: string; name: string; localId: string | null; active: boolean }[];
-  unidades: { id: string; name: string }[];
 }) {
   const [pessoa, setPessoa] = useState<string[]>(editando ? [editando.userId] : []);
-  const [data, setData] = useState(() => editando?.occurredOn ?? new Date().toISOString().slice(0, 10));
+  // `hojeYmd` e não `toISOString`: o segundo é UTC e abriria o formulário com
+  // a data de amanhã depois das 21h
+  const [data, setData] = useState(() => editando?.occurredOn ?? hojeYmd());
   const [hora, setHora] = useState(editando?.occurredAt?.slice(0, 5) ?? "");
   const [turno, setTurno] = useState(editando?.turno ?? "");
   const [classe, setClasse] = useState<Enums<"seg_acidente_class">>(editando?.classe ?? "fai");
-  const [unitId, setUnitId] = useState(editando?.unitId ?? "");
   const [localId, setLocalId] = useState(editando?.localId ?? "");
   const [areaId, setAreaId] = useState(editando?.areaId ?? "");
   const [descricao, setDescricao] = useState(editando?.descricao ?? "");
@@ -92,7 +93,8 @@ export function SegAcidenteDialog({
         occurredAt: hora || null,
         turno: turno || null,
         classe,
-        unitId: unitId || null,
+        // a unidade não é escolhida: vem do vínculo do acidentado, carimbada
+        // pelo trigger `stamp_seg_acidente`
         localId: localId || null,
         areaId: areaId || null,
         descricao,
@@ -181,7 +183,12 @@ export function SegAcidenteDialog({
                 </span>
               </p>
             ) : (
-              <PeoplePicker people={pessoas} selected={pessoa} onChange={setPessoa} single placeholder="Buscar colaborador…" />
+              <>
+                <PeoplePicker people={pessoas} selected={pessoa} onChange={setPessoa} single placeholder="Buscar colaborador…" />
+                <p className="soft" style={{ fontSize: "0.74rem", margin: "0.35rem 0 0" }}>
+                  Setor, função, gestor e unidade são carimbados do vínculo dele na data do acidente.
+                </p>
+              </>
             )}
           </div>
 
@@ -198,15 +205,6 @@ export function SegAcidenteDialog({
               <label className="label">Turno</label>
               <input className="input" value={turno} placeholder="1º turno" onChange={(e) => setTurno(e.target.value)} />
             </div>
-            {unidades.length > 1 && (
-              <div>
-                <label className="label">Unidade</label>
-                <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                  <option value="">Do vínculo do colaborador</option>
-                  {unidades.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-            )}
             <div>
               <label className="label">Local</label>
               <select

@@ -71,13 +71,12 @@ function dataBr(iso: string | null) {
  * conta que vai alimentar a pirâmide.
  */
 export function SegAcidentesManager({
-  rows, pessoas, locais, areas, unidades,
+  rows, pessoas, locais, areas,
 }: {
   rows: AcidenteRow[];
   pessoas: Person[];
   locais: { id: string; name: string; active: boolean }[];
   areas: { id: string; name: string; localId: string | null; active: boolean }[];
-  unidades: { id: string; name: string }[];
 }) {
   const [form, setForm] = useState<{ open: boolean; editando: AcidenteRow | null }>({ open: false, editando: null });
   const [aberto, setAberto] = useState<string | null>(null);
@@ -397,7 +396,7 @@ export function SegAcidentesManager({
         <SegAcidenteDialog
           key={form.editando?.id ?? "novo"}
           onClose={() => setForm({ open: false, editando: null })}
-          editando={form.editando} pessoas={pessoas} locais={locais} areas={areas} unidades={unidades}
+          editando={form.editando} pessoas={pessoas} locais={locais} areas={areas}
         />
       )}
 

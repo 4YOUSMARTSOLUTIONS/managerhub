@@ -7,8 +7,9 @@ import { ImageOff, ShieldAlert } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { Badge } from "@/components/ui/Badge";
 import { SEG_NATUREZA, SEG_NATUREZA_TONE } from "@/lib/constants";
+import { hojeYmd } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
-import { criarRelato } from "@/lib/actions/seguranca";
+import { criarRelato, editarRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
 export type TipoOpt = {
@@ -80,8 +81,19 @@ const grade = {
  * digitado por um clique errado é o tipo de coisa que faz a pessoa não relatar
  * de novo.
  */
+/** O que o formulário precisa saber para reabrir um relato em edição. */
+export type RelatoEmEdicao = {
+  id: string;
+  occurredOn: string;
+  tipoId: string;
+  localId: string | null;
+  areaId: string | null;
+  descricao: string;
+  envolvidos: string[];
+};
+
 export function SegRelatoDialog({
-  open, onClose, pessoas, tipos, locais, areas, unidades,
+  open, onClose, pessoas, tipos, locais, areas, editando,
 }: {
   open: boolean;
   onClose: () => void;
@@ -89,16 +101,19 @@ export function SegRelatoDialog({
   tipos: TipoOpt[];
   locais: LocalOpt[];
   areas: AreaOpt[];
-  unidades: { id: string; name: string }[];
+  /** null = novo relato. O pai monta com `key`, então cada abertura começa
+   *  no estado certo sem efeito de reset. */
+  editando?: RelatoEmEdicao | null;
 }) {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const [data, setData] = useState(hoje);
-  const [tipoId, setTipoId] = useState("");
-  const [localId, setLocalId] = useState("");
-  const [areaId, setAreaId] = useState("");
-  const [unitId, setUnitId] = useState("");
-  const [envolvidos, setEnvolvidos] = useState<string[]>([]);
-  const [descricao, setDescricao] = useState("");
+  // `hojeYmd` e não `toISOString`: o segundo devolve UTC, e depois das 21h o
+  // formulário abriria com a data de amanhã
+  const hoje = hojeYmd();
+  const [data, setData] = useState(editando?.occurredOn ?? hoje);
+  const [tipoId, setTipoId] = useState(editando?.tipoId ?? "");
+  const [localId, setLocalId] = useState(editando?.localId ?? "");
+  const [areaId, setAreaId] = useState(editando?.areaId ?? "");
+  const [envolvidos, setEnvolvidos] = useState<string[]>(editando?.envolvidos ?? []);
+  const [descricao, setDescricao] = useState(editando?.descricao ?? "");
   const [erro, setErro] = useState("");
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
@@ -114,7 +129,7 @@ export function SegRelatoDialog({
 
   const limpar = () => {
     setData(hoje); setTipoId(""); setLocalId(""); setAreaId("");
-    setUnitId(""); setEnvolvidos([]); setDescricao(""); setErro("");
+    setEnvolvidos([]); setDescricao(""); setErro("");
   };
 
   const fechar = () => { limpar(); onClose(); };
@@ -123,16 +138,18 @@ export function SegRelatoDialog({
     setErro("");
     if (!tipoId) { setErro("Escolha o tipo do relato."); return; }
     if (!descricao.trim()) { setErro("Descreva o que aconteceu."); return; }
+    const payload = {
+      occurred_on: data,
+      tipo_id: tipoId,
+      local_id: localId || null,
+      area_id: areaId || null,
+      descricao,
+      envolvidos,
+    };
     iniciar(async () => {
-      const r = await criarRelato({
-        occurred_on: data,
-        tipo_id: tipoId,
-        local_id: localId || null,
-        area_id: areaId || null,
-        unit_id: unitId || null,
-        descricao,
-        envolvidos,
-      });
+      const r = editando
+        ? await editarRelato(editando.id, payload)
+        : await criarRelato(payload);
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Relato registrado.");
       limpar();
@@ -154,7 +171,9 @@ export function SegRelatoDialog({
     >
       <div className="card" style={{ width: "100%", maxWidth: 720, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Novo relato</h2>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>
+            {editando ? "Editar relato" : "Novo relato"}
+          </h2>
           <button
             type="button" onClick={fechar} className="muted" aria-label="Fechar"
             style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1 }}
@@ -181,17 +200,9 @@ export function SegRelatoDialog({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.8rem" }}>
             <div>
               <label className="label">Data do ocorrido <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              {/* `max` no dia de hoje: relato é do que já aconteceu */}
               <input className="input" type="date" value={data} max={hoje} onChange={(e) => setData(e.target.value)} />
             </div>
-            {unidades.length > 1 && (
-              <div>
-                <label className="label">Unidade</label>
-                <select className="select" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-                  <option value="">Não informar</option>
-                  {unidades.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-            )}
           </div>
 
           <div>
@@ -265,6 +276,7 @@ export function SegRelatoDialog({
             />
             <p className="soft" style={{ fontSize: "0.74rem", margin: "0.35rem 0 0" }}>
               Opcional. Condição insegura costuma ser sobre o lugar, não sobre alguém.
+              A unidade do relato vem do vínculo de quem foi citado; sem citação, do seu.
             </p>
           </div>
 
@@ -287,7 +299,7 @@ export function SegRelatoDialog({
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost" disabled={pendente} onClick={fechar}>Cancelar</button>
           <button type="button" className="btn btn-primary" disabled={pendente} onClick={enviar}>
-            {pendente ? "Enviando…" : "Enviar relato"}
+            {pendente ? "Enviando…" : editando ? "Salvar alterações" : "Enviar relato"}
           </button>
         </div>
       </div>
