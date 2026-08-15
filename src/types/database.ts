@@ -1701,6 +1701,15 @@ export type Database = {
         Update: { status?: Database["public"]["Enums"]["seg_relato_status"]; triado_por?: string | null; triado_em?: string | null; nota_triagem?: string | null; duplicado_de?: string | null }
         Relationships: []
       }
+      // Liga o relato à ação de tratamento. Tabela própria de propósito: uma
+      // coluna em `actions` obrigaria a remendar a `create_action`, que é
+      // mantida por replace() sobre pg_get_functiondef.
+      seg_relato_acoes: {
+        Row: { id: string; relato_id: string; action_id: string; tenant_id: string; created_by: string | null; created_at: string }
+        Insert: { id?: string; relato_id: string; action_id: string; tenant_id: string; created_by?: string | null; created_at?: string }
+        Update: never
+        Relationships: []
+      }
       // O vínculo da época de cada envolvido, carimbado por trigger no insert.
       seg_relato_envolvidos: {
         Row: { id: string; relato_id: string; tenant_id: string; user_id: string; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; created_at: string }
@@ -2059,6 +2068,9 @@ export type Database = {
       is_safety_member: { Args: { p_tenant: string }; Returns: boolean }
       pode_tratar_seguranca: { Args: { p_tenant: string }; Returns: boolean }
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
+      seg_triar_relato: { Args: { p_id: string; p_status: Database["public"]["Enums"]["seg_relato_status"]; p_nota?: string | null; p_duplicado_de?: string | null }; Returns: undefined }
+      seg_alertar_gestor: { Args: { p_id: string }; Returns: number }
+      seg_vincular_acao: { Args: { p_relato_id: string; p_action_id: string }; Returns: undefined }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"

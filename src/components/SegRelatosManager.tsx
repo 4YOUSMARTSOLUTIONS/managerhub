@@ -1,24 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { BellRing, ListChecks, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
+import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
 import {
   SEG_NATUREZA, SEG_NATUREZA_TONE, SEG_RELATO_STATUS, SEG_RELATO_STATUS_TONE,
 } from "@/lib/constants";
 import { normalizar } from "@/lib/format";
 import { SegRelatoDialog, type AreaOpt, type LocalOpt, type TipoOpt } from "@/components/SegRelatoDialog";
+import { SegAcaoDialog } from "@/components/SegAcaoDialog";
+import { alertarGestor, triarRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
 export type EnvolvidoRow = {
   userId: string;
   nome: string | null;
+  setorId: string | null;
   setor: string | null;
+  subsetorId: string | null;
   subsetor: string | null;
   funcao: string | null;
+  /** o gestor da ÉPOCA: é ele quem tinha que conversar com a pessoa */
+  gestorId: string | null;
   gestor: string | null;
   unidade: string | null;
 };
@@ -71,6 +80,11 @@ export function SegRelatosManager({
   const [status, setStatus] = useState("");
   const [tipo, setTipo] = useState("");
   const [aberto, setAberto] = useState<string | null>(null);
+  const [nota, setNota] = useState("");
+  const [duplicadoDe, setDuplicadoDe] = useState("");
+  const [acao, setAcao] = useState(false);
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
 
   const nomeTipo = useMemo(() => new Map(tipos.map((t) => [t.id, t.name])), [tipos]);
   const nomeLocal = useMemo(() => new Map(locais.map((l) => [l.id, l.name])), [locais]);
@@ -92,6 +106,55 @@ export function SegRelatosManager({
   }, [rows, busca, status, tipo, nomeTipo, nomeLocal, nomeArea]);
 
   const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
+  const encerrado = detalhe
+    ? ["tratado", "improcedente", "duplicado"].includes(detalhe.status)
+    : false;
+  // o gestor sugerido é o da ÉPOCA, carimbado no relato
+  const gestoresDoRelato = detalhe
+    ? [...new Set(detalhe.envolvidos.map((e) => e.gestorId).filter((id): id is string => !!id))]
+    : [];
+
+  const fecharDetalhe = () => { setAberto(null); setNota(""); setDuplicadoDe(""); };
+
+  const triar = (novoStatus: Enums<"seg_relato_status">) => {
+    if (!detalhe) return;
+    iniciar(async () => {
+      const r = await triarRelato({
+        id: detalhe.id, status: novoStatus, nota,
+        duplicadoDe: novoStatus === "duplicado" ? duplicadoDe : null,
+      });
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Relato atualizado.");
+      if (novoStatus !== "triado") fecharDetalhe();
+      setNota("");
+      router.refresh();
+    });
+  };
+
+  const encerrar = async (novoStatus: Enums<"seg_relato_status">) => {
+    if (!detalhe) return;
+    const ok = await confirmDialog({
+      title: novoStatus === "improcedente" ? "Marcar como improcedente" : "Marcar como duplicado",
+      tone: "danger",
+      confirmLabel: "Confirmar",
+      message:
+        novoStatus === "improcedente"
+          ? "O relato sai da fila e deixa de contar como desvio na pirâmide. O relator é avisado de que foi analisado."
+          : "O relato aponta para o original e deixa de contar de novo na pirâmide. O relator é avisado.",
+    });
+    if (!ok) return;
+    triar(novoStatus);
+  };
+
+  const alertar = () => {
+    if (!detalhe) return;
+    iniciar(async () => {
+      const r = await alertarGestor(detalhe.id);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Gestor avisado.");
+      router.refresh();
+    });
+  };
 
   const contagem = useMemo(() => ({
     aguardando: rows.filter((r) => r.status === "aberto").length,
@@ -202,7 +265,7 @@ export function SegRelatosManager({
                 {nomeTipo.get(detalhe.tipoId) ?? "Relato"} · {dataBr(detalhe.occurredOn)}
               </h2>
               <button
-                type="button" onClick={() => setAberto(null)} className="muted" aria-label="Fechar"
+                type="button" onClick={fecharDetalhe} className="muted" aria-label="Fechar"
                 style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1 }}
               >
                 ×
@@ -274,12 +337,84 @@ export function SegRelatosManager({
                   )}
                 </div>
               )}
+
+              {/* A triagem só aparece para quem pode triar. Mostrar botão que
+                  vai responder "não autorizado" é pior do que não mostrar. */}
+              {ehSeguranca && !encerrado && (
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+                  <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>Triagem</h3>
+
+                  <textarea
+                    className="input" rows={2} value={nota}
+                    placeholder="Nota da triagem: o que você concluiu e o que vai ser feito."
+                    onChange={(e) => setNota(e.target.value)}
+                  />
+
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    {detalhe.status === "aberto" && (
+                      <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={() => triar("triado")}>
+                        <ListChecks size={15} /> Iniciar tratativa
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setAcao(true)}>
+                      Criar ação de tratamento
+                    </button>
+                    <button
+                      type="button" className="btn btn-ghost btn-sm" disabled={pendente || gestoresDoRelato.length === 0}
+                      title={gestoresDoRelato.length === 0 ? "Os envolvidos não têm gestor cadastrado" : "Avisa o gestor sem citar quem relatou"}
+                      onClick={alertar}
+                    >
+                      <BellRing size={15} /> Alertar gestor
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => encerrar("improcedente")}>
+                      Improcedente
+                    </button>
+                  </div>
+
+                  {detalhe.status === "aberto" && (
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <label className="label">Duplicado de</label>
+                        <select className="select" value={duplicadoDe} onChange={(e) => setDuplicadoDe(e.target.value)}>
+                          <option value="">Escolher o relato original…</option>
+                          {rows
+                            .filter((o) => o.id !== detalhe.id && o.status !== "duplicado")
+                            .map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {dataBr(o.occurredOn)} · {nomeTipo.get(o.tipoId) ?? "Relato"} · {o.descricao.slice(0, 40)}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button" className="btn btn-ghost btn-sm"
+                        disabled={pendente || !duplicadoDe} onClick={() => encerrar("duplicado")}
+                      >
+                        Marcar duplicado
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button>
+              <button type="button" className="btn btn-ghost" onClick={fecharDetalhe}>Fechar</button>
             </div>
           </div>
+
+          {acao && (
+            <SegAcaoDialog
+              open={acao} onClose={() => setAcao(false)}
+              relatoId={detalhe.id}
+              problema={`${nomeTipo.get(detalhe.tipoId) ?? "Relato"} em ${dataBr(detalhe.occurredOn)}: ${detalhe.descricao}`}
+              sugestaoResponsaveis={gestoresDoRelato}
+              pessoas={pessoas}
+              unitId={detalhe.unitId}
+              departmentId={detalhe.envolvidos[0]?.setorId ?? null}
+              subdepartmentId={detalhe.envolvidos[0]?.subsetorId ?? null}
+            />
+          )}
         </div>
       )}
 

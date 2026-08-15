@@ -64,7 +64,7 @@ export default async function SegurancaRelatosPage() {
   const { data: envolvidos } = ids.length
     ? await supabase
         .from("seg_relato_envolvidos")
-        .select("relato_id, user_id, snap_full_name, snap_department_name, snap_subdepartment_name, snap_position_name, snap_manager_name, snap_unit_name")
+        .select("relato_id, user_id, snap_full_name, snap_department_id, snap_department_name, snap_subdepartment_id, snap_subdepartment_name, snap_position_name, snap_manager_id, snap_manager_name, snap_unit_name")
         .in("relato_id", ids)
     : { data: [] };
 
@@ -74,9 +74,12 @@ export default async function SegurancaRelatosPage() {
     atual.push({
       userId: e.user_id,
       nome: e.snap_full_name,
+      setorId: e.snap_department_id,
       setor: e.snap_department_name,
+      subsetorId: e.snap_subdepartment_id,
       subsetor: e.snap_subdepartment_name,
       funcao: e.snap_position_name,
+      gestorId: e.snap_manager_id,
       gestor: e.snap_manager_name,
       unidade: e.snap_unit_name,
     });

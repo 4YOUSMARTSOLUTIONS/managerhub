@@ -337,6 +337,119 @@ export async function criarRelato(input: RelatoInput): Promise<ActionState> {
 }
 
 // ============================================================================
+// Triagem
+// ============================================================================
+//
+// A alçada é verificada dentro das RPCs (`seg_exige_tratativa`), que é onde
+// precisa estar para valer contra quem chame o PostgREST direto. Aqui o
+// contexto é só o da sessão, e a mensagem de recusa já vem em português.
+
+export async function triarRelato(input: {
+  id: string;
+  status: Enums<"seg_relato_status">;
+  nota?: string;
+  duplicadoDe?: string | null;
+}): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_triar_relato", {
+      p_id: input.id,
+      p_status: input.status,
+      p_nota: input.nota?.trim() || null,
+      p_duplicado_de: input.duplicadoDe || null,
+    });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Relato atualizado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function alertarGestor(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("seg_alertar_gestor", { p_id: id });
+    if (error) return { error: error.message };
+
+    revalidar();
+    const n = data ?? 0;
+    if (n === 0) {
+      return { ok: true, message: "Nenhum gestor a avisar: os envolvidos não têm gestor cadastrado." };
+    }
+    return { ok: true, message: n === 1 ? "Gestor avisado." : `${n} gestores avisados.` };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Abre a ação de tratamento e a amarra ao relato.
+ *
+ * A ação nasce pelo mesmo `create_action` do resto do sistema, para cair na
+ * tela de Ações com prazo, responsável e cobrança como qualquer outra. O que
+ * este módulo acrescenta é o vínculo e o desfecho do relato, numa RPC própria
+ * (`seg_vincular_acao`) que não obriga a mexer na `create_action`.
+ *
+ * O texto da ação NÃO cita o relator, e o responsável costuma ser o gestor do
+ * envolvido: é ele quem precisa agir.
+ */
+export async function criarAcaoDoRelato(input: {
+  relatoId: string;
+  descricao: string;
+  responsaveis: string[];
+  prazo: string;
+  prioridade: Enums<"priority_level">;
+  problema: string;
+  unitId?: string | null;
+  departmentId?: string | null;
+  subdepartmentId?: string | null;
+}): Promise<ActionState> {
+  try {
+    const { supabase, userId } = await actionContext();
+
+    if (!input.descricao.trim()) return { error: "Descreva o que deve ser feito." };
+    if (input.responsaveis.length === 0) return { error: "Escolha ao menos um responsável." };
+    if (!input.prazo) return { error: "Informe o prazo." };
+
+    const { data, error } = await supabase.rpc("create_action", {
+      p_data: {
+        is_sdpo: false,
+        requester_id: userId,
+        problem_statement: input.problema,
+        priority: input.prioridade,
+        due_date: input.prazo,
+        unit_id: input.unitId ?? "",
+        department_id: input.departmentId ?? "",
+        subdepartment_id: input.subdepartmentId ?? "",
+        cc: [],
+        demandas: [{ description: input.descricao.trim(), assignees: input.responsaveis }],
+      },
+    });
+    if (error) return { error: error.message };
+
+    const acao = (data ?? {}) as { action_id?: string };
+    if (!acao.action_id) return { error: "A ação não foi criada." };
+
+    const vinculo = await supabase.rpc("seg_vincular_acao", {
+      p_relato_id: input.relatoId,
+      p_action_id: acao.action_id,
+    });
+    // a ação existe mesmo se o vínculo falhar; avisar é melhor que fingir sucesso
+    if (vinculo.error) {
+      return { ok: true, warning: `Ação criada, mas não foi possível vinculá-la ao relato: ${vinculo.error.message}` };
+    }
+
+    revalidar();
+    revalidatePath("/acoes");
+    return { ok: true, message: "Ação de tratamento criada e vinculada ao relato." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ============================================================================
 // Equipe de segurança
 // ============================================================================
 
