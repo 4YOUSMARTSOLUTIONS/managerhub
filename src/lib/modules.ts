@@ -22,7 +22,8 @@ export type ModuleKey =
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
   | "cinco_s" | "padroes"
   | "portaria" | "multas_avarias"
-  | "seg_piramide" | "seg_acidentes" | "seg_relatos" | "seg_epis";
+  | "seg_piramide" | "seg_acidentes" | "seg_relatos" | "seg_epis"
+  | "seg_blitz" | "seg_gabaritos";
 
 export type GroupKey = "g_reunioes" | "g_rotina" | "g_pessoas" | "g_ferramentas" | "g_sdpo" | "g_seguranca";
 
@@ -113,6 +114,8 @@ export const MODULES: ModuleDef[] = [
   { key: "seg_acidentes", label: "Acidentes", href: "/seguranca/acidentes", group: "g_seguranca" },
   { key: "seg_relatos", label: "Relatos", href: "/seguranca/relatos", group: "g_seguranca" },
   { key: "seg_epis", label: "Gestão de EPIs", href: "/seguranca/epis", group: "g_seguranca" },
+  { key: "seg_blitz", label: "Blitz de trajeto", href: "/seguranca/blitz", group: "g_seguranca" },
+  { key: "seg_gabaritos", label: "Gabaritos de segurança", href: "/seguranca/gabaritos", group: "g_seguranca" },
 
   // só o proprietário por enquanto: o log mostra o de→para de toda alteração da
   // empresa, inclusive salário, CPF e remuneração variável de quem o leitor não
