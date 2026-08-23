@@ -5,7 +5,7 @@ import { actionContext, adminActionContext } from "./context";
 import { wantsActive } from "@/lib/catalogGuard";
 import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import { SEG_ICONE_BUCKET } from "@/lib/avatar";
-import { normalizar } from "@/lib/format";
+import { hojeYmd, normalizar } from "@/lib/format";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
@@ -795,6 +795,13 @@ export async function salvarAcidente(input: AcidenteInput): Promise<ActionState>
     }
     if (!input.userId) return { error: "Informe quem se acidentou." };
     if (!input.occurredOn) return { error: "Informe a data do acidente." };
+    // retroativo é a regra (a CAT sai depois), futuro é sempre erro de digitação
+    if (input.occurredOn > hojeYmd()) {
+      return { error: "A data do acidente não pode estar no futuro." };
+    }
+    if (input.catEmitidaEm && input.catEmitidaEm > hojeYmd()) {
+      return { error: "A data de emissão da CAT não pode estar no futuro." };
+    }
     if (!input.descricao.trim()) return { error: "Descreva o acidente." };
 
     const campos = {

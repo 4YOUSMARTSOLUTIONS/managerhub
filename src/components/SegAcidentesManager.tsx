@@ -56,8 +56,17 @@ export type AcidenteRow = {
   diasAfastamento: number | null;
   afastamentoDe: string | null;
   retornoEm: string | null;
+  /** carimbo de inclusão no sistema, que a data do ocorrido não responde */
+  criadoEm: string;
+  criadoPor: string | null;
   anexos: AnexoRow[];
 };
+
+/** Data e hora do carimbo, no fuso de quem lê. */
+function dataHoraBr(iso: string | null) {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
+}
 
 function dataBr(iso: string | null) {
   if (!iso) return "—";
@@ -231,6 +240,7 @@ export function SegAcidentesManager({
               "Data", "Hora", "Classificação", "Colaborador", "Matrícula", "Setor", "Função", "Gestor",
               "Unidade", "Local", "Área", "Parte do corpo", "Agente causador", "Natureza da lesão",
               "CAT", "CAT emitida em", "CID", "Dias de afastamento", "Retorno", "Situação", "Descrição",
+              "Lançado em", "Lançado por",
             ]}
             rows={lista.map((r) => [
               dataBr(r.occurredOn), r.occurredAt?.slice(0, 5) ?? "", SEG_ACIDENTE_CLASS[r.classe],
@@ -239,6 +249,7 @@ export function SegAcidentesManager({
               r.parteCorpo ?? "", r.agenteCausador ?? "", r.naturezaLesao ?? "",
               r.catNumero ?? "", dataBr(r.catEmitidaEm), r.cidCode ?? "",
               r.diasAfastamento ?? "", dataBr(r.retornoEm), SEG_ACIDENTE_STATUS[r.status], r.descricao,
+              dataHoraBr(r.criadoEm), r.criadoPor ?? "",
             ])}
           />
           <button type="button" className="btn btn-primary" onClick={() => setForm({ open: true, editando: null })}>
@@ -340,6 +351,13 @@ export function SegAcidentesManager({
                 <div><dt className="soft">CID-10</dt><dd style={{ margin: 0 }}>{detalhe.cidCode ? `${detalhe.cidCode} ${detalhe.cidDescricao ?? ""}` : "—"}</dd></div>
                 <div><dt className="soft">Afastamento</dt><dd style={{ margin: 0 }}>{detalhe.diasAfastamento ? `${detalhe.diasAfastamento} dias, retorno ${dataBr(detalhe.retornoEm)}` : "—"}</dd></div>
               </dl>
+
+              {/* com data retroativa liberada, a data do fato não conta a história
+                  toda: esta linha diz quando o caso entrou no sistema e por quem */}
+              <p className="soft" style={{ fontSize: "0.75rem", margin: 0 }}>
+                Lançado no sistema em {dataHoraBr(detalhe.criadoEm)}
+                {detalhe.criadoPor ? ` por ${shortName(detalhe.criadoPor)}` : ""}.
+              </p>
 
               {detalhe.testemunhas && (
                 <div>

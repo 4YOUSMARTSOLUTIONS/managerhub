@@ -198,7 +198,11 @@ export function SegAcidenteDialog({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem" }}>
             <div>
               <label className="label">Data <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-              <input className="input" type="date" value={data} onChange={(e) => setData(e.target.value)} />
+              {/* retroativo sim, futuro não: acidente que ainda não aconteceu é erro de digitação */}
+              <input
+                className="input" type="date" value={data} max={hojeYmd()}
+                onChange={(e) => setData(e.target.value)}
+              />
             </div>
             <div>
               <label className="label">Hora</label>
@@ -264,7 +268,10 @@ export function SegAcidenteDialog({
               </div>
               <div>
                 <label className="label">CAT emitida em</label>
-                <input className="input" type="date" value={catData} onChange={(e) => setCatData(e.target.value)} />
+                <input
+                  className="input" type="date" value={catData} max={hojeYmd()}
+                  onChange={(e) => setCatData(e.target.value)}
+                />
               </div>
             </div>
 

@@ -77,6 +77,7 @@ export default async function SegurancaAcidentesPage() {
     .map((m) => m.profile)
     .filter((p): p is NonNullable<typeof p> => !!p)
     .map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
+  const nomeDoUser = new Map(pessoas.map((p) => [p.id, p.name]));
 
   const rows: AcidenteRow[] = (acidentes ?? []).map((a) => ({
     id: a.id,
@@ -110,6 +111,10 @@ export default async function SegurancaAcidentesPage() {
     diasAfastamento: a.dias_afastamento,
     afastamentoDe: a.afastamento_de,
     retornoEm: a.retorno_em,
+    // quando o caso entrou no sistema, e por quem. Com data retroativa
+    // liberada, é isto que separa "aconteceu em março" de "foi lançado em agosto".
+    criadoEm: a.created_at,
+    criadoPor: nomeDoUser.get(a.created_by) ?? null,
     anexos: porAcidente.get(a.id) ?? [],
   }));
 
