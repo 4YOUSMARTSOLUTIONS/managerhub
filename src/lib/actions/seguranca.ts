@@ -7,7 +7,7 @@ import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import { hojeYmd, normalizar } from "@/lib/format";
 import type { ActionState } from "./types";
-import type { Enums } from "@/types/database";
+import type { Enums, Json } from "@/types/database";
 
 /**
  * Segurança do trabalho: catálogos, equipe e (nas levas seguintes) relatos,
@@ -652,6 +652,67 @@ export async function alertarGestor(id: string): Promise<ActionState> {
 }
 
 /**
+ * O que a tela de segurança decide ao abrir uma ação.
+ *
+ * `demandas` no plural porque o mesmo caso costuma exigir mais de uma
+ * providência, e elas são o MESMO caso: uma ação por providência espalharia
+ * códigos sem nada dizendo que vieram do mesmo fato.
+ */
+export type AcaoDeSegurancaInput = {
+  demandas: { descricao: string; responsaveis: string[] }[];
+  prazo: string;
+  prioridade: Enums<"priority_level">;
+  problema: string;
+  /** quem pede; a tela manda o usuário atual como padrão */
+  solicitante?: string | null;
+  cc?: string[];
+  unitId?: string | null;
+  departmentId?: string | null;
+  subdepartmentId?: string | null;
+  /** false desliga o vínculo com o Programa nesta ação específica */
+  vincularPrograma?: boolean;
+};
+
+/**
+ * Valida o que as duas actions validam igual e monta o payload da
+ * `create_action`. Sem isso, relato e acidente sairiam do sincronismo na
+ * primeira mudança.
+ */
+function payloadDaAcao(
+  input: AcaoDeSegurancaInput,
+  userId: string,
+  programa: { item_id: string; pilar_id: string | null; bloco_id: string } | null,
+): { erro: string } | { p_data: Json } {
+  const demandas = input.demandas
+    .map((d) => ({ description: d.descricao.trim(), assignees: d.responsaveis }))
+    .filter((d) => d.description);
+
+  if (demandas.length === 0) return { erro: "Descreva o que deve ser feito." };
+  if (demandas.some((d) => d.assignees.length === 0)) {
+    return { erro: "Cada providência precisa de ao menos um responsável." };
+  }
+  if (!input.prazo) return { erro: "Informe o prazo." };
+
+  return {
+    p_data: {
+      is_sdpo: !!programa,
+      pilar_id: programa?.pilar_id ?? "",
+      bloco_id: programa?.bloco_id ?? "",
+      item_id: programa?.item_id ?? "",
+      requester_id: input.solicitante || userId,
+      problem_statement: input.problema,
+      priority: input.prioridade,
+      due_date: input.prazo,
+      unit_id: input.unitId ?? "",
+      department_id: input.departmentId ?? "",
+      subdepartment_id: input.subdepartmentId ?? "",
+      cc: input.cc ?? [],
+      demandas,
+    },
+  };
+}
+
+/**
  * Abre a ação de tratamento e a amarra ao relato.
  *
  * A ação nasce pelo mesmo `create_action` do resto do sistema, para cair na
@@ -662,25 +723,11 @@ export async function alertarGestor(id: string): Promise<ActionState> {
  * O texto da ação NÃO cita o relator, e o responsável costuma ser o gestor do
  * envolvido: é ele quem precisa agir.
  */
-export async function criarAcaoDoRelato(input: {
-  relatoId: string;
-  descricao: string;
-  responsaveis: string[];
-  prazo: string;
-  prioridade: Enums<"priority_level">;
-  problema: string;
-  unitId?: string | null;
-  departmentId?: string | null;
-  subdepartmentId?: string | null;
-  /** false desliga o vínculo com o Programa nesta ação específica */
-  vincularPrograma?: boolean;
-}): Promise<ActionState> {
+export async function criarAcaoDoRelato(
+  input: AcaoDeSegurancaInput & { relatoId: string },
+): Promise<ActionState> {
   try {
     const { supabase, userId } = await actionContext();
-
-    if (!input.descricao.trim()) return { error: "Descreva o que deve ser feito." };
-    if (input.responsaveis.length === 0) return { error: "Escolha ao menos um responsável." };
-    if (!input.prazo) return { error: "Informe o prazo." };
 
     // O vínculo com o Programa é lido do servidor, nunca da tela: o item é
     // configuração da empresa, e mandar os ids pelo navegador seria abrir a
@@ -691,23 +738,10 @@ export async function criarAcaoDoRelato(input: {
           item_id: string; pilar_id: string | null; bloco_id: string;
         } | null);
 
-    const { data, error } = await supabase.rpc("create_action", {
-      p_data: {
-        is_sdpo: !!programa,
-        pilar_id: programa?.pilar_id ?? "",
-        bloco_id: programa?.bloco_id ?? "",
-        item_id: programa?.item_id ?? "",
-        requester_id: userId,
-        problem_statement: input.problema,
-        priority: input.prioridade,
-        due_date: input.prazo,
-        unit_id: input.unitId ?? "",
-        department_id: input.departmentId ?? "",
-        subdepartment_id: input.subdepartmentId ?? "",
-        cc: [],
-        demandas: [{ description: input.descricao.trim(), assignees: input.responsaveis }],
-      },
-    });
+    const montado = payloadDaAcao(input, userId, programa);
+    if ("erro" in montado) return { error: montado.erro };
+
+    const { data, error } = await supabase.rpc("create_action", { p_data: montado.p_data });
     if (error) return { error: error.message };
 
     const acao = (data ?? {}) as { action_id?: string };
@@ -998,24 +1032,11 @@ export async function setItemDoPrograma(
  * NÃO encerra o acidente: encerrar é sobre o retorno ao trabalho, e a ação
  * corretiva pode levar meses.
  */
-export async function criarAcaoDoAcidente(input: {
-  acidenteId: string;
-  descricao: string;
-  responsaveis: string[];
-  prazo: string;
-  prioridade: Enums<"priority_level">;
-  problema: string;
-  unitId?: string | null;
-  departmentId?: string | null;
-  subdepartmentId?: string | null;
-  vincularPrograma?: boolean;
-}): Promise<ActionState> {
+export async function criarAcaoDoAcidente(
+  input: AcaoDeSegurancaInput & { acidenteId: string },
+): Promise<ActionState> {
   try {
     const { supabase, userId } = await actionContext();
-
-    if (!input.descricao.trim()) return { error: "Descreva o que deve ser feito." };
-    if (input.responsaveis.length === 0) return { error: "Escolha ao menos um responsável." };
-    if (!input.prazo) return { error: "Informe o prazo." };
 
     // o item vem do servidor, nunca da tela: mandar os ids pelo navegador
     // abriria a porta para a ação nascer pendurada em qualquer item
@@ -1025,23 +1046,10 @@ export async function criarAcaoDoAcidente(input: {
           item_id: string; pilar_id: string | null; bloco_id: string;
         } | null);
 
-    const { data, error } = await supabase.rpc("create_action", {
-      p_data: {
-        is_sdpo: !!programa,
-        pilar_id: programa?.pilar_id ?? "",
-        bloco_id: programa?.bloco_id ?? "",
-        item_id: programa?.item_id ?? "",
-        requester_id: userId,
-        problem_statement: input.problema,
-        priority: input.prioridade,
-        due_date: input.prazo,
-        unit_id: input.unitId ?? "",
-        department_id: input.departmentId ?? "",
-        subdepartment_id: input.subdepartmentId ?? "",
-        cc: [],
-        demandas: [{ description: input.descricao.trim(), assignees: input.responsaveis }],
-      },
-    });
+    const montado = payloadDaAcao(input, userId, programa);
+    if ("erro" in montado) return { error: montado.erro };
+
+    const { data, error } = await supabase.rpc("create_action", { p_data: montado.p_data });
     if (error) return { error: error.message };
 
     const acao = (data ?? {}) as { action_id?: string };

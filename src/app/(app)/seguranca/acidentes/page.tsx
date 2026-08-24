@@ -21,7 +21,7 @@ export default async function SegurancaAcidentesPage() {
   const gate = await moduleGate("seg_acidentes");
   if (gate) return gate;
 
-  const { tenant, unitScope, role } = await requireContext();
+  const { tenant, user, unitScope, role } = await requireContext();
   const supabase = await createClient();
 
   const { data: pode } = await supabase.rpc("pode_tratar_seguranca", { p_tenant: tenant.id });
@@ -50,7 +50,7 @@ export default async function SegurancaAcidentesPage() {
   // unidade (ela vem do vínculo do acidentado) e o filtro é o do topo
   const [
     { data: acidentes }, membros, { data: locais }, { data: areas }, { data: causas },
-    itemPrograma,
+    itemPrograma, { data: units }, { data: deps }, { data: subs },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
@@ -59,6 +59,11 @@ export default async function SegurancaAcidentesPage() {
     supabase.from("seg_causas").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     // a que item do Programa a ação de tratamento será amarrada (1.1)
     getItemDoPrograma("acidente"),
+    // recorte da AÇÃO de tratamento: vem carimbado do caso, mas o tratamento
+    // às vezes é de outra área, e aí a equipe corrige na hora de abrir
+    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
+    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).eq("active", true).order("name"),
   ]);
 
   const ids = (acidentes ?? []).map((a) => a.id);
@@ -168,6 +173,10 @@ export default async function SegurancaAcidentesPage() {
         areas={(areas ?? []).map((a) => ({ id: a.id, name: a.name, localId: a.local_id, active: a.active }))}
         causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}
         itemPrograma={itemPrograma}
+        unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
+        setores={(deps ?? []).map((d) => ({ id: d.id, name: d.name }))}
+        subsetores={(subs ?? []).map((x) => ({ id: x.id, name: x.name, departmentId: x.department_id }))}
+        solicitantePadrao={user.id}
       />
     </div>
   );

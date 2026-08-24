@@ -47,6 +47,7 @@ export default async function SegurancaRelatosPage() {
     { data: tipos }, { data: locais }, { data: areas }, { data: units },
     { data: programa }, { data: causas }, { data: ocorrencias },
     { data: vinculoOcorrencia }, { data: vinculoLocal }, { data: vinculoArea },
+    { data: deps }, { data: subs },
     focos, alertas,
   ] = await Promise.all([
     lista,
@@ -71,6 +72,9 @@ export default async function SegurancaRelatosPage() {
     supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id),
     supabase.from("seg_local_tipos").select("local_id, tipo_id").eq("tenant_id", tenant.id),
     supabase.from("seg_area_tipos").select("area_id, tipo_id").eq("tenant_id", tenant.id),
+    // recorte da AÇÃO de tratamento, editável na hora de abrir
+    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
+    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     // o foco vigente de cada área, para o formulário lembrar a orientação na
     // hora em que a pessoa escolhe onde o fato aconteceu
     getFocosStatus(),
@@ -228,6 +232,9 @@ export default async function SegurancaRelatosPage() {
           areaId: f.area_id, titulo: f.titulo, orientacao: f.orientacao,
         }))}
         unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
+        setores={(deps ?? []).map((d) => ({ id: d.id, name: d.name }))}
+        subsetores={(subs ?? []).map((x) => ({ id: x.id, name: x.name, departmentId: x.department_id }))}
+        solicitantePadrao={user.id}
         causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}
         itemPrograma={(programa ?? null) as
           | { item: string; bloco: string; secao: string | null; pilar: string | null }

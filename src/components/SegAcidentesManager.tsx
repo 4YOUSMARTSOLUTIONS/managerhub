@@ -95,6 +95,7 @@ function dataBr(iso: string | null) {
  */
 export function SegAcidentesManager({
   rows, pessoas, locais, areas, causas, ehProprietario, itemPrograma,
+  unidades, setores, subsetores, solicitantePadrao,
 }: {
   rows: AcidenteRow[];
   pessoas: Person[];
@@ -105,6 +106,11 @@ export function SegAcidentesManager({
   ehProprietario: boolean;
   /** item do Programa ao qual a ação de tratamento é amarrada (1.1) */
   itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
+  /** recorte da AÇÃO de tratamento, editável na hora de abrir */
+  unidades: { id: string; name: string }[];
+  setores: { id: string; name: string }[];
+  subsetores: { id: string; name: string; departmentId: string }[];
+  solicitantePadrao: string;
 }) {
   const [form, setForm] = useState<{ open: boolean; editando: AcidenteRow | null }>({ open: false, editando: null });
   const [aberto, setAberto] = useState<string | null>(null);
@@ -524,6 +530,10 @@ export function SegAcidentesManager({
           departmentId={detalhe.setorId}
           subdepartmentId={detalhe.subsetorId}
           itemPrograma={itemPrograma}
+          unidades={unidades}
+          setores={setores}
+          subsetores={subsetores}
+          solicitantePadrao={solicitantePadrao}
         />
       )}
 

@@ -74,7 +74,7 @@ function dataBr(iso: string) {
  */
 export function SegRelatosManager({
   rows, ehSeguranca, ehProprietario, pessoas, tipos, locais, areas, unidades, causas,
-  ocorrencias, focos, itemPrograma,
+  ocorrencias, focos, itemPrograma, setores, subsetores, solicitantePadrao,
 }: {
   rows: RelatoRow[];
   ehSeguranca: boolean;
@@ -90,6 +90,10 @@ export function SegRelatosManager({
   focos: FocoOpt[];
   /** item do Programa ao qual as ações de tratamento são amarradas */
   itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
+  /** recorte da AÇÃO de tratamento, editável na hora de abrir */
+  setores: { id: string; name: string }[];
+  subsetores: { id: string; name: string; departmentId: string }[];
+  solicitantePadrao: string;
 }) {
   const [novo, setNovo] = useState(false);
   const [editando, setEditando] = useState<RelatoRow | null>(null);
@@ -558,6 +562,10 @@ export function SegRelatosManager({
               departmentId={detalhe.envolvidos[0]?.setorId ?? null}
               subdepartmentId={detalhe.envolvidos[0]?.subsetorId ?? null}
               itemPrograma={itemPrograma}
+              unidades={unidades}
+              setores={setores}
+              subsetores={subsetores}
+              solicitantePadrao={solicitantePadrao}
             />
           )}
         </div>
