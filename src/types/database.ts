@@ -853,6 +853,27 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; user_id?: string; employee_code?: string | null; admission_date?: string | null; dismissed_at?: string | null; department_id?: string | null; subdepartment_id?: string | null; position_id?: string | null; position_level_id?: string | null; source?: string; created_at?: string }
         Relationships: []
       }
+      // ---- férias ----
+      // O PROCESSO da previsão de férias (solicitação -> aprovação do gestor ->
+      // efetivação do DP). Escrita SÓ por RPC (ferias_solicitar, ferias_lancar,
+      // ferias_decidir, ferias_efetivar...): Insert/Update `never` descrevem o
+      // privilégio real, o grant de authenticated é só select/delete. O FATO
+      // continua em `employee_absences` (kind 'ferias'), criado na efetivação.
+      ferias_solicitacoes: {
+        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["ferias_status"]; start_date: string; end_date: string; dias: number; abono_dias: number; adiantar_decimo_terceiro: boolean; aquisitivo_inicio: string; aquisitivo_fim: string; snap_admission_date: string; reagendada_de: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; snap_hierarchy_name: string | null; created_by: string; lancada_pelo_gestor: boolean; decided_at: string | null; decided_by: string | null; decision_note: string | null; efetivada_at: string | null; efetivada_by: string | null; efetivacao_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; absence_id: string | null; created_at: string; updated_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      // Níveis de hierarquia que NÃO solicitam as próprias férias (o gestor
+      // programa por eles). Catálogo simples: escrita direta por policy
+      // (owner/admin/hr), no molde de absence_types.
+      ferias_niveis_bloqueados: {
+        Row: { tenant_id: string; hierarchy_level_id: string; created_at: string }
+        Insert: { tenant_id: string; hierarchy_level_id: string; created_at?: string }
+        Update: never
+        Relationships: []
+      }
       // ---- redutores da remuneração variável ----
       // O catálogo de punições e as REGRAS são configuração: leitura para
       // qualquer membro. `employee_sanctions` é dado disciplinar, e a leitura é
@@ -1991,6 +2012,25 @@ export type Database = {
       absenteismo_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
       absenteismo_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
       absenteismo_atestado: { Args: { p_id: string }; Returns: Json }
+      // Férias. Os períodos viajam em jsonb [{inicio, fim, abono, decimo}];
+      // `p_hoje` vem do cliente porque o servidor está em UTC (lição do
+      // occurred_on do absenteísmo). Só a efetivação escreve em
+      // employee_absences.
+      ferias_solicitar: { Args: { p_tenant: string; p_periodos: Json; p_hoje?: string }; Returns: undefined }
+      ferias_lancar: { Args: { p_tenant: string; p_user: string; p_periodos: Json; p_hoje?: string }; Returns: undefined }
+      ferias_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
+      ferias_reenviar: { Args: { p_id: string; p_inicio: string; p_fim: string; p_abono?: number; p_decimo?: boolean; p_hoje?: string }; Returns: undefined }
+      ferias_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
+      ferias_efetivar: { Args: { p_id: string; p_desconta_rv?: boolean; p_nota?: string | null }; Returns: undefined }
+      ferias_contexto_efetivacao: { Args: { p_id: string }; Returns: Json }
+      ferias_periodos_aquisitivos: {
+        Args: { p_tenant: string; p_user: string; p_hoje?: string; p_excluir?: string | null }
+        Returns: {
+          aq_inicio: string; aq_fim: string; concessivo_fim: string
+          dias_direito: number; dias_usados: number; abono_usado: number
+          saldo: number; qtd_periodos: number; situacao: string
+        }[]
+      }
       // Chat interno. Criar conversa mexe em canal + membros na mesma
       // transação, com dedup de DM; a visão geral devolve só os canais de quem
       // chama (a de administração é outra função).
@@ -2298,6 +2338,7 @@ export type Database = {
       infraction_severity: "leve" | "media" | "grave"
       punicao_status: "rascunho" | "pendente" | "aprovada" | "reprovada" | "cancelada"
       absenteismo_status: "aberto" | "pendente" | "aprovado" | "reprovado" | "cancelado"
+      ferias_status: "solicitada" | "aprovada" | "reprovada" | "efetivada" | "reagendada" | "cancelada"
       chat_channel_kind: "dm" | "grupo"
       chat_member_role: "dono" | "membro"
       chat_user_status: "disponivel" | "ocupado" | "ausente"

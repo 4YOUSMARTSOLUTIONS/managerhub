@@ -18,7 +18,7 @@ export type ModuleKey =
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
   | "chamados" | "venda_interna" | "chat"
-  | "metas" | "feedbacks" | "punicoes" | "absenteismos" | "treinamentos"
+  | "metas" | "feedbacks" | "punicoes" | "absenteismos" | "ferias" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
   | "cinco_s" | "padroes"
@@ -81,6 +81,10 @@ export const MODULES: ModuleDef[] = [
   // `core` (sempre ligada) e some do menu de quem não lidera equipe, por minRole.
   { key: "minha_equipe", label: "Minha equipe", href: "/minha-equipe", group: "g_pessoas", core: true, minRole: "team_lead" },
   { key: "metas", label: "Metas", href: "/metas", group: "g_pessoas" },
+  // SEM minRole de propósito: o colaborador comum solicita as próprias férias,
+  // então precisa do item de menu. A autorização fina (quem aprova, quem
+  // efetiva, quem nem solicita) é decidida dentro da page e das RPCs.
+  { key: "ferias", label: "Férias", href: "/ferias", group: "g_pessoas" },
   { key: "feedbacks", label: "Feedbacks", href: "/feedbacks", group: "g_pessoas" },
   // Quem lança é o gestor da pessoa; quem aprova é o RH. Daí o minRole próprio:
   // a tela não faz sentido para quem não faz nem uma coisa nem outra.

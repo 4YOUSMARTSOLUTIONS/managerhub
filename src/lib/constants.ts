@@ -340,6 +340,44 @@ export const ABSENTEISMO_STATUS_TONE: Record<Enums<"absenteismo_status">, Tone> 
   cancelado: "gray",
 };
 
+// ---------- Férias (o processo de previsão) ----------
+// Os rótulos dizem COM QUEM a bola está, não o nome interno do estado: é o que
+// a pessoa quer saber quando abre a tela.
+export const FERIAS_STATUS: Record<Enums<"ferias_status">, string> = {
+  solicitada: "Aguardando o gestor",
+  aprovada: "Aguardando efetivação",
+  reprovada: "Devolvida",
+  efetivada: "Efetivada",
+  reagendada: "Reagendada",
+  cancelada: "Cancelada",
+};
+
+export const FERIAS_STATUS_TONE: Record<Enums<"ferias_status">, Tone> = {
+  solicitada: "blue",
+  aprovada: "amber",
+  reprovada: "red",
+  efetivada: "green",
+  reagendada: "gray",
+  cancelada: "gray",
+};
+
+/** Situação do período aquisitivo (saída de `ferias_periodos_aquisitivos`). */
+export const FERIAS_AQUISITIVO_SITUACAO: Record<string, string> = {
+  em_curso: "Em curso",
+  aberta: "Com saldo",
+  a_vencer: "A vencer",
+  vencida: "Vencida",
+  quitada: "Quitada",
+};
+
+export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
+  em_curso: "gray",
+  aberta: "blue",
+  a_vencer: "amber",
+  vencida: "red",
+  quitada: "green",
+};
+
 // ---------- Feedbacks ----------
 export const FEEDBACK_TYPE_LABEL: Record<Enums<"feedback_type">, string> = {
   reconhecimento: "Reconhecimento",

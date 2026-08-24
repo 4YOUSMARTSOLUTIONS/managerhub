@@ -23,6 +23,7 @@ import { FeedbackCadenceEditor } from "@/components/FeedbackCadenceEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
+import { FeriasConfigManager } from "@/components/FeriasConfigManager";
 import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManager";
 import { InfractionTypesManager, type InfracaoRow } from "@/components/InfractionTypesManager";
 import { AbsenceTypesManager, type TipoAbsenteismoRow } from "@/components/AbsenceTypesManager";
@@ -120,6 +121,7 @@ export default async function SettingsPage() {
     { data: segOcorrenciasData }, { data: segOcTipos }, { data: segOcLocais }, { data: segOcAreas },
     { data: blitzMeiosData }, { data: blitzPerguntasData }, { data: blitzPerguntaMeios },
     { data: blitzMotivosData }, { data: veiculosData },
+    { data: feriasBloqueadosData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -237,6 +239,8 @@ export default async function SettingsPage() {
       .eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, active")
       .eq("tenant_id", tenant.id).order("placa"),
+    // níveis de hierarquia que não solicitam as próprias férias
+    supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -536,17 +540,24 @@ export default async function SettingsPage() {
           id: "ausencias",
           label: "Férias",
           content: (
-            <AbsencesManager
-              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
-              alvos={importTargets}
-              unidades={(units ?? []).map((u) => u.name)}
-              absences={absenceRows.filter((a) => a.kind === "ferias")}
-              canEdit={canEditDP}
-              kinds={["ferias"]}
-              title="Férias"
-              description="Períodos de férias programadas. Quando o lançamento desconta, a remuneração variável dos meses atingidos passa a ser proporcional aos dias trabalhados."
-              exportFilename="ferias.xlsx"
-            />
+            <>
+              <FeriasConfigManager
+                niveis={(hierarchies ?? []).map((h) => ({ id: h.id, name: h.name, active: h.active }))}
+                bloqueados={(feriasBloqueadosData ?? []).map((b) => b.hierarchy_level_id)}
+                canEdit={canEditDP}
+              />
+              <AbsencesManager
+                members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+                alvos={importTargets}
+                unidades={(units ?? []).map((u) => u.name)}
+                absences={absenceRows.filter((a) => a.kind === "ferias")}
+                canEdit={canEditDP}
+                kinds={["ferias"]}
+                title="Férias"
+                description="Registro direto, para histórico e importação em lote. O fluxo oficial de previsão, aprovação do gestor e efetivação está no módulo Férias; as linhas criadas por lá são editadas por lá, e a exclusão delas aqui é recusada."
+                exportFilename="ferias.xlsx"
+              />
+            </>
           ),
         },
         {
