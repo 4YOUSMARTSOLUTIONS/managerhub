@@ -1299,6 +1299,55 @@ export async function excluirBlitz(id: string): Promise<ActionState> {
   }
 }
 
+export type BlitzAlerta = {
+  id: string;
+  enviado_em: string;
+  colaborador: string | null;
+  occurred_on: string;
+  meio: string | null;
+  liberado: boolean;
+  motivo: string | null;
+  observacao: string | null;
+  respostas_nao: string[];
+  tratativa_em: string | null;
+  tratativa_resumo: string | null;
+  tratativa_acordo: string | null;
+};
+
+/** Os alertas de blitz do gestor logado, projetados coluna a coluna pela RPC. */
+export async function getBlitzAlertas(): Promise<BlitzAlerta[]> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("seg_blitz_meus_alertas");
+    if (error || !data) return [];
+    return data as BlitzAlerta[];
+  } catch {
+    return [];
+  }
+}
+
+export async function registrarTratativaBlitz(input: {
+  alertaId: string;
+  em: string;
+  resumo: string;
+  acordo?: string | null;
+}): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_blitz_registrar_tratativa", {
+      p_alerta: input.alertaId,
+      p_em: input.em,
+      p_resumo: input.resumo,
+      p_acordo: input.acordo || null,
+    });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Tratativa registrada." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 // ============================================================================
 // Exclusão (proprietário)
 // ============================================================================

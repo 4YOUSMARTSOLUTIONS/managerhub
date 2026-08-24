@@ -1784,6 +1784,14 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // Alerta automático da blitz não conforme + a tratativa do gestor.
+      // Escrita só por RPC; o gestor lê o próprio, a segurança lê todos.
+      seg_blitz_alertas: {
+        Row: { id: string; tenant_id: string; avaliacao_id: string; gestor_id: string; enviado_em: string; tratativa_em: string | null; tratativa_resumo: string | null; tratativa_acordo: string | null; registrada_em: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       seg_equipe: {
         Row: { id: string; tenant_id: string; user_id: string; created_by: string | null; created_at: string }
         Insert: { id?: string; tenant_id: string; user_id: string; created_by?: string | null; created_at?: string }
@@ -2225,6 +2233,9 @@ export type Database = {
       pode_avaliar_blitz: { Args: { p_tenant: string }; Returns: boolean }
       seg_criar_blitz: { Args: { p_data: Json }; Returns: string }
       seg_excluir_blitz: { Args: { p_id: string }; Returns: undefined }
+      seg_blitz_meus_alertas: { Args: Record<PropertyKey, never>; Returns: Json }
+      seg_blitz_registrar_tratativa: { Args: { p_alerta: string; p_em: string; p_resumo: string; p_acordo?: string | null }; Returns: undefined }
+      seg_blitz_painel: { Args: { p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
       pode_ver_blitz: { Args: { p_tenant: string; p_user: string }; Returns: boolean }
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
       // só o autor, e só enquanto o relato está `aberto`

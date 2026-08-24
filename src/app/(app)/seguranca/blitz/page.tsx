@@ -1,7 +1,8 @@
 import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
-import { SegBlitzManager, type BlitzRow } from "@/components/SegBlitzManager";
+import { SegBlitzManager, type BlitzPainel, type BlitzRow } from "@/components/SegBlitzManager";
+import { getBlitzAlertas } from "@/lib/actions/seguranca";
 
 /**
  * Blitz de trajeto.
@@ -33,6 +34,7 @@ export default async function SegurancaBlitzPage() {
     { data: blitzes }, { data: podeAvaliar }, membros,
     { data: meios }, { data: perguntas }, { data: perguntaMeios },
     { data: motivos }, { data: veiculos },
+    { data: painel }, alertas,
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_avaliar_blitz", { p_tenant: tenant.id }),
@@ -47,6 +49,13 @@ export default async function SegurancaBlitzPage() {
     // o veículo mais recente de cada colaborador vira a sugestão do formulário
     supabase.from("seg_veiculos").select("user_id, meio_id, placa, tipo_descricao, propriedade, updated_at")
       .eq("tenant_id", tenant.id).eq("active", true).order("updated_at", { ascending: false }),
+    // painel do ano corrente, com a recorrência já recortada pela alçada
+    supabase.rpc("seg_blitz_painel", {
+      p_ano: new Date().getFullYear(),
+      p_unit_ids: unidades,
+    }),
+    // os alertas do usuário logado como gestor
+    getBlitzAlertas(),
   ]);
 
   const ids = (blitzes ?? []).map((b) => b.id);
@@ -116,6 +125,8 @@ export default async function SegurancaBlitzPage() {
           userId: v.user_id, meioId: v.meio_id, placa: v.placa,
           tipoDescricao: v.tipo_descricao, propriedade: v.propriedade,
         }))}
+        painel={(painel ?? null) as BlitzPainel | null}
+        alertas={alertas}
       />
     </div>
   );

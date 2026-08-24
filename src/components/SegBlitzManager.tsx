@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ExportButton } from "@/components/ui/ExportButton";
@@ -15,6 +16,8 @@ import type { Person } from "@/components/PeoplePicker";
 import {
   SegBlitzDialog, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
 } from "@/components/SegBlitzDialog";
+import { SegBlitzTratativas } from "@/components/SegBlitzTratativas";
+import type { BlitzAlerta } from "@/lib/actions/seguranca";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_PROPRIEDADE } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
 import { excluirBlitz } from "@/lib/actions/seguranca";
@@ -40,6 +43,17 @@ export type BlitzRow = {
   respostas: { pergunta: string; resposta: Enums<"seg_blitz_resposta"> }[];
 };
 
+export type BlitzPainel = {
+  total: number;
+  conformes: number;
+  com_desvio: number;
+  bloqueios: number;
+  colaboradores: number;
+  alertas: { enviados: number; com_tratativa: number };
+  /** vazia para quem não tem alçada; recortada pela cadeia para team_lead */
+  recorrencia: { user_id: string; nome: string | null; setor: string | null; nao_conformes: number; total: number }[];
+};
+
 function dataBr(iso: string) {
   const [a, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
@@ -59,7 +73,7 @@ function situacao(r: BlitzRow): { label: string; tone: "green" | "amber" | "red"
 }
 
 export function SegBlitzManager({
-  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos,
+  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, painel, alertas,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -69,6 +83,9 @@ export function SegBlitzManager({
   perguntas: BlitzPerguntaOpt[];
   motivos: { id: string; name: string; active: boolean }[];
   veiculos: VeiculoSugestao[];
+  painel: BlitzPainel | null;
+  /** os alertas do usuário logado como gestor */
+  alertas: BlitzAlerta[];
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -132,6 +149,67 @@ export function SegBlitzManager({
           ) : undefined
         }
       />
+
+      <SegBlitzTratativas alertas={alertas} />
+
+      {painel && painel.total > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.8rem" }}>
+          <StatCard label="Blitzes no ano" value={painel.total} hint={`${painel.colaboradores} colaborador(es) abordado(s)`} />
+          <StatCard
+            label="Conformidade"
+            value={`${Math.round((painel.conformes / painel.total) * 100)}%`}
+            tone={painel.conformes / painel.total >= 0.8 ? "green" : painel.conformes / painel.total >= 0.5 ? "amber" : "red"}
+            hint={`${painel.conformes} de ${painel.total} conformes`}
+          />
+          <StatCard label="Liberadas com desvio" value={painel.com_desvio} tone="amber" />
+          <StatCard label="Bloqueios" value={painel.bloqueios} tone={painel.bloqueios > 0 ? "red" : "green"} />
+          {painel.alertas.enviados > 0 && (
+            <StatCard
+              label="Alertas com tratativa"
+              value={`${Math.round((painel.alertas.com_tratativa / painel.alertas.enviados) * 100)}%`}
+              tone={
+                painel.alertas.com_tratativa / painel.alertas.enviados >= 0.8 ? "green"
+                  : painel.alertas.com_tratativa / painel.alertas.enviados >= 0.5 ? "amber" : "red"
+              }
+              hint={`${painel.alertas.com_tratativa} de ${painel.alertas.enviados} gestores registraram`}
+            />
+          )}
+        </div>
+      )}
+
+      {/* o indicador pedido: quem repete o "não OK", para o acompanhamento sair
+          da memória e virar conversa. team_lead recebe só a própria cadeia. */}
+      {painel && painel.recorrencia.length > 0 && (
+        <div className="card card-pad">
+          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Recorrência de não conformidade</h3>
+          <p className="soft" style={{ fontSize: "0.76rem", margin: "0 0 0.7rem" }}>
+            Quantas vezes cada colaborador saiu não conforme no ano. Recorrência é conversa de
+            gestor, não de multa.
+          </p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th style={{ width: 160 }}>Setor</th>
+                <th style={{ width: 130, textAlign: "right" }}>Não conformes</th>
+                <th style={{ width: 110, textAlign: "right" }}>Blitzes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {painel.recorrencia.map((r) => (
+                <tr key={r.user_id}>
+                  <td style={{ fontWeight: 600 }}>{shortName(r.nome)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <Badge tone={r.nao_conformes >= 3 ? "red" : "amber"}>{r.nao_conformes}</Badge>
+                  </td>
+                  <td className="muted" style={{ textAlign: "right", fontSize: "0.82rem" }}>{r.total}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input
