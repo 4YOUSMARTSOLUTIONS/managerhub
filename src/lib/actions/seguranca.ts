@@ -25,12 +25,14 @@ const RP_CONFIG = "/configuracoes";
 const RP_RELATOS = "/seguranca/relatos";
 const RP_ACIDENTES = "/seguranca/acidentes";
 const RP_PIRAMIDE = "/seguranca/piramide";
+const RP_BLITZ = "/seguranca/blitz";
 
 function revalidar() {
   revalidatePath(RP_CONFIG);
   revalidatePath(RP_RELATOS);
   revalidatePath(RP_ACIDENTES);
   revalidatePath(RP_PIRAMIDE);
+  revalidatePath(RP_BLITZ);
 }
 
 /** As três tabelas de catálogo do módulo. A tela manda o nome; aqui ele é validado. */
@@ -1236,6 +1238,62 @@ export async function setVeiculoAtivo(id: string, active: boolean): Promise<Acti
     if (error) return { error: mensagem(error) };
     revalidar();
     return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type BlitzInput = {
+  userId: string;
+  occurredOn: string;
+  meioId: string;
+  placa?: string | null;
+  veiculoTipo?: string | null;
+  propriedade?: Enums<"seg_veiculo_propriedade"> | null;
+  liberado: boolean;
+  motivoBloqueioId?: string | null;
+  observacao?: string | null;
+  respostas: { perguntaId: string; resposta: Enums<"seg_blitz_resposta"> }[];
+};
+
+/**
+ * Lança a blitz. Tudo acontece na RPC, numa transação só: validação, cálculo
+ * do conforme, carimbo das respostas e o upsert do veículo (que é o "lembrar
+ * da última blitz"). Aqui só passa o payload e traduz o retorno.
+ */
+export async function criarBlitz(input: BlitzInput): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_criar_blitz", {
+      p_data: {
+        user_id: input.userId,
+        occurred_on: input.occurredOn,
+        meio_id: input.meioId,
+        placa: input.placa ?? null,
+        veiculo_tipo: input.veiculoTipo ?? null,
+        propriedade: input.propriedade ?? null,
+        liberado: input.liberado,
+        motivo_bloqueio_id: input.motivoBloqueioId ?? null,
+        observacao: input.observacao ?? null,
+        respostas: input.respostas.map((r) => ({ pergunta_id: r.perguntaId, resposta: r.resposta })),
+      },
+    });
+    if (error) return { error: error.message };
+
+    revalidar();
+    return { ok: true, message: "Blitz registrada." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function excluirBlitz(id: string): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_excluir_blitz", { p_id: id });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Blitz excluída." };
   } catch (e) {
     return { error: (e as Error).message };
   }

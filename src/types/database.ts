@@ -1769,6 +1769,21 @@ export type Database = {
         Update: { meio_id?: string | null; placa?: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active?: boolean }
         Relationships: []
       }
+      // A blitz de um colaborador. Escrita só pela RPC seg_criar_blitz
+      // (conforme é carimbado lá: liberado E nenhuma resposta 'nao').
+      seg_blitz_avaliacoes: {
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; user_id: string; snap_full_name: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; meio_id: string; veiculo_id: string | null; placa: string | null; veiculo_tipo: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"] | null; liberado: boolean; motivo_bloqueio_id: string | null; observacao: string | null; conforme: boolean; created_by: string; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      // a resposta carimba o texto da pergunta da época
+      seg_blitz_respostas: {
+        Row: { id: string; avaliacao_id: string; tenant_id: string; pergunta_id: string | null; snap_pergunta: string; resposta: Database["public"]["Enums"]["seg_blitz_resposta"] }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       seg_equipe: {
         Row: { id: string; tenant_id: string; user_id: string; created_by: string | null; created_at: string }
         Insert: { id?: string; tenant_id: string; user_id: string; created_by?: string | null; created_at?: string }
@@ -2208,6 +2223,8 @@ export type Database = {
       is_safety_member: { Args: { p_tenant: string }; Returns: boolean }
       pode_tratar_seguranca: { Args: { p_tenant: string }; Returns: boolean }
       pode_avaliar_blitz: { Args: { p_tenant: string }; Returns: boolean }
+      seg_criar_blitz: { Args: { p_data: Json }; Returns: string }
+      seg_excluir_blitz: { Args: { p_id: string }; Returns: undefined }
       pode_ver_blitz: { Args: { p_tenant: string; p_user: string }; Returns: boolean }
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
       // só o autor, e só enquanto o relato está `aberto`
