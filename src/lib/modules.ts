@@ -2,7 +2,8 @@
  * Catálogo de módulos do sistema (fonte única da estrutura do menu).
  *
  * AO CRIAR UMA PÁGINA NOVA:
- *  1. adicione a key em `ModuleKey` e a entrada em `MODULES` (e em `NAV_ORDER` se for de topo);
+ *  1. adicione a key em `ModuleKey` e a entrada em `MODULES` (`group: null` = item de topo;
+ *     a ordem do menu é derivada e alfabética, ninguém edita `NAV_ORDER` à mão);
  *  2. chame `moduleGate("<key>")` na primeira linha da page, antes de qualquer query.
  * Sem isso o módulo fica sem venda e sem bloqueio. A key é o identificador no banco
  * (`unit_modules.module_key`): NUNCA renomeie uma key existente sem migrar os dados.
@@ -56,7 +57,10 @@ export const MODULES: ModuleDef[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", group: null, core: true },
 
   { key: "reunioes", label: "Reuniões", href: "/reunioes", group: "g_reunioes" },
-  { key: "acoes", label: "Ações", href: "/acoes", group: "g_reunioes" },
+  // Item de topo, e não mais filho de "Gestão de reuniões": ação nasce de
+  // reunião, de relato de segurança, de acidente, de checklist... prender o
+  // módulo ao grupo de reuniões escondia isso de quem procura.
+  { key: "acoes", label: "Ações", href: "/acoes", group: null },
   { key: "salas", label: "Salas de reunião", href: "/salas", group: "g_reunioes" },
 
   { key: "agenda_diario", label: "Diário de bordo", href: "/agenda", group: "g_rotina" },

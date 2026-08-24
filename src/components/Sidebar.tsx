@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ClipboardList,
   AlertTriangle, CalendarCheck, ChevronDown, ClipboardCheck, DoorOpen, Lock,
   LayoutDashboard, LayoutGrid, Layers, MessageCircle, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
   Boxes, BookMarked, Presentation, Store, MessageSquareWarning, HeartPulse, Triangle,
@@ -30,6 +31,7 @@ const GROUP_ICONS: Record<GroupKey, React.ReactNode> = {
   g_seguranca: <ShieldCheck size={SZ} />,
 };
 const MODULE_ICONS: Partial<Record<ModuleKey, React.ReactNode>> = {
+  acoes: <ClipboardList size={SZ} />,
   dashboard: <LayoutDashboard size={SZ} />,
   chamados: <Headset size={SZ} />,
   chat: <MessageCircle size={SZ} />,
