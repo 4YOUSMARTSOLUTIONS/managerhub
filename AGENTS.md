@@ -1,4 +1,11 @@
 <!-- BEGIN:nextjs-agent-rules -->
+# UI: as regras visuais moram em DESIGN.md
+
+Antes de criar tela, tabela, badge ou modal, leia `DESIGN.md`. Em especial: cor
+é só para status que pede ação (uma pílula tintada por linha; taxonomia usa
+`<Badge variant="quiet">`), e painel de detalhe usa as primitivas `DetailModal`
++ `Field`/`FieldGrid`/`DetailSection` em vez de overlay copiado à mão.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.

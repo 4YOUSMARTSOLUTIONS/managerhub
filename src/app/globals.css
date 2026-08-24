@@ -734,6 +734,8 @@ a {
   --badge-c: var(--mh-text-2);
 }
 .badge-dark {
+  /* --badge-c existe para a variante quiet: o ponto herda o tom mais forte */
+  --badge-c: var(--mh-text-1);
   background: var(--mh-text-1);
   border-color: var(--mh-text-1);
   color: var(--mh-surface-1);
@@ -746,6 +748,33 @@ a {
   border-radius: 999px;
   background: currentColor;
   flex-shrink: 0;
+}
+
+/* ---------- Badge quiet: o nível NEUTRO ----------
+   Regra do produto (DESIGN.md): badge tintado é reservado a STATUS que pede
+   ação. Taxonomia e cadastro (classe, tipo, natureza, perfil, ativo) usam
+   este nível: corpo neutro e a cor semântica reduzida a um ponto de 6px.
+   A cor continua como pista sem competir com o status na mesma linha.
+
+   Declarado DEPOIS dos tons de propósito: o tom continua definindo
+   `--badge-c` (que o ponto usa), mas corpo, borda e texto são vencidos
+   aqui pela ordem da cascata. */
+.badge-quiet {
+  background: transparent;
+  border-color: var(--mh-border-strong);
+  color: var(--mh-text-2);
+}
+.badge-quiet::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--badge-c, var(--mh-text-3));
+  flex-shrink: 0;
+}
+/* quiet cinza dispensa o ponto: seria um ponto cinza em texto cinza */
+.badge-quiet.badge-gray::before {
+  display: none;
 }
 
 /* ---------- Botão-ícone ---------- */
