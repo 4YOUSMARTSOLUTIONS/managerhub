@@ -1734,6 +1734,41 @@ export type Database = {
       }
       // Quem tria relato e cadastra acidente. Não é papel do sistema: o técnico
       // de segurança costuma ser um `member` comum.
+      // Catálogos da blitz de trajeto. As perguntas mudam com o tempo por
+      // decisão da empresa, então são cadastro; a resposta carimba o texto.
+      seg_blitz_meios: {
+        Row: { id: string; tenant_id: string; name: string; image_path: string | null; tem_veiculo: boolean; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; image_path?: string | null; tem_veiculo?: boolean; active?: boolean; sort?: number }
+        Update: { name?: string; image_path?: string | null; tem_veiculo?: boolean; active?: boolean; sort?: number }
+        Relationships: []
+      }
+      seg_blitz_perguntas: {
+        Row: { id: string; tenant_id: string; name: string; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; sort?: number }
+        Update: { name?: string; active?: boolean; sort?: number }
+        Relationships: []
+      }
+      // ligação da cascata: SEM VÍNCULO = VALE PARA TODOS os meios
+      seg_blitz_pergunta_meios: {
+        Row: { tenant_id: string; pergunta_id: string; meio_id: string }
+        Insert: { tenant_id: string; pergunta_id: string; meio_id: string }
+        Update: never
+        Relationships: []
+      }
+      seg_blitz_motivos: {
+        Row: { id: string; tenant_id: string; name: string; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; active?: boolean; sort?: number }
+        Update: { name?: string; active?: boolean; sort?: number }
+        Relationships: []
+      }
+      // O cadastro se alimenta pela blitz (upsert por placa) e Configurações
+      // corrige. Placa normalizada por trigger: maiúscula, sem separador.
+      seg_veiculos: {
+        Row: { id: string; tenant_id: string; user_id: string; meio_id: string | null; placa: string; tipo_descricao: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; meio_id?: string | null; placa: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active?: boolean }
+        Update: { meio_id?: string | null; placa?: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active?: boolean }
+        Relationships: []
+      }
       seg_equipe: {
         Row: { id: string; tenant_id: string; user_id: string; created_by: string | null; created_at: string }
         Insert: { id?: string; tenant_id: string; user_id: string; created_by?: string | null; created_at?: string }
@@ -2172,6 +2207,8 @@ export type Database = {
       // ---- segurança do trabalho ----
       is_safety_member: { Args: { p_tenant: string }; Returns: boolean }
       pode_tratar_seguranca: { Args: { p_tenant: string }; Returns: boolean }
+      pode_avaliar_blitz: { Args: { p_tenant: string }; Returns: boolean }
+      pode_ver_blitz: { Args: { p_tenant: string; p_user: string }; Returns: boolean }
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
       // só o autor, e só enquanto o relato está `aberto`
       seg_editar_relato: { Args: { p_id: string; p_data: Json }; Returns: undefined }
@@ -2301,6 +2338,8 @@ export type Database = {
       seg_acidente_class: "fai" | "mti" | "mdi" | "lti" | "sif"
       // severidade responde "quão grave"; tipo responde "onde a empresa entra"
       seg_acidente_tipo: "tipico" | "trajeto"
+      seg_blitz_resposta: "sim" | "nao" | "na"
+      seg_veiculo_propriedade: "proprio" | "empresa"
       seg_acidente_status: "aberto" | "encerrado"
     }
     CompositeTypes: {

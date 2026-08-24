@@ -713,6 +713,18 @@ export const SEG_ACIDENTE_TIPO_TONE: Record<Enums<"seg_acidente_tipo">, Tone> = 
   trajeto: "purple",
 };
 
+/** Resposta de pergunta da blitz de trajeto. */
+export const SEG_BLITZ_RESPOSTA: Record<Enums<"seg_blitz_resposta">, string> = {
+  sim: "Sim",
+  nao: "Não",
+  na: "Não se aplica",
+};
+
+export const SEG_VEICULO_PROPRIEDADE: Record<Enums<"seg_veiculo_propriedade">, string> = {
+  proprio: "Próprio",
+  empresa: "Da empresa",
+};
+
 export const SEG_ACIDENTE_STATUS: Record<Enums<"seg_acidente_status">, string> = {
   aberto: "Em apuração",
   encerrado: "Encerrado",

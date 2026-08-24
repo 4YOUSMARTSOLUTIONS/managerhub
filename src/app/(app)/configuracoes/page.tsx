@@ -32,6 +32,8 @@ import { SegCatalogoManager } from "@/components/SegCatalogoManager";
 import { SegEquipeManager } from "@/components/SegEquipeManager";
 import { SegProgramaVinculo } from "@/components/SegProgramaVinculo";
 import { SegOcorrenciasManager } from "@/components/SegOcorrenciasManager";
+import { SegBlitzPerguntasManager } from "@/components/SegBlitzPerguntasManager";
+import { SegVeiculosManager } from "@/components/SegVeiculosManager";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -116,6 +118,8 @@ export default async function SettingsPage() {
     { data: segTiposData }, { data: segLocaisData }, { data: segAreasData }, { data: segEquipeData },
     { data: segSettingsData }, { data: segCausasData },
     { data: segOcorrenciasData }, { data: segOcTipos }, { data: segOcLocais }, { data: segOcAreas },
+    { data: blitzMeiosData }, { data: blitzPerguntasData }, { data: blitzPerguntaMeios },
+    { data: blitzMotivosData }, { data: veiculosData },
   ] = await Promise.all([
     supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -223,6 +227,16 @@ export default async function SettingsPage() {
     supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id),
     supabase.from("seg_ocorrencia_locais").select("ocorrencia_id, local_id").eq("tenant_id", tenant.id),
     supabase.from("seg_ocorrencia_areas").select("ocorrencia_id, area_id").eq("tenant_id", tenant.id),
+    // blitz de trajeto: catálogos e o cadastro de veículos
+    supabase.from("seg_blitz_meios").select("id, name, image_path, tem_veiculo, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_blitz_perguntas").select("id, name, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_blitz_pergunta_meios").select("pergunta_id, meio_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_blitz_motivos").select("id, name, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, active")
+      .eq("tenant_id", tenant.id).order("placa"),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -838,6 +852,8 @@ export default async function SettingsPage() {
 
   // só itens ativos, com o caminho inteiro no rótulo: "1.2" sozinho se repete
   // em todo pilar, e a pessoa escolheria o errado
+  const nomePorUser = new Map(rvMembers.map((m) => [m.userId, m.name]));
+
   const itensDoPrograma = itemOpts
     .filter((i) => i.active)
     .map((i) => {
@@ -1395,6 +1411,64 @@ export default async function SettingsPage() {
                     image_path: null, active: r.active,
                   }))}
                   canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-blitz-meios",
+              label: "Meios de transporte",
+              content: (
+                <SegCatalogoManager
+                  kind="meio"
+                  rows={(blitzMeiosData ?? []).map((r) => ({
+                    id: r.id, name: r.name, description: null,
+                    image_path: r.image_path, active: r.active, tem_veiculo: r.tem_veiculo,
+                  }))}
+                  canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-blitz-perguntas",
+              label: "Perguntas da blitz",
+              content: (
+                <SegBlitzPerguntasManager
+                  canEdit={canEdit}
+                  rows={(blitzPerguntasData ?? []).map((q) => ({
+                    id: q.id, name: q.name, active: q.active,
+                    meioIds: (blitzPerguntaMeios ?? []).filter((v) => v.pergunta_id === q.id).map((v) => v.meio_id),
+                  }))}
+                  meios={(blitzMeiosData ?? []).filter((m) => m.active).map((m) => ({ id: m.id, name: m.name }))}
+                />
+              ),
+            },
+            {
+              id: "seg-blitz-motivos",
+              label: "Motivos de bloqueio",
+              content: (
+                <SegCatalogoManager
+                  kind="blitz_motivo"
+                  rows={(blitzMotivosData ?? []).map((r) => ({
+                    id: r.id, name: r.name, description: null, image_path: null, active: r.active,
+                  }))}
+                  canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-veiculos",
+              label: "Veículos",
+              content: (
+                <SegVeiculosManager
+                  canEdit={canEdit}
+                  rows={(veiculosData ?? []).map((v) => ({
+                    id: v.id, userId: v.user_id,
+                    pessoa: nomePorUser.get(v.user_id) ?? null,
+                    meioId: v.meio_id, placa: v.placa,
+                    tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, active: v.active,
+                  }))}
+                  meios={(blitzMeiosData ?? []).filter((m) => m.active && m.tem_veiculo).map((m) => ({ id: m.id, name: m.name }))}
+                  pessoas={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
                 />
               ),
             },

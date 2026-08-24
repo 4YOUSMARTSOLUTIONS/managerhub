@@ -11,6 +11,7 @@ import { normalizar } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
 import {
   definirIconeSeg, deleteSegCatalogo, removerIconeSeg,
+  saveBlitzMeio, saveBlitzMotivo,
   saveSegArea, saveSegCausa, saveSegLocal, saveSegTipoRelato, setSegCatalogoAtivo,
   type CatalogoSeg,
 } from "@/lib/actions/seguranca";
@@ -26,9 +27,11 @@ export type SegCatalogoRow = {
   natureza?: Enums<"seg_relato_natureza">;
   /** só em áreas */
   local_id?: string | null;
+  /** só em meios de transporte da blitz */
+  tem_veiculo?: boolean;
 };
 
-export type SegCatalogoKind = "tipo" | "local" | "area" | "causa";
+export type SegCatalogoKind = "tipo" | "local" | "area" | "causa" | "meio" | "blitz_motivo";
 
 type Rascunho = {
   id?: string;
@@ -36,20 +39,28 @@ type Rascunho = {
   description: string;
   natureza: Enums<"seg_relato_natureza">;
   local_id: string;
+  tem_veiculo: boolean;
 };
 
-const vazio: Rascunho = { name: "", description: "", natureza: "desvio", local_id: "" };
+const vazio: Rascunho = { name: "", description: "", natureza: "desvio", local_id: "", tem_veiculo: true };
 
 const TABELA: Record<SegCatalogoKind, CatalogoSeg> = {
   tipo: "seg_tipos_relato",
   local: "seg_locais",
   area: "seg_areas",
   causa: "seg_causas",
+  meio: "seg_blitz_meios",
+  blitz_motivo: "seg_blitz_motivos",
 };
 
 // causa é vocabulário de análise, não botão de formulário: não tem figura
 const COM_FIGURA: Record<SegCatalogoKind, boolean> = {
-  tipo: true, local: true, area: true, causa: false,
+  tipo: true, local: true, area: true, causa: false, meio: true, blitz_motivo: false,
+};
+
+// descrição só onde ela vira ajuda de formulário; pergunta e motivo são o texto inteiro
+const COM_DESCRICAO: Record<SegCatalogoKind, boolean> = {
+  tipo: true, local: true, area: true, causa: true, meio: false, blitz_motivo: false,
 };
 
 const TEXTOS: Record<SegCatalogoKind, { titulo: string; ajuda: string; singular: string; novo: string; vazio: string; arquivo: string }> = {
@@ -76,6 +87,22 @@ const TEXTOS: Record<SegCatalogoKind, { titulo: string; ajuda: string; singular:
     novo: "+ Nova causa",
     vazio: "Nenhuma causa cadastrada. Sem elas a triagem não consegue apontar tendência.",
     arquivo: "causas-de-seguranca.xlsx",
+  },
+  meio: {
+    titulo: "Meios de transporte",
+    ajuda: "Como o colaborador se desloca até a empresa. Meio sem veículo (a pé, coletivo) esconde placa e tipo no formulário da blitz.",
+    singular: "meio de transporte",
+    novo: "+ Novo meio",
+    vazio: "Nenhum meio cadastrado. Sem eles a blitz não tem o que perguntar.",
+    arquivo: "meios-de-transporte.xlsx",
+  },
+  blitz_motivo: {
+    titulo: "Motivos de bloqueio",
+    ajuda: "Por que um veículo pode ser barrado na blitz. O avaliador escolhe da lista, e é isso que empilha no indicador.",
+    singular: "motivo",
+    novo: "+ Novo motivo",
+    vazio: "Nenhum motivo cadastrado. Bloqueio sem motivo não conta história.",
+    arquivo: "motivos-de-bloqueio.xlsx",
   },
   area: {
     titulo: "Áreas do ocorrido",
@@ -151,7 +178,11 @@ export function SegCatalogoManager({
     setErro("");
     iniciar(async () => {
       const r =
-        kind === "tipo"
+        kind === "meio"
+          ? await saveBlitzMeio({ id: rascunho.id, name: rascunho.name, tem_veiculo: rascunho.tem_veiculo })
+          : kind === "blitz_motivo"
+            ? await saveBlitzMotivo({ id: rascunho.id, name: rascunho.name })
+            : kind === "tipo"
           ? await saveSegTipoRelato({
               id: rascunho.id, name: rascunho.name,
               natureza: rascunho.natureza, description: rascunho.description,
@@ -160,10 +191,10 @@ export function SegCatalogoManager({
             ? await saveSegLocal({ id: rascunho.id, name: rascunho.name, description: rascunho.description })
             : kind === "causa"
               ? await saveSegCausa({ id: rascunho.id, name: rascunho.name, description: rascunho.description })
-              : await saveSegArea({
-                id: rascunho.id, name: rascunho.name,
-                local_id: rascunho.local_id || null, description: rascunho.description,
-              });
+                : await saveSegArea({
+                    id: rascunho.id, name: rascunho.name,
+                    local_id: rascunho.local_id || null, description: rascunho.description,
+                  });
       if (r.error) { setErro(r.error); return; }
       setRascunho(null);
       router.refresh();
@@ -273,7 +304,7 @@ export function SegCatalogoManager({
               <label className="label">Nome <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input
                 className="input" value={rascunho.name}
-                placeholder={kind === "tipo" ? "Condição insegura no PDV" : kind === "local" ? "Armazém" : kind === "causa" ? "Pressa por produtividade" : "Área de descarga"}
+                placeholder={kind === "tipo" ? "Condição insegura no PDV" : kind === "local" ? "Armazém" : kind === "causa" ? "Pressa por produtividade" : kind === "meio" ? "Motocicleta" : kind === "blitz_motivo" ? "Pneu em má condição" : "Área de descarga"}
                 onChange={(e) => setRascunho((r) => (r ? { ...r, name: e.target.value } : r))}
               />
             </div>
@@ -295,6 +326,21 @@ export function SegCatalogoManager({
               </div>
             )}
 
+            {kind === "meio" && (
+              <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", cursor: "pointer", alignSelf: "end", paddingBottom: "0.4rem" }}>
+                <input
+                  type="checkbox" checked={rascunho.tem_veiculo}
+                  onChange={(e) => setRascunho((r) => (r ? { ...r, tem_veiculo: e.target.checked } : r))}
+                />
+                <span style={{ fontSize: "0.82rem" }}>
+                  Tem veículo
+                  <span className="soft" style={{ display: "block", fontSize: "0.72rem" }}>
+                    Liga placa, tipo e propriedade no formulário da blitz.
+                  </span>
+                </span>
+              </label>
+            )}
+
             {kind === "area" && (
               <div>
                 <label className="label">Local</label>
@@ -308,14 +354,16 @@ export function SegCatalogoManager({
               </div>
             )}
 
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label className="label">Descrição</label>
-              <textarea
-                className="input" rows={2} value={rascunho.description}
-                placeholder="Opcional. Aparece como ajuda no formulário de relato."
-                onChange={(e) => setRascunho((r) => (r ? { ...r, description: e.target.value } : r))}
-              />
-            </div>
+            {COM_DESCRICAO[kind] && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label className="label">Descrição</label>
+                <textarea
+                  className="input" rows={2} value={rascunho.description}
+                  placeholder="Opcional. Aparece como ajuda no formulário de relato."
+                  onChange={(e) => setRascunho((r) => (r ? { ...r, description: e.target.value } : r))}
+                />
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.9rem", flexWrap: "wrap" }}>
             <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={salvar}>
@@ -343,6 +391,7 @@ export function SegCatalogoManager({
               <th>Nome</th>
               {kind === "tipo" && <th style={{ width: 190 }}>Natureza</th>}
               {kind === "area" && <th style={{ width: 190 }}>Local</th>}
+              {kind === "meio" && <th style={{ width: 140 }}>Veículo</th>}
               <th style={{ width: 100 }}>Situação</th>
               {canEdit && <th style={{ textAlign: "right" }}></th>}
             </tr>
@@ -363,6 +412,11 @@ export function SegCatalogoManager({
                 {kind === "area" && (
                   <td className="soft" style={{ fontSize: "0.82rem" }}>
                     {(i.local_id && nomeDoLocal.get(i.local_id)) || "Todos os locais"}
+                  </td>
+                )}
+                {kind === "meio" && (
+                  <td className="soft" style={{ fontSize: "0.82rem" }}>
+                    {i.tem_veiculo ? "Com placa" : "Sem veículo"}
                   </td>
                 )}
                 <td><Badge tone={i.active ? "green" : "gray"}>{i.active ? "Ativo" : "Inativo"}</Badge></td>
@@ -393,6 +447,7 @@ export function SegCatalogoManager({
                           setRascunho({
                             id: i.id, name: i.name, description: i.description ?? "",
                             natureza: i.natureza ?? "desvio", local_id: i.local_id ?? "",
+                            tem_veiculo: i.tem_veiculo ?? true,
                           });
                         }}
                       >

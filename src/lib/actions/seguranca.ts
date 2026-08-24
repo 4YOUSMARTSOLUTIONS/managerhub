@@ -34,9 +34,14 @@ function revalidar() {
 }
 
 /** As três tabelas de catálogo do módulo. A tela manda o nome; aqui ele é validado. */
-export type CatalogoSeg = "seg_tipos_relato" | "seg_locais" | "seg_areas" | "seg_causas" | "seg_ocorrencias";
+export type CatalogoSeg =
+  | "seg_tipos_relato" | "seg_locais" | "seg_areas" | "seg_causas" | "seg_ocorrencias"
+  | "seg_blitz_meios" | "seg_blitz_perguntas" | "seg_blitz_motivos";
 
-const CATALOGOS: CatalogoSeg[] = ["seg_tipos_relato", "seg_locais", "seg_areas", "seg_causas", "seg_ocorrencias"];
+const CATALOGOS: CatalogoSeg[] = [
+  "seg_tipos_relato", "seg_locais", "seg_areas", "seg_causas", "seg_ocorrencias",
+  "seg_blitz_meios", "seg_blitz_perguntas", "seg_blitz_motivos",
+];
 
 function catalogoValido(valor: unknown): CatalogoSeg | null {
   const t = String(valor ?? "") as CatalogoSeg;
@@ -51,6 +56,10 @@ function mensagem(e: { message?: string }): string {
   if (msg.includes("seg_areas_nome_unico")) return "Já existe uma área com esse nome nesse local.";
   if (msg.includes("seg_causas_nome_unico")) return "Já existe uma causa com esse nome.";
   if (msg.includes("seg_ocorrencias_nome_unico")) return "Já existe uma ocorrência com esse nome.";
+  if (msg.includes("seg_blitz_meios_nome_unico")) return "Já existe um meio de transporte com esse nome.";
+  if (msg.includes("seg_blitz_perguntas_nome_unico")) return "Já existe uma pergunta com esse texto.";
+  if (msg.includes("seg_blitz_motivos_nome_unico")) return "Já existe um motivo com esse nome.";
+  if (msg.includes("seg_veiculos_placa_unica")) return "Já existe um veículo com essa placa nesta empresa.";
   if (msg.includes("_nome_nao_vazio")) return "Informe o nome.";
   if (msg.includes("row-level security")) return "Você não tem permissão para alterar este cadastro.";
   return msg || "Não foi possível salvar.";
@@ -367,6 +376,12 @@ export async function setSegCatalogoAtivo(formData: FormData): Promise<void> {
     await supabase.from("seg_causas").update({ active }).eq("id", id);
   } else if (tabela === "seg_ocorrencias") {
     await supabase.from("seg_ocorrencias").update({ active }).eq("id", id);
+  } else if (tabela === "seg_blitz_meios") {
+    await supabase.from("seg_blitz_meios").update({ active }).eq("id", id);
+  } else if (tabela === "seg_blitz_perguntas") {
+    await supabase.from("seg_blitz_perguntas").update({ active }).eq("id", id);
+  } else if (tabela === "seg_blitz_motivos") {
+    await supabase.from("seg_blitz_motivos").update({ active }).eq("id", id);
   } else {
     await supabase.from("seg_areas").update({ active }).eq("id", id);
   }
@@ -397,7 +412,13 @@ export async function deleteSegCatalogo(formData: FormData): Promise<void> {
           ? await supabase.from("seg_causas").delete().eq("id", id)
           : tabela === "seg_ocorrencias"
             ? await supabase.from("seg_ocorrencias").delete().eq("id", id)
-            : await supabase.from("seg_areas").delete().eq("id", id);
+            : tabela === "seg_blitz_meios"
+              ? await supabase.from("seg_blitz_meios").delete().eq("id", id)
+              : tabela === "seg_blitz_perguntas"
+                ? await supabase.from("seg_blitz_perguntas").delete().eq("id", id)
+                : tabela === "seg_blitz_motivos"
+                  ? await supabase.from("seg_blitz_motivos").delete().eq("id", id)
+                  : await supabase.from("seg_areas").delete().eq("id", id);
 
   if (apagou.error) {
     if (tabela === "seg_tipos_relato") {
@@ -408,6 +429,12 @@ export async function deleteSegCatalogo(formData: FormData): Promise<void> {
       await supabase.from("seg_causas").update({ active: false }).eq("id", id);
     } else if (tabela === "seg_ocorrencias") {
       await supabase.from("seg_ocorrencias").update({ active: false }).eq("id", id);
+    } else if (tabela === "seg_blitz_meios") {
+      await supabase.from("seg_blitz_meios").update({ active: false }).eq("id", id);
+    } else if (tabela === "seg_blitz_perguntas") {
+      await supabase.from("seg_blitz_perguntas").update({ active: false }).eq("id", id);
+    } else if (tabela === "seg_blitz_motivos") {
+      await supabase.from("seg_blitz_motivos").update({ active: false }).eq("id", id);
     } else {
       await supabase.from("seg_areas").update({ active: false }).eq("id", id);
     }
@@ -432,8 +459,8 @@ async function lerIcone(
   tabela: CatalogoSeg,
   id: string,
 ): Promise<string | null> {
-  // causa não tem figura: é vocabulário de análise, não botão de formulário
-  if (tabela === "seg_causas") return null;
+  // causa, pergunta e motivo não têm figura: são vocabulário, não botão
+  if (tabela === "seg_causas" || tabela === "seg_blitz_perguntas" || tabela === "seg_blitz_motivos") return null;
   const q =
     tabela === "seg_tipos_relato"
       ? await supabase.from("seg_tipos_relato").select("image_path").eq("id", id).maybeSingle()
@@ -441,7 +468,9 @@ async function lerIcone(
         ? await supabase.from("seg_locais").select("image_path").eq("id", id).maybeSingle()
         : tabela === "seg_ocorrencias"
           ? await supabase.from("seg_ocorrencias").select("image_path").eq("id", id).maybeSingle()
-          : await supabase.from("seg_areas").select("image_path").eq("id", id).maybeSingle();
+          : tabela === "seg_blitz_meios"
+            ? await supabase.from("seg_blitz_meios").select("image_path").eq("id", id).maybeSingle()
+            : await supabase.from("seg_areas").select("image_path").eq("id", id).maybeSingle();
   return q.data?.image_path ?? null;
 }
 
@@ -457,8 +486,11 @@ async function gravarIcone(
   if (tabela === "seg_locais") {
     return supabase.from("seg_locais").update({ image_path: path }).eq("id", id);
   }
-  if (tabela === "seg_causas") {
-    return { error: { message: "Causa não tem figura." } };
+  if (tabela === "seg_causas" || tabela === "seg_blitz_perguntas" || tabela === "seg_blitz_motivos") {
+    return { error: { message: "Este cadastro não tem figura." } };
+  }
+  if (tabela === "seg_blitz_meios") {
+    return supabase.from("seg_blitz_meios").update({ image_path: path }).eq("id", id);
   }
   if (tabela === "seg_ocorrencias") {
     return supabase.from("seg_ocorrencias").update({ image_path: path }).eq("id", id);
@@ -1067,6 +1099,143 @@ export async function criarAcaoDoAcidente(
     revalidar();
     revalidatePath("/acoes");
     return { ok: true, message: "Ação de tratamento criada e vinculada ao acidente." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ============================================================================
+// Blitz de trajeto: catálogos e veículos
+// ============================================================================
+
+export type BlitzMeioInput = { id?: string; name: string; tem_veiculo: boolean };
+
+export async function saveBlitzMeio(input: BlitzMeioInput): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    const name = input.name.trim();
+    if (!name) return { error: "Informe o nome do meio de transporte." };
+
+    const { error } = input.id
+      ? await supabase.from("seg_blitz_meios").update({ name, tem_veiculo: input.tem_veiculo }).eq("id", input.id)
+      : await supabase.from("seg_blitz_meios").insert({ tenant_id: tenantId, name, tem_veiculo: input.tem_veiculo });
+    if (error) return { error: mensagem(error) };
+
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type BlitzPerguntaInput = {
+  id?: string;
+  name: string;
+  /** vazio = a pergunta vale para todo meio (regra da cascata) */
+  meioIds: string[];
+};
+
+export async function saveBlitzPergunta(input: BlitzPerguntaInput): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    const name = input.name.trim();
+    if (!name) return { error: "Escreva a pergunta." };
+
+    let id = input.id;
+    if (id) {
+      const { error } = await supabase.from("seg_blitz_perguntas").update({ name }).eq("id", id);
+      if (error) return { error: mensagem(error) };
+    } else {
+      const { data, error } = await supabase
+        .from("seg_blitz_perguntas")
+        .insert({ tenant_id: tenantId, name })
+        .select("id")
+        .single();
+      if (error) return { error: mensagem(error) };
+      id = data.id;
+    }
+
+    // vínculos por substituição total, como nas ocorrências: o estado da tela
+    // é a verdade, e diff aqui só criaria bugs de borda
+    const del = await supabase.from("seg_blitz_pergunta_meios").delete().eq("pergunta_id", id);
+    if (del.error) return { error: mensagem(del.error) };
+    if (input.meioIds.length) {
+      const { error } = await supabase.from("seg_blitz_pergunta_meios").insert(
+        input.meioIds.map((meioId) => ({ tenant_id: tenantId, pergunta_id: id as string, meio_id: meioId })),
+      );
+      if (error) return { error: mensagem(error) };
+    }
+
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function saveBlitzMotivo(input: { id?: string; name: string }): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    const name = input.name.trim();
+    if (!name) return { error: "Informe o motivo." };
+
+    const { error } = input.id
+      ? await supabase.from("seg_blitz_motivos").update({ name }).eq("id", input.id)
+      : await supabase.from("seg_blitz_motivos").insert({ tenant_id: tenantId, name });
+    if (error) return { error: mensagem(error) };
+
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export type VeiculoInput = {
+  id?: string;
+  userId: string;
+  meioId?: string | null;
+  placa: string;
+  tipoDescricao?: string | null;
+  propriedade: Enums<"seg_veiculo_propriedade">;
+};
+
+/**
+ * Cadastro de veículo pela tela de Configurações. A RLS já limita a quem pode
+ * avaliar blitz; a placa é normalizada por trigger no banco (maiúscula, sem
+ * separador), então "abc-1d23" e "ABC1D23" caem na mesma linha.
+ */
+export async function salvarVeiculo(input: VeiculoInput): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    if (!input.userId) return { error: "Informe o colaborador." };
+    if (!input.placa.trim()) return { error: "Informe a placa." };
+
+    const campos = {
+      meio_id: input.meioId || null,
+      placa: input.placa,
+      tipo_descricao: input.tipoDescricao?.trim() || null,
+      propriedade: input.propriedade,
+    };
+    const { error } = input.id
+      ? await supabase.from("seg_veiculos").update(campos).eq("id", input.id)
+      : await supabase.from("seg_veiculos").insert({ ...campos, tenant_id: tenantId, user_id: input.userId });
+    if (error) return { error: mensagem(error) };
+
+    revalidar();
+    return { ok: true, message: "Veículo salvo." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function setVeiculoAtivo(id: string, active: boolean): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.from("seg_veiculos").update({ active }).eq("id", id);
+    if (error) return { error: mensagem(error) };
+    revalidar();
+    return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }
