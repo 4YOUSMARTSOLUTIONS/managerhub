@@ -12,7 +12,7 @@ import {
 } from "@/lib/ferias";
 import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
-import { lancarFerias, reenviarFerias, solicitarFerias } from "@/lib/actions/ferias";
+import { lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias } from "@/lib/actions/ferias";
 
 /**
  * O formulário da previsão de férias: até 3 períodos, abono pecuniário e
@@ -29,14 +29,14 @@ import { lancarFerias, reenviarFerias, solicitarFerias } from "@/lib/actions/fer
 export function FeriasSolicitarDialog({
   modo, pessoas, aquisitivos, feriados, hoje, inicial, onFechar,
 }: {
-  modo: "solicitar" | "lancar" | "reenviar";
+  modo: "solicitar" | "lancar" | "reenviar" | "reagendar";
   /** só no modo lancar: quem o usuário pode programar */
   pessoas?: Person[];
   /** aquisitivos de quem vai tirar férias; null = sem validação de saldo no cliente */
   aquisitivos: AquisitivoInfo[] | null;
   feriados: FeriadoCustom[];
   hoje: string;
-  /** só no modo reenviar */
+  /** nos modos reenviar e reagendar: a linha de origem */
   inicial?: { id: string; inicio: string; fim: string; abono: number; decimo: boolean };
   onFechar: () => void;
 }) {
@@ -51,7 +51,8 @@ export function FeriasSolicitarDialog({
   const router = useRouter();
 
   const titulo = modo === "solicitar" ? "Solicitar férias"
-    : modo === "lancar" ? "Lançar férias para a equipe" : "Corrigir e reenviar";
+    : modo === "lancar" ? "Lançar férias para a equipe"
+    : modo === "reagendar" ? "Reagendar férias" : "Corrigir e reenviar";
 
   const totalDias = periodos.reduce(
     (s, p) => s + (p.inicio && p.fim && p.fim >= p.inicio ? diasDoPeriodo(p.inicio, p.fim) + p.abono : 0), 0);
@@ -89,10 +90,15 @@ export function FeriasSolicitarDialog({
         ? await solicitarFerias({ periodos, hoje })
         : modo === "lancar"
           ? await lancarFerias({ userId: userId[0], periodos, hoje })
-          : await reenviarFerias({
-              id: inicial!.id, inicio: periodos[0].inicio, fim: periodos[0].fim,
-              abono: periodos[0].abono, decimo: periodos[0].decimo, hoje,
-            });
+          : modo === "reagendar"
+            ? await reagendarFerias({
+                id: inicial!.id, inicio: periodos[0].inicio, fim: periodos[0].fim,
+                abono: periodos[0].abono, decimo: periodos[0].decimo, hoje,
+              })
+            : await reenviarFerias({
+                id: inicial!.id, inicio: periodos[0].inicio, fim: periodos[0].fim,
+                abono: periodos[0].abono, decimo: periodos[0].decimo, hoje,
+              });
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Salvo.");
       onFechar();
@@ -126,6 +132,13 @@ export function FeriasSolicitarDialog({
               <label className="label">Colaborador <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <PeoplePicker people={pessoas ?? []} selected={userId} onChange={setUserId} single />
             </div>
+          )}
+
+          {modo === "reagendar" && inicial && (
+            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
+              Reagendando as férias de {formatDate(inicial.inicio)} a {formatDate(inicial.fim)}.
+              Elas continuam valendo até o departamento pessoal verificar e efetivar a troca.
+            </p>
           )}
 
           {aquisitivos && aquisitivos.length > 0 && (
@@ -198,7 +211,7 @@ export function FeriasSolicitarDialog({
           ))}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-            {modo !== "reenviar" && periodos.length < 3 ? (
+            {(modo === "solicitar" || modo === "lancar") && periodos.length < 3 ? (
               <button
                 type="button" className="btn btn-ghost btn-sm"
                 onClick={() => setPeriodos((xs) => [...xs, { inicio: "", fim: "", abono: 0, decimo: false }])}

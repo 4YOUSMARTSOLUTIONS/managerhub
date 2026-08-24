@@ -874,6 +874,14 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // Dedup do varredor semanal de vencimento (cron): cada (pessoa,
+      // aquisitivo, tipo) avisa uma vez. Escrita só pela função do cron.
+      ferias_alertas_enviados: {
+        Row: { tenant_id: string; user_id: string; aquisitivo_inicio: string; tipo: string; sent_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       // ---- redutores da remuneração variável ----
       // O catálogo de punições e as REGRAS são configuração: leitura para
       // qualquer membro. `employee_sanctions` é dado disciplinar, e a leitura é
@@ -2023,6 +2031,9 @@ export type Database = {
       ferias_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
       ferias_efetivar: { Args: { p_id: string; p_desconta_rv?: boolean; p_nota?: string | null }; Returns: undefined }
       ferias_contexto_efetivacao: { Args: { p_id: string }; Returns: Json }
+      ferias_reagendar: { Args: { p_id: string; p_inicio: string; p_fim: string; p_abono?: number; p_decimo?: boolean; p_hoje?: string }; Returns: undefined }
+      // escopo decidido DENTRO da RPC: DP/manager = empresa, team_lead = cadeia, member = só ele
+      ferias_painel: { Args: { p_tenant: string; p_hoje?: string; p_unit_ids?: string[] | null }; Returns: Json }
       ferias_periodos_aquisitivos: {
         Args: { p_tenant: string; p_user: string; p_hoje?: string; p_excluir?: string | null }
         Returns: {

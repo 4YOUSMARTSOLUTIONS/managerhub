@@ -141,6 +141,23 @@ export async function efetivarFerias(
   }
 }
 
+export async function reagendarFerias(
+  input: { id: string; inicio: string; fim: string; abono: number; decimo: boolean; hoje: string },
+): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("ferias_reagendar", {
+      p_id: input.id, p_inicio: input.inicio, p_fim: input.fim,
+      p_abono: input.abono, p_decimo: input.decimo, p_hoje: input.hoje,
+    });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Reagendamento enviado. As férias atuais continuam valendo até a verificação do DP." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export type ContextoEfetivacao = {
   faltasQtd: number;
   faltasDias: number;

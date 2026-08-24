@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { minhaEquipe } from "@/lib/team";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { FeriasManager, type FeriasRow } from "@/components/FeriasManager";
+import { FeriasManager, type FeriasPainel, type FeriasRow } from "@/components/FeriasManager";
 import type { AquisitivoInfo } from "@/lib/ferias";
 
 /**
@@ -45,7 +45,7 @@ export default async function FeriasPage() {
   const [
     { data: linhas }, membros, equipe,
     { data: meuVinculo }, { data: bloqueados }, { data: feriados },
-    { data: aquisitivos },
+    { data: aquisitivos }, { data: painel },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
@@ -60,6 +60,11 @@ export default async function FeriasPage() {
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
     supabase.rpc("ferias_periodos_aquisitivos", {
       p_tenant: tenant.id, p_user: user.id, p_hoje: hoje,
+    }),
+    // o painel decide o escopo por dentro (DP e manager = empresa, team_lead =
+    // cadeia, member = só ele); a unidade do topo só encolhe
+    supabase.rpc("ferias_painel", {
+      p_tenant: tenant.id, p_hoje: hoje, p_unit_ids: unidades,
     }),
   ]);
 
@@ -151,6 +156,7 @@ export default async function FeriasPage() {
         meusAquisitivos={meusAquisitivos}
         feriados={(feriados ?? []).map((f) => ({ day: f.day, name: f.name }))}
         hoje={hoje}
+        painel={(painel ?? null) as FeriasPainel | null}
       />
     </div>
   );

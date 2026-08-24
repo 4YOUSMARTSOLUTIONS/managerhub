@@ -16,6 +16,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
 import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
+import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
@@ -26,6 +27,20 @@ import {
   type ContextoEfetivacao,
 } from "@/lib/actions/ferias";
 import type { Enums } from "@/types/database";
+
+/** o retorno de `ferias_painel` (o escopo já vem recortado pela alçada) */
+export type FeriasPainel = {
+  agora: { userId: string; nome: string | null; setor: string | null; inicio: string; fim: string }[];
+  proximas: { userId: string; nome: string | null; inicio: string; fim: string; origem: "efetivada" | "prevista" }[];
+  timeline: TimelineLinha[];
+  saldos: {
+    userId: string; nome: string | null; setor: string | null; saldo: number;
+    situacao: string | null; aquisitivoInicio: string | null; aquisitivoFim: string | null;
+    gozarAte: string | null;
+  }[];
+  janelaInicio: string;
+  janelaFim: string;
+};
 
 export type FeriasRow = {
   id: string;
@@ -73,7 +88,7 @@ export type FeriasRow = {
  */
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, podeSolicitar, avisoSolicitar,
-  pessoasLancar, meusAquisitivos, feriados, hoje,
+  pessoasLancar, meusAquisitivos, feriados, hoje, painel,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -88,9 +103,11 @@ export function FeriasManager({
   meusAquisitivos: AquisitivoInfo[];
   feriados: FeriadoCustom[];
   hoje: string;
+  painel: FeriasPainel | null;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [reenvio, setReenvio] = useState<FeriasRow | null>(null);
+  const [reagendando, setReagendando] = useState<FeriasRow | null>(null);
   const [detalhe, setDetalhe] = useState<FeriasRow | null>(null);
   const [efetivando, setEfetivando] = useState<FeriasRow | null>(null);
   const [nota, setNota] = useState<{ row: FeriasRow; acao: "devolver" | "cancelar" } | null>(null);
@@ -104,9 +121,17 @@ export function FeriasManager({
     () => [...rows.filter((r) => r.status === "aprovada")].sort((a, b) => a.startDate.localeCompare(b.startDate)),
     [rows]);
 
-  const emGozo = rows.filter((r) => r.status === "efetivada" && r.startDate <= hoje && r.endDate >= hoje);
-  const proximas = rows.filter((r) =>
-    (r.status === "efetivada" || r.status === "aprovada") && r.startDate > hoje && r.startDate <= somarDias(hoje, 60));
+  // o painel traz o FATO (employee_absences, inclusive o histórico pré-módulo);
+  // sem ele, cai para as linhas do processo
+  const emGozoQtd = painel
+    ? painel.agora.length
+    : rows.filter((r) => r.status === "efetivada" && r.startDate <= hoje && r.endDate >= hoje).length;
+  const proximasQtd = painel
+    ? painel.proximas.length
+    : rows.filter((r) =>
+        (r.status === "efetivada" || r.status === "aprovada") && r.startDate > hoje && r.startDate <= somarDias(hoje, 60)).length;
+  const aVencerQtd = painel ? painel.saldos.filter((s) => s.situacao === "a_vencer").length : 0;
+  const vencidasQtd = painel ? painel.saldos.filter((s) => s.situacao === "vencida").length : 0;
 
   const podeGerir = ehGestor || ehDp;
 
@@ -116,6 +141,7 @@ export function FeriasManager({
         minhas={minhas} aquisitivos={meusAquisitivos} avisoSolicitar={avisoSolicitar}
         podeSolicitar={podeSolicitar} onSolicitar={() => setDialogo("solicitar")}
         onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
+        onReagendar={setReagendando}
         hoje={hoje}
       />
     ) },
@@ -136,6 +162,11 @@ export function FeriasManager({
       <TabelaGeral rows={rows} onDetalhe={setDetalhe} />
     ) });
   }
+  if (podeGerir && painel) {
+    abas.push({ id: "visao", label: "Visão geral", content: (
+      <VisaoGeral painel={painel} hoje={hoje} />
+    ) });
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
@@ -153,14 +184,22 @@ export function FeriasManager({
       </div>
 
       {podeGerir && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.8rem" }}>
-          <StatCard label="De férias agora" value={emGozo.length} tone="green"
-            hint={emGozo.slice(0, 3).map((r) => shortName(r.fullName)).join(", ") || "ninguém em gozo hoje"} />
-          <StatCard label="Próximas saídas (60 dias)" value={proximas.length} tone="blue" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
+          <StatCard label="De férias agora" value={emGozoQtd} tone="green"
+            hint={painel?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje"} />
+          <StatCard label="Próximas saídas (60 dias)" value={proximasQtd} tone="blue" />
           <StatCard label="Aguardando o gestor" value={rows.filter((r) => r.status === "solicitada").length}
             tone={fila.length > 0 ? "amber" : "gray"} />
           <StatCard label="Aguardando efetivação" value={filaDp.length} tone={filaDp.length > 0 ? "amber" : "gray"}
             hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
+          {painel && (
+            <StatCard label="A vencer (90 dias)" value={aVencerQtd} tone={aVencerQtd > 0 ? "amber" : "gray"}
+              hint="período concessivo terminando" />
+          )}
+          {painel && (
+            <StatCard label="Vencidas" value={vencidasQtd} tone={vencidasQtd > 0 ? "red" : "green"}
+              hint={vencidasQtd > 0 ? "concessão em dobro (art. 137)" : "nenhum estouro"} />
+          )}
         </div>
       )}
 
@@ -189,11 +228,25 @@ export function FeriasManager({
           onFechar={() => setReenvio(null)}
         />
       )}
+      {reagendando && (
+        <FeriasSolicitarDialog
+          modo="reagendar"
+          aquisitivos={null}
+          feriados={feriados}
+          hoje={hoje}
+          inicial={{
+            id: reagendando.id, inicio: reagendando.startDate, fim: reagendando.endDate,
+            abono: reagendando.abonoDias, decimo: reagendando.decimo,
+          }}
+          onFechar={() => setReagendando(null)}
+        />
+      )}
       {detalhe && (
         <DetalheFerias
           row={detalhe} meuId={meuId} ehDp={ehDp} ehOwner={ehOwner}
           onFechar={() => setDetalhe(null)}
           onReenviar={(r) => { setDetalhe(null); setReenvio(r); }}
+          onReagendar={(r) => { setDetalhe(null); setReagendando(r); }}
           onEfetivar={(r) => { setDetalhe(null); setEfetivando(r); }}
           onDevolver={(r) => { setDetalhe(null); setNota({ row: r, acao: "devolver" }); }}
           onCancelar={(r) => { setDetalhe(null); setNota({ row: r, acao: "cancelar" }); }}
@@ -232,7 +285,7 @@ export function FeriasManager({
 // ============================================================================
 
 function MinhasFerias({
-  minhas, aquisitivos, podeSolicitar, avisoSolicitar, onSolicitar, onReenviar, onDetalhe, onCancelar, hoje,
+  minhas, aquisitivos, podeSolicitar, avisoSolicitar, onSolicitar, onReenviar, onDetalhe, onCancelar, onReagendar, hoje,
 }: {
   minhas: FeriasRow[];
   aquisitivos: AquisitivoInfo[];
@@ -242,6 +295,7 @@ function MinhasFerias({
   onReenviar: (r: FeriasRow) => void;
   onDetalhe: (r: FeriasRow) => void;
   onCancelar: (r: FeriasRow) => void;
+  onReagendar: (r: FeriasRow) => void;
   hoje: string;
 }) {
   const relevantes = aquisitivos.filter((a) => a.situacao !== "quitada" || a.diasUsados > 0);
@@ -329,6 +383,11 @@ function MinhasFerias({
                       {(r.status === "solicitada" || r.status === "reprovada") && (
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onCancelar(r)}>
                           <Ban size={13} aria-hidden /> Cancelar
+                        </button>
+                      )}
+                      {r.status === "efetivada" && r.startDate > hoje && (
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReagendar(r)}>
+                          <CalendarPlus size={13} aria-hidden /> Reagendar
                         </button>
                       )}
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDetalhe(r)}>Detalhe</button>
@@ -569,7 +628,7 @@ function TabelaGeral({ rows, onDetalhe }: { rows: FeriasRow[]; onDetalhe: (r: Fe
 // ============================================================================
 
 function DetalheFerias({
-  row, meuId, ehDp, ehOwner, onFechar, onReenviar, onEfetivar, onDevolver, onCancelar,
+  row, meuId, ehDp, ehOwner, onFechar, onReenviar, onReagendar, onEfetivar, onDevolver, onCancelar,
 }: {
   row: FeriasRow;
   meuId: string;
@@ -577,6 +636,7 @@ function DetalheFerias({
   ehOwner: boolean;
   onFechar: () => void;
   onReenviar: (r: FeriasRow) => void;
+  onReagendar: (r: FeriasRow) => void;
   onEfetivar: (r: FeriasRow) => void;
   onDevolver: (r: FeriasRow) => void;
   onCancelar: (r: FeriasRow) => void;
@@ -633,6 +693,11 @@ function DetalheFerias({
             {row.status === "reprovada" && row.createdBy === meuId && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReenviar(row)}>
                 <Pencil size={13} aria-hidden /> Corrigir e reenviar
+              </button>
+            )}
+            {row.status === "efetivada" && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReagendar(row)}>
+                <CalendarPlus size={13} aria-hidden /> Reagendar
               </button>
             )}
             {podeCancelar && (
@@ -819,6 +884,134 @@ function EfetivarDialog({
         )}
       </DetailSection>
     </DetailModal>
+  );
+}
+
+// ============================================================================
+// Visão geral (gestor e DP)
+// ============================================================================
+
+function VisaoGeral({ painel, hoje }: { painel: FeriasPainel; hoje: string }) {
+  const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer");
+  const [mostrarTodos, setMostrarTodos] = useState(false);
+  const listaSaldos = mostrarTodos ? painel.saldos : comPendencia;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.9rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "0.8rem" }}>
+        <div className="card card-pad">
+          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.6rem" }}>De férias agora</h3>
+          {painel.agora.length === 0 ? (
+            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém em gozo hoje.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              {painel.agora.map((a) => (
+                <div key={`${a.userId}${a.inicio}`} style={{ display: "flex", gap: "0.5rem", alignItems: "baseline", fontSize: "0.84rem" }}>
+                  <span style={{ fontWeight: 600 }}>{shortName(a.nome)}</span>
+                  <span className="soft" style={{ fontSize: "0.76rem" }}>{a.setor ?? ""}</span>
+                  <span className="soft" style={{ marginLeft: "auto", fontSize: "0.78rem" }}>volta {formatDate(somarDias(a.fim, 1))}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card card-pad">
+          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.6rem" }}>Próximas saídas (60 dias)</h3>
+          {painel.proximas.length === 0 ? (
+            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma saída marcada para os próximos 60 dias.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              {painel.proximas.slice(0, 8).map((p) => (
+                <div key={`${p.userId}${p.inicio}`} style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.84rem" }}>
+                  <span style={{ fontWeight: 600 }}>{shortName(p.nome)}</span>
+                  <Badge variant="quiet" tone={p.origem === "efetivada" ? "green" : "blue"}>
+                    {p.origem === "efetivada" ? "Efetivada" : "Prevista"}
+                  </Badge>
+                  <span className="soft" style={{ marginLeft: "auto", fontSize: "0.78rem" }}>
+                    {formatDate(p.inicio)} a {formatDate(p.fim)}
+                  </span>
+                </div>
+              ))}
+              {painel.proximas.length > 8 && (
+                <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
+                  e mais {painel.proximas.length - 8} na linha do tempo abaixo.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <FeriasTimeline
+        linhas={painel.timeline}
+        janelaInicio={painel.janelaInicio}
+        janelaFim={painel.janelaFim}
+        hoje={hoje}
+      />
+
+      <div className="card card-pad">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div>
+            <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>Saldos e prazos de concessão</h3>
+            <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
+              O próximo período aquisitivo a programar de cada colaborador. Vencida = a
+              concessão passou do prazo e agora é em dobro (art. 137).
+            </p>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMostrarTodos((v) => !v)}>
+            {mostrarTodos ? "Ver só as pendências" : `Ver todos (${painel.saldos.length})`}
+          </button>
+        </div>
+        {listaSaldos.length === 0 ? (
+          <p className="soft" style={{ fontSize: "0.82rem", margin: "0.7rem 0 0" }}>
+            Nenhum período a vencer ou vencido. Tudo em dia.
+          </p>
+        ) : (
+          <div style={{ overflowX: "auto", marginTop: "0.7rem" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th style={{ width: 150 }}>Setor</th>
+                  <th style={{ width: 120 }}>Aquisitivo</th>
+                  <th style={{ width: 80, textAlign: "right" }}>Saldo</th>
+                  <th style={{ width: 120 }}>Gozar até</th>
+                  <th style={{ width: 130 }}>Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listaSaldos.slice(0, 60).map((s) => (
+                  <tr key={s.userId}>
+                    <td style={{ fontWeight: 600 }}>{shortName(s.nome)}</td>
+                    <td className="muted" style={{ fontSize: "0.82rem" }}>{s.setor ?? "—"}</td>
+                    <td className="muted" style={{ fontSize: "0.82rem" }}>
+                      {s.aquisitivoInicio ? `${s.aquisitivoInicio.slice(0, 4)}/${s.aquisitivoFim?.slice(0, 4)}` : "—"}
+                    </td>
+                    <td className="tabular" style={{ textAlign: "right" }}>{s.saldo}</td>
+                    <td className="muted" style={{ fontSize: "0.82rem" }}>{s.gozarAte ? formatDate(s.gozarAte) : "—"}</td>
+                    <td>
+                      {s.situacao ? (
+                        <Badge tone={FERIAS_AQUISITIVO_TONE[s.situacao] ?? "gray"}>
+                          {FERIAS_AQUISITIVO_SITUACAO[s.situacao] ?? s.situacao}
+                        </Badge>
+                      ) : (
+                        <Badge variant="quiet" tone="green">Em dia</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {listaSaldos.length > 60 && (
+              <p className="soft" style={{ fontSize: "0.76rem", margin: "0.5rem 0 0" }}>
+                Mostrando 60 de {listaSaldos.length}. Use a exportação de Todas as previsões para a lista completa.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
