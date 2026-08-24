@@ -151,6 +151,29 @@ export function SegAcidenteDialog({
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+          {/* Tipo antes da severidade: primeiro se estabelece se o fato é da
+              operação ou do percurso, e só depois quão grave ele foi. */}
+          <div>
+            <label className="label">Tipo de acidente <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              {(["tipico", "trajeto"] as Enums<"seg_acidente_tipo">[]).map((t) => (
+                <button
+                  key={t} type="button" onClick={() => setTipo(t)} aria-pressed={tipo === t}
+                  style={{
+                    padding: "0.45rem 0.9rem", cursor: "pointer",
+                    background: tipo === t ? "var(--mh-primary-soft)" : "var(--surface-2)",
+                    border: "1px solid " + (tipo === t ? "var(--mh-primary-500)" : "var(--border)"),
+                    borderRadius: 999, color: "var(--mh-text-1)",
+                    fontSize: "0.8rem", fontWeight: tipo === t ? 600 : 500,
+                  }}
+                >
+                  {SEG_ACIDENTE_TIPO[t]}
+                </button>
+              ))}
+            </div>
+            <p className="soft" style={{ fontSize: "0.74rem", margin: "0.4rem 0 0" }}>{SEG_ACIDENTE_TIPO_AJUDA[tipo]}</p>
+          </div>
+
           <div>
             <label className="label">Classificação <span style={{ color: "var(--mh-danger)" }}>*</span></label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.5rem" }}>
@@ -179,29 +202,6 @@ export function SegAcidenteDialog({
               ))}
             </div>
             <p className="soft" style={{ fontSize: "0.74rem", margin: "0.4rem 0 0" }}>{SEG_ACIDENTE_CLASS_AJUDA[classe]}</p>
-          </div>
-
-          {/* a outra classificação: a de cima diz quão grave, esta diz se a
-              empresa tinha como evitar mudando o próprio processo */}
-          <div>
-            <label className="label">Tipo de acidente <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-              {(["tipico", "trajeto"] as Enums<"seg_acidente_tipo">[]).map((t) => (
-                <button
-                  key={t} type="button" onClick={() => setTipo(t)} aria-pressed={tipo === t}
-                  style={{
-                    padding: "0.45rem 0.9rem", cursor: "pointer",
-                    background: tipo === t ? "var(--mh-primary-soft)" : "var(--surface-2)",
-                    border: "1px solid " + (tipo === t ? "var(--mh-primary-500)" : "var(--border)"),
-                    borderRadius: 999, color: "var(--mh-text-1)",
-                    fontSize: "0.8rem", fontWeight: tipo === t ? 600 : 500,
-                  }}
-                >
-                  {SEG_ACIDENTE_TIPO[t]}
-                </button>
-              ))}
-            </div>
-            <p className="soft" style={{ fontSize: "0.74rem", margin: "0.4rem 0 0" }}>{SEG_ACIDENTE_TIPO_AJUDA[tipo]}</p>
           </div>
 
           <div>
