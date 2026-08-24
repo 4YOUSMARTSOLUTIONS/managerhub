@@ -292,7 +292,7 @@ function CompetencyRank({ title, tone, rows, empty }: { title: string; tone: "gr
         <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
           {rows.map((r) => (
             <div key={r.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <Badge tone={tone === "green" ? "green" : "amber"}>{r.name}</Badge>
+              <Badge variant="quiet" tone={tone === "green" ? "green" : "amber"}>{r.name}</Badge>
               <span className="soft" style={{ fontSize: "0.8rem" }}>{r.n}×</span>
             </div>
           ))}
@@ -352,9 +352,9 @@ function TeamFeedbacks({ rows, subjectOptions, onNew, onOpen }: {
                 <tr key={f.id} onClick={() => onOpen(f)} style={{ cursor: "pointer" }}>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDate(f.date)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 600 }}>{shortName(f.subjectName)}</td>
-                  <td><Badge tone={FEEDBACK_TYPE_TONE[f.type]}>{FEEDBACK_TYPE_LABEL[f.type]}</Badge></td>
+                  <td><Badge variant="quiet" tone={FEEDBACK_TYPE_TONE[f.type]}>{FEEDBACK_TYPE_LABEL[f.type]}</Badge></td>
                   <td className="muted" style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fbSummary(f)}>{fbSummary(f)}</td>
-                  <td><Badge tone={f.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[f.visibility]}</Badge></td>
+                  <td><Badge variant="quiet" tone={f.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[f.visibility]}</Badge></td>
                   <td><Badge tone={f.appliedAt ? "green" : "gray"}>{f.appliedAt ? "Aplicado" : "Registrado"}</Badge></td>
                   <td style={{ textAlign: "right" }}><button type="button" className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onOpen(f); }}>Ver</button></td>
                 </tr>
@@ -397,7 +397,7 @@ function TeamSessions({ rows, subjectOptions, onNew, onOpen }: {
                   <td style={{ whiteSpace: "nowrap", fontWeight: 600 }}>{shortName(s.subjectName)}</td>
                   <td className="muted" style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.title ?? ""}>{s.title || <span className="soft">—</span>}</td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{s.referenceMonth ? s.referenceMonth.slice(0, 7) : "—"}</td>
-                  <td><Badge tone={s.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[s.visibility]}</Badge></td>
+                  <td><Badge variant="quiet" tone={s.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[s.visibility]}</Badge></td>
                   <td><Badge tone={s.appliedAt ? "green" : "gray"}>{s.appliedAt ? "Aplicado" : "Registrado"}</Badge></td>
                   <td style={{ textAlign: "right" }}><button type="button" className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onOpen(s); }}>Ver</button></td>
                 </tr>
@@ -439,8 +439,9 @@ function FeedbackCard({ f, compName, showSubject, canEdit, onEdit, showAck, onCr
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.6rem", ...(f.appliedAt ? {} : { borderLeft: "3px solid var(--border)" }) }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <Badge tone={FEEDBACK_TYPE_TONE[f.type]}>{FEEDBACK_TYPE_LABEL[f.type]}</Badge>
-        <Badge tone={f.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[f.visibility]}</Badge>
+        {/* um acento por cabecalho: o status; tipo e visibilidade falam baixo */}
+        <Badge variant="quiet" tone={FEEDBACK_TYPE_TONE[f.type]}>{FEEDBACK_TYPE_LABEL[f.type]}</Badge>
+        <Badge variant="quiet" tone={f.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[f.visibility]}</Badge>
         <Badge tone={f.appliedAt ? "green" : "gray"}>{f.appliedAt ? "Aplicado" : "Registrado"}</Badge>
         {f.channel && <span className="soft" style={{ fontSize: "0.78rem" }}>{FEEDBACK_CHANNEL_LABEL[f.channel]}</span>}
         <span className="soft" style={{ fontSize: "0.78rem" }}>{formatDate(f.date)}</span>
@@ -477,7 +478,7 @@ function FeedbackCard({ f, compName, showSubject, canEdit, onEdit, showAck, onCr
       ))}
       {f.competencyIds.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-          {f.competencyIds.map((id) => <Badge key={id} tone="purple">{compName.get(id) ?? "—"}</Badge>)}
+          {f.competencyIds.map((id) => <Badge key={id} variant="quiet" tone="purple">{compName.get(id) ?? "—"}</Badge>)}
         </div>
       )}
       {f.attachments.length > 0 && (
@@ -510,8 +511,8 @@ function SessionCard({ s, feedbacks, showSubject, canEdit, onEdit, showAck }: {
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.6rem", ...(s.appliedAt ? {} : { borderLeft: "3px solid var(--border)" }) }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <Badge tone="blue">Sessão 1:1</Badge>
-        <Badge tone={s.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[s.visibility]}</Badge>
+        <Badge variant="quiet" tone="blue">Sessão 1:1</Badge>
+        <Badge variant="quiet" tone={s.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[s.visibility]}</Badge>
         <Badge tone={s.appliedAt ? "green" : "gray"}>{s.appliedAt ? "Aplicado" : "Registrado"}</Badge>
         <span className="soft" style={{ fontSize: "0.78rem" }}>{formatDate(s.date)}{s.referenceMonth ? ` · ref. ${s.referenceMonth.slice(0, 7)}` : ""}</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -544,7 +545,7 @@ function SessionCard({ s, feedbacks, showSubject, canEdit, onEdit, showAck }: {
         <div>
           <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 4 }}>Feedbacks referenciados</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-            {items.map((f) => <Badge key={f.id} tone="gray">{formatDate(f.date)} · {f.title || FEEDBACK_TYPE_LABEL[f.type]}</Badge>)}
+            {items.map((f) => <Badge key={f.id} variant="quiet" tone="gray">{formatDate(f.date)} · {f.title || FEEDBACK_TYPE_LABEL[f.type]}</Badge>)}
           </div>
         </div>
       )}
@@ -957,7 +958,7 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
             {periodFeedbacks.map((f) => (
               <label key={f.id} style={{ display: "flex", gap: "0.5rem", alignItems: "center", cursor: "pointer", fontSize: "0.85rem" }}>
                 <input type="checkbox" checked={itemIds.includes(f.id)} onChange={() => toggleItem(f.id)} />
-                <span className="soft">{formatDate(f.date)}</span> · <Badge tone={FEEDBACK_TYPE_TONE[f.type]}>{FEEDBACK_TYPE_LABEL[f.type]}</Badge> {f.title || (f.situation ?? "").slice(0, 40)}
+                <span className="soft">{formatDate(f.date)}</span> · <Badge variant="quiet" tone={FEEDBACK_TYPE_TONE[f.type]}>{FEEDBACK_TYPE_LABEL[f.type]}</Badge> {f.title || (f.situation ?? "").slice(0, 40)}
               </label>
             ))}
           </div>

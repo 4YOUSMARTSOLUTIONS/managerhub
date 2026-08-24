@@ -6,6 +6,7 @@ import {
   Ban, Check, FileText, Mail, Paperclip, Pencil, Send, Stethoscope, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
@@ -216,7 +217,7 @@ export function AbsenteismosManager({
             <span>{r.typeName}</span>
             {r.kind && (
               <div style={{ marginTop: "0.2rem" }}>
-                <Badge tone={ABSENCE_KIND_TONE[r.kind]}>{ABSENCE_KIND_LABEL[r.kind]}</Badge>
+                <Badge variant="quiet" tone={ABSENCE_KIND_TONE[r.kind]}>{ABSENCE_KIND_LABEL[r.kind]}</Badge>
               </div>
             )}
           </>
@@ -456,12 +457,9 @@ export function AbsenteismosManager({
 }
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }) {
-  return (
-    <div>
-      <div className="soft" style={{ fontSize: "0.7rem" }}>{rotulo}</div>
-      <div style={{ fontSize: "0.85rem" }}>{valor ?? "–"}</div>
-    </div>
-  );
+  // delega para a primitiva da ficha (DESIGN.md): rótulo uppercase fraco,
+  // valor no tom pleno, vazio = travessão
+  return <Field label={rotulo}>{valor}</Field>;
 }
 
 /** Fecha por X ou pelo botão, nunca por clique no fundo. */
@@ -760,7 +758,7 @@ function PainelConfirmacao({
           do Motivo, um texto longo esticava a linha inteira. */}
       {tipo && (
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "-0.4rem" }}>
-          <Badge tone={ABSENCE_KIND_TONE[tipo.kind]}>{ABSENCE_KIND_LABEL[tipo.kind]}</Badge>
+          <Badge variant="quiet" tone={ABSENCE_KIND_TONE[tipo.kind]}>{ABSENCE_KIND_LABEL[tipo.kind]}</Badge>
           {tipo.description && (
             <span className="soft" style={{ fontSize: "0.78rem" }}>{tipo.description}</span>
           )}
@@ -1149,10 +1147,11 @@ function Ficha({
     <>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         <Badge tone={ABSENTEISMO_STATUS_TONE[linha.status]}>{ABSENTEISMO_STATUS[linha.status]}</Badge>
-        {linha.kind && <Badge tone={ABSENCE_KIND_TONE[linha.kind]}>{ABSENCE_KIND_LABEL[linha.kind]}</Badge>}
+        {linha.kind && <Badge variant="quiet" tone={ABSENCE_KIND_TONE[linha.kind]}>{ABSENCE_KIND_LABEL[linha.kind]}</Badge>}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
+      <DetailSection title="Colaborador">
+        <FieldGrid min={150}>
         <Campo rotulo="Colaborador" valor={linha.fullName} />
         <Campo rotulo="Matrícula" valor={linha.employeeCode} />
         <Campo rotulo="Setor" valor={linha.departmentName} />
@@ -1161,11 +1160,13 @@ function Ficha({
         <Campo rotulo="Gestor imediato" valor={linha.managerName} />
         <Campo rotulo="Unidade" valor={linha.unitName} />
         <Campo rotulo="Faltou em" valor={formatDate(linha.occurredOn)} />
-      </div>
+        </FieldGrid>
+      </DetailSection>
 
       {linha.reasonNote && <Campo rotulo="O que se sabia no lançamento" valor={linha.reasonNote} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
+      <DetailSection title="A ausência">
+        <FieldGrid min={150}>
         <Campo rotulo="Motivo" valor={linha.typeName} />
         <Campo
           rotulo="Período"
@@ -1187,8 +1188,13 @@ function Ficha({
         )}
         {linha.workAccident && <Campo rotulo="Acidente de trabalho" valor="Sim" />}
         {linha.waived && <Campo rotulo="Falta abonada" valor="Sim" />}
-      </div>
-      {linha.note && <Campo rotulo="Observação" valor={linha.note} />}
+        {linha.note && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Campo rotulo="Observação" valor={linha.note} />
+          </div>
+        )}
+        </FieldGrid>
+      </DetailSection>
 
       {/* O dado clínico não vem na lista: quem quiser ver pede, e a leitura passa
           pela RPC que confere a alçada. */}
@@ -1203,7 +1209,8 @@ function Ficha({
             )}
           </div>
           {verMedico && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem", marginTop: "0.7rem" }}>
+            <div style={{ marginTop: "0.7rem" }}>
+            <FieldGrid min={150}>
               <Campo rotulo="CID" valor={medico?.cid ?? null} />
               <Campo rotulo="Descrição" valor={medico?.cidDescricao ?? null} />
               {medico?.acompanhado && <Campo rotulo="Acompanhado" valor={medico.acompanhado} />}
@@ -1212,19 +1219,30 @@ function Ficha({
               <Campo rotulo="Local" valor={medico?.local ?? null} />
               <Campo rotulo="Emitido em" valor={medico?.emitidoEm ? formatDate(medico.emitidoEm) : null} />
               <Campo rotulo="Dias de afastamento" valor={medico?.diasAfastamento?.toString() ?? null} />
+            </FieldGrid>
             </div>
           )}
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
+      <DetailSection title="Trâmite">
+        <FieldGrid min={150}>
         <Campo rotulo="Lançado por" valor={linha.createdByName} />
         <Campo rotulo="Enviado ao RH em" valor={linha.submittedAt ? formatDate(linha.submittedAt) : null} />
         <Campo rotulo="Decidido por" valor={linha.decidedByName} />
         <Campo rotulo="Decidido em" valor={linha.decidedAt ? formatDate(linha.decidedAt) : null} />
-      </div>
-      {linha.decisionNote && <Campo rotulo="Motivo da decisão" valor={linha.decisionNote} />}
-      {linha.cancelNote && <Campo rotulo="Motivo do cancelamento" valor={linha.cancelNote} />}
+        {linha.decisionNote && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Campo rotulo="Motivo da decisão" valor={linha.decisionNote} />
+          </div>
+        )}
+        {linha.cancelNote && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <Campo rotulo="Motivo do cancelamento" valor={linha.cancelNote} />
+          </div>
+        )}
+        </FieldGrid>
+      </DetailSection>
 
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         {onEfetivar && (

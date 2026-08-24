@@ -829,9 +829,11 @@ export function ActionsManager({
                             #{a.code}{a.demandas.length > 1 ? `.${di + 1}` : ""}
                           </button>
                         </td>
-                        <td>{first && <Badge tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
-                        <td>{first && (a.isSdpo ? <Badge tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>{first && (a.programaName ? <Badge tone="blue">{a.programaName}</Badge> : <span className="soft">—</span>)}</td>
+                        {/* um acento por linha (DESIGN.md): o status mantém a cor;
+                            prioridade e vínculo com o Programa são taxonomia */}
+                        <td>{first && <Badge variant="quiet" tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
+                        <td>{first && (a.isSdpo ? <Badge variant="quiet" tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{first && (a.programaName ? <Badge variant="quiet" tone="blue">{a.programaName}</Badge> : <span className="soft">—</span>)}</td>
                         <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
                         <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.secaoName ?? ""}>{first ? (a.secaoName ?? "—") : ""}</td>
                         <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>

@@ -18,6 +18,8 @@ import {
   SEG_ACIDENTE_TIPO, SEG_ACIDENTE_TIPO_TONE,
 } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
+import { DetailModal } from "@/components/ui/DetailModal";
+import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { SegAcidenteDialog } from "@/components/SegAcidenteDialog";
 import { SegAcaoDialog } from "@/components/SegAcaoDialog";
 import {
@@ -329,10 +331,11 @@ export function SegAcidentesManager({
               <tr key={r.id} onClick={() => { setAberto(r.id); setRetorno(r.retornoEm ?? ""); }} style={{ cursor: "pointer" }} title="Abrir o caso">
                 <td>{dataBr(r.occurredOn)}</td>
                 <td>
-                  <Badge tone={SEG_ACIDENTE_CLASS_TONE[r.classe]}>{SEG_ACIDENTE_CLASS[r.classe]}</Badge>
+                  {/* taxonomia fala baixo: a cor da severidade vira ponto */}
+                  <Badge variant="quiet" tone={SEG_ACIDENTE_CLASS_TONE[r.classe]}>{SEG_ACIDENTE_CLASS[r.classe]}</Badge>
                 </td>
                 <td>
-                  <Badge tone={SEG_ACIDENTE_TIPO_TONE[r.tipo]}>{SEG_ACIDENTE_TIPO[r.tipo]}</Badge>
+                  <Badge variant="quiet" tone={SEG_ACIDENTE_TIPO_TONE[r.tipo]}>{SEG_ACIDENTE_TIPO[r.tipo]}</Badge>
                 </td>
                 <td style={{ fontWeight: 600 }}>{shortName(r.pessoa)}</td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
@@ -354,158 +357,20 @@ export function SegAcidentesManager({
       )}
 
       {detalhe && (
-        <div
-          style={{
-            position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
-            backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
-            display: "flex", alignItems: "flex-start", justifyContent: "center",
-            padding: "4vh 1rem", zIndex: 50, overflowY: "auto",
-          }}
-        >
-          <div className="card" style={{ width: "100%", maxWidth: 680, boxShadow: "var(--mh-shadow-e3)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>
-                {shortName(detalhe.pessoa)} · {dataBr(detalhe.occurredOn)}
-              </h2>
-              <button
-                type="button" onClick={() => setAberto(null)} className="muted" aria-label="Fechar"
-                style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1 }}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                <Badge tone={SEG_ACIDENTE_CLASS_TONE[detalhe.classe]}>{SEG_ACIDENTE_CLASS_LONGO[detalhe.classe]}</Badge>
-                <Badge tone={SEG_ACIDENTE_TIPO_TONE[detalhe.tipo]}>{SEG_ACIDENTE_TIPO[detalhe.tipo]}</Badge>
-                <Badge tone={SEG_ACIDENTE_STATUS_TONE[detalhe.status]}>{SEG_ACIDENTE_STATUS[detalhe.status]}</Badge>
-              </div>
-
-              <p style={{ margin: 0, fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>{detalhe.descricao}</p>
-
-              <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.7rem", margin: 0, fontSize: "0.82rem" }}>
-                <div><dt className="soft">Setor</dt><dd style={{ margin: 0 }}>{detalhe.setor ?? "—"}</dd></div>
-                <div><dt className="soft">Função</dt><dd style={{ margin: 0 }}>{detalhe.funcao ?? "—"}</dd></div>
-                <div><dt className="soft">Gestor</dt><dd style={{ margin: 0 }}>{shortName(detalhe.gestor)}</dd></div>
-                <div><dt className="soft">Unidade</dt><dd style={{ margin: 0 }}>{detalhe.unidade ?? "—"}</dd></div>
-                <div><dt className="soft">Hora e turno</dt><dd style={{ margin: 0 }}>{[detalhe.occurredAt?.slice(0, 5), detalhe.turno].filter(Boolean).join(" · ") || "—"}</dd></div>
-                <div><dt className="soft">Local e área</dt><dd style={{ margin: 0 }}>{[(detalhe.localId && nomeLocal.get(detalhe.localId)), (detalhe.areaId && nomeArea.get(detalhe.areaId))].filter(Boolean).join(" · ") || "—"}</dd></div>
-                <div><dt className="soft">Parte do corpo</dt><dd style={{ margin: 0 }}>{detalhe.parteCorpo ?? "—"}</dd></div>
-                <div><dt className="soft">Agente causador</dt><dd style={{ margin: 0 }}>{detalhe.agenteCausador ?? "—"}</dd></div>
-                <div><dt className="soft">Natureza da lesão</dt><dd style={{ margin: 0 }}>{detalhe.naturezaLesao ?? "—"}</dd></div>
-                <div><dt className="soft">CAT</dt><dd style={{ margin: 0 }}>{detalhe.catNumero ? `${detalhe.catNumero} · ${dataBr(detalhe.catEmitidaEm)}` : "—"}</dd></div>
-                <div><dt className="soft">Causa-raiz</dt><dd style={{ margin: 0 }}>{(detalhe.causaId && nomeCausa.get(detalhe.causaId)) || "Não apontada"}</dd></div>
-                <div><dt className="soft">CID-10</dt><dd style={{ margin: 0 }}>{detalhe.cidCode ? `${detalhe.cidCode} ${detalhe.cidDescricao ?? ""}` : "—"}</dd></div>
-                <div><dt className="soft">Afastamento</dt><dd style={{ margin: 0 }}>{detalhe.diasAfastamento ? `${detalhe.diasAfastamento} dias, retorno ${dataBr(detalhe.retornoEm)}` : "—"}</dd></div>
-              </dl>
-
-              {/* com data retroativa liberada, a data do fato não conta a história
-                  toda: esta linha diz quando o caso entrou no sistema e por quem */}
-              <p className="soft" style={{ fontSize: "0.75rem", margin: 0 }}>
-                Lançado no sistema em {dataHoraBr(detalhe.criadoEm)}
-                {detalhe.criadoPor ? ` por ${shortName(detalhe.criadoPor)}` : ""}.
-              </p>
-
-              {detalhe.testemunhas && (
-                <div>
-                  <div className="soft" style={{ fontSize: "0.78rem" }}>Testemunhas</div>
-                  <p style={{ margin: 0, fontSize: "0.84rem" }}>{detalhe.testemunhas}</p>
-                </div>
-              )}
-
-              {detalhe.analiseCausa && (
-                <div>
-                  <div className="soft" style={{ fontSize: "0.78rem" }}>Análise da causa</div>
-                  <p style={{ margin: 0, fontSize: "0.84rem", whiteSpace: "pre-wrap" }}>{detalhe.analiseCausa}</p>
-                </div>
-              )}
-
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
-                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Ações de tratamento</h3>
-                {detalhe.acoes.length === 0 ? (
-                  <p className="soft" style={{ fontSize: "0.8rem", margin: "0 0 0.5rem" }}>
-                    Nenhuma ação aberta. O que a empresa vai mudar para não repetir vira ação aqui,
-                    com responsável e prazo.
-                  </p>
-                ) : (
-                  <ul style={{ margin: "0 0 0.5rem", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                    {detalhe.acoes.map((a) => (
-                      <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
-                        {/* a ação mora no módulo de Ações: aqui vai o ponteiro,
-                            não uma segunda cópia do acompanhamento */}
-                        <Link href={`/acoes?busca=${a.codigo}`} className="btn btn-ghost btn-sm">
-                          <ExternalLink size={13} /> Ação #{a.codigo}
-                        </Link>
-                        <Badge tone={a.concluida ? "green" : "amber"}>
-                          {a.concluida ? "Concluída" : `${a.pendentes} demanda${a.pendentes === 1 ? "" : "s"} em aberto`}
-                        </Badge>
-                        {a.prazo && <span className="soft">prazo {dataBr(a.prazo)}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setAcao(true)}>
-                  <ListChecks size={14} /> Criar ação de tratamento
-                </button>
-              </div>
-
-              <div>
-                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Documentos</h3>
-                {detalhe.anexos.length === 0 ? (
-                  <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Nenhum documento anexado.</p>
-                ) : (
-                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                    {detalhe.anexos.map((x) => (
-                      <li key={x.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <button
-                          type="button" className="btn btn-ghost btn-sm" disabled={pendente}
-                          onClick={() => abrirAnexo(x.id)} style={{ flex: 1, justifyContent: "flex-start" }}
-                        >
-                          <Paperclip size={14} /> {x.nome}
-                        </button>
-                        <button type="button" className="icon-btn icon-btn-danger" title="Remover" disabled={pendente} onClick={() => excluirAnexo(x)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <button
-                  type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.5rem" }}
-                  disabled={pendente} onClick={() => inputAnexo.current?.click()}
-                >
-                  <Paperclip size={14} /> Anexar CAT, laudo ou foto
-                </button>
-              </div>
-
-              {detalhe.status === "aberto" && (
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem", display: "flex", gap: "0.5rem", alignItems: "flex-end", flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 180 }}>
-                    <label className="label">Retorno ao trabalho</label>
-                    <input className="input" type="date" value={retorno} onChange={(e) => setRetorno(e.target.value)} />
-                  </div>
-                  <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={encerrar}>
-                    Encerrar caso
-                  </button>
-                  {detalhe.classe === "lti" && (
-                    <span className="soft" style={{ fontSize: "0.75rem" }}>
-                      Acidente com afastamento só encerra com a data de retorno.
-                    </span>
-                  )}
-                  {/* encerrar o caso é sobre o retorno ao trabalho; a ação
-                      corretiva pode levar meses e não trava o encerramento */}
-                  {pendentesDoCaso > 0 && (
-                    <span className="soft" style={{ fontSize: "0.75rem" }}>
-                      {pendentesDoCaso === 1 ? "Há 1 ação de tratamento em aberto" : `Há ${pendentesDoCaso} ações de tratamento em aberto`}.
-                      O caso encerra assim mesmo, e ela continua sendo cobrada em Ações.
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+        <DetailModal
+          open onClose={() => setAberto(null)} width="lg"
+          title={`${shortName(detalhe.pessoa)} · ${dataBr(detalhe.occurredOn)}`}
+          badges={
+            <>
+              {/* um acento só: o status. Classe e tipo são taxonomia e falam
+                  baixo, com a cor reduzida ao ponto (DESIGN.md) */}
+              <Badge tone={SEG_ACIDENTE_STATUS_TONE[detalhe.status]}>{SEG_ACIDENTE_STATUS[detalhe.status]}</Badge>
+              <Badge variant="quiet" tone={SEG_ACIDENTE_CLASS_TONE[detalhe.classe]}>{SEG_ACIDENTE_CLASS_LONGO[detalhe.classe]}</Badge>
+              <Badge variant="quiet" tone={SEG_ACIDENTE_TIPO_TONE[detalhe.tipo]}>{SEG_ACIDENTE_TIPO[detalhe.tipo]}</Badge>
+            </>
+          }
+          footer={
+            <>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm({ open: true, editando: detalhe })}>
                   <Pencil size={14} /> Editar
@@ -525,9 +390,138 @@ export function SegAcidentesManager({
                 )}
               </div>
               <button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p style={{ margin: 0, fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>{detalhe.descricao}</p>
+          {/* com data retroativa liberada, a data do fato não conta a história
+              toda: esta linha diz quando o caso entrou no sistema e por quem */}
+          <p className="soft" style={{ fontSize: "0.75rem", margin: "-0.4rem 0 0" }}>
+            Lançado no sistema em {dataHoraBr(detalhe.criadoEm)}
+            {detalhe.criadoPor ? ` por ${shortName(detalhe.criadoPor)}` : ""}.
+          </p>
+
+          <DetailSection title="Vínculo">
+            <FieldGrid>
+              <Field label="Setor">{detalhe.setor}</Field>
+              <Field label="Função">{detalhe.funcao}</Field>
+              <Field label="Gestor">{detalhe.gestor ? shortName(detalhe.gestor) : null}</Field>
+              <Field label="Unidade">{detalhe.unidade}</Field>
+            </FieldGrid>
+          </DetailSection>
+
+          <DetailSection title="O ocorrido">
+            <FieldGrid>
+              <Field label="Hora e turno">{[detalhe.occurredAt?.slice(0, 5), detalhe.turno].filter(Boolean).join(" · ")}</Field>
+              <Field label="Local">{detalhe.localId ? nomeLocal.get(detalhe.localId) : null}</Field>
+              <Field label="Área">{detalhe.areaId ? nomeArea.get(detalhe.areaId) : null}</Field>
+              <Field label="Parte do corpo">{detalhe.parteCorpo}</Field>
+              <Field label="Agente causador">{detalhe.agenteCausador}</Field>
+              <Field label="Natureza da lesão">{detalhe.naturezaLesao}</Field>
+              {detalhe.testemunhas && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Field label="Testemunhas">{detalhe.testemunhas}</Field>
+                </div>
+              )}
+            </FieldGrid>
+          </DetailSection>
+
+          <DetailSection title="Registro legal e apuração">
+            <FieldGrid>
+              <Field label="CAT">{detalhe.catNumero ? `${detalhe.catNumero} · ${dataBr(detalhe.catEmitidaEm)}` : null}</Field>
+              <Field label="CID-10">{detalhe.cidCode ? `${detalhe.cidCode} ${detalhe.cidDescricao ?? ""}` : null}</Field>
+              <Field label="Causa-raiz">{(detalhe.causaId && nomeCausa.get(detalhe.causaId)) || "Não apontada"}</Field>
+              <Field label="Afastamento">{detalhe.diasAfastamento ? `${detalhe.diasAfastamento} dias, retorno ${dataBr(detalhe.retornoEm)}` : null}</Field>
+              {detalhe.analiseCausa && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Field label="Análise da causa">
+                    <span style={{ whiteSpace: "pre-wrap" }}>{detalhe.analiseCausa}</span>
+                  </Field>
+                </div>
+              )}
+            </FieldGrid>
+          </DetailSection>
+
+          <DetailSection title="Ações de tratamento">
+            {detalhe.acoes.length === 0 ? (
+              <p className="soft" style={{ fontSize: "0.8rem", margin: "0 0 0.5rem" }}>
+                Nenhuma ação aberta. O que a empresa vai mudar para não repetir vira ação aqui,
+                com responsável e prazo.
+              </p>
+            ) : (
+              <ul style={{ margin: "0 0 0.5rem", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                {detalhe.acoes.map((a) => (
+                  <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+                    {/* a ação mora no módulo de Ações: aqui vai o ponteiro,
+                        não uma segunda cópia do acompanhamento */}
+                    <Link href={`/acoes?busca=${a.codigo}`} className="btn btn-ghost btn-sm">
+                      <ExternalLink size={13} /> Ação #{a.codigo}
+                    </Link>
+                    <Badge tone={a.concluida ? "green" : "amber"}>
+                      {a.concluida ? "Concluída" : `${a.pendentes} demanda${a.pendentes === 1 ? "" : "s"} em aberto`}
+                    </Badge>
+                    {a.prazo && <span className="soft">prazo {dataBr(a.prazo)}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setAcao(true)}>
+              <ListChecks size={14} /> Criar ação de tratamento
+            </button>
+          </DetailSection>
+
+          <DetailSection title="Documentos">
+            {detalhe.anexos.length === 0 ? (
+              <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Nenhum documento anexado.</p>
+            ) : (
+              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                {detalhe.anexos.map((x) => (
+                  <li key={x.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="button" className="btn btn-ghost btn-sm" disabled={pendente}
+                      onClick={() => abrirAnexo(x.id)} style={{ flex: 1, justifyContent: "flex-start" }}
+                    >
+                      <Paperclip size={14} /> {x.nome}
+                    </button>
+                    <button type="button" className="icon-btn icon-btn-danger" title="Remover" disabled={pendente} onClick={() => excluirAnexo(x)}>
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.5rem" }}
+              disabled={pendente} onClick={() => inputAnexo.current?.click()}
+            >
+              <Paperclip size={14} /> Anexar CAT, laudo ou foto
+            </button>
+          </DetailSection>
+
+          {detalhe.status === "aberto" && (
+            <DetailSection title="Retorno ao trabalho">
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <input className="input" type="date" value={retorno} onChange={(e) => setRetorno(e.target.value)} style={{ maxWidth: 180 }} />
+                <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={encerrar}>
+                  Encerrar caso
+                </button>
+                {detalhe.classe === "lti" && (
+                  <span className="soft" style={{ fontSize: "0.75rem" }}>
+                    Acidente com afastamento só encerra com a data de retorno.
+                  </span>
+                )}
+                {/* encerrar o caso é sobre o retorno ao trabalho; a ação
+                    corretiva pode levar meses e não trava o encerramento */}
+                {pendentesDoCaso > 0 && (
+                  <span className="soft" style={{ fontSize: "0.75rem" }}>
+                    {pendentesDoCaso === 1 ? "Há 1 ação de tratamento em aberto" : `Há ${pendentesDoCaso} ações de tratamento em aberto`}.
+                    O caso encerra assim mesmo, e ela continua sendo cobrada em Ações.
+                  </span>
+                )}
+              </div>
+            </DetailSection>
+          )}
+        </DetailModal>
       )}
 
       {detalhe && (

@@ -18,6 +18,8 @@ import { normalizar, shortName } from "@/lib/format";
 import {
   SegRelatoDialog, type AreaOpt, type FocoOpt, type LocalOpt, type OcorrenciaOpt, type TipoOpt,
 } from "@/components/SegRelatoDialog";
+import { DetailModal } from "@/components/ui/DetailModal";
+import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { SegAcaoDialog } from "@/components/SegAcaoDialog";
 import { alertarGestor, excluirRelato, triarRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
@@ -304,7 +306,7 @@ export function SegRelatosManager({
                   {(r.ocorrenciaId && nomeOcorrencia.get(r.ocorrenciaId)) || "Não informada"}
                 </td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>{nomeTipo.get(r.tipoId) ?? "—"}</td>
-                <td><Badge tone={SEG_NATUREZA_TONE[r.natureza]}>{SEG_NATUREZA[r.natureza]}</Badge></td>
+                <td><Badge variant="quiet" tone={SEG_NATUREZA_TONE[r.natureza]}>{SEG_NATUREZA[r.natureza]}</Badge></td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>
                   {(r.localId && nomeLocal.get(r.localId)) || "—"}
                 </td>
@@ -327,66 +329,58 @@ export function SegRelatosManager({
       )}
 
       {detalhe && (
-        <div
-          style={{
-            position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
-            backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
-            display: "flex", alignItems: "flex-start", justifyContent: "center",
-            padding: "5vh 1rem", zIndex: 50, overflowY: "auto",
-          }}
-        >
-          <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--mh-shadow-e3)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>
-                {nomeTipo.get(detalhe.tipoId) ?? "Relato"} · {dataBr(detalhe.occurredOn)}
-              </h2>
-              <button
-                type="button" onClick={fecharDetalhe} className="muted" aria-label="Fechar"
-                style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1 }}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                <Badge tone={SEG_NATUREZA_TONE[detalhe.natureza]}>{SEG_NATUREZA[detalhe.natureza]}</Badge>
-                <Badge tone={SEG_RELATO_STATUS_TONE[detalhe.status]}>{SEG_RELATO_STATUS[detalhe.status]}</Badge>
+        <>
+        <DetailModal
+          open onClose={fecharDetalhe} width="md"
+          title={`${nomeTipo.get(detalhe.tipoId) ?? "Relato"} · ${dataBr(detalhe.occurredOn)}`}
+          badges={
+            <>
+              {/* um acento só: o status. Natureza é taxonomia e fala baixo */}
+              <Badge tone={SEG_RELATO_STATUS_TONE[detalhe.status]}>{SEG_RELATO_STATUS[detalhe.status]}</Badge>
+              <Badge variant="quiet" tone={SEG_NATUREZA_TONE[detalhe.natureza]}>{SEG_NATUREZA[detalhe.natureza]}</Badge>
+            </>
+          }
+          footer={
+            <>
+              {/* o autor corrige o próprio relato enquanto a segurança não
+                  pegou: sem isso a saída dele seria abrir um segundo relato do
+                  mesmo fato, que a triagem depois marca como duplicado */}
+              {detalhe.souAutor && detalhe.status === "aberto" ? (
+                <button
+                  type="button" className="btn btn-ghost btn-sm"
+                  onClick={() => { setEditando(detalhe); setAberto(null); }}
+                >
+                  <Pencil size={14} /> Editar relato
+                </button>
+              ) : <span />}
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {ehProprietario && (
+                  <button
+                    type="button" className="btn btn-ghost btn-sm" disabled={pendente}
+                    style={{ color: "var(--mh-danger)" }} onClick={excluir}
+                  >
+                    <Trash2 size={14} /> Excluir
+                  </button>
+                )}
+                <button type="button" className="btn btn-ghost" onClick={fecharDetalhe}>Fechar</button>
               </div>
-
+            </>
+          }
+        >
               <p style={{ margin: 0, fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>{detalhe.descricao}</p>
 
-              <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.7rem", margin: 0, fontSize: "0.82rem" }}>
-                <div>
-                  <dt className="soft">Local</dt>
-                  <dd style={{ margin: 0 }}>{(detalhe.localId && nomeLocal.get(detalhe.localId)) || "Não informado"}</dd>
-                </div>
-                <div>
-                  <dt className="soft">Área</dt>
-                  <dd style={{ margin: 0 }}>{(detalhe.areaId && nomeArea.get(detalhe.areaId)) || "Não informada"}</dd>
-                </div>
-                <div>
-                  <dt className="soft">Ocorrência</dt>
-                  <dd style={{ margin: 0 }}>{(detalhe.ocorrenciaId && nomeOcorrencia.get(detalhe.ocorrenciaId)) || "Não informada"}</dd>
-                </div>
-                <div>
-                  <dt className="soft">Causa-raiz</dt>
-                  <dd style={{ margin: 0 }}>{(detalhe.causaId && nomeCausa.get(detalhe.causaId)) || "Não apontada"}</dd>
-                </div>
-                <div>
-                  <dt className="soft">Unidade</dt>
-                  <dd style={{ margin: 0 }}>{(detalhe.unitId && nomeUnidade.get(detalhe.unitId)) || "Não informada"}</dd>
-                </div>
-                {ehSeguranca && (
-                  <div>
-                    <dt className="soft">Relator</dt>
-                    <dd style={{ margin: 0 }}>{shortName(detalhe.relator)}</dd>
-                  </div>
-                )}
-              </dl>
+              <DetailSection title="O fato">
+                <FieldGrid>
+                  <Field label="Ocorrência">{detalhe.ocorrenciaId ? nomeOcorrencia.get(detalhe.ocorrenciaId) : null}</Field>
+                  <Field label="Local">{detalhe.localId ? nomeLocal.get(detalhe.localId) : null}</Field>
+                  <Field label="Área">{detalhe.areaId ? nomeArea.get(detalhe.areaId) : null}</Field>
+                  <Field label="Unidade">{detalhe.unitId ? nomeUnidade.get(detalhe.unitId) : null}</Field>
+                  <Field label="Causa-raiz">{(detalhe.causaId && nomeCausa.get(detalhe.causaId)) || "Não apontada"}</Field>
+                  {ehSeguranca && <Field label="Relator">{shortName(detalhe.relator)}</Field>}
+                </FieldGrid>
+              </DetailSection>
 
-              <div>
-                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Envolvidos</h3>
+              <DetailSection title="Envolvidos">
                 {detalhe.envolvidos.length === 0 ? (
                   <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma pessoa citada.</p>
                 ) : (
@@ -407,11 +401,10 @@ export function SegRelatosManager({
                 <p className="soft" style={{ fontSize: "0.72rem", margin: "0.45rem 0 0" }}>
                   Setor, função e gestor são os do dia do relato.
                 </p>
-              </div>
+              </DetailSection>
 
               {detalhe.acoes.length > 0 && (
-                <div>
-                  <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Ações de tratamento</h3>
+                <DetailSection title="Ações de tratamento">
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     {detalhe.acoes.map((a) => (
                       <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
@@ -430,12 +423,11 @@ export function SegRelatosManager({
                   <p className="soft" style={{ fontSize: "0.72rem", margin: "0.4rem 0 0" }}>
                     O relato é dado por tratado quando a ação for concluída.
                   </p>
-                </div>
+                </DetailSection>
               )}
 
               {detalhe.notaTriagem && (
-                <div>
-                  <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Triagem</h3>
+                <DetailSection title="Nota da triagem">
                   <p style={{ margin: 0, fontSize: "0.84rem", whiteSpace: "pre-wrap" }}>{detalhe.notaTriagem}</p>
                   {detalhe.triadoPor && (
                     <p className="soft" style={{ fontSize: "0.74rem", margin: "0.3rem 0 0" }}>
@@ -443,14 +435,14 @@ export function SegRelatosManager({
                       {detalhe.triadoEm ? ` em ${dataBr(detalhe.triadoEm)}` : ""}
                     </p>
                   )}
-                </div>
+                </DetailSection>
               )}
 
               {/* A triagem só aparece para quem pode triar. Mostrar botão que
                   vai responder "não autorizado" é pior do que não mostrar. */}
               {ehSeguranca && !encerrado && (
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
-                  <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: 0 }}>Triagem</h3>
+                <DetailSection title="Triagem">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
 
                   {/* a causa é o que transforma contagem em tendência: sem ela
                       o painel só sabe dizer quantos, nunca por quê */}
@@ -521,35 +513,10 @@ export function SegRelatosManager({
                       </button>
                     </div>
                   )}
-                </div>
+                  </div>
+                </DetailSection>
               )}
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
-              {/* o autor corrige o próprio relato enquanto a segurança não
-                  pegou: sem isso a saída dele seria abrir um segundo relato do
-                  mesmo fato, que a triagem depois marca como duplicado */}
-              {detalhe.souAutor && detalhe.status === "aberto" ? (
-                <button
-                  type="button" className="btn btn-ghost btn-sm"
-                  onClick={() => { setEditando(detalhe); setAberto(null); }}
-                >
-                  <Pencil size={14} /> Editar relato
-                </button>
-              ) : <span />}
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                {ehProprietario && (
-                  <button
-                    type="button" className="btn btn-ghost btn-sm" disabled={pendente}
-                    style={{ color: "var(--mh-danger)" }} onClick={excluir}
-                  >
-                    <Trash2 size={14} /> Excluir
-                  </button>
-                )}
-                <button type="button" className="btn btn-ghost" onClick={fecharDetalhe}>Fechar</button>
-              </div>
-            </div>
-          </div>
+        </DetailModal>
 
           {acao && (
             <SegAcaoDialog
@@ -568,7 +535,7 @@ export function SegRelatosManager({
               solicitantePadrao={solicitantePadrao}
             />
           )}
-        </div>
+        </>
       )}
 
       {/* sem `unidades`: a unidade do relato é derivada no servidor, do vínculo
