@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ExternalLink, ListChecks, Paperclip, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -231,6 +232,42 @@ export function SegAcidentesManager({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+      {/* O cabeçalho mora aqui, e não na página, porque os botões dependem do
+          estado desta tela (o filtro que a exportação usa, o formulário que o
+          botão abre). Na linha dos filtros eles quebravam para baixo e
+          abriam um vão entre os cartões e a tabela. */}
+      <PageHeader
+        title="Acidentes"
+        subtitle="Registro dos acidentes de trabalho, com o que a empresa precisa e o que a lei pede."
+        action={(
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <ExportButton
+              filename="acidentes.xlsx"
+              sheetName="Acidentes"
+              headers={[
+                "Data", "Hora", "Classificação", "Tipo", "Colaborador", "Matrícula", "Setor", "Função", "Gestor",
+                "Unidade", "Local", "Área", "Parte do corpo", "Agente causador", "Natureza da lesão",
+                "CAT", "CAT emitida em", "CID", "Dias de afastamento", "Retorno", "Situação", "Descrição",
+                "Lançado em", "Lançado por",
+              ]}
+              rows={lista.map((r) => [
+                dataBr(r.occurredOn), r.occurredAt?.slice(0, 5) ?? "", SEG_ACIDENTE_CLASS[r.classe],
+                SEG_ACIDENTE_TIPO[r.tipo],
+                r.pessoa ?? "", r.matricula ?? "", r.setor ?? "", r.funcao ?? "", r.gestor ?? "",
+                r.unidade ?? "", (r.localId && nomeLocal.get(r.localId)) || "", (r.areaId && nomeArea.get(r.areaId)) || "",
+                r.parteCorpo ?? "", r.agenteCausador ?? "", r.naturezaLesao ?? "",
+                r.catNumero ?? "", dataBr(r.catEmitidaEm), r.cidCode ?? "",
+                r.diasAfastamento ?? "", dataBr(r.retornoEm), SEG_ACIDENTE_STATUS[r.status], r.descricao,
+                dataHoraBr(r.criadoEm), r.criadoPor ?? "",
+              ])}
+            />
+            <button type="button" className="btn btn-primary" onClick={() => setForm({ open: true, editando: null })}>
+              <Plus size={15} /> Registrar acidente
+            </button>
+          </div>
+        )}
+      />
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.8rem" }}>
         <StatCard label="Acidentes registrados" value={numeros.total} />
         <StatCard label="Em apuração" value={numeros.abertos} tone="amber" />
@@ -262,31 +299,6 @@ export function SegAcidentesManager({
             <option key={s} value={s}>{SEG_ACIDENTE_STATUS[s]}</option>
           ))}
         </select>
-        <div style={{ display: "flex", gap: "0.5rem", marginLeft: "auto", flexWrap: "wrap" }}>
-          <ExportButton
-            filename="acidentes.xlsx"
-            sheetName="Acidentes"
-            headers={[
-              "Data", "Hora", "Classificação", "Tipo", "Colaborador", "Matrícula", "Setor", "Função", "Gestor",
-              "Unidade", "Local", "Área", "Parte do corpo", "Agente causador", "Natureza da lesão",
-              "CAT", "CAT emitida em", "CID", "Dias de afastamento", "Retorno", "Situação", "Descrição",
-              "Lançado em", "Lançado por",
-            ]}
-            rows={lista.map((r) => [
-              dataBr(r.occurredOn), r.occurredAt?.slice(0, 5) ?? "", SEG_ACIDENTE_CLASS[r.classe],
-              SEG_ACIDENTE_TIPO[r.tipo],
-              r.pessoa ?? "", r.matricula ?? "", r.setor ?? "", r.funcao ?? "", r.gestor ?? "",
-              r.unidade ?? "", (r.localId && nomeLocal.get(r.localId)) || "", (r.areaId && nomeArea.get(r.areaId)) || "",
-              r.parteCorpo ?? "", r.agenteCausador ?? "", r.naturezaLesao ?? "",
-              r.catNumero ?? "", dataBr(r.catEmitidaEm), r.cidCode ?? "",
-              r.diasAfastamento ?? "", dataBr(r.retornoEm), SEG_ACIDENTE_STATUS[r.status], r.descricao,
-              dataHoraBr(r.criadoEm), r.criadoPor ?? "",
-            ])}
-          />
-          <button type="button" className="btn btn-primary" onClick={() => setForm({ open: true, editando: null })}>
-            <Plus size={15} /> Registrar acidente
-          </button>
-        </div>
       </div>
 
       {rows.length === 0 ? (

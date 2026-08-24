@@ -1,8 +1,8 @@
 import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SegAcidentesManager, type AcidenteRow } from "@/components/SegAcidentesManager";
 import { getItemDoPrograma } from "@/lib/actions/seguranca";
 
@@ -161,10 +161,6 @@ export default async function SegurancaAcidentesPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Acidentes"
-        subtitle="Registro dos acidentes de trabalho, com o que a empresa precisa e o que a lei pede."
-      />
       <SegAcidentesManager
         ehProprietario={role === "owner"}
         rows={rows}
