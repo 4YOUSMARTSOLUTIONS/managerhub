@@ -21,7 +21,7 @@ import { getAlertasResumo, getFocosStatus } from "@/lib/actions/seguranca";
 export default async function SegurancaPiramidePage({
   searchParams,
 }: {
-  searchParams: Promise<{ ano?: string }>;
+  searchParams: Promise<{ ano?: string; tipo?: string }>;
 }) {
   const gate = await moduleGate("seg_piramide");
   if (gate) return gate;
@@ -35,12 +35,15 @@ export default async function SegurancaPiramidePage({
 
   const agora = new Date();
   const ano = Number(sp.ano) || agora.getFullYear();
+  // típico e trajeto contam juntos por padrão; o filtro é uma escolha de quem
+  // olha, e valor estranho na URL vira "sem filtro" em vez de erro
+  const tipo = sp.tipo === "tipico" || sp.tipo === "trajeto" ? sp.tipo : null;
   const unidades = effectiveUnitFilter(unitScope);
 
   // O foco não segue o ano do filtro: ele é o que está valendo HOJE. Vem
   // junto porque é aqui que a causa dominante é lida e a decisão é tomada.
   const [{ data: painel }, focos, alertas, { data: areas }, { data: causas }] = await Promise.all([
-    supabase.rpc("seg_dashboard", { p_ano: ano, p_unit_ids: unidades }),
+    supabase.rpc("seg_dashboard", { p_ano: ano, p_unit_ids: unidades, p_tipo: tipo }),
     getFocosStatus(),
     getAlertasResumo(ano),
     supabase.from("seg_areas").select("id, name").eq("active", true).order("name"),
@@ -57,6 +60,7 @@ export default async function SegurancaPiramidePage({
       <SegPiramideDashboard
         painel={(painel ?? null) as PainelSeguranca | null}
         ano={ano}
+        tipo={tipo}
         alertas={alertas}
       />
     </div>

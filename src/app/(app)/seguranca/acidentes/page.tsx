@@ -94,6 +94,7 @@ export default async function SegurancaAcidentesPage() {
     occurredAt: a.occurred_at,
     turno: a.turno,
     classe: a.classe,
+    tipo: a.tipo,
     status: a.status,
     localId: a.local_id,
     areaId: a.area_id,

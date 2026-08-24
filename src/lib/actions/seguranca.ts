@@ -756,6 +756,7 @@ export type AcidenteInput = {
   occurredAt?: string | null;
   turno?: string | null;
   classe: Enums<"seg_acidente_class">;
+  tipo: Enums<"seg_acidente_tipo">;
   unitId?: string | null;
   localId?: string | null;
   areaId?: string | null;
@@ -810,6 +811,7 @@ export async function salvarAcidente(input: AcidenteInput): Promise<ActionState>
       occurred_at: input.occurredAt || null,
       turno: input.turno?.trim() || null,
       classe: input.classe,
+      tipo: input.tipo,
       local_id: input.localId || null,
       area_id: input.areaId || null,
       descricao: input.descricao.trim(),

@@ -168,10 +168,12 @@ function Barras({
 }
 
 export function SegPiramideDashboard({
-  painel, ano, alertas,
+  painel, ano, tipo, alertas,
 }: {
   painel: PainelSeguranca | null;
   ano: number;
+  /** null = típico e trajeto juntos, que é o padrão */
+  tipo: "tipico" | "trajeto" | null;
   /** alertas ao gestor no ano e quantos viraram conversa; `visivel` false para
    *  quem não trata segurança */
   alertas: { enviados: number; comConversa: number; visivel: boolean };
@@ -181,10 +183,10 @@ export function SegPiramideDashboard({
 
   // O ano viaja na URL, para o painel de um exercício poder ser colado numa
   // reunião. A UNIDADE não: ela é do seletor do topo, e só de lá.
-  const trocarAno = (valor: string) => {
+  const trocar = (chave: string, valor: string) => {
     const p = new URLSearchParams(params.toString());
-    if (valor) p.set("ano", valor);
-    else p.delete("ano");
+    if (valor) p.set(chave, valor);
+    else p.delete(chave);
     router.push(`/seguranca/piramide?${p.toString()}`);
   };
 
@@ -218,9 +220,25 @@ export function SegPiramideDashboard({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-        <select className="select" value={ano} onChange={(e) => trocarAno(e.target.value)} style={{ maxWidth: 130 }}>
+        <select className="select" value={ano} onChange={(e) => trocar("ano", e.target.value)} style={{ maxWidth: 130 }}>
           {anos.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
+        <select
+          className="select" value={tipo ?? ""}
+          onChange={(e) => trocar("tipo", e.target.value)} style={{ maxWidth: 200 }}
+        >
+          <option value="">Típicos e de trajeto</option>
+          <option value="tipico">Só típicos</option>
+          <option value="trajeto">Só de trajeto</option>
+        </select>
+        {/* o filtro recorta ACIDENTES; relato não tem típico nem trajeto, e
+            sem esta frase o leitor acharia que a base também foi recortada */}
+        {tipo && (
+          <span className="soft" style={{ fontSize: "0.76rem" }}>
+            Mostrando só acidentes {tipo === "trajeto" ? "de trajeto" : "típicos"}. Os relatos não têm essa
+            classificação e continuam inteiros.
+          </span>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.8rem" }}>

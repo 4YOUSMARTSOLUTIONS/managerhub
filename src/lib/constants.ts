@@ -691,6 +691,28 @@ export const SEG_ACIDENTE_CLASS_TONE: Record<Enums<"seg_acidente_class">, Tone> 
   sif: "dark",
 };
 
+/**
+ * Típico ou de trajeto.
+ *
+ * Cor fora da escala de severidade de propósito: esta classificação não é
+ * "mais grave" nem "menos grave" que a outra, e usar vermelho aqui faria o
+ * olho ler as duas na mesma régua.
+ */
+export const SEG_ACIDENTE_TIPO: Record<Enums<"seg_acidente_tipo">, string> = {
+  tipico: "Típico",
+  trajeto: "De trajeto",
+};
+
+export const SEG_ACIDENTE_TIPO_AJUDA: Record<Enums<"seg_acidente_tipo">, string> = {
+  tipico: "Aconteceu na operação, no ambiente que a empresa controla.",
+  trajeto: "No percurso entre a casa e o trabalho, nos dois sentidos. A CAT é a mesma.",
+};
+
+export const SEG_ACIDENTE_TIPO_TONE: Record<Enums<"seg_acidente_tipo">, Tone> = {
+  tipico: "gray",
+  trajeto: "purple",
+};
+
 export const SEG_ACIDENTE_STATUS: Record<Enums<"seg_acidente_status">, string> = {
   aberto: "Em apuração",
   encerrado: "Encerrado",

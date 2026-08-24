@@ -13,6 +13,7 @@ import type { Person } from "@/components/PeoplePicker";
 import {
   SEG_ACIDENTE_CLASS, SEG_ACIDENTE_CLASS_LONGO, SEG_ACIDENTE_CLASS_TONE,
   SEG_ACIDENTE_STATUS, SEG_ACIDENTE_STATUS_TONE,
+  SEG_ACIDENTE_TIPO, SEG_ACIDENTE_TIPO_TONE,
 } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
 import { SegAcidenteDialog } from "@/components/SegAcidenteDialog";
@@ -39,6 +40,8 @@ export type AcidenteRow = {
   occurredAt: string | null;
   turno: string | null;
   classe: Enums<"seg_acidente_class">;
+  /** típico (na operação) ou de trajeto (no percurso casa-trabalho) */
+  tipo: Enums<"seg_acidente_tipo">;
   status: Enums<"seg_acidente_status">;
   localId: string | null;
   areaId: string | null;
@@ -97,6 +100,7 @@ export function SegAcidentesManager({
   const [busca, setBusca] = useState("");
   const [classe, setClasse] = useState("");
   const [status, setStatus] = useState("");
+  const [tipo, setTipo] = useState("");
   const [retorno, setRetorno] = useState("");
   const [pendente, iniciar] = useTransition();
   const inputAnexo = useRef<HTMLInputElement>(null);
@@ -110,12 +114,13 @@ export function SegAcidentesManager({
     const q = normalizar(busca.trim());
     return rows.filter((r) => {
       if (classe && r.classe !== classe) return false;
+      if (tipo && r.tipo !== tipo) return false;
       if (status && r.status !== status) return false;
       if (!q) return true;
       return [r.pessoa, r.descricao, r.setor, r.parteCorpo, r.agenteCausador, r.catNumero]
         .some((v) => v && normalizar(v).includes(q));
     });
-  }, [rows, busca, classe, status]);
+  }, [rows, busca, classe, tipo, status]);
 
   const numeros = useMemo(() => ({
     total: rows.length,
@@ -226,6 +231,12 @@ export function SegAcidentesManager({
             <option key={c} value={c}>{SEG_ACIDENTE_CLASS_LONGO[c]}</option>
           ))}
         </select>
+        <select className="select" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ maxWidth: 170 }}>
+          <option value="">Típicos e de trajeto</option>
+          {(Object.keys(SEG_ACIDENTE_TIPO) as Enums<"seg_acidente_tipo">[]).map((t) => (
+            <option key={t} value={t}>{SEG_ACIDENTE_TIPO[t]}</option>
+          ))}
+        </select>
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)} style={{ maxWidth: 170 }}>
           <option value="">Todos os status</option>
           {(Object.keys(SEG_ACIDENTE_STATUS) as Enums<"seg_acidente_status">[]).map((s) => (
@@ -237,13 +248,14 @@ export function SegAcidentesManager({
             filename="acidentes.xlsx"
             sheetName="Acidentes"
             headers={[
-              "Data", "Hora", "Classificação", "Colaborador", "Matrícula", "Setor", "Função", "Gestor",
+              "Data", "Hora", "Classificação", "Tipo", "Colaborador", "Matrícula", "Setor", "Função", "Gestor",
               "Unidade", "Local", "Área", "Parte do corpo", "Agente causador", "Natureza da lesão",
               "CAT", "CAT emitida em", "CID", "Dias de afastamento", "Retorno", "Situação", "Descrição",
               "Lançado em", "Lançado por",
             ]}
             rows={lista.map((r) => [
               dataBr(r.occurredOn), r.occurredAt?.slice(0, 5) ?? "", SEG_ACIDENTE_CLASS[r.classe],
+              SEG_ACIDENTE_TIPO[r.tipo],
               r.pessoa ?? "", r.matricula ?? "", r.setor ?? "", r.funcao ?? "", r.gestor ?? "",
               r.unidade ?? "", (r.localId && nomeLocal.get(r.localId)) || "", (r.areaId && nomeArea.get(r.areaId)) || "",
               r.parteCorpo ?? "", r.agenteCausador ?? "", r.naturezaLesao ?? "",
@@ -271,6 +283,7 @@ export function SegAcidentesManager({
             <tr>
               <th style={{ width: 100 }}>Data</th>
               <th style={{ width: 80 }}>Classe</th>
+              <th style={{ width: 100 }}>Tipo</th>
               <th>Colaborador</th>
               <th style={{ width: 130 }}>Setor</th>
               <th style={{ width: 160 }}>Função</th>
@@ -286,6 +299,9 @@ export function SegAcidentesManager({
                 <td>{dataBr(r.occurredOn)}</td>
                 <td>
                   <Badge tone={SEG_ACIDENTE_CLASS_TONE[r.classe]}>{SEG_ACIDENTE_CLASS[r.classe]}</Badge>
+                </td>
+                <td>
+                  <Badge tone={SEG_ACIDENTE_TIPO_TONE[r.tipo]}>{SEG_ACIDENTE_TIPO[r.tipo]}</Badge>
                 </td>
                 <td style={{ fontWeight: 600 }}>{shortName(r.pessoa)}</td>
                 <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
@@ -331,6 +347,7 @@ export function SegAcidentesManager({
             <div style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
               <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                 <Badge tone={SEG_ACIDENTE_CLASS_TONE[detalhe.classe]}>{SEG_ACIDENTE_CLASS_LONGO[detalhe.classe]}</Badge>
+                <Badge tone={SEG_ACIDENTE_TIPO_TONE[detalhe.tipo]}>{SEG_ACIDENTE_TIPO[detalhe.tipo]}</Badge>
                 <Badge tone={SEG_ACIDENTE_STATUS_TONE[detalhe.status]}>{SEG_ACIDENTE_STATUS[detalhe.status]}</Badge>
               </div>
 
