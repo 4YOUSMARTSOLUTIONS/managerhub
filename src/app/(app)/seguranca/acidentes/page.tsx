@@ -4,6 +4,7 @@ import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SegAcidentesManager, type AcidenteRow } from "@/components/SegAcidentesManager";
+import { getItemDoPrograma } from "@/lib/actions/seguranca";
 
 /**
  * Acidentes de trabalho.
@@ -49,12 +50,15 @@ export default async function SegurancaAcidentesPage() {
   // unidade (ela vem do vínculo do acidentado) e o filtro é o do topo
   const [
     { data: acidentes }, membros, { data: locais }, { data: areas }, { data: causas },
+    itemPrograma,
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
     supabase.from("seg_locais").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("seg_areas").select("id, name, local_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("seg_causas").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
+    // a que item do Programa a ação de tratamento será amarrada (1.1)
+    getItemDoPrograma("acidente"),
   ]);
 
   const ids = (acidentes ?? []).map((a) => a.id);
@@ -65,6 +69,33 @@ export default async function SegurancaAcidentesPage() {
         .in("acidente_id", ids)
         .order("created_at")
     : { data: [] };
+
+  // ações de tratamento abertas a partir dos acidentes: elas vivem no módulo
+  // de Ações, e aqui aparece só o ponteiro
+  const { data: vinculos } = ids.length
+    ? await supabase
+        .from("seg_acidente_acoes")
+        .select("acidente_id, action_id, actions(code, due_date, action_demandas(status))")
+        .in("acidente_id", ids)
+    : { data: [] };
+
+  const acoesPorAcidente = new Map<string, AcidenteRow["acoes"]>();
+  for (const v of vinculos ?? []) {
+    const a = v.actions as unknown as {
+      code: number; due_date: string | null; action_demandas: { status: string }[];
+    } | null;
+    if (!a) continue;
+    const demandas = a.action_demandas ?? [];
+    const atual = acoesPorAcidente.get(v.acidente_id) ?? [];
+    atual.push({
+      id: v.action_id,
+      codigo: a.code,
+      prazo: a.due_date,
+      concluida: demandas.length > 0 && demandas.every((d) => d.status === "done"),
+      pendentes: demandas.filter((d) => d.status !== "done").length,
+    });
+    acoesPorAcidente.set(v.acidente_id, atual);
+  }
 
   const porAcidente = new Map<string, AcidenteRow["anexos"]>();
   for (const x of anexos ?? []) {
@@ -88,6 +119,9 @@ export default async function SegurancaAcidentesPage() {
     subsetor: a.snap_subdepartment_name,
     funcao: a.snap_position_name,
     gestor: a.snap_manager_name,
+    setorId: a.snap_department_id,
+    subsetorId: a.snap_subdepartment_id,
+    gestorId: a.snap_manager_id,
     unidade: a.snap_unit_name,
     unitId: a.unit_id,
     occurredOn: a.occurred_on,
@@ -117,6 +151,7 @@ export default async function SegurancaAcidentesPage() {
     criadoEm: a.created_at,
     criadoPor: nomeDoUser.get(a.created_by) ?? null,
     anexos: porAcidente.get(a.id) ?? [],
+    acoes: acoesPorAcidente.get(a.id) ?? [],
   }));
 
   return (
@@ -132,6 +167,7 @@ export default async function SegurancaAcidentesPage() {
         locais={(locais ?? []).map((l) => ({ id: l.id, name: l.name, active: l.active }))}
         areas={(areas ?? []).map((a) => ({ id: a.id, name: a.name, localId: a.local_id, active: a.active }))}
         causas={(causas ?? []).map((c) => ({ id: c.id, name: c.name, active: c.active }))}
+        itemPrograma={itemPrograma}
       />
     </div>
   );

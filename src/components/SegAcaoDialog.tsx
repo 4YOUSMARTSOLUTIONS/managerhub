@@ -6,11 +6,11 @@ import { toast } from "sonner";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { PRIORITY } from "@/lib/constants";
 import { hojeYmd, somarDias } from "@/lib/format";
-import { criarAcaoDoRelato } from "@/lib/actions/seguranca";
+import { criarAcaoDoAcidente, criarAcaoDoRelato } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
 /**
- * A ação de tratamento do relato.
+ * A ação de tratamento, do relato ou do acidente.
  *
  * Não é um formulário de ação completo de propósito. A ação nasce pelo mesmo
  * `create_action` do resto do sistema e cai em /acoes com prazo e cobrança como
@@ -20,14 +20,17 @@ import type { Enums } from "@/types/database";
  *
  * O responsável já vem sugerido como o GESTOR DA ÉPOCA do envolvido, que é
  * quem tem alçada para conversar e corrigir.
+ *
+ * O `alvo` decide a que o vínculo é feito e a que item do Programa a ação
+ * nasce amarrada: relato vai para o 1.2, acidente para o 1.1.
  */
 export function SegAcaoDialog({
-  open, onClose, relatoId, problema, sugestaoResponsaveis, pessoas,
+  open, onClose, alvo, problema, sugestaoResponsaveis, pessoas,
   unitId, departmentId, subdepartmentId, itemPrograma,
 }: {
   open: boolean;
   onClose: () => void;
-  relatoId: string;
+  alvo: { tipo: "relato" | "acidente"; id: string };
   problema: string;
   sugestaoResponsaveis: string[];
   pessoas: Person[];
@@ -52,11 +55,14 @@ export function SegAcaoDialog({
   const salvar = () => {
     setErro("");
     iniciar(async () => {
-      const r = await criarAcaoDoRelato({
-        relatoId, descricao, responsaveis, prazo, prioridade,
+      const comum = {
+        descricao, responsaveis, prazo, prioridade,
         problema, unitId, departmentId, subdepartmentId,
         vincularPrograma: vincular,
-      });
+      };
+      const r = alvo.tipo === "acidente"
+        ? await criarAcaoDoAcidente({ acidenteId: alvo.id, ...comum })
+        : await criarAcaoDoRelato({ relatoId: alvo.id, ...comum });
       if (r.error) { setErro(r.error); return; }
       if (r.warning) toast.warning(r.warning);
       else toast.success(r.message ?? "Ação criada.");

@@ -550,7 +550,7 @@ export function SegRelatosManager({
           {acao && (
             <SegAcaoDialog
               open={acao} onClose={() => setAcao(false)}
-              relatoId={detalhe.id}
+              alvo={{ tipo: "relato", id: detalhe.id }}
               problema={`${nomeTipo.get(detalhe.tipoId) ?? "Relato"} em ${dataBr(detalhe.occurredOn)}: ${detalhe.descricao}`}
               sugestaoResponsaveis={gestoresDoRelato}
               pessoas={pessoas}

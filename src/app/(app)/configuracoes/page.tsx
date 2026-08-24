@@ -215,7 +215,7 @@ export default async function SettingsPage() {
       .order("sort").order("name"),
     supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id),
     // a que item do Programa as ações de relato se amarram
-    supabase.from("seg_settings").select("relato_item_id").eq("tenant_id", tenant.id).maybeSingle(),
+    supabase.from("seg_settings").select("relato_item_id, acidente_item_id").eq("tenant_id", tenant.id).maybeSingle(),
     supabase.from("seg_causas").select("id, name, description, active")
       .eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("seg_ocorrencias").select("id, name, description, image_path, active")
@@ -835,6 +835,24 @@ export default async function SettingsPage() {
   const secaoOpts = (secoes ?? []).map((s) => ({ id: s.id, name: s.name, active: s.active }));
   const blocoOpts = (blocos ?? []).map((b) => ({ id: b.id, name: b.name, code: b.code, programa_id: b.programa_id, pilar_id: b.pilar_id, secao_id: b.secao_id, active: b.active }));
   const itemOpts = (itens ?? []).map((i) => ({ id: i.id, name: i.name, code: i.code, programa_id: i.programa_id, pilar_id: i.pilar_id, secao_id: i.secao_id, bloco_id: i.bloco_id, active: i.active }));
+
+  // só itens ativos, com o caminho inteiro no rótulo: "1.2" sozinho se repete
+  // em todo pilar, e a pessoa escolheria o errado
+  const itensDoPrograma = itemOpts
+    .filter((i) => i.active)
+    .map((i) => {
+      const bloco = blocoOpts.find((b) => b.id === i.bloco_id);
+      const pilar = (pilares ?? []).find((p) => p.id === (bloco?.pilar_id ?? i.pilar_id));
+      const secao = (secoes ?? []).find((s) => s.id === (bloco?.secao_id ?? i.secao_id));
+      return {
+        id: i.id,
+        rotulo: `${pilar?.name ?? "Sem pilar"} · ${i.code ? `${i.code} ` : ""}${i.name}`,
+        pilar: pilar?.name ?? null,
+        secao: secao?.name ?? null,
+        bloco: bloco?.name ?? "",
+      };
+    })
+    .sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"));
   const programaById = new Map(programaOpts.map((p) => [p.id, p.name]));
   const pilarById = new Map(pilarOpts.map((p) => [p.id, p.name]));
   const secaoById = new Map(secaoOpts.map((s) => [s.id, s.name]));
@@ -1384,27 +1402,23 @@ export default async function SettingsPage() {
               id: "seg-programa",
               label: "Programa de Excelência",
               content: (
-                <SegProgramaVinculo
-                  canEdit={canEdit}
-                  atual={segSettingsData?.relato_item_id ?? null}
-                  // só itens ativos, com o caminho inteiro no rótulo: "1.2" sozinho
-                  // se repete em todo pilar, e a pessoa escolheria o errado
-                  itens={itemOpts
-                    .filter((i) => i.active)
-                    .map((i) => {
-                      const bloco = blocoOpts.find((b) => b.id === i.bloco_id);
-                      const pilar = (pilares ?? []).find((p) => p.id === (bloco?.pilar_id ?? i.pilar_id));
-                      const secao = (secoes ?? []).find((s) => s.id === (bloco?.secao_id ?? i.secao_id));
-                      return {
-                        id: i.id,
-                        rotulo: `${pilar?.name ?? "Sem pilar"} · ${i.code ? `${i.code} ` : ""}${i.name}`,
-                        pilar: pilar?.name ?? null,
-                        secao: secao?.name ?? null,
-                        bloco: bloco?.name ?? "",
-                      };
-                    })
-                    .sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"))}
-                />
+                // dois vínculos, um por origem da ação: relato e acidente caem
+                // em itens vizinhos do mesmo bloco, e trocar um pelo outro
+                // sujaria a pontuação dos dois
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "1rem" }}>
+                  <SegProgramaVinculo
+                    canEdit={canEdit}
+                    alvo="relato"
+                    atual={segSettingsData?.relato_item_id ?? null}
+                    itens={itensDoPrograma}
+                  />
+                  <SegProgramaVinculo
+                    canEdit={canEdit}
+                    alvo="acidente"
+                    atual={segSettingsData?.acidente_item_id ?? null}
+                    itens={itensDoPrograma}
+                  />
+                </div>
               ),
             },
             {

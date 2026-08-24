@@ -949,12 +949,15 @@ export async function urlAnexoAcidente(anexoId: string): Promise<string | null> 
   return data?.signedUrl ?? null;
 }
 
+/** Relato e acidente se amarram a itens vizinhos do Programa: 1.2 e 1.1. */
+export type AlvoDoPrograma = "relato" | "acidente";
+
 /** O item do Programa hoje configurado, para a tela dizer a que a ação será amarrada. */
-export async function getItemDoPrograma(): Promise<{
+export async function getItemDoPrograma(para: AlvoDoPrograma = "relato"): Promise<{
   itemId: string; item: string; bloco: string; secao: string | null; pilar: string | null;
 } | null> {
   const { supabase } = await actionContext();
-  const { data } = await supabase.rpc("seg_item_do_programa");
+  const { data } = await supabase.rpc("seg_item_do_programa", { p_para: para });
   const v = data as {
     item_id: string; item: string; bloco: string; secao: string | null; pilar: string | null;
   } | null;
@@ -963,15 +966,99 @@ export async function getItemDoPrograma(): Promise<{
 }
 
 /** Define (ou limpa) o item do Programa das ações de relato. owner/admin. */
-export async function setItemDoPrograma(itemId: string | null): Promise<ActionState> {
+export async function setItemDoPrograma(
+  itemId: string | null,
+  para: AlvoDoPrograma = "relato",
+): Promise<ActionState> {
   try {
     const { supabase, tenantId } = await adminActionContext();
-    const { error } = await supabase
-      .from("seg_settings")
-      .upsert({ tenant_id: tenantId, relato_item_id: itemId || null }, { onConflict: "tenant_id" });
+    // duas chamadas literais em vez de uma com chave computada: o tipo do
+    // upsert recusa tanto `[coluna]` quanto a união dos dois objetos, e
+    // perder a checagem aqui é perder a única rede que impede gravar item
+    // do Programa na coluna errada
+    const { error } = para === "acidente"
+      ? await supabase.from("seg_settings")
+          .upsert({ tenant_id: tenantId, acidente_item_id: itemId || null }, { onConflict: "tenant_id" })
+      : await supabase.from("seg_settings")
+          .upsert({ tenant_id: tenantId, relato_item_id: itemId || null }, { onConflict: "tenant_id" });
     if (error) return { error: mensagem(error) };
     revalidar();
     return { ok: true, message: itemId ? "Vínculo com o Programa salvo." : "Vínculo removido." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Abre a ação de tratamento do acidente e a amarra ao caso.
+ *
+ * Mesmo caminho do relato: a ação nasce pelo `create_action` do resto do
+ * sistema e cai em /acoes com prazo e cobrança. A diferença é o item do
+ * Programa (1.1, investigação de acidentes) e o fato de que concluir a ação
+ * NÃO encerra o acidente: encerrar é sobre o retorno ao trabalho, e a ação
+ * corretiva pode levar meses.
+ */
+export async function criarAcaoDoAcidente(input: {
+  acidenteId: string;
+  descricao: string;
+  responsaveis: string[];
+  prazo: string;
+  prioridade: Enums<"priority_level">;
+  problema: string;
+  unitId?: string | null;
+  departmentId?: string | null;
+  subdepartmentId?: string | null;
+  vincularPrograma?: boolean;
+}): Promise<ActionState> {
+  try {
+    const { supabase, userId } = await actionContext();
+
+    if (!input.descricao.trim()) return { error: "Descreva o que deve ser feito." };
+    if (input.responsaveis.length === 0) return { error: "Escolha ao menos um responsável." };
+    if (!input.prazo) return { error: "Informe o prazo." };
+
+    // o item vem do servidor, nunca da tela: mandar os ids pelo navegador
+    // abriria a porta para a ação nascer pendurada em qualquer item
+    const programa = input.vincularPrograma === false
+      ? null
+      : ((await supabase.rpc("seg_item_do_programa", { p_para: "acidente" })).data as {
+          item_id: string; pilar_id: string | null; bloco_id: string;
+        } | null);
+
+    const { data, error } = await supabase.rpc("create_action", {
+      p_data: {
+        is_sdpo: !!programa,
+        pilar_id: programa?.pilar_id ?? "",
+        bloco_id: programa?.bloco_id ?? "",
+        item_id: programa?.item_id ?? "",
+        requester_id: userId,
+        problem_statement: input.problema,
+        priority: input.prioridade,
+        due_date: input.prazo,
+        unit_id: input.unitId ?? "",
+        department_id: input.departmentId ?? "",
+        subdepartment_id: input.subdepartmentId ?? "",
+        cc: [],
+        demandas: [{ description: input.descricao.trim(), assignees: input.responsaveis }],
+      },
+    });
+    if (error) return { error: error.message };
+
+    const acao = (data ?? {}) as { action_id?: string };
+    if (!acao.action_id) return { error: "A ação não foi criada." };
+
+    const vinculo = await supabase.rpc("seg_vincular_acao_acidente", {
+      p_acidente_id: input.acidenteId,
+      p_action_id: acao.action_id,
+    });
+    // a ação existe mesmo se o vínculo falhar; avisar é melhor que fingir sucesso
+    if (vinculo.error) {
+      return { ok: true, warning: `Ação criada, mas não foi possível vinculá-la ao acidente: ${vinculo.error.message}` };
+    }
+
+    revalidar();
+    revalidatePath("/acoes");
+    return { ok: true, message: "Ação de tratamento criada e vinculada ao acidente." };
   } catch (e) {
     return { error: (e as Error).message };
   }

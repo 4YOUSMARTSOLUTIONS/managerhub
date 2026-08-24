@@ -1793,14 +1793,22 @@ export type Database = {
       // Incidentes, Atos e Condições Inseguras" do pilar Segurança), que é
       // catálogo de cada empresa e por isso não pode morar no código.
       seg_settings: {
-        Row: { id: string; tenant_id: string; relato_item_id: string | null; updated_at: string }
-        Insert: { id?: string; tenant_id: string; relato_item_id?: string | null; updated_at?: string }
-        Update: { relato_item_id?: string | null; updated_at?: string }
+        Row: { id: string; tenant_id: string; relato_item_id: string | null; acidente_item_id: string | null; updated_at: string }
+        Insert: { id?: string; tenant_id: string; relato_item_id?: string | null; acidente_item_id?: string | null; updated_at?: string }
+        Update: { relato_item_id?: string | null; acidente_item_id?: string | null; updated_at?: string }
         Relationships: []
       }
       // Liga o relato à ação de tratamento. Tabela própria de propósito: uma
       // coluna em `actions` obrigaria a remendar a `create_action`, que é
       // mantida por replace() sobre pg_get_functiondef.
+      // O vínculo do acidente com a ação de tratamento. A ação vive em
+      // /acoes; aqui fica só o ponteiro. Concluí-la NÃO encerra o acidente.
+      seg_acidente_acoes: {
+        Row: { id: string; acidente_id: string; action_id: string; tenant_id: string; created_by: string | null; created_at: string }
+        Insert: { id?: string; acidente_id: string; action_id: string; tenant_id: string; created_by?: string | null; created_at?: string }
+        Update: never
+        Relationships: []
+      }
       seg_relato_acoes: {
         Row: { id: string; relato_id: string; action_id: string; tenant_id: string; created_by: string | null; created_at: string }
         Insert: { id?: string; relato_id: string; action_id: string; tenant_id: string; created_by?: string | null; created_at?: string }
@@ -2175,7 +2183,9 @@ export type Database = {
       // a unidade vem do seletor do topo, que é uma LISTA (o usuário pode ter
       // várias permitidas), e não um id só
       seg_dashboard: { Args: { p_ano: number; p_unit_ids?: string[] | null; p_tipo?: Database["public"]["Enums"]["seg_acidente_tipo"] | null }; Returns: Json }
-      seg_item_do_programa: { Args: Record<PropertyKey, never>; Returns: Json }
+      // 'relato' (default) ou 'acidente': itens vizinhos, 1.2 e 1.1
+      seg_item_do_programa: { Args: { p_para?: string }; Returns: Json }
+      seg_vincular_acao_acidente: { Args: { p_acidente_id: string; p_action_id: string }; Returns: undefined }
       seg_salvar_foco: { Args: { p_data: Json }; Returns: string }
       seg_excluir_foco: { Args: { p_id: string }; Returns: undefined }
       // vigentes para todo mundo; sugestões só para quem pode definir foco

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Link2 } from "lucide-react";
-import { setItemDoPrograma } from "@/lib/actions/seguranca";
+import { setItemDoPrograma, type AlvoDoPrograma } from "@/lib/actions/seguranca";
 
 export type ItemDoPrograma = {
   id: string;
@@ -15,7 +15,12 @@ export type ItemDoPrograma = {
 };
 
 /**
- * A que item do Programa de Excelência as ações de relato se amarram.
+ * A que item do Programa de Excelência as ações de segurança se amarram.
+ *
+ * São dois, vizinhos no mesmo bloco: relato vai para o 1.2 (Relatos de
+ * Incidentes, Atos e Condições Inseguras) e acidente para o 1.1 (Notificação,
+ * Investigação e Tratativa de Acidentes). Mandar os dois para o mesmo item
+ * sujaria a pontuação dos dois.
  *
  * O item "1.2 Relatos de Incidentes, Atos e Condições Inseguras" cobra registro
  * digital de atos e condições inseguras COM ações corretivas e preventivas
@@ -28,11 +33,12 @@ export type ItemDoPrograma = {
  * Segurança) e aqui o administrador confirma ou troca.
  */
 export function SegProgramaVinculo({
-  itens, atual, canEdit,
+  itens, atual, canEdit, alvo = "relato",
 }: {
   itens: ItemDoPrograma[];
   atual: string | null;
   canEdit: boolean;
+  alvo?: AlvoDoPrograma;
 }) {
   const [valor, setValor] = useState(atual ?? "");
   const [pendente, iniciar] = useTransition();
@@ -43,7 +49,7 @@ export function SegProgramaVinculo({
 
   const salvar = () => {
     iniciar(async () => {
-      const r = await setItemDoPrograma(valor || null);
+      const r = await setItemDoPrograma(valor || null, alvo);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Vínculo salvo.");
       router.refresh();
@@ -54,12 +60,12 @@ export function SegProgramaVinculo({
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
         <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.2rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <Link2 size={16} /> Vínculo com o Programa de Excelência
+          <Link2 size={16} /> Ações de {alvo === "acidente" ? "acidente" : "relato"}
         </h3>
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-          As ações de tratamento abertas a partir de um relato nascem amarradas a este item.
-          É o que transforma o módulo em evidência de auditoria, sem ninguém precisar
-          garimpar em Ações depois qual delas era de segurança.
+          As ações de tratamento abertas a partir de um {alvo === "acidente" ? "acidente" : "relato"} nascem
+          amarradas a este item. É o que transforma o módulo em evidência de auditoria, sem
+          ninguém precisar garimpar em Ações depois qual delas era de segurança.
         </p>
       </div>
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Paperclip, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ExternalLink, ListChecks, Paperclip, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatCard } from "@/components/ui/StatCard";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
 import { SegAcidenteDialog } from "@/components/SegAcidenteDialog";
+import { SegAcaoDialog } from "@/components/SegAcaoDialog";
 import {
   anexarAoAcidente, encerrarAcidente, excluirAcidente, reabrirAcidente,
   removerAnexoAcidente, urlAnexoAcidente,
@@ -34,6 +36,11 @@ export type AcidenteRow = {
   subsetor: string | null;
   funcao: string | null;
   gestor: string | null;
+  // os ids do vínculo da época, para a ação de tratamento nascer no lugar
+  // certo e já com o gestor sugerido
+  setorId: string | null;
+  subsetorId: string | null;
+  gestorId: string | null;
   unidade: string | null;
   unitId: string | null;
   occurredOn: string;
@@ -62,6 +69,8 @@ export type AcidenteRow = {
   /** carimbo de inclusão no sistema, que a data do ocorrido não responde */
   criadoEm: string;
   criadoPor: string | null;
+  /** ações de tratamento abertas a partir deste acidente; vivem em /acoes */
+  acoes: { id: string; codigo: number; prazo: string | null; concluida: boolean; pendentes: number }[];
   anexos: AnexoRow[];
 };
 
@@ -85,7 +94,7 @@ function dataBr(iso: string | null) {
  * conta que vai alimentar a pirâmide.
  */
 export function SegAcidentesManager({
-  rows, pessoas, locais, areas, causas, ehProprietario,
+  rows, pessoas, locais, areas, causas, ehProprietario, itemPrograma,
 }: {
   rows: AcidenteRow[];
   pessoas: Person[];
@@ -94,6 +103,8 @@ export function SegAcidentesManager({
   causas: { id: string; name: string; active: boolean }[];
   /** excluir acidente e do proprietario: e registro legal, nao fila de trabalho */
   ehProprietario: boolean;
+  /** item do Programa ao qual a ação de tratamento é amarrada (1.1) */
+  itemPrograma: { item: string; bloco: string; secao: string | null; pilar: string | null } | null;
 }) {
   const [form, setForm] = useState<{ open: boolean; editando: AcidenteRow | null }>({ open: false, editando: null });
   const [aberto, setAberto] = useState<string | null>(null);
@@ -102,6 +113,7 @@ export function SegAcidentesManager({
   const [status, setStatus] = useState("");
   const [tipo, setTipo] = useState("");
   const [retorno, setRetorno] = useState("");
+  const [acao, setAcao] = useState(false);
   const [pendente, iniciar] = useTransition();
   const inputAnexo = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -131,6 +143,7 @@ export function SegAcidentesManager({
   }), [rows]);
 
   const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
+  const pendentesDoCaso = detalhe?.acoes.filter((a) => !a.concluida).length ?? 0;
 
   const encerrar = () => {
     if (!detalhe) return;
@@ -390,6 +403,35 @@ export function SegAcidentesManager({
                 </div>
               )}
 
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
+                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Ações de tratamento</h3>
+                {detalhe.acoes.length === 0 ? (
+                  <p className="soft" style={{ fontSize: "0.8rem", margin: "0 0 0.5rem" }}>
+                    Nenhuma ação aberta. O que a empresa vai mudar para não repetir vira ação aqui,
+                    com responsável e prazo.
+                  </p>
+                ) : (
+                  <ul style={{ margin: "0 0 0.5rem", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    {detalhe.acoes.map((a) => (
+                      <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
+                        {/* a ação mora no módulo de Ações: aqui vai o ponteiro,
+                            não uma segunda cópia do acompanhamento */}
+                        <Link href={`/acoes?busca=${a.codigo}`} className="btn btn-ghost btn-sm">
+                          <ExternalLink size={13} /> Ação #{a.codigo}
+                        </Link>
+                        <Badge tone={a.concluida ? "green" : "amber"}>
+                          {a.concluida ? "Concluída" : `${a.pendentes} demanda${a.pendentes === 1 ? "" : "s"} em aberto`}
+                        </Badge>
+                        {a.prazo && <span className="soft">prazo {dataBr(a.prazo)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setAcao(true)}>
+                  <ListChecks size={14} /> Criar ação de tratamento
+                </button>
+              </div>
+
               <div>
                 <h3 style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0 0 0.4rem" }}>Documentos</h3>
                 {detalhe.anexos.length === 0 ? (
@@ -433,6 +475,14 @@ export function SegAcidentesManager({
                       Acidente com afastamento só encerra com a data de retorno.
                     </span>
                   )}
+                  {/* encerrar o caso é sobre o retorno ao trabalho; a ação
+                      corretiva pode levar meses e não trava o encerramento */}
+                  {pendentesDoCaso > 0 && (
+                    <span className="soft" style={{ fontSize: "0.75rem" }}>
+                      {pendentesDoCaso === 1 ? "Há 1 ação de tratamento em aberto" : `Há ${pendentesDoCaso} ações de tratamento em aberto`}.
+                      O caso encerra assim mesmo, e ela continua sendo cobrada em Ações.
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -460,6 +510,21 @@ export function SegAcidentesManager({
             </div>
           </div>
         </div>
+      )}
+
+      {detalhe && (
+        <SegAcaoDialog
+          open={acao} onClose={() => setAcao(false)}
+          alvo={{ tipo: "acidente", id: detalhe.id }}
+          problema={`${SEG_ACIDENTE_CLASS_LONGO[detalhe.classe]} em ${dataBr(detalhe.occurredOn)}: ${detalhe.descricao}`}
+          // o gestor da época do acidentado é quem tem alçada para corrigir
+          sugestaoResponsaveis={detalhe.gestorId ? [detalhe.gestorId] : []}
+          pessoas={pessoas}
+          unitId={detalhe.unitId}
+          departmentId={detalhe.setorId}
+          subdepartmentId={detalhe.subsetorId}
+          itemPrograma={itemPrograma}
+        />
       )}
 
       {/* montado só quando abre, com `key` por registro: cada abertura começa
