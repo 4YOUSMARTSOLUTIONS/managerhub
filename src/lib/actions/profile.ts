@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import sharp from "sharp";
 import { actionContext } from "./context";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -179,6 +178,24 @@ export async function updateOwnAvatar(_prev: ActionState, formData: FormData): P
     // o accept do input é dica, não garantia: quem posta direto manda o que quiser
     if (!AVATAR_MIMES.includes(file.type as (typeof AVATAR_MIMES)[number])) {
       return { error: "Formato não aceito. Envie JPG, PNG ou WebP." };
+    }
+
+    /**
+     * O sharp entra SOB DEMANDA, nunca no topo do arquivo.
+     *
+     * Ele é módulo nativo (libvips). Importado no topo, o binário era carregado
+     * ao simplesmente CARREGAR este módulo de actions — e como "Meu perfil" vive
+     * no menu de todas as telas, o Next puxa este arquivo no registro de actions
+     * de QUALQUER rota. Em produção o libvips não estava presente no runtime, e
+     * o efeito era 500 em toda server action do sistema (salvar qualquer coisa,
+     * e até o Sair), não só no envio da foto. Aqui a falha fica onde nasceu.
+     */
+    let sharp: (typeof import("sharp"))["default"];
+    try {
+      sharp = (await import("sharp")).default;
+    } catch (e) {
+      console.error("[avatar] sharp indisponível no runtime", e);
+      return { error: "O processamento de imagem está indisponível no servidor. Avise a administração." };
     }
 
     const entrada = Buffer.from(await file.arrayBuffer());
