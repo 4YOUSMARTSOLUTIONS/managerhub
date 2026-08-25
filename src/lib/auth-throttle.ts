@@ -18,7 +18,10 @@ import { createServiceClient } from "@/lib/supabase/admin";
  * pode virar endpoint.
  */
 
-export type ChaveThrottle = { bucket: "login_ip" | "login_id" | "senha_usuario"; chave: string };
+export type ChaveThrottle = {
+  bucket: "login_ip" | "login_id" | "senha_usuario" | "reset_ip" | "reset_id";
+  chave: string;
+};
 export type Veredito = { bloqueado: boolean; esperaSegundos: number };
 
 const LIBERADO: Veredito = { bloqueado: false, esperaSegundos: 0 };

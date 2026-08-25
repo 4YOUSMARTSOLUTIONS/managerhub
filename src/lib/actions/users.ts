@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { adminActionContext, dpActionContext } from "./context";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { dispararRecuperacao } from "@/lib/reset-senha";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
@@ -52,6 +54,49 @@ export async function setUserPassword(
 
     revalidatePath("/configuracoes");
     return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Manda para o colaborador o mesmo link que a tela de acesso enviaria.
+ *
+ * Serve o atendimento por telefone: em vez de o RH inventar uma senha, dizê-la
+ * em voz alta e a pessoa ter de trocá-la depois, ela recebe o link e escolhe a
+ * própria senha.
+ *
+ * `dpActionContext`, e não `adminActionContext` como a vizinha `setUserPassword`:
+ * disparar o link não dá acesso a quem dispara — a mensagem vai para o e-mail do
+ * cadastro, que só o dono lê. Definir a senha à mão é outra coisa, e continua
+ * fora do alcance do RH.
+ *
+ * A resposta diz quando não há e-mail, e aqui isso é correto: quem está do outro
+ * lado é o departamento pessoal olhando a ficha, não um anônimo na tela de
+ * acesso. É informação que ele já vê no cadastro.
+ */
+export async function enviarLinkDeRecuperacao(formData: FormData): Promise<ActionState> {
+  try {
+    await dpActionContext();
+    const userId = String(formData.get("user_id") ?? "");
+    if (!userId) return { error: "Colaborador não informado." };
+
+    const admin = createServiceClient();
+    const { data: identificador } = await admin.rpc("identificador_de_recuperacao", {
+      p_user: userId,
+    });
+    if (!identificador) {
+      return { error: "Este colaborador não tem e-mail cadastrado. Cadastre o e-mail na ficha ou redefina a senha por aqui." };
+    }
+
+    const { data } = await admin.rpc("destino_de_recuperacao", { p_identificador: identificador });
+    const destino = (data as { destino?: string | null } | null)?.destino ?? null;
+    if (!destino) {
+      return { error: "Este colaborador não tem e-mail cadastrado. Cadastre o e-mail na ficha ou redefina a senha por aqui." };
+    }
+
+    await dispararRecuperacao(identificador);
+    return { ok: true, message: "Link de recuperação enviado para o e-mail do colaborador." };
   } catch (e) {
     return { error: (e as Error).message };
   }

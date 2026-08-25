@@ -2117,6 +2117,13 @@ export type Database = {
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }
       platform_set_active_tenant: { Args: { p_tenant: string }; Returns: undefined }
       email_by_cpf: { Args: { p_cpf: string }; Returns: string }
+      // Recuperação de senha. As duas rodam ANTES do login, então são revogadas
+      // até de `authenticated`: só o service role, de dentro do servidor, chama.
+      // `destino_de_recuperacao` distingue o e-mail de AUTENTICAÇÃO (que o
+      // generateLink exige) do e-mail de CONTATO (para onde a mensagem vai).
+      destino_de_recuperacao: { Args: { p_identificador: string }; Returns: Json }
+      recuperacao_avisar_dp: { Args: { p_user: string; p_tenant: string }; Returns: undefined }
+      identificador_de_recuperacao: { Args: { p_user: string }; Returns: string }
       create_action: { Args: { p_data: Json }; Returns: Json }
       update_action: { Args: { p_id: string; p_data: Json }; Returns: undefined }
       import_action: { Args: { p_data: Json }; Returns: Json }

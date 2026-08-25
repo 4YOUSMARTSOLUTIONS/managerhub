@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { setUserPassword, removeUser, setMemberActive } from "@/lib/actions/users";
+import { setUserPassword, removeUser, setMemberActive, enviarLinkDeRecuperacao } from "@/lib/actions/users";
 import { USER_TYPE, type Tone } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
@@ -54,6 +54,7 @@ const ICON = {
   lock: "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z|M7 11V7a5 5 0 0 1 10 0v4",
   trash: "M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6|M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6",
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z|M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  mail: "M22 6 12 13 2 6|M2 6h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z",
 };
 
 function Ico({ d }: { d: string }) {
@@ -145,6 +146,28 @@ export function UsersManager({
       if (res?.error) { toast.error(res.error); return; }
       toast.success(makeActive ? "Colaborador ativado." : "Colaborador inativado.");
       router.refresh();
+    });
+  }
+
+  /**
+   * O link vai para o e-mail do cadastro, e não para a mão do RH: assim quem
+   * escolhe a senha é o dono dela. Para quem não tem e-mail, a action recusa com
+   * mensagem — aqui dizer isso é correto, é a ficha do colaborador e não a tela
+   * de acesso.
+   */
+  async function enviarRecuperacao(userId: string, name: string | null) {
+    const ok = await confirmDialog({
+      title: "Enviar link de recuperação",
+      message: `${name ?? "O colaborador"} vai receber um e-mail para definir a própria senha. O link vale por 1 hora.`,
+      confirmLabel: "Enviar link",
+    });
+    if (!ok) return;
+    const fd = new FormData();
+    fd.set("user_id", userId);
+    startTransition(async () => {
+      const res = await enviarLinkDeRecuperacao(fd);
+      if (res?.error) { toast.error(res.error); return; }
+      toast.success(res?.message ?? "Link enviado.");
     });
   }
 
@@ -291,6 +314,9 @@ export function UsersManager({
                           <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
                           {canAct && (
                             <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
+                          )}
+                          {canAct && (
+                            <button className="icon-btn" type="button" title="Enviar link de recuperação de senha" onClick={() => enviarRecuperacao(e.userId, e.fullName)}><Ico d={ICON.mail} /></button>
                           )}
                           {canManageAccess && (
                             <FormModal triggerLabel={<Ico d={ICON.lock} />} triggerClassName="icon-btn" triggerTitle="Redefinir senha" title={`Redefinir senha · ${e.fullName ?? ""}`} action={setUserPassword} submitLabel="Salvar senha">

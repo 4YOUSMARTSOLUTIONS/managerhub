@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { signIn } from "@/lib/actions/auth";
 import { initialActionState } from "@/lib/actions/types";
 import { AuthShell } from "@/components/AuthShell";
@@ -14,6 +15,7 @@ export default function LoginPage() {
     <AuthShell
       title="Entrar"
       subtitle="Acesse o portal de gestão da sua empresa."
+      footer={<Link href="/esqueci-senha">Esqueci minha senha</Link>}
     >
       <form action={action} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div>

@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 
-const PUBLIC_PATHS = ["/login", "/auth"];
+// `/esqueci-senha` e `/redefinir-senha` entram aqui porque quem chega nelas,
+// por definição, não consegue entrar no sistema.
+const PUBLIC_PATHS = ["/login", "/auth", "/esqueci-senha", "/redefinir-senha"];
 
 /**
  * Rotas que um usuário AUTENTICADO alcança mesmo com a senha padrão pendente.
@@ -12,7 +14,7 @@ const PUBLIC_PATHS = ["/login", "/auth"];
  * desligado a definir senha nova para só então descobrir que o acesso está
  * inativo é fluxo absurdo.
  */
-const LIVRES_DA_TROCA = ["/trocar-senha", "/suspenso", "/auth"];
+const LIVRES_DA_TROCA = ["/trocar-senha", "/suspenso", "/auth", "/redefinir-senha"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

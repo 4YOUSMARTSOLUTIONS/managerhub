@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/admin";
+import { appUrl as origemDoApp } from "@/lib/app-url";
 import { getPlatformResend } from "@/lib/platform-integrations";
 import { sendMail } from "@/lib/mailer";
 
@@ -199,7 +200,7 @@ export async function dispatchComunicadoAbsenteismo(
       return { status: "skipped", destinatarios: 0, error: "nenhum destinatário cadastrado" };
     }
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://managerhub.app").replace(/\/+$/, "");
+    const appUrl = origemDoApp();
     const r = await sendMail({
       apiKey,
       to: emails,

@@ -39,6 +39,8 @@ export function NotificationsBell() {
     else if (n.type.startsWith("punicao_")) router.push("/punicoes");
     else if (n.type.startsWith("absenteismo_")) router.push("/absenteismos");
     else if (n.type.startsWith("ferias_")) router.push("/ferias");
+    // quem não tem e-mail cadastrado é o RH que resolve, na ficha do colaborador
+    else if (n.type === "senha_sem_email") router.push("/configuracoes?tab=usuarios");
     else if (n.type.startsWith("seg_relato_")) router.push("/seguranca/relatos");
     else if (n.type.startsWith("seg_acidente_")) router.push("/seguranca/acidentes");
     else if (n.type.startsWith("seg_blitz_")) router.push("/seguranca/blitz");
