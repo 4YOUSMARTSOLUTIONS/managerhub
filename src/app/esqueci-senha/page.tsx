@@ -76,9 +76,9 @@ export default function EsqueciSenhaPage() {
               background: "var(--mh-surface-2)",
             }}
           >
-            <strong>Sem e-mail cadastrado, não dá para recuperar a senha por aqui.</strong>{" "}
-            Se a mensagem não chegar em alguns minutos, procure o RH: ele redefine
-            o seu acesso.
+            <strong>Sem e-mail cadastrado, não é possível recuperar a senha por aqui.</strong>{" "}
+            Se a mensagem não chegar em alguns minutos, procure o RH: ele poderá
+            redefinir o seu acesso.
           </p>
 
           {state.error && (
