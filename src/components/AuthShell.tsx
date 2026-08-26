@@ -73,7 +73,7 @@ export function AuthShell({
         </div>
 
         {footer && (
-          <p className="muted" style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.875rem" }}>
+          <p className="muted" style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.8rem" }}>
             {footer}
           </p>
         )}
