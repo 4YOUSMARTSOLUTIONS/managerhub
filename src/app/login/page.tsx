@@ -15,7 +15,6 @@ export default function LoginPage() {
     <AuthShell
       title="Entrar"
       subtitle="Acesse o portal de gestão da sua empresa."
-      footer={<Link href="/esqueci-senha">Esqueci minha senha</Link>}
     >
       <form action={action} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div>
@@ -43,6 +42,11 @@ export default function LoginPage() {
           </p>
         )}
         <SubmitButton className="btn btn-primary btn-block" pendingLabel="Entrando…">Entrar</SubmitButton>
+        <p style={{ textAlign: "center", margin: "-0.35rem 0 0" }}>
+          <Link href="/esqueci-senha" className="muted" style={{ fontSize: "0.72rem" }}>
+            Esqueci minha senha
+          </Link>
+        </p>
       </form>
     </AuthShell>
   );
