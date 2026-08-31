@@ -2319,7 +2319,7 @@ export type Database = {
       seg_alertas_resumo: { Args: { p_ano?: number | null }; Returns: Json }
       // exclusão é do proprietário; o audit_trigger guarda a linha apagada
       seg_excluir_relato: { Args: { p_id: string }; Returns: undefined }
-      seg_excluir_acidente: { Args: { p_id: string }; Returns: undefined }
+      seg_excluir_acidente: { Args: { p_id: string; p_motivo: string }; Returns: undefined }
     }
     Enums: {
       agenda_frequency: "diaria" | "semanal" | "mensal" | "unica"

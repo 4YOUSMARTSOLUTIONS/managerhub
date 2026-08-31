@@ -1368,10 +1368,14 @@ export async function excluirRelato(id: string): Promise<ActionState> {
   }
 }
 
-export async function excluirAcidente(id: string): Promise<ActionState> {
+/** O motivo é obrigatório: ele viaja para o `audit_logs` junto com a linha apagada. */
+export async function excluirAcidente(id: string, motivo: string): Promise<ActionState> {
   try {
     const { supabase } = await actionContext();
-    const { error } = await supabase.rpc("seg_excluir_acidente", { p_id: id });
+    const { error } = await supabase.rpc("seg_excluir_acidente", {
+      p_id: id,
+      p_motivo: motivo.trim(),
+    });
     if (error) return { error: error.message };
 
     revalidar();

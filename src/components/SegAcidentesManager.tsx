@@ -123,6 +123,7 @@ export function SegAcidentesManager({
   const [tipo, setTipo] = useState("");
   const [retorno, setRetorno] = useState("");
   const [acao, setAcao] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
   const [pendente, iniciar] = useTransition();
   const inputAnexo = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -166,22 +167,21 @@ export function SegAcidentesManager({
     });
   };
 
-  const excluir = () => {
+  /**
+   * Excluir não é mais um sim/não: acidente é registro legal, e o motivo é o que
+   * responde, meses depois, por que ele não está mais na base. O texto vai junto
+   * com a linha apagada para os Logs do sistema.
+   */
+  const confirmarExclusao = (motivo: string) => {
     if (!detalhe) return;
-    void (async () => {
-      const ok = await confirmDialog({
-        title: "Excluir o acidente?",
-        message: `O registro de ${shortName(detalhe.pessoa)} em ${dataBr(detalhe.occurredOn)} sai da base, junto com os documentos anexados. A pirâmide e os dias perdidos são recalculados, e a exclusão fica nos Logs do sistema.`,
-        confirmLabel: "Excluir",
-        tone: "danger",
-      });
-      if (!ok) return;
-      const r = await excluirAcidente(detalhe.id);
+    iniciar(async () => {
+      const r = await excluirAcidente(detalhe.id, motivo);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Acidente excluído.");
+      setExcluindo(false);
       setAberto(null);
       router.refresh();
-    })();
+    });
   };
 
   const reabrir = () => {
@@ -383,7 +383,7 @@ export function SegAcidentesManager({
                 {ehProprietario && (
                   <button
                     type="button" className="btn btn-ghost btn-sm" disabled={pendente}
-                    style={{ color: "var(--mh-danger)" }} onClick={excluir}
+                    style={{ color: "var(--mh-danger)" }} onClick={() => setExcluindo(true)}
                   >
                     <Trash2 size={14} /> Excluir
                   </button>
@@ -553,10 +553,99 @@ export function SegAcidentesManager({
         />
       )}
 
+      {excluindo && detalhe && (
+        <ExclusaoDialog
+          pessoa={shortName(detalhe.pessoa)}
+          data={dataBr(detalhe.occurredOn)}
+          salvando={pendente}
+          onConfirmar={confirmarExclusao}
+          onFechar={() => setExcluindo(false)}
+        />
+      )}
+
       <input
         ref={inputAnexo} type="file" style={{ display: "none" }}
         onChange={(e) => anexar(e.target.files?.[0])}
       />
+    </div>
+  );
+}
+
+/**
+ * A justificativa da exclusão.
+ *
+ * Fecha por X ou Cancelar, nunca por clique no fundo: quem chegou até aqui está
+ * apagando registro legal, e perder o texto por um clique fora seria pior que o
+ * incômodo de fechar à mão.
+ */
+function ExclusaoDialog({
+  pessoa, data, salvando, onConfirmar, onFechar,
+}: {
+  pessoa: string;
+  data: string;
+  salvando: boolean;
+  onConfirmar: (motivo: string) => void;
+  onFechar: () => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const curto = motivo.trim().length < 10;
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
+        backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "8vh 1rem", zIndex: 70, overflowY: "auto",
+      }}
+    >
+      <div className="card" style={{ width: "100%", maxWidth: 520, boxShadow: "var(--mh-shadow-e3)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+          <h2 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>Excluir o acidente</h2>
+          <button
+            type="button" onClick={onFechar} className="muted" aria-label="Fechar"
+            style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+          <p className="soft" style={{ fontSize: "0.82rem", margin: 0, lineHeight: 1.55 }}>
+            O registro de <strong>{pessoa}</strong> em {data} sai da base, junto com os
+            documentos anexados. A pirâmide e os dias perdidos são recalculados.
+            O motivo abaixo fica guardado nos Logs do sistema com o que foi apagado.
+          </p>
+
+          <div>
+            <label className="label" htmlFor="motivo_exclusao">
+              Motivo da exclusão <span style={{ color: "var(--mh-danger)" }}>*</span>
+            </label>
+            <textarea
+              id="motivo_exclusao"
+              className="input"
+              rows={3}
+              value={motivo}
+              autoFocus
+              placeholder="Ex.: lançamento em duplicidade do acidente do dia 12, registrado duas vezes."
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+          <button type="button" className="btn btn-ghost" onClick={onFechar}>Cancelar</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ background: "var(--mh-danger)", borderColor: "var(--mh-danger)" }}
+            disabled={salvando || curto}
+            onClick={() => onConfirmar(motivo)}
+          >
+            {salvando ? "Excluindo…" : "Excluir"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
