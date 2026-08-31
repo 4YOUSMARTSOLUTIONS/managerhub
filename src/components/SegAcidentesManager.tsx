@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLink, ListChecks, Paperclip, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ExternalLink, ImagePlus, ListChecks, Paperclip, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -17,14 +17,14 @@ import {
   SEG_ACIDENTE_STATUS, SEG_ACIDENTE_STATUS_TONE,
   SEG_ACIDENTE_TIPO, SEG_ACIDENTE_TIPO_TONE,
 } from "@/lib/constants";
-import { normalizar, shortName } from "@/lib/format";
+import { formatValorComUnidade, normalizar, shortName } from "@/lib/format";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { SegAcidenteDialog } from "@/components/SegAcidenteDialog";
 import { SegAcaoDialog } from "@/components/SegAcaoDialog";
 import {
   anexarAoAcidente, encerrarAcidente, excluirAcidente, reabrirAcidente,
-  removerAnexoAcidente, urlAnexoAcidente,
+  removerAnexoAcidente, urlAnexoAcidente, urlsDasFotosDoAcidente,
 } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
@@ -61,6 +61,9 @@ export type AcidenteRow = {
   agenteCausador: string | null;
   naturezaLesao: string | null;
   analiseCausa: string | null;
+  houvePerdas: boolean;
+  perdasDescricao: string | null;
+  perdasValor: number | null;
   causaId: string | null;
   catNumero: string | null;
   catEmitidaEm: string | null;
@@ -124,6 +127,9 @@ export function SegAcidentesManager({
   const [retorno, setRetorno] = useState("");
   const [acao, setAcao] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  // url assinada por foto do caso aberto; o bucket e privado, entao a
+  // miniatura tambem depende de assinatura (10 minutos, como o resto)
+  const [fotos, setFotos] = useState<Record<string, string>>({});
   const [pendente, iniciar] = useTransition();
   const inputAnexo = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -150,9 +156,31 @@ export function SegAcidentesManager({
     comAfastamento: rows.filter((r) => r.classe === "lti").length,
     diasPerdidos: rows.reduce((s, r) => s + (r.diasAfastamento ?? 0), 0),
     sif: rows.filter((r) => r.classe === "sif").length,
+    comPerdas: rows.filter((r) => r.houvePerdas).length,
+    perdasValor: rows.reduce((s, r) => s + (r.perdasValor ?? 0), 0),
+    // quantos já se sabe que quebraram algo mas ninguém precificou ainda: sem
+    // isto o total parece completo quando não é
+    perdasSemValor: rows.filter((r) => r.houvePerdas && r.perdasValor == null).length,
   }), [rows]);
 
   const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
+
+  // as fotos do caso aberto, separadas dos documentos pelo tipo do arquivo
+  const anexosFoto = detalhe?.anexos.filter((a) => (a.mime ?? "").startsWith("image/")) ?? [];
+  const anexosDoc = detalhe?.anexos.filter((a) => !(a.mime ?? "").startsWith("image/")) ?? [];
+
+  /**
+   * Busca as URLs assinadas das fotos de um caso.
+   *
+   * Chamada nos EVENTOS que mudam o conjunto (abrir o caso, anexar, remover), e
+   * não num efeito: o bucket é privado, a assinatura é trabalho de rede, e
+   * pendurá-la na renderização faria a tela buscar de novo a cada re-render.
+   */
+  const carregarFotos = (acidenteId: string) => {
+    void urlsDasFotosDoAcidente(acidenteId).then((lista) => {
+      setFotos(Object.fromEntries(lista.map((f) => [f.id, f.url])));
+    });
+  };
   const pendentesDoCaso = detalhe?.acoes.filter((a) => !a.concluida).length ?? 0;
 
   const encerrar = () => {
@@ -195,16 +223,35 @@ export function SegAcidentesManager({
     });
   };
 
-  const anexar = (file: File | undefined) => {
-    if (!file || !detalhe) return;
-    const fd = new FormData();
-    fd.set("id", detalhe.id);
-    fd.set("file", file);
+  /**
+   * Anexa vários de uma vez.
+   *
+   * Cena de acidente rende uma sequência de fotos, e mandar uma por uma era o
+   * caminho para o registro ficar com a primeira e nenhuma das outras. O envio é
+   * em série, não em paralelo: o bucket é o mesmo e o retorno importa menos que
+   * saber, ao final, quantas entraram e quantas foram recusadas.
+   */
+  const anexar = (files: FileList | null) => {
+    const lista = Array.from(files ?? []);
+    if (lista.length === 0 || !detalhe) return;
     iniciar(async () => {
-      const r = await anexarAoAcidente(fd);
-      if (r.error) toast.error(r.error);
-      else toast.success(r.message ?? "Documento anexado.");
+      let enviados = 0;
+      const falhas: string[] = [];
+      for (const file of lista) {
+        const fd = new FormData();
+        fd.set("id", detalhe.id);
+        fd.set("file", file);
+        const r = await anexarAoAcidente(fd);
+        if (r.error) falhas.push(`${file.name}: ${r.error}`);
+        else enviados += 1;
+      }
+      if (enviados > 0) {
+        toast.success(enviados === 1 ? "Arquivo anexado." : `${enviados} arquivos anexados.`);
+      }
+      // uma recusa não pode passar despercebida no meio de um lote que "deu certo"
+      if (falhas.length > 0) toast.error(falhas[0]);
       if (inputAnexo.current) inputAnexo.current.value = "";
+      carregarFotos(detalhe.id);
       router.refresh();
     });
   };
@@ -250,6 +297,7 @@ export function SegAcidentesManager({
                 "Data", "Hora", "Classificação", "Tipo", "Colaborador", "Matrícula", "Setor", "Função", "Gestor",
                 "Unidade", "Local", "Área", "Parte do corpo", "Agente causador", "Natureza da lesão",
                 "CAT", "CAT emitida em", "CID", "Dias de afastamento", "Retorno", "Situação", "Descrição",
+                "Houve perdas", "Perdas (descrição)", "Perdas (R$)",
                 "Lançado em", "Lançado por",
               ]}
               rows={lista.map((r) => [
@@ -260,6 +308,7 @@ export function SegAcidentesManager({
                 r.parteCorpo ?? "", r.agenteCausador ?? "", r.naturezaLesao ?? "",
                 r.catNumero ?? "", dataBr(r.catEmitidaEm), r.cidCode ?? "",
                 r.diasAfastamento ?? "", dataBr(r.retornoEm), SEG_ACIDENTE_STATUS[r.status], r.descricao,
+                r.houvePerdas ? "Sim" : "Não", r.perdasDescricao ?? "", r.perdasValor ?? "",
                 dataHoraBr(r.criadoEm), r.criadoPor ?? "",
               ])}
             />
@@ -276,6 +325,18 @@ export function SegAcidentesManager({
         <StatCard label="Com afastamento" value={numeros.comAfastamento} tone="red" hint="LTI" />
         <StatCard label="Dias perdidos" value={numeros.diasPerdidos} tone="red" />
         <StatCard label="Graves ou fatais" value={numeros.sif} tone="dark" hint="SIF" />
+        {numeros.comPerdas > 0 && (
+          <StatCard
+            label="Perdas materiais"
+            value={formatValorComUnidade(numeros.perdasValor, "R$")}
+            tone="amber"
+            hint={
+              numeros.perdasSemValor > 0
+                ? `${numeros.comPerdas} acidente(s), ${numeros.perdasSemValor} sem valor apurado`
+                : `em ${numeros.comPerdas} acidente(s)`
+            }
+          />
+        )}
       </div>
 
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -328,7 +389,7 @@ export function SegAcidentesManager({
           </thead>
           <tbody>
             {lista.map((r) => (
-              <tr key={r.id} onClick={() => { setAberto(r.id); setRetorno(r.retornoEm ?? ""); }} style={{ cursor: "pointer" }} title="Abrir o caso">
+              <tr key={r.id} onClick={() => { setAberto(r.id); setRetorno(r.retornoEm ?? ""); setFotos({}); carregarFotos(r.id); }} style={{ cursor: "pointer" }} title="Abrir o caso">
                 <td>{dataBr(r.occurredOn)}</td>
                 <td>
                   {/* taxonomia fala baixo: a cor da severidade vira ponto */}
@@ -442,6 +503,23 @@ export function SegAcidentesManager({
             </FieldGrid>
           </DetailSection>
 
+          {detalhe.houvePerdas && (
+            <DetailSection title="Perdas materiais">
+              <FieldGrid min={200}>
+                <Field label="Valor apurado">
+                  {detalhe.perdasValor != null
+                    ? formatValorComUnidade(detalhe.perdasValor, "R$")
+                    : "Ainda não apurado"}
+                </Field>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <Field label="O que foi perdido ou danificado">
+                    <span style={{ whiteSpace: "pre-wrap" }}>{detalhe.perdasDescricao}</span>
+                  </Field>
+                </div>
+              </FieldGrid>
+            </DetailSection>
+          )}
+
           <DetailSection title="Ações de tratamento">
             {detalhe.acoes.length === 0 ? (
               <p className="soft" style={{ fontSize: "0.8rem", margin: "0 0 0.5rem" }}>
@@ -470,12 +548,64 @@ export function SegAcidentesManager({
             </button>
           </DetailSection>
 
+          {/* Fotos e documentos vivem na mesma tabela e no mesmo bucket, mas
+              olhar para eles é diferente: foto de cena se entende de relance, e
+              nome de arquivo não mostra nada. Daí a galeria separada da lista. */}
+          <DetailSection title="Fotos">
+            {anexosFoto.length === 0 ? (
+              <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Nenhuma foto anexada.</p>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(108px, 1fr))", gap: "0.5rem" }}>
+                {anexosFoto.map((x) => (
+                  <div key={x.id} style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      title={`Abrir ${x.nome}`}
+                      onClick={() => abrirAnexo(x.id)}
+                      style={{
+                        display: "block", width: "100%", aspectRatio: "1 / 1", padding: 0,
+                        border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden",
+                        background: "var(--surface-2)", cursor: "pointer",
+                      }}
+                    >
+                      {fotos[x.id] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={fotos[x.id]} alt={x.nome}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                      ) : (
+                        <span className="soft" style={{ fontSize: "0.7rem" }}>carregando…</span>
+                      )}
+                    </button>
+                    <button
+                      type="button" className="icon-btn icon-btn-danger" title="Remover foto"
+                      disabled={pendente} onClick={() => excluirAnexo(x)}
+                      style={{
+                        position: "absolute", top: 4, right: 4,
+                        background: "var(--mh-surface-1)", borderRadius: 6,
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.5rem" }}
+              disabled={pendente} onClick={() => inputAnexo.current?.click()}
+            >
+              <ImagePlus size={14} /> Adicionar fotos
+            </button>
+          </DetailSection>
+
           <DetailSection title="Documentos">
-            {detalhe.anexos.length === 0 ? (
+            {anexosDoc.length === 0 ? (
               <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Nenhum documento anexado.</p>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                {detalhe.anexos.map((x) => (
+                {anexosDoc.map((x) => (
                   <li key={x.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <button
                       type="button" className="btn btn-ghost btn-sm" disabled={pendente}
@@ -494,7 +624,7 @@ export function SegAcidentesManager({
               type="button" className="btn btn-ghost btn-sm" style={{ marginTop: "0.5rem" }}
               disabled={pendente} onClick={() => inputAnexo.current?.click()}
             >
-              <Paperclip size={14} /> Anexar CAT, laudo ou foto
+              <Paperclip size={14} /> Anexar CAT ou laudo
             </button>
           </DetailSection>
 
@@ -564,8 +694,8 @@ export function SegAcidentesManager({
       )}
 
       <input
-        ref={inputAnexo} type="file" style={{ display: "none" }}
-        onChange={(e) => anexar(e.target.files?.[0])}
+        ref={inputAnexo} type="file" multiple style={{ display: "none" }}
+        onChange={(e) => anexar(e.target.files)}
       />
     </div>
   );

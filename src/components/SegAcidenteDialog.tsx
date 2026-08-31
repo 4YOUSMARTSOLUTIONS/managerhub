@@ -28,6 +28,20 @@ const CLASSES: Enums<"seg_acidente_class">[] = ["fai", "mti", "mdi", "lti", "sif
  * legal fica divergente do laudo; a busca é na tabela oficial do DATASUS, a
  * mesma do módulo de absenteísmo, e o que se grava é o par código+descrição.
  */
+/**
+ * "1.250,50" -> 1250.5, e vazio -> null.
+ *
+ * O campo é texto porque quem digita valor escreve como fala: com vírgula e às
+ * vezes com ponto de milhar. Um `type="number"` recusaria a vírgula em teclado
+ * pt-BR e devolveria vazio sem explicar por quê.
+ */
+function valorEmNumero(v: string): number | null {
+  const limpo = v.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", ".");
+  if (!limpo.trim()) return null;
+  const n = Number(limpo);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function SegAcidenteDialog({
   onClose, editando, pessoas, locais, areas, causas,
 }: {
@@ -56,6 +70,12 @@ export function SegAcidenteDialog({
   const [agente, setAgente] = useState(editando?.agenteCausador ?? "");
   const [natureza, setNatureza] = useState(editando?.naturezaLesao ?? "");
   const [analise, setAnalise] = useState(editando?.analiseCausa ?? "");
+  const [houvePerdas, setHouvePerdas] = useState(editando?.houvePerdas ?? false);
+  const [perdasDescricao, setPerdasDescricao] = useState(editando?.perdasDescricao ?? "");
+  // texto, e não number: o campo aceita "1.250,00" e a conversão acontece no envio
+  const [perdasValor, setPerdasValor] = useState(
+    editando?.perdasValor != null ? String(editando.perdasValor).replace(".", ",") : "",
+  );
   const [causa, setCausa] = useState(editando?.causaId ?? "");
   const [catNumero, setCatNumero] = useState(editando?.catNumero ?? "");
   const [catData, setCatData] = useState(editando?.catEmitidaEm ?? "");
@@ -118,6 +138,9 @@ export function SegAcidenteDialog({
         diasAfastamento: dias ? Number(dias) : null,
         afastamentoDe: afastamentoDe || null,
         retornoEm: retorno || null,
+        houvePerdas,
+        perdasDescricao,
+        perdasValor: valorEmNumero(perdasValor),
       });
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Acidente salvo.");
@@ -382,6 +405,45 @@ export function SegAcidenteDialog({
               placeholder="Pode ser preenchida depois, quando a apuração terminar."
               onChange={(e) => setAnalise(e.target.value)}
             />
+          </div>
+
+          {/* O mesmo evento que machuca costuma quebrar. Sem o campo, o custo do
+              acidente ficava só no que se vê na pessoa. */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.9rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", cursor: "pointer", fontSize: "0.86rem", fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={houvePerdas}
+                onChange={(e) => setHouvePerdas(e.target.checked)}
+              />
+              Houve perdas materiais
+            </label>
+
+            {houvePerdas && (
+              <div style={{ display: "grid", gap: "0.7rem", marginTop: "0.7rem" }}>
+                <div>
+                  <label className="label">
+                    O que foi perdido ou danificado <span style={{ color: "var(--mh-danger)" }}>*</span>
+                  </label>
+                  <textarea
+                    className="input" rows={2} value={perdasDescricao}
+                    placeholder="Ex.: empilhadeira com o garfo entortado e 12 caixas de produto avariadas."
+                    onChange={(e) => setPerdasDescricao(e.target.value)}
+                  />
+                </div>
+                <div style={{ maxWidth: 220 }}>
+                  <label className="label">Valor estimado (R$)</label>
+                  <input
+                    className="input" inputMode="decimal" value={perdasValor}
+                    placeholder="opcional"
+                    onChange={(e) => setPerdasValor(e.target.value)}
+                  />
+                  <p className="soft" style={{ fontSize: "0.74rem", margin: "0.3rem 0 0" }}>
+                    Pode ficar em branco agora e ser preenchido quando o valor for apurado.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {erro && (

@@ -842,6 +842,10 @@ export type AcidenteInput = {
   diasAfastamento?: number | null;
   afastamentoDe?: string | null;
   retornoEm?: string | null;
+  houvePerdas?: boolean;
+  perdasDescricao?: string | null;
+  /** opcional de propósito: no dia do acidente quase nunca se sabe quanto custou */
+  perdasValor?: number | null;
 };
 
 /** Traduz as constraints do acidente para a linguagem de quem preenche. */
@@ -851,6 +855,10 @@ function mensagemAcidente(e: { message?: string }): string {
     return "LTI é acidente com afastamento: informe quantos dias.";
   }
   if (msg.includes("seg_acidente_afastamento_positivo")) return "Os dias de afastamento não podem ser negativos.";
+  if (msg.includes("seg_acidente_perdas_coerentes")) {
+    return "Descreva o que foi perdido ou danificado.";
+  }
+  if (msg.includes("seg_acidente_perdas_valor_positivo")) return "O valor das perdas não pode ser negativo.";
   if (msg.includes("seg_acidente_descricao_nao_vazia")) return "Descreva o acidente.";
   if (msg.includes("row-level security")) return "Só a equipe de segurança pode registrar acidentes.";
   return msg || "Não foi possível salvar o acidente.";
@@ -872,6 +880,10 @@ export async function salvarAcidente(input: AcidenteInput): Promise<ActionState>
       return { error: "A data de emissão da CAT não pode estar no futuro." };
     }
     if (!input.descricao.trim()) return { error: "Descreva o acidente." };
+    if (input.houvePerdas && !input.perdasDescricao?.trim()) {
+      return { error: "Descreva o que foi perdido ou danificado." };
+    }
+    if ((input.perdasValor ?? 0) < 0) return { error: "O valor das perdas não pode ser negativo." };
 
     const campos = {
       unit_id: input.unitId || null,
@@ -896,6 +908,11 @@ export async function salvarAcidente(input: AcidenteInput): Promise<ActionState>
       dias_afastamento: input.diasAfastamento ?? null,
       afastamento_de: input.afastamentoDe || null,
       retorno_em: input.retornoEm || null,
+      // sem a marca, descrição e valor voltam a nulo: o banco recusa dado de
+      // perda pendurado num acidente que diz não ter tido perda
+      houve_perdas: !!input.houvePerdas,
+      perdas_descricao: input.houvePerdas ? (input.perdasDescricao?.trim() || null) : null,
+      perdas_valor: input.houvePerdas ? (input.perdasValor ?? null) : null,
     };
 
     const { error } = input.id
@@ -1015,6 +1032,35 @@ export async function urlAnexoAcidente(anexoId: string): Promise<string | null> 
   if (!anexo) return null;
   const { data } = await ctx.supabase.storage.from(BUCKET_ACIDENTE).createSignedUrl(anexo.path, 600);
   return data?.signedUrl ?? null;
+}
+
+/**
+ * As URLs das FOTOS de um acidente, de uma vez.
+ *
+ * A `urlAnexoAcidente` assina um arquivo por chamada, o que serve para abrir um
+ * documento no clique. Miniatura é outro caso: a galeria precisa de todas as
+ * imagens já ao abrir a ficha, e uma ida por foto deixaria a tela piscando.
+ * `createSignedUrls` assina o lote inteiro numa chamada.
+ */
+export async function urlsDasFotosDoAcidente(
+  acidenteId: string,
+): Promise<{ id: string; url: string }[]> {
+  const ctx = await actionContext();
+  const { data: anexos } = await ctx.supabase
+    .from("seg_acidente_anexos")
+    .select("id, path, content_type")
+    .eq("acidente_id", acidenteId);
+
+  const fotos = (anexos ?? []).filter((a) => (a.content_type ?? "").startsWith("image/"));
+  if (fotos.length === 0) return [];
+
+  const { data } = await ctx.supabase.storage
+    .from(BUCKET_ACIDENTE)
+    .createSignedUrls(fotos.map((f) => f.path), 600);
+
+  return (data ?? [])
+    .map((assinada, i) => ({ id: fotos[i].id, url: assinada.signedUrl ?? "" }))
+    .filter((x) => x.url);
 }
 
 /** Relato e acidente se amarram a itens vizinhos do Programa: 1.2 e 1.1. */
