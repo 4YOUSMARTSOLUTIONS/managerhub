@@ -21,7 +21,7 @@ import {
 } from "@/lib/actions/individual-goals";
 import { lockRvPeriod, reopenRvPeriod } from "@/lib/actions/rv-lock";
 import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
-import { farolAttainment, attainmentCredit, type FarolStatus } from "@/lib/goals-farol";
+import { farolAttainment, attainmentCredit, exigeEvidencia, type FarolStatus } from "@/lib/goals-farol";
 import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
 import { redutoresDoMes, kindsComRedutor, type RegraRedutor, type SancaoLite, type ResultadoRedutor } from "@/lib/rv-redutores";
 import { formatDate, formatMetaValor, formatValorComUnidade } from "@/lib/format";
@@ -885,9 +885,11 @@ export function IndividualGoalsFarol({
                           </span>
                         );
                       }
-                      if (g.evidenceRequired) {
+                      // vermelho só quando o lançamento reivindica resultado:
+                      // meta não atingida não deve mais anexo a ninguém
+                      if (g.evidenceRequired && exigeEvidencia(status)) {
                         return (
-                          <span title="Esta meta exige evidência e ainda não tem anexo" style={{ marginLeft: 6, color: "var(--mh-danger)", whiteSpace: "nowrap" }}>
+                          <span title="Este resultado exige evidência e ainda não tem anexo" style={{ marginLeft: 6, color: "var(--mh-danger)", whiteSpace: "nowrap" }}>
                             <Paperclip size={12} style={{ verticalAlign: "-0.1em" }} />
                           </span>
                         );
@@ -1456,7 +1458,7 @@ function CampoEvidenciaObrigatoria({ valor, onChange }: { valor: boolean; onChan
         <span>
           <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Exigir evidência do atingimento</span>
           <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
-            O realizado desta meta só é salvo com pelo menos um arquivo anexado (planilha, imagem, PDF…).
+            Quando o resultado atinge a meta (cheia ou parcial), só é salvo com pelo menos um arquivo anexado (planilha, imagem, PDF…). Resultado abaixo da meta entra sem anexo.
           </span>
         </span>
       </label>
@@ -1644,6 +1646,15 @@ function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; o
     });
   };
 
+  // A exigência de evidência segue o RESULTADO digitado, não a meta: só quem
+  // reivindica atingimento precisa comprovar. Recalcula a cada tecla para o
+  // aviso do painel não continuar cobrando anexo de um número que ficou abaixo.
+  const digitado = actual.trim() === "" ? null : Number(actual);
+  const exigidaAgora =
+    goal.evidenceRequired && entry != null && digitado != null && Number.isFinite(digitado)
+      ? exigeEvidencia(farolAttainment(goal.direction, entry.target, digitado, entry.partial).status)
+      : false;
+
   const readonly = (label: React.ReactNode, value: string) => (
     <div>
       <label className="label">{label}</label>
@@ -1687,6 +1698,7 @@ function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; o
           period={periodOf(month)}
           evidences={entry.evidences}
           obrigatoria={goal.evidenceRequired}
+          exigidaAgora={exigidaAgora}
           travado={entry.status === "aprovada"}
           onMudou={() => router.refresh()}
         />

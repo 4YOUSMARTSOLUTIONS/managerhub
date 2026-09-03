@@ -31,13 +31,17 @@ export function GoalEvidencePanel({
   period,
   evidences,
   obrigatoria,
+  exigidaAgora,
   travado,
   onMudou,
 }: {
   goalId: string;
   period: string;
   evidences: GoalEvidenceLite[];
+  /** a meta pede evidência do atingimento */
   obrigatoria: boolean;
+  /** o resultado digitado agora é dos que precisam de prova (atingido ou parcial) */
+  exigidaAgora: boolean;
   /** competência aprovada: só leitura */
   travado: boolean;
   onMudou: () => void;
@@ -94,9 +98,11 @@ export function GoalEvidencePanel({
       <label className="label" style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
         <Paperclip size={13} />
         Evidência do atingimento{" "}
-        {obrigatoria
-          ? <span style={{ color: "var(--mh-danger)", fontWeight: 700 }}>(obrigatória)</span>
-          : <span className="soft">(opcional)</span>}
+        {!obrigatoria
+          ? <span className="soft">(opcional)</span>
+          : exigidaAgora
+            ? <span style={{ color: "var(--mh-danger)", fontWeight: 700 }}>(obrigatória)</span>
+            : <span className="soft">(obrigatória só se a meta for atingida)</span>}
       </label>
 
       {evidences.length > 0 && (
@@ -149,9 +155,9 @@ export function GoalEvidencePanel({
         </>
       )}
 
-      {evidences.length === 0 && obrigatoria && !travado && (
+      {evidences.length === 0 && obrigatoria && exigidaAgora && !travado && (
         <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: "0.3rem 0 0" }}>
-          Esta meta exige evidência: sem anexo, o realizado não será salvo.
+          O resultado informado atinge a meta: sem anexo, ele não será salvo.
         </p>
       )}
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: "0.3rem 0 0" }}>{erro}</p>}

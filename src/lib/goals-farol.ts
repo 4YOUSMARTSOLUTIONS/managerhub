@@ -42,3 +42,15 @@ export function attainmentCredit(status: FarolStatus, partialPct: number): numbe
   if (status === "parcial") return Math.max(0, Math.min(100, partialPct)) / 100;
   return 0;
 }
+
+/**
+ * A evidência é prova de resultado, então só é cobrada de quem reivindica um.
+ *
+ * Meta não atingida não tem o que comprovar: ninguém forja um fracasso, e pedir
+ * anexo ali só empurrava para a frente o lançamento do número ruim, que é
+ * justamente o que precisa aparecer cedo. Parcial continua exigindo porque paga
+ * RV, e pendente (sem realizado) nunca exigiu.
+ */
+export function exigeEvidencia(status: FarolStatus): boolean {
+  return status === "atingida" || status === "parcial";
+}

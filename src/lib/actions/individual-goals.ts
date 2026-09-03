@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { souGestorDe } from "@/lib/team";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
+import { farolAttainment, exigeEvidencia } from "@/lib/goals-farol";
 
 const BUCKET_EVIDENCIA = "goal-evidence";
 
@@ -205,20 +206,27 @@ export async function upsertGoalEntry(input: UpsertEntryInput): Promise<ActionSt
     const actual =
       input.actual_value == null || Number.isNaN(Number(input.actual_value)) ? null : Number(input.actual_value);
 
-    // EVIDÊNCIA OBRIGATÓRIA: sem anexo, não grava o realizado.
+    // EVIDÊNCIA OBRIGATÓRIA: sem anexo, não grava o realizado ATINGIDO.
     //
     // A conferência mora aqui, e não só na tela, porque é aqui que o número entra
     // no sistema — venha do diálogo de registrar, do de cadastrar ou de qualquer
     // caminho futuro. E só vale quando há realizado: cadastrar a meta, distribuir
     // peso ou limpar o valor continuam livres, senão o gestor não conseguiria nem
     // criar a meta que exige evidência.
+    //
+    // Meta não atingida entra sem anexo (`exigeEvidencia`): a prova serve para
+    // sustentar um resultado, e resultado ruim ninguém inventa. Cobrar arquivo
+    // ali só atrasava o lançamento do número que mais interessa ver cedo.
     if (actual != null) {
       const { data: meta } = await supabase
         .from("individual_goals")
-        .select("evidence_required")
+        .select("evidence_required, direction")
         .eq("id", input.goal_id)
         .maybeSingle();
-      if (meta?.evidence_required) {
+      const farol = meta
+        ? farolAttainment(meta.direction, Number(input.target_value), actual, numOrNull(input.partial_value))
+        : null;
+      if (meta?.evidence_required && farol && exigeEvidencia(farol.status)) {
         const { count } = existing?.id
           ? await supabase
               .from("individual_goal_entry_attachments")
@@ -226,7 +234,7 @@ export async function upsertGoalEntry(input: UpsertEntryInput): Promise<ActionSt
               .eq("entry_id", existing.id)
           : { count: 0 };
         if (!count) {
-          return { error: "Esta meta exige evidência: anexe pelo menos um arquivo antes de registrar o realizado." };
+          return { error: "Esta meta exige evidência do atingimento: anexe pelo menos um arquivo antes de salvar." };
         }
       }
     }
@@ -599,7 +607,7 @@ export async function deleteGoalEvidence(id: string): Promise<ActionState> {
     // mensagem sair em português em vez de "0 linhas afetadas"
     const { data: entry } = await ctx.supabase
       .from("individual_goal_entries")
-      .select("approval_status, goal_id, actual_value")
+      .select("approval_status, goal_id, actual_value, target_value, partial_value")
       .eq("id", att.entry_id)
       .maybeSingle();
     if (entry?.approval_status === "aprovada") {
@@ -610,24 +618,30 @@ export async function deleteGoalEvidence(id: string): Promise<ActionState> {
       const canManage = await canManageOwner(ctx, owner);
       if (!(owner === ctx.userId || canManage)) return { error: "Você não tem permissão para remover esta evidência." };
 
-      // NÃO DEIXA O REALIZADO FICAR ÓRFÃO DE EVIDÊNCIA.
+      // NÃO DEIXA O REALIZADO ATINGIDO FICAR ÓRFÃO DE EVIDÊNCIA.
       //
       // Exigir o anexo só na hora de gravar deixava uma porta aberta: salvar com
       // evidência e apagar o arquivo em seguida, ficando com o número comprovado
       // por nada. Quem precisa trocar o arquivo sobe o novo primeiro e aí remove
       // o antigo, que já não é o último.
+      //
+      // A trava acompanha a da gravação: se o lançamento não é atingido, ele
+      // nunca precisou de anexo e o arquivo pode sair.
       const { data: meta } = await ctx.supabase
         .from("individual_goals")
-        .select("evidence_required")
+        .select("evidence_required, direction")
         .eq("id", entry.goal_id)
         .maybeSingle();
-      if (meta?.evidence_required && entry.actual_value != null) {
+      const farol = meta && entry.actual_value != null
+        ? farolAttainment(meta.direction, entry.target_value, entry.actual_value, entry.partial_value)
+        : null;
+      if (meta?.evidence_required && farol && exigeEvidencia(farol.status)) {
         const { count } = await ctx.supabase
           .from("individual_goal_entry_attachments")
           .select("id", { count: "exact", head: true })
           .eq("entry_id", att.entry_id);
         if ((count ?? 0) <= 1) {
-          return { error: "Esta meta exige evidência e já tem realizado lançado. Anexe o arquivo novo antes de remover o atual." };
+          return { error: "Esta meta exige evidência e já tem um resultado atingido lançado. Anexe o arquivo novo antes de remover o atual." };
         }
       }
     }
