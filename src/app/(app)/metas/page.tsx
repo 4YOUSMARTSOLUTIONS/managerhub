@@ -3,9 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type RvCongeladoRow } from "@/components/IndividualGoalsFarol";
-import { AreaGoalsFarol, type AreaGoalRow, type AreaEntryLite } from "@/components/AreaGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 
 export default async function GoalsPage() {
@@ -19,12 +17,9 @@ export default async function GoalsPage() {
   // ---------- ONDA 1: tudo o que nao depende de nada ----------
   //
   // Antes esta tela fazia 7 idas ao banco EM FILA, e so 3 eram dependencias de
-  // verdade. As metas da area, os setores, os subsetores e a lista de pessoas nao
-  // precisavam de nada e mesmo assim esperavam a vez.
+  // verdade: setores, subsetores e a lista de pessoas nao precisavam de nada e
+  // mesmo assim esperavam a vez.
   //
-  // `departments` e `subdepartments` eram consultados DUAS vezes cada, com a query
-  // identica: uma para o filtro das metas individuais, outra para as da area. Agora
-  // e uma leitura so, usada pelas duas.
   // A equipe passa a ser lida para TODO MUNDO, admin inclusive: agora ela não serve
   // só de permissão, serve de escopo padrão da tela. Antes o admin nem consultava,
   // porque abria a empresa inteira de uma vez.
@@ -47,14 +42,8 @@ export default async function GoalsPage() {
       ])
     : Promise.resolve(null);
 
-  const [{ data: reports }, { data: areaGoals }, { data: deps }, { data: subs }, { data: cargos }, { data: unidadesTodas }, todosMembros, donos] = await Promise.all([
+  const [{ data: reports }, { data: deps }, { data: subs }, { data: cargos }, { data: unidadesTodas }, todosMembros, donos] = await Promise.all([
     reportsP,
-    supabase
-      .from("area_goals")
-      .select("id, name, description, unit, kind, direction, consolidation, department_id, subdepartment_id, unit_id, parent_id, owner_id, created_by, dept:departments(name), sub:subdepartments(name), orgUnit:units(name), owner:profiles!area_goals_owner_id_fkey(full_name)")
-      .eq("tenant_id", tenant.id)
-      .order("sort")
-      .order("name"),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
     // cargos e unidades só para dar nome ao vínculo carimbado nos retratos de RV
@@ -107,25 +96,16 @@ export default async function GoalsPage() {
     .eq("tenant_id", tenant.id);
 
   // `manager_id` entra para o escopo padrão (subordinados DIRETOS). Quem não tem
-  // equipe nem pode ampliar lê só a própria linha, que a aba de metas da área
-  // precisa para saber o setor/subsetor padrão.
+  // equipe nem pode ampliar lê só a própria linha.
   let memQuery = supabase
     .from("memberships")
     .select("user_id, manager_id, department_id, subdepartment_id")
     .eq("tenant_id", tenant.id);
   if (!canSeeMultiple) memQuery = memQuery.eq("user_id", user.id);
 
-  const areaIds = (areaGoals ?? []).map((g) => g.id);
-
-  const [{ data: goals }, { data: mems }, { data: areaEntries }] = await Promise.all([
+  const [{ data: goals }, { data: mems }] = await Promise.all([
     goalsQuery.order("name"),
     memQuery,
-    areaIds.length
-      ? supabase
-          .from("area_goal_entries")
-          .select("area_goal_id, unit_id, period, target_value, actual_value, numerator_value, denominator_value")
-          .in("area_goal_id", areaIds)
-      : Promise.resolve({ data: [] as { area_goal_id: string; unit_id: string | null; period: string; target_value: number | null; actual_value: number | null; numerator_value: number | null; denominator_value: number | null }[] }),
   ]);
 
   // ---------- ONDA 3: o que depende da onda 2 ----------
@@ -325,8 +305,6 @@ export default async function GoalsPage() {
   const deptByUser = new Map<string, { dept: string | null; sub: string | null }>();
   for (const m of mems ?? []) deptByUser.set(m.user_id, { dept: m.department_id, sub: m.subdepartment_id });
 
-  // a lista completa de pessoas e montada UMA vez e reaproveitada pelas duas abas;
-  // antes ia duas vezes no envio ao navegador, identica, para quem e admin
   const todos = todosMembros
     .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "-" }))
     .filter((m) => m.id)
@@ -348,12 +326,6 @@ export default async function GoalsPage() {
     members = isAdmin ? todos : todos.filter((m) => naCadeia.has(m.id));
   }
 
-  // setor/subsetor do próprio usuário: é o recorte com que a aba de metas da área
-  // abre. Subsetor quando tem; setor quando não tem.
-  const minhaLinha = (mems ?? []).find((m) => m.user_id === user.id);
-  const deptPadrao = minhaLinha?.department_id ?? "";
-  const subPadrao = minhaLinha?.subdepartment_id ?? "";
-
   const goalRows: GoalRow[] = goalsNoEscopo.map((g) => {
     const ds = deptByUser.get(g.owner_id) ?? { dept: null, sub: null };
     return {
@@ -372,115 +344,27 @@ export default async function GoalsPage() {
     };
   });
 
-  const areaEntriesByGoal = new Map<string, AreaEntryLite[]>();
-  for (const e of areaEntries ?? []) {
-    const arr = areaEntriesByGoal.get(e.area_goal_id) ?? [];
-    arr.push({ unitId: e.unit_id, period: e.period, target: e.target_value, actual: e.actual_value, numerator: e.numerator_value, denominator: e.denominator_value });
-    areaEntriesByGoal.set(e.area_goal_id, arr);
-  }
-
-  const areaRows: AreaGoalRow[] = (areaGoals ?? []).map((g) => ({
-    id: g.id,
-    name: g.name,
-    description: g.description,
-    unit: g.unit,
-    kind: g.kind,
-    direction: g.direction,
-    consolidation: g.consolidation,
-    departmentId: g.department_id,
-    departmentName: (g.dept as unknown as { name: string } | null)?.name ?? null,
-    subdepartmentId: g.subdepartment_id,
-    subdepartmentName: (g.sub as unknown as { name: string } | null)?.name ?? null,
-    unitId: g.unit_id,
-    unitName: (g.orgUnit as unknown as { name: string } | null)?.name ?? null,
-    parentId: g.parent_id,
-createdById: g.created_by,
-    ownerId: g.owner_id,
-    ownerName: (g.owner as unknown as { full_name: string | null } | null)?.full_name ?? null,
-    entries: areaEntriesByGoal.get(g.id) ?? [],
-  }));
-
-  // As metas da área usam os mesmos setores/subsetores lidos na onda 1, sem repetir
-  // a consulta. A antiga leitura de `units` daqui era descartada: quem alimenta o
-  // seletor de unidade é o `unitScope` do requireContext, logo abaixo.
-  // UNIDADES QUE A PESSOA ALCANÇA POR RESPONSABILIDADE, e só em Metas da área.
-  //
-  // O Financeiro é centralizado na Matriz e responde por metas da Filial. O
-  // seletor do topo não resolve: ele vale para o sistema inteiro, e alargar lá
-  // daria acesso à Filial em chamados, ações e reuniões também.
-  //
-  // Então a autorização sai do próprio cadastro da meta: se a meta da Filial está
-  // no seu nome, você alcança a Filial nesta tela. Nada para marcar em lugar
-  // nenhum — cadastrou no nome da pessoa, ela passa a poder; tirou, ela deixa de
-  // poder. E o alcance é só o que ela responde, não a Filial inteira.
-  const unidadesExtras = (() => {
-    const m = new Map<string, string>();
-    for (const g of areaGoals ?? []) {
-      if (g.owner_id !== user.id || !g.unit_id) continue;
-      if (unitScope.allowedUnitIds.includes(g.unit_id)) continue;
-      m.set(g.unit_id, (g.orgUnit as unknown as { name: string } | null)?.name ?? "Outra unidade");
-    }
-    return [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  })();
-
-  const areaDepartments = (deps ?? []).map((d) => ({ id: d.id, name: d.name }));
-  const areaSubdepartments = (subs ?? []).map((s) => ({ id: s.id, name: s.name, departmentId: s.department_id }));
-  const areaMembers = todos;
-
-  const tabs: Tab[] = [
-    {
-      id: "individual",
-      label: "Metas individuais",
-      content: (
-        <IndividualGoalsFarol
-          goals={goalRows}
-          canManageOthers={canSeeMultiple}
-          canCreateGoals={canCreateGoals}
-          isAdmin={isAdmin}
-          podeMetaPropria={role === "manager"}
-          reportIds={reportIds}
-          currentUserId={user.id}
-          members={members}
-          departments={departments}
-          subdepartments={subdepartments}
-          rvTimelines={rvTimelines}
-          rvDias={rvDias}
-          regrasRedutor={regrasRedutor}
-          periodosFechados={periodosFechados}
-          rvCongelados={rvCongelados}
-          canLockPeriod={isAdmin}
-        />
-      ),
-    },
-    {
-      id: "area",
-      label: "Metas da área",
-      content: (
-        <AreaGoalsFarol
-          goals={areaRows}
-          departments={areaDepartments}
-          subdepartments={areaSubdepartments}
-          units={unitScope.units}
-          members={areaMembers}
-          isAdmin={isAdmin}
-          // metas da ÁREA: quem lidera também CADASTRA (Gerencial e Gestor), e
-          // edita ou exclui o que cadastrou. Mexer no indicador dos outros
-          // continua sendo da administração, como diz a RLS.
-          podeCriarIndicador={isAdmin || role === "manager" || role === "team_lead"}
-          currentUserId={user.id}
-          scopedUnitId={unitScope.activeUnitId}
-          unidadesExtras={unidadesExtras}
-          deptPadrao={deptPadrao}
-          subPadrao={subPadrao}
-        />
-      ),
-    },
-  ];
-
   return (
     <div>
-      <PageHeader title="Metas" subtitle="Acompanhe o farol de metas individuais e da área." />
-      <Tabs tabs={tabs} />
+      <PageHeader title="Metas individuais" subtitle="Acompanhe o farol de metas de cada colaborador." />
+      <IndividualGoalsFarol
+        goals={goalRows}
+        canManageOthers={canSeeMultiple}
+        canCreateGoals={canCreateGoals}
+        isAdmin={isAdmin}
+        podeMetaPropria={role === "manager"}
+        reportIds={reportIds}
+        currentUserId={user.id}
+        members={members}
+        departments={departments}
+        subdepartments={subdepartments}
+        rvTimelines={rvTimelines}
+        rvDias={rvDias}
+        regrasRedutor={regrasRedutor}
+        periodosFechados={periodosFechados}
+        rvCongelados={rvCongelados}
+        canLockPeriod={isAdmin}
+      />
     </div>
   );
 }

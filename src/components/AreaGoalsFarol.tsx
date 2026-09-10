@@ -164,6 +164,9 @@ export function AreaGoalsFarol({
   // as duas listas juntas resolvem o nome da unidade em qualquer lugar da tela
   const unidadesVisiveis = useMemo(() => [...units, ...unidadesExtras], [units, unidadesExtras]);
   const [editGoal, setEditGoal] = useState<AreaGoalRow | null>(null);
+  // edição do KPI inteiro, a partir da linha consolidada: ali a linha não é uma
+  // meta, é o conjunto das unidades, então o que se edita é o conjunto
+  const [editKpi, setEditKpi] = useState<AreaGoalRow[] | null>(null);
   const [entryGoal, setEntryGoal] = useState<AreaGoalRow | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -323,6 +326,9 @@ export function AreaGoalsFarol({
   // editar/excluir: administração em qualquer um, quem lidera só no que criou
   const podeGerir = (g: AreaGoalRow) =>
     isAdmin || (podeCriarIndicador && g.createdById === currentUserId);
+  // no consolidado a edição vale para todas as unidades do KPI de uma vez, então
+  // só é oferecida a quem pode mexer em todas elas
+  const podeGerirKpi = (ms: AreaGoalRow[]) => ms.length > 0 && ms.every(podeGerir);
   const grouped = unitSel === GROUP;
 
   /**
@@ -537,7 +543,7 @@ export function AreaGoalsFarol({
               </tr>
             </thead>
             <tbody>
-              {tree.map(({ row: { goal: g, chave, target, actual, pct, status }, depth, hasChildren }) => {
+              {tree.map(({ row: { goal: g, members: doKpi, chave, target, actual, pct, status }, depth, hasChildren }) => {
                 const isCollapsed = collapsed.has(chave);
                 return (
                 <tr key={g.id}>
@@ -546,7 +552,11 @@ export function AreaGoalsFarol({
                       {hasChildren ? (
                         <button type="button" onClick={() => toggleCollapse(chave)} title={isCollapsed ? "Expandir" : "Recolher"} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", width: 16, padding: 0, fontSize: "0.7rem", lineHeight: 1 }}>{isCollapsed ? "▸" : "▾"}</button>
                       ) : <span style={{ display: "inline-block", width: 16 }} />}
-                      {podeGerir(g) && !grouped ? (
+                      {grouped ? (
+                        podeGerirKpi(doKpi) ? (
+                          <button type="button" onClick={() => setEditKpi(doKpi)} title={`Editar o KPI nas ${doKpi.length} unidade(s)`} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--text)", cursor: "pointer", textAlign: "left" }}>{g.name}</button>
+                        ) : <span style={{ fontWeight: 600 }}>{g.name}</span>
+                      ) : podeGerir(g) ? (
                         <button type="button" onClick={() => setEditGoal(g)} title="Editar indicador" style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--text)", cursor: "pointer", textAlign: "left" }}>{g.name}</button>
                       ) : <span style={{ fontWeight: 600 }}>{g.name}</span>}
                       {hasChildren && isCollapsed && <span className="soft" style={{ fontSize: "0.68rem", marginLeft: 4 }}>+{(rows.filter((r) => r.chavePai === chave).length)}</span>}
@@ -575,6 +585,22 @@ export function AreaGoalsFarol({
                     // não existe UM registro para gravar. O botão fica visível e
                     // desabilitado, dizendo o que fazer, em vez de sumir.
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
+                      {/* Editar o CADASTRO não depende de escolher unidade: nome,
+                          conceito e responsável são atributos do KPI, e no
+                          consolidado a alteração vale para todas as unidades da
+                          linha. Só o LANÇAMENTO precisa de uma unidade, e é esse
+                          que segue desabilitado ao lado. */}
+                      {podeGerirKpi(doKpi) && (
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          title={`Editar o KPI (nome, conceito, responsável…) nas ${doKpi.length} unidade(s)`}
+                          onClick={() => setEditKpi(doKpi)}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z" /></svg>
+                        </button>
+                      )}
                       {canEnter(g) && (
                         <button
                           type="button"
@@ -585,6 +611,7 @@ export function AreaGoalsFarol({
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
                         </button>
                       )}
+                      </div>
                     </td>
                   ) : (
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
@@ -613,6 +640,7 @@ export function AreaGoalsFarol({
 
       {addOpen && <GoalDialog mode="new" goals={goals} departments={departments} subdepartments={subdepartments} units={units} members={members} onClose={() => setAddOpen(false)} />}
       {editGoal && <GoalDialog mode="edit" goal={editGoal} goals={goals} departments={departments} subdepartments={subdepartments} units={units} members={members} onClose={() => setEditGoal(null)} />}
+      {editKpi && <GoalDialog mode="edit" goal={editKpi[0]} bulkGoals={editKpi} goals={goals} departments={departments} subdepartments={subdepartments} units={units} members={members} onClose={() => setEditKpi(null)} />}
       {/* lista combinada: numa unidade extra, `units` (o vínculo) não a contém, e
           uma meta de Grupo abriria sem a unidade que a pessoa está olhando.
           O GoalDialog acima segue com `units`: cadastrar indicador é de admin, que
@@ -751,7 +779,7 @@ function GoalDialog({ mode, goal, bulkGoals, goals, departments, subdepartments,
     </>}>
       {isBulk ? (
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-          As alterações abaixo serão aplicadas a <strong>todas as unidades</strong> deste KPI ({bulkGoals!.map((g) => g.unitName ?? "Todas").join(", ")}).
+          Os campos vêm de <strong>{bulkGoals![0].unitName ?? "Todas as unidades"}</strong> e o que você salvar aqui vale para <strong>todas as unidades</strong> deste KPI ({bulkGoals!.map((g) => g.unitName ?? "Todas").join(", ")}). Para mexer em uma unidade só, escolha-a no seletor do topo.
         </p>
       ) : (
         <div>

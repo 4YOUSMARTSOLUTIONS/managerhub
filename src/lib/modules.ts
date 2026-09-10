@@ -18,7 +18,7 @@ export type ModuleKey =
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
   | "chamados" | "venda_interna" | "chat"
-  | "metas" | "feedbacks" | "punicoes" | "absenteismos" | "ferias" | "treinamentos"
+  | "metas" | "metas_area" | "feedbacks" | "punicoes" | "absenteismos" | "ferias" | "treinamentos"
   | "gapa" | "gop" | "dto" | "relatos_anomalia" | "checklists" | "formularios" | "swot" | "pdca"
   | "pnr" | "sustentabilidade" | "central_sdpo" | "sonho"
   | "cinco_s" | "padroes"
@@ -80,7 +80,15 @@ export const MODULES: ModuleDef[] = [
   // Não é módulo vendável: é a tela que dá sentido ao perfil Gestor, então nasce
   // `core` (sempre ligada) e some do menu de quem não lidera equipe, por minRole.
   { key: "minha_equipe", label: "Minha equipe", href: "/minha-equipe", group: "g_pessoas", core: true, minRole: "team_lead" },
-  { key: "metas", label: "Metas", href: "/metas", group: "g_pessoas" },
+  // Duas telas, duas keys. Elas dividiam uma página com abas, mas não dividem
+  // público: metas individuais são a RV de cada pessoa (gestor e RH), metas da
+  // área são o painel de indicadores do setor. Separadas, cada uma carrega só o
+  // que usa e a empresa pode contratar uma sem a outra.
+  //
+  // A key `metas` NÃO muda de nome, só de rótulo: ela é o identificador no banco
+  // (`unit_modules.module_key`) do que já foi vendido.
+  { key: "metas", label: "Metas individuais", href: "/metas", group: "g_pessoas" },
+  { key: "metas_area", label: "Metas da área", href: "/metas-area", group: "g_pessoas" },
   // SEM minRole de propósito: o colaborador comum solicita as próprias férias,
   // então precisa do item de menu. A autorização fina (quem aprova, quem
   // efetiva, quem nem solicita) é decidida dentro da page e das RPCs.

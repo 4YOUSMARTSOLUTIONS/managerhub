@@ -80,7 +80,7 @@ export async function createAreaGoal(input: CreateAreaGoalInput): Promise<Action
       created_by: userId,
     });
     if (error) return { error: error.message };
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -127,7 +127,7 @@ export async function updateAreaGoal(input: UpdateAreaGoalInput): Promise<Action
       })
       .eq("id", input.id);
     if (error) return { error: error.message };
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -142,7 +142,7 @@ export async function deleteAreaGoal(id: string): Promise<ActionState> {
     }
     const { error } = await supabase.from("area_goals").delete().eq("id", id);
     if (error) return { error: error.message };
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -215,7 +215,7 @@ export async function upsertAreaEntry(input: UpsertAreaEntryInput): Promise<Acti
       ({ error } = await supabase.from("area_goal_entries").insert(payload));
     }
     if (error) return { error: error.message };
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -350,7 +350,7 @@ export async function importAreaGoals(
       }
     }
 
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { imported: toInsert.length, invalid, duplicates };
   } catch (e) {
     return { imported: 0, invalid: 0, duplicates: 0, error: (e as Error).message };
@@ -465,7 +465,7 @@ export async function importAreaEntries(
           : "Nenhuma linha válida — confira Indicador, Unidade, Competência (MM/AAAA) e os valores.",
       };
     }
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { imported, invalid, notFound };
   } catch (e) {
     return { imported: 0, invalid: 0, notFound: 0, error: (e as Error).message };
@@ -479,7 +479,7 @@ export async function deleteAreaEntry(input: { area_goal_id: string; unit_id: st
     q = input.unit_id === null ? q.is("unit_id", null) : q.eq("unit_id", input.unit_id);
     const { error } = await q;
     if (error) return { error: error.message };
-    revalidatePath("/metas");
+    revalidatePath("/metas-area");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
