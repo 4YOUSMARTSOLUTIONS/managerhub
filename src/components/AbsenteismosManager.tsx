@@ -360,11 +360,11 @@ export function AbsenteismosManager({
       {novo && (
         <Dialogo titulo="Lançar não comparecimento" onFechar={() => setNovo(null)}>
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-            Use isto quando a pessoa não apareceu e o motivo ainda não é conhecido. O comunicado por
-            e-mail sai na hora, para os endereços definidos em Configurações, e é só isso: nada vai
-            ao RH agora. Quando a situação estiver confirmada, volte na aba Em aberto e use
-            Efetivar, informando o motivo, o período real (que pode ser maior que um dia) e os
-            documentos.
+            Use essa opção quando o colaborador não apareceu e o motivo ainda não é conhecido, ou
+            se o atestado ainda não foi entregue. O comunicado por e-mail é enviado na hora, para os
+            endereços definidos em Configurações. Quando a situação estiver confirmada e o atestado
+            tiver sido recebido, volte na aba Em aberto e use Efetivar, informando o motivo, o
+            período real, bem como o documento.
           </p>
 
           <div>
