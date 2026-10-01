@@ -302,8 +302,11 @@ export function AbsenteismosManager({
             <th style={{ width: 190 }}>Período</th>
             {comAutor && <th style={{ width: 170 }}>Lançado por</th>}
             <th style={{ width: 160 }}>Situação</th>
-            <th style={{ width: 50, textAlign: "center" }} title="Comunicado por e-mail">
-              <Mail size={14} />
+            {/* Escrito, e não o ícone sozinho: o cabeçalho é onde a pessoa
+                descobre o que a coluna significa, e um envelope ali obrigava a
+                passar o mouse para saber. */}
+            <th style={{ width: 140, textAlign: "center", whiteSpace: "nowrap" }} title="Verde: enviado. Vermelho: falhou. Apagado: sem destinatário cadastrado.">
+              Comunicado enviado
             </th>
             <th style={{ width: 90 }}></th>
           </tr>
