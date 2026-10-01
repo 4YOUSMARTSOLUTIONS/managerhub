@@ -133,10 +133,14 @@ export const MODULES: ModuleDef[] = [
   { key: "seg_blitz", label: "Blitz de trajeto", href: "/seguranca/blitz", group: "g_seguranca" },
   { key: "seg_gabaritos", label: "Gabaritos de segurança", href: "/seguranca/gabaritos", group: "g_seguranca" },
 
-  // só o proprietário por enquanto: o log mostra o de→para de toda alteração da
+  // Proprietário e Administrador: o log mostra o de→para de toda alteração da
   // empresa, inclusive salário, CPF e remuneração variável de quem o leitor não
-  // gerencia. Enquanto não houver recorte por escopo dentro da tela, fica fechado.
-  { key: "auditoria", label: "Logs do sistema", href: "/auditoria", group: null, core: true, minRole: "owner" },
+  // gerencia, então para de subir daí. Gestor e Gerencial continuam fora enquanto
+  // a tela não tiver recorte próprio (cada um vendo só a cadeia dele).
+  //
+  // NÃO é `core`: quem contrata decide se a empresa tem a tela, unidade por
+  // unidade, pelo Painel ADM. O papel é o piso, o entitlement é o teto.
+  { key: "auditoria", label: "Logs do sistema", href: "/auditoria", group: null, minRole: "admin" },
   // Gerencial entra, mas só para LER: a tela inteira sai em modo consulta para
   // ele (ver `canEdit` em src/app/(app)/configuracoes/page.tsx). O menu não
   // distingue ver de mexer, então o corte de escrita não mora aqui.

@@ -4,24 +4,31 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pager } from "@/components/ui/Pager";
 import { AuditLogViewer, type AuditRow, type AuditFilters } from "@/components/AuditLogViewer";
+import { moduleGate } from "@/lib/module-gate";
 
 const PAGE_SIZE = 50;
 
 type SP = { p?: string; q?: string; acao?: string; tipo?: string; autor?: string };
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<SP> }) {
+  const gate = await moduleGate("auditoria");
+  if (gate) return gate;
+
   const { tenant, role } = await requireContext();
-  // Só o proprietário por enquanto. O log é da empresa inteira e mostra o de→para
+  // Proprietário e Administrador. O log é da empresa inteira e mostra o de→para
   // de toda alteração, inclusive salário, CPF e remuneração variável de quem o
-  // leitor não gerencia. Admin e gestor saem daqui até a tela ter recorte próprio.
-  // Super admin de plataforma chega como "owner" pelo requireContext.
-  const canView = role === "owner";
+  // leitor não gerencia; Gestor e Gerencial seguem fora até a tela ter recorte
+  // próprio. Super admin de plataforma chega como "owner" pelo requireContext.
+  //
+  // A trava de verdade é a policy `audit_administracao_select`: a chave pública
+  // está no bundle, então fechar só a tela não fecharia nada.
+  const canView = role === "owner" || role === "admin";
 
   if (!canView) {
     return (
       <div>
         <PageHeader title="Logs do sistema" />
-        <EmptyState title="Acesso restrito" description="Apenas o proprietário da empresa pode ver os logs do sistema." />
+        <EmptyState title="Acesso restrito" description="Apenas o proprietário e os administradores da empresa podem ver os logs do sistema." />
       </div>
     );
   }
