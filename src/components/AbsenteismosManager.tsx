@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Ban, Check, FileText, Mail, Paperclip, Pencil, Send, Stethoscope, X,
 } from "lucide-react";
@@ -216,20 +217,42 @@ export function AbsenteismosManager({
   const faixaDeHoras = (inicio: string | null, fim: string | null) =>
     inicio ? `${inicio.slice(0, 5)} às ${fim?.slice(0, 5) ?? "?"}` : "";
 
+  /**
+   * Quanto durou: horas quando é ausência parcial, dias quando cobre o período.
+   *
+   * As duas unidades na mesma coluna porque a pergunta é uma só, e porque
+   * "0 dias" para quem saiu seis horas seria pior que não dizer nada. Horas têm
+   * precedência: existindo horário, o período é sempre o mesmo dia.
+   */
+  const duracao = (r: AbsenteismoRow): string => {
+    if (r.hoursStart && r.hoursEnd) {
+      const minutos = Math.round((Date.parse(`1970-01-01T${r.hoursEnd}`) - Date.parse(`1970-01-01T${r.hoursStart}`)) / 60000);
+      if (!Number.isFinite(minutos) || minutos <= 0) return "";
+      const h = Math.floor(minutos / 60);
+      const m = minutos % 60;
+      return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+    }
+    if (r.startDate && r.endDate) {
+      const d = diasDoPeriodo(r.startDate, r.endDate);
+      return d === null ? "" : `${d} dia${d === 1 ? "" : "s"}`;
+    }
+    return "";
+  };
+
   const linha = (r: AbsenteismoRow, comAutor: boolean) => (
     <tr key={r.id}>
+      {/* Só nome e matrícula aqui. Função e setor viraram colunas: empilhados
+          debaixo do nome eles quebravam em quatro linhas e faziam a linha
+          inteira crescer, sem ficarem alinhados entre si para comparar. */}
       <td>
         <span style={{ fontWeight: 600 }}>{r.fullName ?? "Sem nome"}</span>
-        <div className="soft" style={{ fontSize: "0.74rem" }}>
-          {[r.employeeCode, r.positionName, r.departmentName].filter(Boolean).join(" · ") || "–"}
-        </div>
-      </td>
-      <td style={{ whiteSpace: "nowrap" }}>
-        {formatDate(r.occurredOn)}
-        {r.hoursStart && (
-          <div className="soft" style={{ fontSize: "0.74rem" }}>{faixaDeHoras(r.hoursStart, r.hoursEnd)}</div>
+        {r.employeeCode && (
+          <div className="soft" style={{ fontSize: "0.74rem" }}>{r.employeeCode}</div>
         )}
       </td>
+      <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? <span className="soft">–</span>}</td>
+      <td className="muted" style={{ fontSize: "0.82rem" }}>{r.positionName ?? <span className="soft">–</span>}</td>
+      <td style={{ whiteSpace: "nowrap" }}>{formatDate(r.occurredOn)}</td>
       <td>
         {r.typeName ? (
           <>
@@ -242,10 +265,17 @@ export function AbsenteismosManager({
           </>
         ) : <span className="soft">Motivo não confirmado</span>}
       </td>
+      <td style={{ whiteSpace: "nowrap" }}>{r.startDate ? formatDate(r.startDate) : <span className="soft">–</span>}</td>
+      <td style={{ whiteSpace: "nowrap" }}>{r.endDate ? formatDate(r.endDate) : <span className="soft">–</span>}</td>
       <td style={{ whiteSpace: "nowrap" }}>
-        {r.startDate && r.endDate
-          ? `${formatDate(r.startDate)} a ${formatDate(r.endDate)}`
-          : <span className="soft">–</span>}
+        {duracao(r) ? (
+          <>
+            <span>{duracao(r)}</span>
+            {r.hoursStart && (
+              <div className="soft" style={{ fontSize: "0.74rem" }}>{faixaDeHoras(r.hoursStart, r.hoursEnd)}</div>
+            )}
+          </>
+        ) : <span className="soft">–</span>}
       </td>
       {comAutor && <td>{r.createdByName ?? <span className="soft">–</span>}</td>}
       <td><Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge></td>
@@ -293,13 +323,20 @@ export function AbsenteismosManager({
     lista.length === 0 ? (
       <EmptyState title="Nada por aqui" description={vazio} />
     ) : (
+      // com Setor, Função, Início, Fim e Duração a tabela passa da largura da
+      // tela em notebook: a rolagem mora aqui dentro, e não no corpo da página
+      <div style={{ overflowX: "auto" }}>
       <table className="table">
         <thead>
           <tr>
             <th>Colaborador</th>
+            <th style={{ width: 150 }}>Setor</th>
+            <th style={{ width: 180 }}>Função</th>
             <th style={{ width: 110 }}>Dia</th>
             <th style={{ width: 190 }}>Motivo</th>
-            <th style={{ width: 190 }}>Período</th>
+            <th style={{ width: 110 }}>Início</th>
+            <th style={{ width: 110 }}>Fim</th>
+            <th style={{ width: 110 }} title="Horas quando a ausência é parcial; dias quando cobre o período inteiro">Duração</th>
             {comAutor && <th style={{ width: 170 }}>Lançado por</th>}
             <th style={{ width: 160 }}>Situação</th>
             {/* Escrito, e não o ícone sozinho: o cabeçalho é onde a pessoa
@@ -313,6 +350,7 @@ export function AbsenteismosManager({
         </thead>
         <tbody>{lista.map((r) => linha(r, comAutor))}</tbody>
       </table>
+      </div>
     );
 
   const abas: Tab[] = [
@@ -356,12 +394,12 @@ export function AbsenteismosManager({
           <ExportButton
             filename="absenteismos.xlsx"
             sheetName="Absenteísmos"
-            headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
+            headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
             rows={rows.map((r) => [
               r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
               r.unitName ?? "", r.occurredOn, faixaDeHoras(r.hoursStart, r.hoursEnd), r.typeName ?? "",
               r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
-              r.startDate ?? "", r.endDate ?? "",
+              r.startDate ?? "", r.endDate ?? "", duracao(r),
               r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
               ABSENTEISMO_STATUS[r.status], r.createdByName ?? "",
               r.decidedByName ?? "", r.decisionNote ?? "",
@@ -722,6 +760,10 @@ function PainelConfirmacao({
       });
       if (r.error) { onErro(r.error); return; }
       router.refresh();
+      // Sem isto o botão não dizia nada: o diálogo fica aberto de propósito
+      // (salvar sem enviar é para continuar depois), então nada na tela mudava
+      // e a gravação parecia não ter acontecido.
+      if (!depois) toast.success("Rascunho salvo. O lançamento segue em aberto, sem ir ao RH.");
       if (depois) depois();
     });
   };
