@@ -13,7 +13,7 @@ import { wantsActive } from "@/lib/catalogGuard";
 
 /**
  * Absenteísmos: o catálogo de tipos, a lista de quem recebe o comunicado e,
- * adiante, o lançamento de não comparecimento com aprovação do RH.
+ * adiante, o lançamento de ausência com aprovação do RH.
  *
  * Arquivo separado de `absences.ts` de propósito. Aquele é o cadastro
  * ADMINISTRATIVO que grava direto em `employee_absences` (a base que a
@@ -286,29 +286,50 @@ async function montarCarimbo(ctx: Contexto, userId: string) {
 }
 
 /**
- * O aviso de que a pessoa não apareceu.
+ * O aviso de que a pessoa não veio, ou não ficou o dia inteiro.
  *
  * Pode ser lançado a qualquer hora do dia: o gestor às vezes descobre logo cedo,
  * às vezes só quando alguém dá falta na escala da tarde.
  *
  * `occurredOn` vem do CLIENTE porque é o dia local de quem lança. Um
  * `now()::date` no servidor viraria o dia seguinte às 21h de Brasília.
+ *
+ * AS HORAS JÁ NASCEM AQUI, e não só na efetivação. Quem saiu duas horas para o
+ * médico não "não compareceu", e lançar isso como dia inteiro fazia o comunicado
+ * chegar ao RH dizendo que a pessoa não veio trabalhar. As colunas e as
+ * constraints já existiam (`absenteismo_horas_coerentes` e
+ * `absenteismo_horas_um_dia_so`, que aceitam horas com `start_date` nulo): só
+ * faltava o primeiro passo preenchê-las.
  */
 export async function lancarNaoComparecimento(input: {
   userId: string;
   occurredOn: string;
   reasonNote: string;
+  /** ausência de horas: entrada e saída no dia. Vazio = o dia inteiro. */
+  horaInicio?: string;
+  horaFim?: string;
 }): Promise<ActionState & { id?: string }> {
   try {
     const ctx = await actionContext();
     const { supabase, tenantId, userId } = ctx;
 
     if (!input.userId) return { error: "Escolha o colaborador." };
-    if (!input.occurredOn) return { error: "Informe o dia do não comparecimento." };
+    if (!input.occurredOn) return { error: "Informe o dia da ausência." };
     if (!(await podeLancarPara(ctx, input.userId))) {
       return { error: "Você só lança absenteísmo para quem está na sua equipe." };
     }
-    if (input.userId === userId) return { error: "Ninguém lança o próprio não comparecimento." };
+    if (input.userId === userId) return { error: "Ninguém lança a própria ausência." };
+
+    // As duas horas ou nenhuma, e nessa ordem: é o que o banco exige, e aqui
+    // vira frase em vez de erro de constraint.
+    const inicio = input.horaInicio?.trim() ?? "";
+    const fim = input.horaFim?.trim() ?? "";
+    if (Boolean(inicio) !== Boolean(fim)) {
+      return { error: "Na ausência de horas, informe os dois horários: das e até." };
+    }
+    if (inicio && fim <= inicio) {
+      return { error: "O horário final precisa ser maior que o inicial." };
+    }
 
     const carimbo = await montarCarimbo(ctx, input.userId);
 
@@ -322,6 +343,8 @@ export async function lancarNaoComparecimento(input: {
         status: "aberto",
         occurred_on: input.occurredOn,
         reason_note: input.reasonNote.trim() || null,
+        hours_start: inicio || null,
+        hours_end: fim || null,
       })
       .select("id")
       .single();
@@ -809,10 +832,10 @@ export async function cancelarAbsenteismo(formData: FormData): Promise<ActionSta
 function mensagemDoLancamento(e: { code?: string; message?: string }): string {
   const msg = e.message ?? "";
   if (msg.includes("absenteismo_do_dia_uk")) {
-    return "Já existe um lançamento de não comparecimento para esta pessoa neste dia.";
+    return "Já existe um lançamento de ausência para esta pessoa neste dia.";
   }
   if (msg.includes("absenteismo_periodo_cobre_o_dia")) {
-    return "O período informado precisa incluir o dia do não comparecimento.";
+    return "O período informado precisa incluir o dia da ausência.";
   }
   if (msg.includes("absenteismo_periodo")) return "O término não pode ser antes do início.";
   if (msg.includes("absenteismo_anexo_quando_o_tipo_exige")) {

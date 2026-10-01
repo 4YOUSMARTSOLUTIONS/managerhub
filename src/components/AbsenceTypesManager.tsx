@@ -140,7 +140,7 @@ export function AbsenceTypesManager({
       <div>
         <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Tipos de absenteísmo</h3>
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-          O que o gestor pode escolher ao confirmar um não comparecimento. Cada tipo se comporta
+          O que o gestor pode escolher ao confirmar uma ausência. Cada tipo se comporta
           como um dos cinco tipos base, e é o comportamento que decide o efeito na remuneração
           variável: assim dá para ter Atestado médico e Atestado odontológico separados sem criar
           duas regras de redutor.
@@ -281,7 +281,7 @@ export function AbsenceTypesManager({
 
       {rows.length === 0 ? (
         <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>
-          Nenhum tipo cadastrado. Sem eles o gestor não consegue confirmar um não comparecimento.
+          Nenhum tipo cadastrado. Sem eles o gestor não consegue confirmar uma ausência.
         </p>
       ) : (
         <table className="table">

@@ -51,6 +51,8 @@ type Linha = {
   tenant_id: string;
   status: string;
   occurred_on: string;
+  hours_start: string | null;
+  hours_end: string | null;
   reason_note: string | null;
   snap_type_name: string | null;
   start_date: string | null;
@@ -67,12 +69,22 @@ type Linha = {
   decision_note: string | null;
 };
 
+/** "09:00 às 11:00", ou vazio quando a ausência cobre o dia inteiro. */
+function faixaDeHoras(l: Linha): string {
+  if (!l.hours_start) return "";
+  return `${l.hours_start.slice(0, 5)} às ${l.hours_end?.slice(0, 5) ?? "?"}`;
+}
+
 function assunto(evento: EventoComunicado, l: Linha): string {
   const quem = l.snap_full_name ?? "Colaborador";
   const dia = dataBr(l.occurred_on);
   if (evento === "aprovado") return `Absenteísmo aprovado: ${quem} em ${dia}`;
   if (evento === "reprovado") return `Absenteísmo reprovado: ${quem} em ${dia}`;
   if (evento === "confirmado") return `Motivo confirmado: ${quem} em ${dia}`;
+  // Quem saiu duas horas não "não compareceu". O assunto é o que o RH lê na
+  // caixa de entrada antes de abrir, então a diferença precisa estar ali.
+  const horas = faixaDeHoras(l);
+  if (horas) return `Ausência de horas: ${quem} em ${dia}, ${horas}`;
   return `Não comparecimento: ${quem} em ${dia}`;
 }
 
@@ -84,8 +96,11 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
     ["Função", l.snap_position_name ?? "-"],
     ["Gestor imediato", l.snap_manager_name ?? "-"],
     ["Unidade", l.snap_unit_name ?? "-"],
-    ["Dia do não comparecimento", dataBr(l.occurred_on)],
+    ["Dia da ausência", dataBr(l.occurred_on)],
   ];
+
+  const horas = faixaDeHoras(l);
+  if (horas) linhas.push(["Horário", horas]);
 
   if (evento !== "aberto") {
     linhas.push(["Motivo informado", l.snap_type_name ?? "-"]);
@@ -97,7 +112,9 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
 
   const situacao =
     evento === "aberto"
-      ? "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
+      ? horas
+        ? "Ausência parcial: o colaborador trabalhou no restante do dia. Situação ainda não confirmada, e o motivo será informado quando o gestor confirmar o lançamento."
+        : "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
       : evento === "confirmado"
         ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH. Ainda não vale como ausência."
         : evento === "aprovado"

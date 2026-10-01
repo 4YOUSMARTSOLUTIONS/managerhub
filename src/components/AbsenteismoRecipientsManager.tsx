@@ -24,7 +24,7 @@ type Rascunho = { id?: string; email: string; name: string; unitId: string };
 const vazio: Rascunho = { email: "", name: "", unitId: "" };
 
 /**
- * Quem recebe o comunicado de não comparecimento.
+ * Quem recebe o comunicado de ausência.
  *
  * A lista guarda e-mail, e não colaborador do sistema, porque quem precisa
  * saber que alguém não apareceu costuma estar fora do organograma: portaria,
@@ -75,7 +75,7 @@ export function AbsenteismoRecipientsManager({
       title: "Remover destinatário",
       tone: "danger",
       confirmLabel: "Remover",
-      message: `Remover ${d.email} da lista? Ele deixa de receber os comunicados de não comparecimento.`,
+      message: `Remover ${d.email} da lista? Ele deixa de receber os comunicados de ausência.`,
     });
     if (!ok) return;
     const fd = new FormData();
@@ -95,7 +95,7 @@ export function AbsenteismoRecipientsManager({
       <div>
         <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Comunicado por e-mail</h3>
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-          Quem é avisado assim que um gestor lança um não comparecimento, e depois quando o motivo
+          Quem é avisado assim que um gestor lança uma ausência, e depois quando o motivo
           é confirmado e quando o RH decide. Sem unidade, a pessoa recebe de todas; com unidade,
           só dos lançamentos daquela unidade. Dados do atestado nunca vão por e-mail.
         </p>

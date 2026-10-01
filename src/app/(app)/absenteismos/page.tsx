@@ -9,7 +9,7 @@ import { AbsenteismosManager, type AbsenteismoRow } from "@/components/Absenteis
 /**
  * Absenteísmos.
  *
- * O gestor registra que alguém não apareceu, sem saber o motivo, e o comunicado
+ * O gestor registra que alguém não veio (ou saiu por algumas horas), sem saber o motivo, e o comunicado
  * por e-mail sai na hora. Depois, com a situação esclarecida, ele
  * confirma o que foi (falta, atestado, licença), anexa o documento e envia ao
  * RH. Só a aprovação do RH cria a linha em `employee_absences`, que é a base
@@ -36,7 +36,7 @@ export default async function AbsenteismosPage() {
         <PageHeader title="Absenteísmos" />
         <EmptyState
           title="Acesso restrito"
-          description="O não comparecimento é lançado pelo gestor da pessoa e aprovado pelo RH. Quem não faz nem uma coisa nem outra não acompanha lançamentos por aqui."
+          description="A ausência é lançada pelo gestor da pessoa e aprovada pelo RH. Quem não faz nem uma coisa nem outra não acompanha lançamentos por aqui."
         />
       </div>
     );
@@ -50,7 +50,7 @@ export default async function AbsenteismosPage() {
         <PageHeader title="Absenteísmos" subtitle={tenant.name} />
         <EmptyState
           title="Nada para lançar por aqui"
-          description="O não comparecimento é lançado pelo gestor da pessoa. Assim que houver alguém sob sua gestão, o formulário aparece nesta tela."
+          description="A ausência é lançada pelo gestor da pessoa. Assim que houver alguém sob sua gestão, o formulário aparece nesta tela."
         />
       </div>
     );
@@ -182,7 +182,7 @@ export default async function AbsenteismosPage() {
     <div>
       <PageHeader
         title="Absenteísmos"
-        subtitle="O não comparecimento vira ausência de verdade só depois que o RH aprova"
+        subtitle="A ausência só vale de verdade depois que o RH aprova"
       />
       <AbsenteismosManager
         rows={rows}

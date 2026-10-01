@@ -157,7 +157,9 @@ export function AbsenteismosManager({
   podeDecidir: boolean;
   podeCancelarAprovado: boolean;
 }) {
-  const [novo, setNovo] = useState<{ userId: string; occurredOn: string; reasonNote: string } | null>(null);
+  const [novo, setNovo] = useState<
+    { userId: string; occurredOn: string; reasonNote: string; emHoras: boolean; horaInicio: string; horaFim: string } | null
+  >(null);
   const [confirmando, setConfirmando] = useState<AbsenteismoRow | null>(null);
   const [aberto, setAberto] = useState<AbsenteismoRow | null>(null);
   const [erro, setErro] = useState("");
@@ -185,7 +187,15 @@ export function AbsenteismosManager({
     if (!novo) return;
     setErro("");
     iniciar(async () => {
-      const r = await lancarNaoComparecimento(novo);
+      // o que vai ao servidor é só o que ele grava, e as horas só quando a
+      // ausência é de horas: a marcação é estado de tela, não dado do lançamento
+      const r = await lancarNaoComparecimento({
+        userId: novo.userId,
+        occurredOn: novo.occurredOn,
+        reasonNote: novo.reasonNote,
+        horaInicio: novo.emHoras ? novo.horaInicio : "",
+        horaFim: novo.emHoras ? novo.horaFim : "",
+      });
       if (r.error) { setErro(r.error); return; }
       setNovo(null);
       if (r.warning) setErro(r.warning);
@@ -202,6 +212,10 @@ export function AbsenteismosManager({
     (r.status === "aberto" || r.status === "reprovado")
     && (r.createdBy === meuId || podeDecidir);
 
+  /** "09:00 às 11:00", ou vazio quando a ausência é do dia inteiro. */
+  const faixaDeHoras = (inicio: string | null, fim: string | null) =>
+    inicio ? `${inicio.slice(0, 5)} às ${fim?.slice(0, 5) ?? "?"}` : "";
+
   const linha = (r: AbsenteismoRow, comAutor: boolean) => (
     <tr key={r.id}>
       <td>
@@ -210,7 +224,12 @@ export function AbsenteismosManager({
           {[r.employeeCode, r.positionName, r.departmentName].filter(Boolean).join(" · ") || "–"}
         </div>
       </td>
-      <td style={{ whiteSpace: "nowrap" }}>{formatDate(r.occurredOn)}</td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        {formatDate(r.occurredOn)}
+        {r.hoursStart && (
+          <div className="soft" style={{ fontSize: "0.74rem" }}>{faixaDeHoras(r.hoursStart, r.hoursEnd)}</div>
+        )}
+      </td>
       <td>
         {r.typeName ? (
           <>
@@ -271,7 +290,7 @@ export function AbsenteismosManager({
         <thead>
           <tr>
             <th>Colaborador</th>
-            <th style={{ width: 110 }}>Faltou em</th>
+            <th style={{ width: 110 }}>Dia</th>
             <th style={{ width: 190 }}>Motivo</th>
             <th style={{ width: 190 }}>Período</th>
             {comAutor && <th style={{ width: 170 }}>Lançado por</th>}
@@ -296,7 +315,7 @@ export function AbsenteismosManager({
             ausência: quando a situação estiver confirmada (atestado em mãos, falta assumida),
             use <strong>Efetivar</strong> para informar o motivo, o período real e os documentos.
           </p>
-          {tabela(emAberto, true, "Nenhum não comparecimento em aberto. Quando alguém não aparecer, lance por aqui.")}
+          {tabela(emAberto, true, "Nenhuma ausência em aberto. Quando alguém faltar ou sair por algumas horas, lance por aqui.")}
         </div>
       ),
     },
@@ -327,10 +346,10 @@ export function AbsenteismosManager({
           <ExportButton
             filename="absenteismos.xlsx"
             sheetName="Absenteísmos"
-            headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Faltou em", "Motivo", "Comportamento", "Início", "Término", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
+            headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
             rows={rows.map((r) => [
               r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
-              r.unitName ?? "", r.occurredOn, r.typeName ?? "",
+              r.unitName ?? "", r.occurredOn, faixaDeHoras(r.hoursStart, r.hoursEnd), r.typeName ?? "",
               r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
               r.startDate ?? "", r.endDate ?? "",
               r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
@@ -343,9 +362,9 @@ export function AbsenteismosManager({
           {podeDecidir && <RelatorioAbsenteismoDialog unidades={unidades} />}
           <button
             type="button" className="btn btn-primary btn-sm"
-            onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "" }); }}
+            onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "", emHoras: false, horaInicio: "", horaFim: "" }); }}
           >
-            + Lançar não comparecimento
+            + Lançar ausência
           </button>
         </div>
       </div>
@@ -356,15 +375,17 @@ export function AbsenteismosManager({
 
       <Tabs tabs={abas} />
 
-      {/* ---------------- lançamento do não comparecimento ---------------- */}
+      {/* ---------------- lançamento da ausência ---------------- */}
       {novo && (
-        <Dialogo titulo="Lançar não comparecimento" onFechar={() => setNovo(null)}>
+        <Dialogo titulo="Lançar ausência" onFechar={() => setNovo(null)}>
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-            Use essa opção quando o colaborador não apareceu e o motivo ainda não é conhecido, ou
-            se o atestado ainda não foi entregue. O comunicado por e-mail é enviado na hora, para os
-            endereços definidos em Configurações. Quando a situação estiver confirmada e o atestado
-            tiver sido recebido, volte na aba Em aberto e use Efetivar, informando o motivo, o
-            período real, bem como o documento.
+            {novo.emHoras
+              ? "Use essa opção quando o colaborador se ausentou por algumas horas, chegou atrasado ou saiu mais cedo, e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
+              : "Use essa opção quando o colaborador não apareceu e o motivo ainda não é conhecido, ou se o atestado ainda não foi entregue."}{" "}
+            O comunicado por e-mail é enviado na hora, para os endereços definidos em
+            Configurações. Quando a situação estiver confirmada e o atestado tiver sido recebido,
+            volte na aba Em aberto e use Efetivar, informando o motivo, o período real, bem como o
+            documento.
           </p>
 
           <div>
@@ -393,13 +414,56 @@ export function AbsenteismosManager({
             </div>
           )}
 
-          <div style={{ maxWidth: 200 }}>
-            <label className="label">Dia <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-            <input
-              type="date" className="input" value={novo.occurredOn}
-              onChange={(e) => setNovo((n) => (n ? { ...n, occurredOn: e.target.value } : n))}
-            />
+          {/* Dia e horário juntos, porque são a mesma pergunta: QUANDO.
+              A marcação usa a mesma frase do Efetivar de propósito: quem lança
+              aqui vai reencontrá-la lá, já preenchida, e duas palavras diferentes
+              para a mesma coisa fariam parecer que são duas coisas. */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem", alignItems: "end" }}>
+            <div>
+              <label className="label">Dia <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <input
+                type="date" className="input" value={novo.occurredOn}
+                onChange={(e) => setNovo((n) => (n ? { ...n, occurredOn: e.target.value } : n))}
+              />
+            </div>
+            {novo.emHoras && (
+              <>
+                <div>
+                  <label className="label">Das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <input
+                    type="time" className="input" value={novo.horaInicio}
+                    onChange={(e) => setNovo((n) => (n ? { ...n, horaInicio: e.target.value } : n))}
+                  />
+                </div>
+                <div>
+                  <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <input
+                    type="time" className="input" value={novo.horaFim}
+                    onChange={(e) => setNovo((n) => (n ? { ...n, horaFim: e.target.value } : n))}
+                  />
+                </div>
+              </>
+            )}
           </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer" }}>
+            <input
+              type="checkbox" checked={novo.emHoras}
+              onChange={(e) => {
+                const emHoras = e.target.checked;
+                setNovo((n) => (n ? { ...n, emHoras, horaInicio: emHoras ? n.horaInicio : "", horaFim: emHoras ? n.horaFim : "" } : n));
+              }}
+            />
+            Ausência de horas (não cobre o dia inteiro)
+          </label>
+
+          {novo.emHoras && (
+            <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
+              O horário segue para a efetivação já preenchido e sai no relatório do RH, para o
+              desconto ser feito na folha. Ausência de horas não entra no cálculo da remuneração
+              variável.
+            </p>
+          )}
 
           <div>
             <label className="label">O que se sabe até agora</label>
@@ -423,7 +487,7 @@ export function AbsenteismosManager({
 
       {/* ---------------- efetivação ---------------- */}
       {confirmando && (
-        <Dialogo titulo="Efetivar o não comparecimento" onFechar={() => { setConfirmando(null); setErro(""); }}>
+        <Dialogo titulo="Efetivar a ausência" onFechar={() => { setConfirmando(null); setErro(""); }}>
           <PainelConfirmacao
             linha={confirmando}
             tipos={tiposAtivos}
@@ -695,7 +759,7 @@ function PainelConfirmacao({
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
         <Campo rotulo="Colaborador" valor={linha.fullName} />
-        <Campo rotulo="Faltou em" valor={formatDate(linha.occurredOn)} />
+        <Campo rotulo="Dia" valor={formatDate(linha.occurredOn)} />
         <Campo rotulo="Setor" valor={linha.departmentName} />
         <Campo rotulo="Função" valor={linha.positionName} />
       </div>
@@ -1159,7 +1223,7 @@ function Ficha({
         <Campo rotulo="Função" valor={linha.positionName} />
         <Campo rotulo="Gestor imediato" valor={linha.managerName} />
         <Campo rotulo="Unidade" valor={linha.unitName} />
-        <Campo rotulo="Faltou em" valor={formatDate(linha.occurredOn)} />
+        <Campo rotulo="Dia" valor={formatDate(linha.occurredOn)} />
         </FieldGrid>
       </DetailSection>
 

@@ -320,12 +320,16 @@ export const ABSENCE_DESCONTA_PADRAO: Record<Enums<"absence_kind">, boolean> = {
 /**
  * Situação do lançamento de absenteísmo.
  *
- * "Não comparecimento" é o aviso de que a pessoa não apareceu: existe, já
- * disparou o comunicado, e ainda não é absenteísmo nenhum. Só "Aprovado" vira
- * ausência de verdade e conta para a remuneração variável.
+ * "Em aberto" é o aviso: existe, já disparou o comunicado, e ainda não é
+ * absenteísmo nenhum. Só "Aprovado" vira ausência de verdade e conta para a
+ * remuneração variável.
+ *
+ * O rótulo dizia "Não comparecimento", que passou a mentir quando o lançamento
+ * ganhou ausência de horas: quem saiu duas horas compareceu. "Em aberto" é o
+ * mesmo nome da aba onde a linha está, e vale para os dois casos.
  */
 export const ABSENTEISMO_STATUS: Record<Enums<"absenteismo_status">, string> = {
-  aberto: "Não comparecimento",
+  aberto: "Em aberto",
   pendente: "Aguardando o RH",
   aprovado: "Aprovado",
   reprovado: "Reprovado",
