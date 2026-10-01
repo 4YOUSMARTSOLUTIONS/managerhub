@@ -250,7 +250,14 @@ export function AbsenteismosManager({
       {comAutor && <td>{r.createdByName ?? <span className="soft">–</span>}</td>}
       <td><Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge></td>
       <td style={{ textAlign: "center" }}>
-        {r.emailStatus === "sent" && <Mail size={15} aria-label="Comunicado enviado" />}
+        {/* Os três estados do comunicado se leem pela cor, sem abrir nada:
+            verde saiu, vermelho falhou, apagado não tinha para quem mandar.
+            O enviado ficava na cor do texto e era o único indistinguível. */}
+        {r.emailStatus === "sent" && (
+          <span title="Comunicado enviado" style={{ color: "var(--mh-success)", display: "inline-flex" }}>
+            <Mail size={15} aria-label="Comunicado enviado" />
+          </span>
+        )}
         {r.emailStatus === "failed" && (
           <span title="O comunicado não pôde ser enviado" style={{ color: "var(--mh-danger)", display: "inline-flex" }}>
             <Mail size={15} />
