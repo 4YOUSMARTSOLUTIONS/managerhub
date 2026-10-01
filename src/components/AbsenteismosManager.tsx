@@ -252,7 +252,7 @@ export function AbsenteismosManager({
       </td>
       <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? <span className="soft">–</span>}</td>
       <td className="muted" style={{ fontSize: "0.82rem" }}>{r.positionName ?? <span className="soft">–</span>}</td>
-      <td style={{ whiteSpace: "nowrap" }}>{formatDate(r.occurredOn)}</td>
+
       <td>
         {r.typeName ? (
           <>
@@ -265,7 +265,15 @@ export function AbsenteismosManager({
           </>
         ) : <span className="soft">Motivo não confirmado</span>}
       </td>
-      <td style={{ whiteSpace: "nowrap" }}>{r.startDate ? formatDate(r.startDate) : <span className="soft">–</span>}</td>
+      {/* Sem efetivação ainda não há período, e a coluna ficaria vazia numa
+          linha que TEM data: o dia do lançamento entra aqui, apagado, para a
+          linha não perder a única data que possui. Os dois podem divergir de
+          propósito (atestado retroativo), e aí vale o que foi confirmado. */}
+      <td style={{ whiteSpace: "nowrap" }}>
+        {r.startDate
+          ? formatDate(r.startDate)
+          : <span className="soft" title="Dia do lançamento. O período é definido na efetivação.">{formatDate(r.occurredOn)}</span>}
+      </td>
       <td style={{ whiteSpace: "nowrap" }}>{r.endDate ? formatDate(r.endDate) : <span className="soft">–</span>}</td>
       <td style={{ whiteSpace: "nowrap" }}>
         {duracao(r) ? (
@@ -332,7 +340,6 @@ export function AbsenteismosManager({
             <th>Colaborador</th>
             <th style={{ width: 150 }}>Setor</th>
             <th style={{ width: 180 }}>Função</th>
-            <th style={{ width: 110 }}>Dia</th>
             <th style={{ width: 190 }}>Motivo</th>
             <th style={{ width: 110 }}>Início</th>
             <th style={{ width: 110 }}>Fim</th>
