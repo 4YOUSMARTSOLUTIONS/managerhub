@@ -26,6 +26,9 @@ const ENTITY_LABEL: Record<string, string> = {
   rooms: "Sala", meetings: "Reunião", meeting_series: "Reunião (TOR)",
   action_items: "Ação", actions: "Ação", tickets: "Chamado",
   goals: "Meta", area_goals: "Meta da área", individual_goals: "Meta individual",
+  // o indicador é o "o quê"; o lançamento é o número daquele mês, que é o que
+  // entra no cálculo da remuneração variável
+  individual_goal_entries: "Meta individual (lançamento)",
   memberships: "Membro", departments: "Setor", subdepartments: "Subsetor",
   positions: "Função", position_levels: "Perfil de função", units: "Unidade",
   ticket_sectors: "Setor de chamado", ticket_categories: "Categoria de chamado",
@@ -59,6 +62,11 @@ const FIELD_LABEL: Record<string, string> = {
   admission_date: "Admissão", birth_date: "Nascimento", day: "Data", nps_score: "NPS", nps_comment: "Comentário NPS",
   resolved_at: "Resolvido em", approval_requested_at: "Aprovação solicitada em",
   problem_statement: "Problema/Diagnóstico",
+  // lançamento de meta individual
+  period: "Competência", target_value: "Meta", partial_value: "Meta parcial",
+  actual_value: "Realizado", weight: "Peso (%)", rv_value: "RV",
+  approval_status: "Situação", approved_at: "Aprovado em", approved_by: "Aprovado por",
+  reproval_note: "Motivo da reprovação", note: "Observação",
 };
 
 const fieldLabel = (f: string) => FIELD_LABEL[f] ?? f;
