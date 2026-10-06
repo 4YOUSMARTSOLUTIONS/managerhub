@@ -1563,7 +1563,18 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
     });
   };
   const removeIndicator = async () => {
-    if (!(await confirmDialog({ tone: "danger", confirmLabel: "Excluir", message: "Excluir este indicador e TODOS os seus registros em todos os meses?" }))) return;
+    // EXCLUIR APAGA O HISTÓRICO INTEIRO, e o aviso precisa dizer QUAL.
+    //
+    // "todos os meses" é abstrato: quem está trocando o KPI de outubro lê isso
+    // pensando em outubro. Nomear os meses que têm número lançado, e contar as
+    // evidências que vão junto, é a diferença entre confirmar e reconsiderar.
+    // Para tirar a meta só de um mês existe a lixeira na linha da competência.
+    const comLancamento = goal.entries.map((e) => e.period).sort();
+    const evidencias = goal.entries.reduce((n, e) => n + e.evidences.length, 0);
+    const detalhe = comLancamento.length === 0
+      ? "Este indicador ainda não tem lançamento em nenhuma competência."
+      : `Isto apaga o lançamento de ${comLancamento.length === 1 ? "" : "todas estas competências: "}${comLancamento.map((x) => monthLabel(x.slice(0, 7))).join(", ")}${evidencias > 0 ? `, e ${evidencias} evidência${evidencias === 1 ? "" : "s"} anexada${evidencias === 1 ? "" : "s"}` : ""}. Não dá para desfazer. Para tirar a meta de UM mês só, use a lixeira na linha da competência.`;
+    if (!(await confirmDialog({ tone: "danger", confirmLabel: "Excluir tudo", title: "Excluir o indicador e o histórico dele", message: detalhe }))) return;
     start(async () => {
       const res = await deleteIndividualGoal(goal.id);
       if (res.error) { setError(res.error); return; }
