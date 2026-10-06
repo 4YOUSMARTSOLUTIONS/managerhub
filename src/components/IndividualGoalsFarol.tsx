@@ -1490,6 +1490,27 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
     setWeight(monthEntry ? String(monthEntry.weight) : "");
   }, [monthEntry]);
 
+  /**
+   * O que foi mexido na metade de CIMA do formulário.
+   *
+   * Nome, conceito, unidade, tipo de meta e % do parcial são do indicador, que é
+   * uma linha só para todos os meses. Mexer neles reescreve setembro junto com
+   * outubro, e foi exatamente assim que um "Baixa de pagamentos" renomeado em
+   * outubro apareceu renomeado em setembro.
+   */
+  const mudouOIndicador =
+    name.trim() !== goal.name
+    || (description ?? "").trim() !== (goal.description ?? "").trim()
+    || direction !== goal.direction
+    || (binaria ? false : unit.trim() !== goal.unit.trim())
+    || (binaria ? false : (partialPct.trim() === "" ? null : Number(partialPct)) !== (goal.partialPct ?? null));
+
+  /** As outras competências que já têm lançamento deste indicador. */
+  const outrasCompetencias = goal.entries
+    .map((e) => e.period)
+    .filter((p) => p !== periodOf(m))
+    .sort();
+
   const save = () => {
     setError("");
     if (!name.trim()) { setError("Informe o nome do indicador."); return; }
@@ -1500,6 +1521,21 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
       return;
     }
     start(async () => {
+      // AVISO ANTES DE REESCREVER O PASSADO.
+      //
+      // Trocar o KPI do mês é legítimo e o sistema já faz: remove-se a meta da
+      // competência e cadastra-se outra. O que não pode é isso acontecer por
+      // engano, renomeando o indicador e levando junto os meses já apurados.
+      if (mudouOIndicador && outrasCompetencias.length > 0) {
+        const meses = outrasCompetencias.map((p) => monthLabel(p.slice(0, 7))).join(", ");
+        const ok = await confirmDialog({
+          title: "Isto muda o indicador em todas as competências",
+          confirmLabel: "Mudar em todos os meses",
+          tone: "danger",
+          message: `Nome, conceito, unidade, tipo de meta e % do parcial pertencem ao indicador, não ao mês: a alteração vale também para ${meses}, que já tem lançamento. Para medir outra coisa a partir de ${monthLabel(m)}, cancele, remova esta meta da competência pelo ícone da lixeira e cadastre um indicador novo.`,
+        });
+        if (!ok) return;
+      }
       const res = await updateIndividualGoal({
         evidence_required: evidencia,
         id: goal.id, name, description,
@@ -1546,6 +1582,15 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
         <button type="button" className="btn btn-primary" disabled={pending} onClick={save}>{pending ? "Salvando…" : "Salvar"}</button>
       </>}
     >
+      {/* O escopo precisa estar escrito. A metade de baixo sempre disse "Valores
+          da competência"; esta aqui não dizia nada, e quem lia o diálogo inteiro
+          como sendo do mês renomeava o indicador achando que mudava só outubro. */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
+        <strong style={{ fontSize: "0.9rem" }}>O indicador</strong>
+        <span className="soft" style={{ fontSize: "0.72rem" }}>
+          vale para todas as competências, inclusive as já apuradas
+        </span>
+      </div>
       <div>
         <label className="label">Nome do indicador</label>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1603,7 +1648,7 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
           </div>
         </div>
         <p className="soft" style={{ fontSize: "0.72rem", margin: 0 }}>
-          {binaria ? "O peso vale para a competência selecionada. O resultado (OK/NOK) é lançado em “Registrar”." : "Meta, parcial e peso valem para a competência selecionada. O realizado é lançado em “Registrar”."}{" "} {monthEntry ? "" : "Esta meta ainda não está nesta competência — preencha a meta para incluí-la."}
+          {binaria ? "O peso vale para a competência selecionada. O resultado (OK/NOK) é lançado em “Registrar”." : "Meta, parcial e peso valem para a competência selecionada. O realizado é lançado em “Registrar”."}{" "} {monthEntry ? "Para medir OUTRA coisa a partir deste mês, remova esta meta da competência (ícone da lixeira na linha) e cadastre um indicador novo, em vez de renomear este." : "Esta meta ainda não está nesta competência — preencha a meta para incluí-la."}
         </p>
       </div>
       <CampoEvidenciaObrigatoria valor={evidencia} onChange={setEvidencia} />
