@@ -58,7 +58,12 @@ function cellStr(v: unknown): string {
   return String(v).trim();
 }
 
-export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true }: {
+  open: boolean;
+  onClose: () => void;
+  /** false para o RH: a coluna Perfil é ignorada pelo servidor */
+  podeDefinirPerfil?: boolean;
+}) {
   // guarda TODAS as linhas lidas com o sinalizador de demissão: assim alternar
   // "apenas ativos" só reaplica o filtro, sem precisar reler o arquivo
   const [parsed, setParsed] = useState<{ data: Row; dismissed: boolean }[]>([]);
@@ -220,6 +225,16 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
             </p>
             <button type="button" className="btn btn-ghost btn-sm" onClick={downloadTemplate}>↓ Baixar modelo</button>
           </div>
+
+          {/* Dito na entrada, e não em N linhas de erro na saída: o servidor
+              zera a coluna, então a planilha não precisa ser refeita. */}
+          {!podeDefinirPerfil && (
+            <p style={{ margin: 0, fontSize: "0.82rem", background: "var(--mh-warning-soft)", color: "var(--mh-warning)", borderRadius: 8, padding: "0.6rem 0.75rem" }}>
+              A coluna <strong>Perfil</strong> é ignorada nesta importação. Perfil de acesso
+              (Gestor, Gerencial, Funcionário) é definido por um administrador, na ficha do
+              colaborador. Todo o resto da planilha vale normalmente.
+            </p>
+          )}
 
           <div>
             <label className="label">Planilha de colaboradores</label>

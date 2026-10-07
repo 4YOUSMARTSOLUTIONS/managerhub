@@ -228,7 +228,11 @@ export function UsersManager({
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: 280, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}
           />
-          {canEdit && canManageAccess && <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>}
+          {/* Importar em lote segue `canEdit` (owner, admin e RH), e não o
+              `canManageAccess`: cadastrar colaborador um por um o RH já faz, e
+              as RPCs de criar e atualizar sempre aceitaram `hr`. O que a
+              planilha NÃO dá a ele é perfil de acesso, e isso o diálogo avisa. */}
+          {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => setImportOpen(true)}><IconImport /> Importar em lote</button>}
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
@@ -374,7 +378,7 @@ export function UsersManager({
             canSetRole={canManageAccess}
           />
 
-          {canManageAccess && <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} />}
+          {canEdit && <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} podeDefinirPerfil={canManageAccess} />}
         </>
       )}
 
