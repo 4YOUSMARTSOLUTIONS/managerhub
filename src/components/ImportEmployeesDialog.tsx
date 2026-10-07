@@ -73,8 +73,13 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const router = useRouter();
 
+  // "Apenas ativos" NÃO joga mais a linha fora. Jogar fora era o que engolia a
+  // baixa de quem JÁ está cadastrado: a linha nem chegava ao servidor, e o
+  // cadastro antigo seguia Ativo. Agora todas sobem, e a de desligado leva o
+  // sinal `skip_if_new`, que impede apenas a CRIAÇÃO de cadastro novo. É o que
+  // a caixa sempre quis dizer: não inflar a base com quem já saiu.
   const rows = useMemo(
-    () => parsed.filter((p) => !(onlyActive && p.dismissed)).map((p) => p.data),
+    () => parsed.map((p) => (onlyActive && p.dismissed ? { ...p.data, skip_if_new: "1" } : p.data)),
     [parsed, onlyActive],
   );
   const dismissed = useMemo(() => parsed.filter((p) => p.dismissed).length, [parsed]);
@@ -100,7 +105,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
       ["Sub Setor", "Não", "Subsetor dentro do setor (opcional)"],
       ["Data de Nascimento", "Sim", "Formato dd/mm/aaaa"],
       ["CPF", "Sim", "Com ou sem pontuação"],
-      ["Demissão", "Não", "Se preenchida (dd/mm/aaaa), o colaborador entra como INATIVO"],
+      ["Demissão", "Não", "Se preenchida (dd/mm/aaaa), o colaborador fica INATIVO, inclusive quem já está cadastrado. Vazia não reativa ninguém"],
       ["Sexo", "Sim", "Masculino / Feminino / Outro"],
       ["Telefone", "Não", "Opcional"],
       ["E-mail", "Não", "Se vazio, o login do colaborador será por CPF"],
@@ -210,7 +215,8 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
               <br />• <strong>Datas</strong> no formato <strong>dd/mm/aaaa</strong>
               <br />• <strong>Gestor em lote</strong>: exporte a planilha, preencha a coluna
               <strong> Código Gestor</strong> com a <strong>matrícula</strong> do gestor e importe de volta.
-              Em quem já está cadastrado, só o gestor e o perfil mudam; célula vazia não mexe em nada.
+              Em quem já está cadastrado, mudam o gestor, o perfil, a hierarquia e o desligamento;
+              célula vazia não mexe em nada, e uma coluna Demissão vazia não reativa ninguém.
             </p>
             <button type="button" className="btn btn-ghost btn-sm" onClick={downloadTemplate}>↓ Baixar modelo</button>
           </div>
@@ -233,8 +239,13 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
 
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.88rem" }}>
             <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} disabled={reading || importing} />
-            Importar apenas ativos (ignorar quem tem data de demissão)
+            Não criar cadastro para quem já saiu
           </label>
+          <p className="soft" style={{ fontSize: "0.78rem", margin: "-0.6rem 0 0 1.6rem" }}>
+            A data de demissão <strong>sempre</strong> desliga quem já está cadastrado. Esta opção
+            decide só o que fazer com o desligado que ainda <strong>não</strong> existe no sistema:
+            marcada, ele é ignorado; desmarcada, entra no histórico já como inativo.
+          </p>
 
           <div>
             <label className="label">Senha inicial padrão (todos entram com ela + CPF)</label>
@@ -253,7 +264,7 @@ export function ImportEmployeesDialog({ open, onClose }: { open: boolean; onClos
               <strong>{fileName}</strong>
               <div className="muted" style={{ marginTop: 4 }}>
                 {rows.length} colaborador(es) a importar
-                {dismissed > 0 && ` · ${dismissed} com demissão${onlyActive ? " (ignorados)" : " (incluídos)"}`}
+                {dismissed > 0 && ` · ${dismissed} com demissão${onlyActive ? " (desligam quem já existe; não criam cadastro novo)" : " (desligam quem existe e criam os que faltam)"}`}
                 {ignored > 0 && ` · ${ignored} sem CPF/nome (ignorados)`}
               </div>
             </div>
