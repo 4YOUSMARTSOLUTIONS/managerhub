@@ -9,13 +9,13 @@ import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { BotaoFiltros, PainelDeFiltros } from "@/components/ui/Filtros";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { GoalEvidencePanel } from "@/components/GoalEvidencePanel";
-import { CalendarOff, Paperclip, Lock, LockOpen } from "lucide-react";
+import { CalendarOff, Paperclip, Lock, LockOpen, Download, MessageSquareText } from "lucide-react";
 import { OkNokInput } from "@/components/ui/OkNokInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   createIndividualGoal, updateIndividualGoal, deleteIndividualGoal,
-  upsertGoalEntry, deleteGoalEntry, setEntryWeights,
+  upsertGoalEntry, deleteGoalEntry, setEntryWeights, goalEvidenceUrl,
   approveGoalEntry, reproveGoalEntry, approveMonth, reopenGoalEntry,
   copyPreviousMonthEntries,
 } from "@/lib/actions/individual-goals";
@@ -162,6 +162,10 @@ export function IndividualGoalsFarol({
   const [ownerIds, setOwnerIds] = useState<string[]>([currentUserId]);
   const [editGoal, setEditGoal] = useState<GoalRow | null>(null);
   const [entryGoal, setEntryGoal] = useState<GoalRow | null>(null);
+  // o que o colaborador deixou no lançamento: anexos e observação. Separado do
+  // diálogo de Registrar porque VER não é LANÇAR: o gestor que só quer conferir
+  // a prova não deveria abrir um formulário de escrita para isso.
+  const [detalhe, setDetalhe] = useState<{ goal: GoalRow; entry: GoalEntryLite } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [weightsOpen, setWeightsOpen] = useState(false);
   const [reproveTarget, setReproveTarget] = useState<{ goalId: string; name: string } | null>(null);
@@ -877,12 +881,32 @@ export function IndividualGoalsFarol({
                         quem já comprovou sem abrir meta por meta. Vermelho é
                         pendência real (exige e não tem), cinza é informação. */}
                     {mode === "mes" && (() => {
-                      const ev = g.entries.find((x) => x.period === period)?.evidences ?? [];
-                      if (ev.length > 0) {
+                      const e = g.entries.find((x) => x.period === period) ?? null;
+                      const ev = e?.evidences ?? [];
+                      const temNota = Boolean(e?.note?.trim());
+                      const abrir = () => { if (e) setDetalhe({ goal: g, entry: e }); };
+                      // Clicáveis, e não só coloridos: o selo dizia QUE existe
+                      // anexo e não deixava ver, que é a única coisa que o gestor
+                      // quer fazer com essa informação.
+                      if (ev.length > 0 || temNota) {
                         return (
-                          <span className="soft" title={`${ev.length} evidência(s) anexada(s)`} style={{ marginLeft: 6, whiteSpace: "nowrap" }}>
-                            <Paperclip size={12} style={{ verticalAlign: "-0.1em" }} />{ev.length > 1 ? ` ${ev.length}` : ""}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={abrir}
+                            title={[
+                              ev.length > 0 ? `${ev.length} evidência(s) anexada(s)` : null,
+                              temNota ? "Observação do colaborador" : null,
+                            ].filter(Boolean).join(" · ") + " — clique para abrir"}
+                            className="soft"
+                            style={{ marginLeft: 6, whiteSpace: "nowrap", background: "none", border: "none", padding: 0, font: "inherit", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}
+                          >
+                            {ev.length > 0 && (
+                              <>
+                                <Paperclip size={12} style={{ verticalAlign: "-0.1em" }} />{ev.length > 1 ? ev.length : ""}
+                              </>
+                            )}
+                            {temNota && <MessageSquareText size={12} style={{ verticalAlign: "-0.1em" }} />}
+                          </button>
                         );
                       }
                       // vermelho só quando o lançamento reivindica resultado:
@@ -988,6 +1012,14 @@ export function IndividualGoalsFarol({
 
       {editGoal && <GoalDialog goal={editGoal} month={month} onClose={() => setEditGoal(null)} />}
       {entryGoal && <EntryDialog goal={entryGoal} month={month} onClose={() => setEntryGoal(null)} />}
+      {detalhe && (
+        <DetalheDoLancamento
+          goal={detalhe.goal}
+          entry={detalhe.entry}
+          mesLabel={monthLabel(month)}
+          onClose={() => setDetalhe(null)}
+        />
+      )}
       {addOpen && (
         <AddDialog
           period={period}
@@ -1253,6 +1285,95 @@ function ReopenDialog({ goalId, period, name, onClose }: { goalId: string; perio
         <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
       </div>
       {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+    </Modal>
+  );
+}
+
+/**
+ * O que o colaborador deixou no lançamento: a prova e o que ele escreveu.
+ *
+ * Só leitura. O gestor confere a evidência e a observação sem passar pelo
+ * diálogo de Registrar, que é formulário de escrita: abrir um campo editável
+ * para quem só quer olhar convida ao salvamento sem querer, e na competência
+ * aprovada nem abriria.
+ */
+function DetalheDoLancamento({ goal, entry, mesLabel, onClose }: {
+  goal: GoalRow; entry: GoalEntryLite; mesLabel: string; onClose: () => void;
+}) {
+  const [erro, setErro] = useState("");
+  const [pendente, iniciar] = useTransition();
+
+  const baixar = (path: string) => {
+    setErro("");
+    iniciar(async () => {
+      const res = await goalEvidenceUrl(path);
+      if (res.error || !res.url) { setErro(res.error ?? "Não foi possível abrir o arquivo."); return; }
+      window.open(res.url, "_blank", "noopener");
+    });
+  };
+
+  const tamanho = (bytes: number | null) => {
+    if (bytes == null) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <Modal
+      title={`${goal.name} · ${mesLabel}`}
+      onClose={onClose}
+      footer={<button type="button" className="btn btn-ghost" onClick={onClose}>Fechar</button>}
+    >
+      <div>
+        <label className="label" style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+          <MessageSquareText size={13} /> Observação do colaborador
+        </label>
+        {entry.note?.trim()
+          ? <p style={{ margin: 0, fontSize: "0.875rem", whiteSpace: "pre-wrap", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--mh-radius-sm)", padding: "0.6rem 0.7rem" }}>{entry.note}</p>
+          : <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>Nenhuma observação foi deixada nesta competência.</p>}
+      </div>
+
+      {/* A nota da reprovação mora aqui junto: ela é a outra metade da conversa
+          sobre este lançamento, e estava só no diálogo de quem lança. */}
+      {entry.reprovalNote?.trim() && (
+        <div>
+          <label className="label">Motivo da reprovação</label>
+          <p style={{ margin: 0, fontSize: "0.875rem", whiteSpace: "pre-wrap", color: "var(--mh-danger)" }}>{entry.reprovalNote}</p>
+        </div>
+      )}
+
+      <div>
+        <label className="label" style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+          <Paperclip size={13} /> Evidências{entry.evidences.length > 0 ? ` (${entry.evidences.length})` : ""}
+        </label>
+        {entry.evidences.length === 0 ? (
+          <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>Nenhum arquivo anexado nesta competência.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+            {entry.evidences.map((a) => (
+              <div
+                key={a.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: "0.5rem",
+                  padding: "0.35rem 0.5rem", background: "var(--surface-2)",
+                  border: "1px solid var(--border)", borderRadius: "var(--mh-radius-sm)",
+                }}
+              >
+                <span style={{ flex: 1, minWidth: 0, fontSize: "0.82rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.filename}>
+                  {a.filename}
+                </span>
+                <span className="soft" style={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>{tamanho(a.size)}</span>
+                <button type="button" className="icon-btn" title="Abrir / baixar" disabled={pendente} onClick={() => baixar(a.path)}>
+                  <Download size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
     </Modal>
   );
 }
