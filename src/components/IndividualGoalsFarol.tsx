@@ -871,7 +871,11 @@ export function IndividualGoalsFarol({
             <tbody>
               {linhasVisiveis.map(({ goal: g, pct, status, target, actual, weight, partial, rvShare, rvPay, entryStatus, reprovalNote }) => (
                 <tr key={g.id} style={entryStatus === "reprovada" ? { background: "rgba(220,38,38,0.06)" } : undefined}>
-                  <td>
+                  {/* Nome do KPI em uma linha só. Quebrado em quatro, ele
+                      esticava a altura da linha inteira e desalinhava as
+                      colunas de número ao lado. A tabela já rola na horizontal,
+                      então o nome longo empurra para o lado, não para baixo. */}
+                  <td style={{ whiteSpace: "nowrap" }}>
                     {canEditDef(g.ownerId) ? (
                       <button type="button" onClick={() => setEditGoal(g)} title="Editar indicador" style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--text)", cursor: "pointer", textAlign: "left" }}>
                         {g.name}
