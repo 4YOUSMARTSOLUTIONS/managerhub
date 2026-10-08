@@ -575,11 +575,16 @@ export function IndividualGoalsFarol({
             esconderia justamente o controle principal da tela. */}
         {canManageOthers && ownerOpts.length > 1 && (
           <div style={{ minWidth: 240 }}>
+            {/* Um colaborador por vez. O farol de várias pessoas somadas não
+                respondia pergunta nenhuma: o acumulado misturava metas de gente
+                diferente e o card de RV avisava "ajuste os pesos" sem dizer de
+                quem. "Todos" continua na lista, para a visão da equipe inteira. */}
             <MultiSelect
               label="Colaborador"
               options={ownerOpts}
               selected={ownerIdsEfetivos}
               onChange={setOwnerIds}
+              single
               searchable
               allLabel="Todos"
               placeholder="Digite o nome…"

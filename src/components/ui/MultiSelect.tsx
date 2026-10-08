@@ -49,6 +49,7 @@ export function MultiSelect({
   legacyLabel = "Legados",
   legacyHint,
   inline = false,
+  single = false,
 }: {
   label: string;
   options: MultiOption[];
@@ -68,6 +69,15 @@ export function MultiSelect({
    * fazia treze filtros virarem uma parede.
    */
   inline?: boolean;
+  /**
+   * Escolha de UM só. O marcador vira redondo, escolher troca em vez de somar e
+   * o painel fecha na hora, porque não há segunda escolha a fazer.
+   *
+   * A lista continua agrupada e buscável: é o que permite achar alguém entre
+   * trezentos sem lembrar o nome, e é justamente o que um `<select>` nativo não
+   * entrega. Daí a opção morar aqui e não virar outro componente.
+   */
+  single?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -110,6 +120,12 @@ export function MultiSelect({
   }, [ativos]);
 
   const toggle = (value: string) => {
+    if (single) {
+      // reescolher o mesmo limpa: é como se volta para "todos" sem caçar o ×
+      onChange(selected.includes(value) ? [] : [value]);
+      setOpen(false);
+      return;
+    }
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
 
@@ -123,8 +139,10 @@ export function MultiSelect({
         title={o.legacy ? legacyHint : undefined}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.5rem", background: on ? "var(--surface-2)" : "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.85rem", color: o.legacy ? "var(--text-muted)" : "var(--text)" }}
       >
-        <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on ? "var(--mh-primary-500)" : "transparent" }}>
-          {on && <Check size={11} color="#fff" />}
+        <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: single ? "50%" : 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: on && !single ? "var(--mh-primary-500)" : "transparent" }}>
+          {on && (single
+            ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--mh-primary-500)" }} />
+            : <Check size={11} color="#fff" />)}
         </span>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
       </button>
@@ -206,6 +224,20 @@ export function MultiSelect({
               <div className="soft" style={{ padding: "0.6rem", fontSize: "0.82rem" }}>Nada encontrado.</div>
             ) : (
               <>
+                {/* Voltar para "todos" precisa ser uma linha da lista: no modo de
+                    um só, o × do gatilho é a única saída e ele não se anuncia. */}
+                {single && !term.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => { onChange([]); setOpen(false); }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.5rem", background: selected.length === 0 ? "var(--surface-2)" : "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.85rem", color: "var(--text)" }}
+                  >
+                    <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: "50%", border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                      {selected.length === 0 && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--mh-primary-500)" }} />}
+                    </span>
+                    <span>{allLabel}</span>
+                  </button>
+                )}
                 {gruposAtivos.map(([titulo, itens]) => (
                   <div key={titulo || "__sem_grupo__"}>
                     {titulo && <Cabecalho>{titulo}</Cabecalho>}
