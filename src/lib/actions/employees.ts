@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import type { ActionState } from "./types";
+import { SEM_GESTOR } from "@/lib/constants";
 
 function buildData(formData: FormData, cpf: string) {
   return {
@@ -20,7 +21,10 @@ function buildData(formData: FormData, cpf: string) {
     position_id: String(formData.get("position_id") ?? ""),
     position_level_id: String(formData.get("position_level_id") ?? ""),
     hierarchy_level_id: String(formData.get("hierarchy_level_id") ?? ""),
-    manager_id: String(formData.get("manager_id") ?? ""),
+    // "Sem gestor" é uma opção do formulário, e chega aqui como marcador: a RPC
+    // recebe vazio e grava nulo (`nullif(..., '')`), que é como o topo da
+    // hierarquia sempre foi representado
+    manager_id: (() => { const v = String(formData.get("manager_id") ?? ""); return v === SEM_GESTOR ? "" : v; })(),
     role: String(formData.get("role") ?? "member"),
     unit_ids: formData.getAll("unit_ids").map(String).filter(Boolean),
     // data de vigência da movimentação (só a edição envia; a criação ignora e

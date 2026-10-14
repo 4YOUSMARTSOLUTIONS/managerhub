@@ -6,7 +6,7 @@ import { createEmployee, updateEmployee } from "@/lib/actions/employees";
 import { initialActionState } from "@/lib/actions/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { GENDER, ROLE, UNIT_KIND, USER_TYPE, options } from "@/lib/constants";
+import { GENDER, ROLE, UNIT_KIND, USER_TYPE, SEM_GESTOR, options } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 
 export type Option = { id: string; name: string; active?: boolean };
@@ -240,8 +240,18 @@ export function EmployeeDialog({
                 <input name="admission_date" type="date" className="input" required defaultValue={employee?.admissionDate ?? ""} />
               </Field>
               <Field label="Gestor" req>
-                <select name="manager_id" className="select" required defaultValue={employee?.managerId ?? ""}>
+                {/* Obrigatório RESPONDER, não obrigatório TER. "Sem gestor" é uma
+                    opção da lista: o vazio continua travando (ninguém fica órfão
+                    por esquecimento), e quem está no topo da empresa deixa de
+                    ser impossível de salvar. Na edição de quem já não tem
+                    gestor, a opção vem escolhida, senão a ficha abriria inválida
+                    para mexer em qualquer outro campo. */}
+                <select
+                  name="manager_id" className="select" required
+                  defaultValue={employee?.managerId ?? (isEdit ? SEM_GESTOR : "")}
+                >
                   <option value="">Selecione…</option>
+                  <option value={SEM_GESTOR}>Sem gestor (topo da hierarquia)</option>
                   {people.filter((p) => p.id !== employee?.userId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </Field>

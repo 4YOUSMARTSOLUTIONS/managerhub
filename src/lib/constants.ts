@@ -794,3 +794,15 @@ export function options<T extends string>(map: Record<T, string>) {
     label,
   }));
 }
+
+// ---------- Gestor imediato ----------
+/**
+ * Valor do select de gestor para "esta pessoa não tem gestor".
+ *
+ * É uma ESCOLHA, diferente do vazio. O campo continua obrigatório, então
+ * esquecer de preencher ainda trava o salvamento; o que mudou é que o topo da
+ * empresa (sócios, sucessores, diretoria) passou a ter uma resposta válida.
+ * Antes o formulário exigia um gestor de quem não tem, e a única saída era a
+ * planilha, que aceita "-" para o mesmo fim.
+ */
+export const SEM_GESTOR = "__sem_gestor__";
