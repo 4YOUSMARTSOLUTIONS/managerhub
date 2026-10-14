@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
-import { MonthInput } from "@/components/ui/MonthInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
@@ -41,7 +40,7 @@ export type FeedbackRow = {
 };
 export type SessionRow = {
   id: string; subjectId: string; subjectName: string; authorId: string; authorName: string;
-  date: string; referenceMonth: string | null; title: string | null;
+  date: string; periodStart: string | null; periodEnd: string | null; title: string | null;
   highlights: string | null; development: string | null; actionPlan: string | null; overall: string | null;
   visibility: Enums<"feedback_visibility">; appliedAt: string | null; acknowledgedAt: string | null; itemFeedbackIds: string[];
   /** setor e função do sujeito NA ÉPOCA da sessão (carimbo), já em texto */
@@ -63,6 +62,22 @@ function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function thisMonth() { return today().slice(0, 7); }
+
+/**
+ * Como o período de referência se escreve numa linha de lista.
+ *
+ * Mês cheio vira "10/2026", que é como a sessão mensal sempre foi lida. Só o
+ * período que não é um mês inteiro mostra as duas datas, e aí o ano aparece uma
+ * vez quando é o mesmo dos dois lados: "01/07 a 30/09/2026".
+ */
+function rotuloDoPeriodo(de: string | null, ate: string | null): string {
+  if (!de || !ate) return "";
+  const [ay, am, ad] = de.slice(0, 10).split("-");
+  const [by, bm, bd] = ate.slice(0, 10).split("-");
+  const ultimoDia = new Date(Number(ay), Number(am), 0).getDate();
+  if (ay === by && am === bm && ad === "01" && Number(bd) === ultimoDia) return `${am}/${ay}`;
+  return ay === by ? `${ad}/${am} a ${bd}/${bm}/${by}` : `${ad}/${am}/${ay} a ${bd}/${bm}/${by}`;
+}
 function daysSince(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const d = new Date(dateStr + (dateStr.length === 10 ? "T00:00:00" : ""));
@@ -396,7 +411,7 @@ function TeamSessions({ rows, subjectOptions, onNew, onOpen }: {
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDate(s.date)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 600 }}>{shortName(s.subjectName)}</td>
                   <td className="muted" style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.title ?? ""}>{s.title || <span className="soft">—</span>}</td>
-                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{s.referenceMonth ? s.referenceMonth.slice(0, 7) : "—"}</td>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{rotuloDoPeriodo(s.periodStart, s.periodEnd) || "—"}</td>
                   <td><Badge variant="quiet" tone={s.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[s.visibility]}</Badge></td>
                   <td><Badge tone={s.appliedAt ? "green" : "gray"}>{s.appliedAt ? "Aplicado" : "Registrado"}</Badge></td>
                   <td style={{ textAlign: "right" }}><button type="button" className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onOpen(s); }}>Ver</button></td>
@@ -514,7 +529,7 @@ function SessionCard({ s, feedbacks, showSubject, canEdit, onEdit, showAck }: {
         <Badge variant="quiet" tone="blue">Sessão 1:1</Badge>
         <Badge variant="quiet" tone={s.visibility === "compartilhado" ? "blue" : "gray"}>{FEEDBACK_VISIBILITY_LABEL[s.visibility]}</Badge>
         <Badge tone={s.appliedAt ? "green" : "gray"}>{s.appliedAt ? "Aplicado" : "Registrado"}</Badge>
-        <span className="soft" style={{ fontSize: "0.78rem" }}>{formatDate(s.date)}{s.referenceMonth ? ` · ref. ${s.referenceMonth.slice(0, 7)}` : ""}</span>
+        <span className="soft" style={{ fontSize: "0.78rem" }}>{formatDate(s.date)}{s.periodStart && s.periodEnd ? ` · ref. ${rotuloDoPeriodo(s.periodStart, s.periodEnd)}` : ""}</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {canEdit && <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={toggleApplied}>{s.appliedAt ? "Reverter" : "Marcar como aplicado"}</button>}
           {canEdit && onEdit && (
@@ -875,7 +890,12 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
 }) {
   const [subjectId, setSubjectId] = useState(row?.subjectId ?? "");
   const [date, setDate] = useState(row?.date ?? today());
-  const [refMonth, setRefMonth] = useState(row?.referenceMonth ? row.referenceMonth.slice(0, 7) : thisMonth());
+  // Período de referência: nasce no mês corrente, que é o caso de quem faz
+  // feedback mensal e não quer pensar nisso. Quem tem ciclo trimestral, semestral
+  // ou de experiência ajusta as duas datas.
+  const [de, setDe] = useState(row?.periodStart ?? monthRange(thisMonth()).from);
+  const [ate, setAte] = useState(row?.periodEnd ?? monthRange(thisMonth()).to);
+  const periodoValido = Boolean(de && ate && ate >= de);
   const [title, setTitle] = useState(row?.title ?? "");
   const [highlights, setHighlights] = useState(row?.highlights ?? "");
   const [development, setDevelopment] = useState(row?.development ?? "");
@@ -889,20 +909,19 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
   const [aiPending, startAi] = useTransition();
   const router = useRouter();
 
-  // feedbacks pontuais do colaborador no mês de referência (para referenciar / IA)
+  // feedbacks pontuais do colaborador no período de referência (para referenciar / IA)
   const periodFeedbacks = useMemo(() => {
-    if (!subjectId) return [];
-    const { from, to } = monthRange(refMonth);
-    return allFeedbacks.filter((f) => f.subjectId === subjectId && f.date >= from && f.date <= to);
-  }, [allFeedbacks, subjectId, refMonth]);
+    if (!subjectId || !periodoValido) return [];
+    return allFeedbacks.filter((f) => f.subjectId === subjectId && f.date >= de && f.date <= ate);
+  }, [allFeedbacks, subjectId, de, ate, periodoValido]);
   const toggleItem = (id: string) => setItemIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const runAi = () => {
     if (!subjectId) { setError("Selecione o colaborador antes de gerar o rascunho."); return; }
+    if (!periodoValido) { setError("Confira o período de referência: o fim não pode ser antes do início."); return; }
     setError(null); setAiMsg(null);
-    const { from, to } = monthRange(refMonth);
     startAi(async () => {
-      const r = await generateFeedbackSessionAI({ subject_user_id: subjectId, from, to });
+      const r = await generateFeedbackSessionAI({ subject_user_id: subjectId, from: de, to: ate });
       if (!("ok" in r) || !r.ok) { setError(r.error); return; }
       setHighlights(r.highlights); setDevelopment(r.development); setActionPlan(r.action_plan);
       setItemIds(periodFeedbacks.map((f) => f.id));
@@ -912,8 +931,10 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
 
   const submit = () => {
     if (mode === "new" && !subjectId) { setError("Selecione o colaborador."); return; }
+    if (!de || !ate) { setError("Informe o período de referência: de e até."); return; }
+    if (ate < de) { setError("O fim do período de referência não pode ser antes do início."); return; }
     if (![highlights, development, actionPlan, overall].some((x) => x.trim())) { setError("Preencha ao menos um campo da sessão."); return; }
-    const payload = { ...(mode === "edit" ? { id: row!.id } : {}), subject_user_id: subjectId, session_date: date, reference_month: `${refMonth}-01`, title, highlights, development, action_plan: actionPlan, overall, visibility, item_feedback_ids: itemIds };
+    const payload = { ...(mode === "edit" ? { id: row!.id } : {}), subject_user_id: subjectId, session_date: date, period_start: de, period_end: ate, title, highlights, development, action_plan: actionPlan, overall, visibility, item_feedback_ids: itemIds };
     start(async () => {
       const r = mode === "edit" ? await updateFeedbackSession(payload) : await createFeedbackSession(payload);
       if (r?.error) { setError(r.error); return; }
@@ -926,13 +947,29 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
       <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
       <button type="button" className="btn btn-primary" disabled={pending} onClick={submit}>{mode === "edit" ? "Salvar" : "Registrar sessão"}</button>
     </>}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.8rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
         <div>
           <label className="label">Colaborador</label>
           {mode === "edit" ? <input className="input" value={row?.subjectName ?? ""} disabled /> : <SearchSelect options={subjectOptions} value={subjectId} onChange={setSubjectId} placeholder="Buscar…" emptyHint="Nenhum colaborador" />}
         </div>
-        <div><label className="label">Data</label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-        <div><label className="label">Mês de referência</label><MonthInput value={refMonth} onChange={(v) => setRefMonth(v || thisMonth())} /></div>
+        <div><label className="label">Data da sessão</label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+      </div>
+
+      {/* Duas datas no lugar do mês: a cadência é configurada em dias, e uma
+          sessão trimestral ou de experiência não cabe num mês de calendário.
+          A data da sessão fica separada de propósito: ela é QUANDO a conversa
+          aconteceu; o período é O QUE a conversa cobre. */}
+      <div>
+        <label className="label">Período de referência</label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
+          <input type="date" className="input" aria-label="Período de referência, de" value={de} max={ate || undefined} onChange={(e) => setDe(e.target.value)} />
+          <input type="date" className="input" aria-label="Período de referência, até" value={ate} min={de || undefined} onChange={(e) => setAte(e.target.value)} />
+        </div>
+        <p className="soft" style={{ fontSize: "0.75rem", margin: "0.3rem 0 0" }}>
+          {periodoValido
+            ? "O intervalo que esta sessão cobre: é dele que saem os feedbacks pontuais a consolidar. Já vem no mês atual."
+            : <span style={{ color: "var(--mh-danger)" }}>Informe as duas datas, com o fim depois do início.</span>}
+        </p>
       </div>
 
       <div className="card card-pad" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.6rem", background: "var(--bg-subtle, rgba(0,0,0,0.02))" }}>
@@ -945,7 +982,7 @@ function FeedbackSessionDialog({ mode, row, subjectOptions, allFeedbacks, aiEnab
       </div>
       {aiMsg && <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>{aiMsg}</p>}
 
-      <div><label className="label">Título (opcional)</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`Ex.: Feedback de ${refMonth}`} /></div>
+      <div><label className="label">Título (opcional)</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`Ex.: Feedback de ${rotuloDoPeriodo(de, ate) || "outubro"}`} /></div>
       <div><label className="label">Destaques / pontos fortes</label><textarea className="input" rows={3} value={highlights} onChange={(e) => setHighlights(e.target.value)} /></div>
       <div><label className="label">Pontos de desenvolvimento</label><textarea className="input" rows={3} value={development} onChange={(e) => setDevelopment(e.target.value)} /></div>
       <div><label className="label">Plano de ação / combinados</label><textarea className="input" rows={3} value={actionPlan} onChange={(e) => setActionPlan(e.target.value)} /></div>

@@ -248,7 +248,13 @@ type SessionPayload = {
   id?: string;
   subject_user_id: string;
   session_date: string;
-  reference_month?: string | null;
+  /**
+   * Período de referência: o intervalo que a sessão COBRE. É dele que saem os
+   * feedbacks pontuais consolidados. Era um mês de calendário; virou duas datas
+   * porque a cadência é em dias e um ciclo trimestral não cabe num mês.
+   */
+  period_start: string;
+  period_end: string;
   title?: string | null;
   highlights?: string | null;
   development?: string | null;
@@ -258,11 +264,23 @@ type SessionPayload = {
   item_feedback_ids?: string[];
 };
 
+/**
+ * As duas datas, e em ordem. Datas ISO (aaaa-mm-dd) comparam certo como texto.
+ * O banco tem a mesma regra em check; aqui ela vira frase.
+ */
+function recusaDoPeriodo(de: string | null | undefined, ate: string | null | undefined): string | null {
+  if (!de || !ate) return "Informe o período de referência: de e até.";
+  if (ate < de) return "O fim do período de referência não pode ser antes do início.";
+  return null;
+}
+
 export async function createFeedbackSession(input: SessionPayload): Promise<ActionState> {
   try {
     const ctx = await actionContext();
     if (!input.subject_user_id) return { error: "Selecione o colaborador." };
     if (!input.session_date) return { error: "Informe a data da sessão." };
+    const recusa = recusaDoPeriodo(input.period_start, input.period_end);
+    if (recusa) return { error: recusa };
     if (!(await canManageOwner(ctx, input.subject_user_id))) {
       return { error: "Você só pode registrar sessões para os seus colaboradores." };
     }
@@ -276,7 +294,8 @@ export async function createFeedbackSession(input: SessionPayload): Promise<Acti
         subject_user_id: input.subject_user_id,
         author_id: ctx.userId,
         session_date: input.session_date,
-        reference_month: input.reference_month || null,
+        period_start: input.period_start,
+        period_end: input.period_end,
         title: clean(input.title),
         highlights: clean(input.highlights),
         development: clean(input.development),
@@ -305,6 +324,8 @@ export async function updateFeedbackSession(input: SessionPayload): Promise<Acti
   try {
     const ctx = await actionContext();
     if (!input.id) return { error: "Sessão inválida." };
+    const recusa = recusaDoPeriodo(input.period_start, input.period_end);
+    if (recusa) return { error: recusa };
     if (![input.highlights, input.development, input.action_plan, input.overall].some((x) => (x ?? "").trim())) {
       return { error: "Preencha ao menos um campo da sessão." };
     }
@@ -312,7 +333,8 @@ export async function updateFeedbackSession(input: SessionPayload): Promise<Acti
       .from("feedback_sessions")
       .update({
         session_date: input.session_date,
-        reference_month: input.reference_month || null,
+        period_start: input.period_start,
+        period_end: input.period_end,
         title: clean(input.title),
         highlights: clean(input.highlights),
         development: clean(input.development),

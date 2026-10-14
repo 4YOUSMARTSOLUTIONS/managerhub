@@ -36,7 +36,7 @@ export default async function FeedbacksPage() {
     supabase
       .from("feedback_sessions")
       .select(
-        "id, subject_user_id, author_id, session_date, reference_month, title, highlights, development, action_plan, overall, visibility, applied_at, acknowledged_at, subject_department_id, subject_position_id, author:profiles!feedback_sessions_author_id_fkey(full_name), subject:profiles!feedback_sessions_subject_user_id_fkey(full_name), items:feedback_session_items(feedback_id)",
+        "id, subject_user_id, author_id, session_date, period_start, period_end, title, highlights, development, action_plan, overall, visibility, applied_at, acknowledged_at, subject_department_id, subject_position_id, author:profiles!feedback_sessions_author_id_fkey(full_name), subject:profiles!feedback_sessions_subject_user_id_fkey(full_name), items:feedback_session_items(feedback_id)",
       )
       .eq("tenant_id", tenant.id)
       .order("session_date", { ascending: false }),
@@ -102,7 +102,8 @@ export default async function FeedbacksPage() {
     authorId: s.author_id,
     authorName: (s.author as unknown as { full_name: string | null } | null)?.full_name ?? "—",
     date: s.session_date,
-    referenceMonth: s.reference_month,
+    periodStart: s.period_start,
+    periodEnd: s.period_end,
     title: s.title,
     highlights: s.highlights,
     development: s.development,
