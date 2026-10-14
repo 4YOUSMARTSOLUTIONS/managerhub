@@ -5,6 +5,7 @@ import { kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type RvCongeladoRow } from "@/components/IndividualGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export default async function GoalsPage() {
   const gate = await moduleGate("metas");
@@ -37,8 +38,8 @@ export default async function GoalsPage() {
   // compila. Juntar na memória custa o mesmo e não depende do gerador de tipos.
   const donosP = unidadesDoEscopo
     ? Promise.all([
-        supabase.from("memberships").select("id, user_id").eq("tenant_id", tenant.id),
-        supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+        fetchAll(() => supabase.from("memberships").select("id, user_id").eq("tenant_id", tenant.id).order("id")),
+        fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
       ])
     : Promise.resolve(null);
 

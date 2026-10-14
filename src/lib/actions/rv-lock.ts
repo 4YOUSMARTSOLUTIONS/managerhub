@@ -7,6 +7,7 @@ import { verifyOwnPassword } from "./verify-password";
 import { fatorRv } from "@/lib/rv-proporcional";
 import { redutoresDoMes, kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
 import type { ActionState } from "./types";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Fechar e reabrir a competência da remuneração variável.
@@ -50,7 +51,7 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
     { data: mems }, { data: cfgs }, { data: ausencias }, { data: sancoes },
     { data: regrasRaw }, { data: faixasRaw },
   ] = await Promise.all([
-    admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at, department_id, subdepartment_id, manager_id").eq("tenant_id", tenantId),
+    fetchAll(() => admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at, department_id, subdepartment_id, manager_id").eq("tenant_id", tenantId).order("id")),
     admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenantId),
     admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenantId),
     admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
@@ -59,11 +60,22 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   ]);
 
   // unidades por vínculo, para o carimbo do retrato
-  const { data: vinculoUnidades } = await admin
-    .from("membership_units").select("membership_id, unit_id")
-    .in("membership_id", (mems ?? []).map((m) => m.id));
+  //
+  // EM LOTES. Um `.in()` com todos os vínculos da empresa fazia duas coisas
+  // erradas ao mesmo tempo: a URL passava do limite do PostgREST acima de umas
+  // centenas de ids, e a resposta era cortada em 1000 linhas. Aqui o cliente é o
+  // de serviço, que enxerga todas as empresas, então o recorte por vínculo
+  // precisa continuar: o lote mantém o recorte e cabe na URL.
+  const idsDosVinculos = (mems ?? []).map((m) => m.id);
+  const vinculoUnidades: { membership_id: string; unit_id: string }[] = [];
+  for (let i = 0; i < idsDosVinculos.length; i += 200) {
+    const { data: lote } = await admin
+      .from("membership_units").select("membership_id, unit_id")
+      .in("membership_id", idsDosVinculos.slice(i, i + 200));
+    vinculoUnidades.push(...(lote ?? []));
+  }
   const unidadesDe = new Map<string, string[]>();
-  for (const vu of vinculoUnidades ?? []) {
+  for (const vu of vinculoUnidades) {
     const arr = unidadesDe.get(vu.membership_id) ?? [];
     arr.push(vu.unit_id);
     unidadesDe.set(vu.membership_id, arr);

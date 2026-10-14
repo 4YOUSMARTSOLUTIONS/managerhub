@@ -4,6 +4,7 @@ import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FeedbacksManager, type FeedbackRow, type SessionRow, type Opt, type CompOpt, type PdiActionRow, type CadenceRule, type MemberOrg } from "@/components/FeedbacksManager";
 import { moduleGate } from "@/lib/module-gate";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export default async function FeedbacksPage() {
   const gate = await moduleGate("feedbacks");
@@ -47,7 +48,7 @@ export default async function FeedbacksPage() {
       )
       .eq("tenant_id", tenant.id)
       .order("created_at", { ascending: false }),
-    supabase.from("memberships").select("user_id, department_id, position_id").eq("tenant_id", tenant.id),
+    fetchAll(() => supabase.from("memberships").select("user_id, department_id, position_id").eq("tenant_id", tenant.id).order("id")),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
   ]);

@@ -13,6 +13,7 @@ import {
 } from "@/components/TrainingsManager";
 import type { SessionRow } from "@/components/TrainingSessionsManager";
 import type { TrilhaRow } from "@/components/TrainingPathsPanel";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export default async function TreinamentosPage() {
   const gate = await moduleGate("treinamentos");
@@ -77,7 +78,7 @@ export default async function TreinamentosPage() {
       .select("id, user_id, position_id, department_id, subdepartment_id, profiles!memberships_user_id_fkey(full_name, email)")
       .eq("tenant_id", tenant.id)
       .eq("is_active", true),
-    supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),

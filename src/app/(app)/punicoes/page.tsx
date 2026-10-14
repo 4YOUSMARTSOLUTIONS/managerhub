@@ -5,6 +5,7 @@ import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PunicoesManager, type PunicaoRow } from "@/components/PunicoesManager";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Lançamento de punições.
@@ -97,7 +98,7 @@ export default async function PunicoesPage() {
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
-    supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
     supabase.from("units").select("id, name").eq("tenant_id", tenant.id),
   ]);
 

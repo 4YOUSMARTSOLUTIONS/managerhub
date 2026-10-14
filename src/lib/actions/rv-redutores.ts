@@ -10,6 +10,7 @@ import {
   type SanctionImportRow, type SanctionImportResult,
 } from "@/lib/sanctions-import";
 import { indiceDeAlvos, resolverAlvo, type Origem } from "@/lib/import-pessoa";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Redutores da remuneração variável: catálogo de punições, o registro da
@@ -155,12 +156,12 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     const { supabase, tenantId, userId } = await dpActionContext();
 
     const [{ data: membros }, { data: tipos }, { data: existentes }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
-      supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
+      fetchAll(() => supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId).order("id")),
       supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenantId),
       supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
-      supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+      fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
       supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
     ]);
 

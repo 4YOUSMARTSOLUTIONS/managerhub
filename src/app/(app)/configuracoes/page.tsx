@@ -65,6 +65,7 @@ import {
   createTicketSector, deleteTicketSector, setTicketSectorActive,
   createTicketCategory, deleteTicketCategory, setTicketCategoryActive,
 } from "@/lib/actions/tickets";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export default async function SettingsPage() {
   const { tenant, role, user, isSuperAdmin, unitScope } = await requireContext();
@@ -123,7 +124,7 @@ export default async function SettingsPage() {
     { data: blitzMotivosData }, { data: veiculosData },
     { data: feriasBloqueadosData },
   ] = await Promise.all([
-    supabase.from("memberships").select("*").eq("tenant_id", tenant.id),
+    fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("departments").select("*").eq("tenant_id", tenant.id).order("name"),
     supabase.from("subdepartments").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -149,13 +150,13 @@ export default async function SettingsPage() {
     supabase.from("feedback_cadence_rules").select("id, department_id, position_id, cadence_days").eq("tenant_id", tenant.id),
     supabase.rpc("catalog_usage", { p_tenant: tenant.id }),
     // RLS já limita ao tenant — evita .in() com centenas de ids (estoura a URL do PostgREST)
-    supabase.from("profiles").select("id, full_name, email").limit(5000),
+    fetchAll(() => supabase.from("profiles").select("id, full_name, email").order("id")),
     // CPF, telefone, nascimento e sexo saíram do alcance da chave pública: a RLS
     // libera a LINHA do colega e não tem granularidade de coluna, então qualquer
     // funcionário lia a base inteira pelo PostgREST. Vêm por RPC, que exige
     // owner/admin da empresa ativa.
     supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
-    supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
     // contratos encerrados: as importações aceitam lançar histórico pela
     // matrícula antiga, e a PRÉVIA precisa reconhecê-la igual ao servidor
     supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenant.id),

@@ -1,4 +1,5 @@
 import { requireContext } from "@/lib/tenant";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { createClient } from "@/lib/supabase/server";
 import { minhaEquipe } from "@/lib/team";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -75,7 +76,7 @@ export default async function MinhaEquipePage() {
       // senioridade (menor = mais alto), em vez de alfabeticamente
       supabase.from("hierarchy_levels").select("id, name, rank").eq("tenant_id", tenant.id),
       // só as colunas que `authenticated` tem privilégio de ler (ver AGENTS.md)
-      supabase.from("profiles").select("id, full_name, email, avatar_url"),
+      fetchAll(() => supabase.from("profiles").select("id, full_name, email, avatar_url").order("id")),
     ]);
 
   const nome = new Map((deps ?? []).map((d) => [d.id, d.name]));

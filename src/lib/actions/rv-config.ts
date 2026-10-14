@@ -6,6 +6,7 @@ import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { indiceDeAlvos, resolverAlvo, type IndiceDeAlvos, type Origem } from "@/lib/import-pessoa";
 import { normTexto } from "@/lib/absences-import";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
  *  recusa precisa virar mensagem na tela em vez de exceção. */
@@ -106,10 +107,10 @@ export async function importRvConfig(
       funcaoPorNome = new Map((data ?? []).map((p) => [normTexto(p.name), p.id]));
     } else {
       const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
-        supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId),
+        fetchAll(() => supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId).order("id")),
         supabase.from("units").select("id, name").eq("tenant_id", tenantId),
         // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
-        supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+        fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
         supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
       ]);
       const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));

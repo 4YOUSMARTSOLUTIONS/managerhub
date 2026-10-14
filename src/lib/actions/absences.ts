@@ -6,6 +6,7 @@ import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam } from "@/lib/absences-import";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO, type Origem } from "@/lib/import-pessoa";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Férias e afastamentos do colaborador.
@@ -155,10 +156,10 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
     if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
 
     const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
-      supabase.from("memberships").select("id, user_id, is_active, employee_code, dismissed_at").eq("tenant_id", tenantId),
+      fetchAll(() => supabase.from("memberships").select("id, user_id, is_active, employee_code, dismissed_at").eq("tenant_id", tenantId).order("id")),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
-      supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+      fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
       supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
     ]);
     const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));

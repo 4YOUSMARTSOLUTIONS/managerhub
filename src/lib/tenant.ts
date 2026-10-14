@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getAuthUser, getIsSuperAdmin } from "@/lib/auth-cache";
 import type { Enums, Tables } from "@/types/database";
 
@@ -137,11 +138,14 @@ export const requireContext = cache(async function requireContext(): Promise<Act
 /** `cache()`: /metas chamava isto duas vezes no mesmo request, e outras 7 telas uma vez. */
 export const getMembers = cache(async function getMembers(tenantId: string) {
   const supabase = await createClient();
-  const { data } = await supabase
+  // paginado: os ativos ainda são poucos, mas esta é a lista de pessoas de oito
+  // telas, e o corte em 1000 do PostgREST não avisa quando chega
+  const { data } = await fetchAll(() => supabase
     .from("memberships")
     .select("role, user_id, profiles!memberships_user_id_fkey(id, full_name, email)")
     .eq("tenant_id", tenantId)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("id"));
   return (data ?? []).map((m) => ({
     role: m.role,
     profile: m.profiles as Tables<"profiles"> | null,

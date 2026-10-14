@@ -5,6 +5,7 @@ import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AbsenteismosManager, type AbsenteismoRow } from "@/components/AbsenteismosManager";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Absenteísmos.
@@ -85,7 +86,7 @@ export default async function AbsenteismosPage() {
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
-    supabase.from("membership_units").select("membership_id, unit_id").limit(20000),
+    fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
     supabase.from("units").select("id, name").eq("tenant_id", tenant.id),
     // para a tela dizer o efeito REAL do tipo escolhido na remuneração
     // variável: um comportamento com faixa de redutor ativa corta por faixa e

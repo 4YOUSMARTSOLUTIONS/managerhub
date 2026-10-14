@@ -2,6 +2,7 @@ import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import type { AgendaFull, LogRow, ChecklistSchedFull, ChecklistRunLite, OrgInfo, PlannerTaskLite } from "@/lib/agenda-types";
 import type { Tables } from "@/types/database";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export type AgendaData = {
   currentUserId: string;
@@ -48,7 +49,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
     supabase.from("checklist_schedules").select("id, frequency, fixed_date, weekday, day_of_month, run_time, active, checklist_id, checklists!inner(name, active), checklist_schedule_targets(kind, ref_id)").eq("active", true),
     supabase.from("checklist_runs").select("checklist_id, executor_id, period_key").not("completed_at", "is", null).gte("created_at", fromIso),
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
-    supabase.from("memberships").select("user_id, position_id, department_id").eq("tenant_id", tenant.id).eq("is_active", true),
+    fetchAll(() => supabase.from("memberships").select("user_id, position_id, department_id").eq("tenant_id", tenant.id).eq("is_active", true).order("id")),
     supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id),
     // Só o `log_id`, e na mesma janela de 90 dias dos logs: é o que o ícone de
     // detalhe precisa para acender sem abrir a tarefa. A RLS já recorta.
