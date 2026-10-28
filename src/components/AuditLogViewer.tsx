@@ -55,7 +55,7 @@ const FIELD_LABEL: Record<string, string> = {
   department_id: "Setor", subdepartment_id: "Subsetor", position_id: "Função", position_level_id: "Perfil",
   unit_id: "Unidade", programa_id: "Programa", pilar_id: "Pilar", secao_id: "Seção", bloco_id: "Bloco",
   item_id: "Item", assignee_id: "Responsável", requester_id: "Solicitante", owner_id: "Responsável",
-  role: "Perfil", is_ticket_manager: "Gestor de chamados", ticket_sla_mode: "Modo de SLA",
+  role: "Perfil", is_ticket_manager: "Gestor de chamados", is_training_manager: "Gestão de treinamentos", ticket_sla_mode: "Modo de SLA",
   starts_at: "Início", ends_at: "Fim", target: "Meta", value: "Valor", effective_from: "Vigência",
   kind: "Tipo", direction: "Direção", consolidation: "Cálculo", unit: "Un. medida", sort: "Ordem",
   gender: "Sexo", cpf: "CPF", email: "E-mail", phone: "Telefone", employee_code: "Código funcionário",

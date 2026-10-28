@@ -313,6 +313,7 @@ export default async function SettingsPage() {
       hierarchyLevelId: m.hierarchy_level_id,
       managerId: m.manager_id,
       unitIds: uIds,
+      isTrainingManager: m.is_training_manager,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
       subdepartmentName: m.subdepartment_id ? subById.get(m.subdepartment_id)?.name ?? null : null,
       dismissedAt: m.dismissed_at ?? null,

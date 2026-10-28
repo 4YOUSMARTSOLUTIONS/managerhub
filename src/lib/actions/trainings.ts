@@ -14,7 +14,6 @@ import type { Enums } from "@/types/database";
  * tela precisa disso acontecendo na mesma ação para o usuário ver o efeito.
  */
 
-const PODE_CADASTRAR: Enums<"member_role">[] = ["owner", "admin", "hr"];
 
 export type RegraPublico = {
   kind: "user" | "position" | "department" | "subdepartment" | "unit";
@@ -56,7 +55,7 @@ const limpo = (v: string | null | undefined) => (v ?? "").trim() || null;
 
 export async function saveTraining(input: TrainingInput): Promise<ActionState & { id?: string }> {
   try {
-    const { supabase, tenantId, userId, role } = await actionContext();
+    const { supabase, tenantId, userId } = await actionContext();
 
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome do treinamento." };
@@ -81,9 +80,11 @@ export async function saveTraining(input: TrainingInput): Promise<ActionState & 
       const { error } = await supabase.from("trainings").update(campos).eq("id", trainingId);
       if (error) return { error: error.message };
     } else {
-      // a policy de insert exige owner/admin/hr; a mensagem aqui evita o erro cru
-      if (!PODE_CADASTRAR.includes(role)) {
-        return { error: "Apenas proprietário, administrador e RH cadastram treinamentos." };
+      // a policy de insert pergunta `gere_treinamentos`; a mesma pergunta aqui
+      // transforma a recusa em frase em vez de erro cru de RLS
+      const { data: gere } = await supabase.rpc("gere_treinamentos", { p_tenant: tenantId });
+      if (gere !== true) {
+        return { error: "Apenas proprietário, administrador, RH e quem tem a gestão de treinamentos cadastram treinamentos." };
       }
       const { data, error } = await supabase
         .from("trainings")

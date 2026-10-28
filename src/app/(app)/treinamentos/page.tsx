@@ -19,9 +19,13 @@ export default async function TreinamentosPage() {
   const gate = await moduleGate("treinamentos");
   if (gate) return gate;
 
-  const { tenant, user, role, unitScope } = await requireContext();
-  const podeCadastrar = role === "owner" || role === "admin" || role === "hr";
+  const { tenant, user, unitScope } = await requireContext();
   const supabase = await createClient();
+  // Quem cadastra cursos e trilhas: owner, admin, RH e quem tem a marca de
+  // gestão de treinamentos na ficha. A pergunta vai ao banco, que é onde a regra
+  // mora (as policies usam a mesma função), em vez de repetir a lista aqui.
+  const { data: gere } = await supabase.rpc("gere_treinamentos", { p_tenant: tenant.id });
+  const podeCadastrar = gere === true;
 
   const unitIdsDoEscopo = effectiveUnitFilter(unitScope);
 

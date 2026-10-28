@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
-import type { Enums } from "@/types/database";
 
 /**
  * Trilhas de aprendizagem: programas que encadeiam cursos do catálogo em ordem.
@@ -14,7 +13,6 @@ import type { Enums } from "@/types/database";
  * para quem salvou ver o efeito.
  */
 
-const PODE_CADASTRAR: Enums<"member_role">[] = ["owner", "admin", "hr"];
 
 /** Mesmo shape de `RegraPublico` em trainings.ts: quem deve cumprir o programa. */
 export type RegraTrilha = {
@@ -49,7 +47,7 @@ export type TrilhaForEdit = {
 
 export async function saveTrilha(input: TrilhaInput): Promise<ActionState & { id?: string }> {
   try {
-    const { supabase, tenantId, userId, role } = await actionContext();
+    const { supabase, tenantId, userId } = await actionContext();
 
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Informe o nome da trilha." };
@@ -77,8 +75,9 @@ export async function saveTrilha(input: TrilhaInput): Promise<ActionState & { id
       const { error } = await supabase.from("training_paths").update(campos).eq("id", pathId);
       if (error) return { error: error.message };
     } else {
-      if (!PODE_CADASTRAR.includes(role)) {
-        return { error: "Apenas proprietário, administrador e RH cadastram trilhas." };
+      const { data: gere } = await supabase.rpc("gere_treinamentos", { p_tenant: tenantId });
+      if (gere !== true) {
+        return { error: "Apenas proprietário, administrador, RH e quem tem a gestão de treinamentos cadastram trilhas." };
       }
       const { data, error } = await supabase
         .from("training_paths")

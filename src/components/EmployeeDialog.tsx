@@ -30,6 +30,8 @@ export type EmployeeData = {
   hierarchyLevelId: string | null;
   managerId: string | null;
   unitIds: string[];
+  /** marca de gestão de treinamentos (capacidade, independente do papel) */
+  isTrainingManager?: boolean;
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -195,6 +197,26 @@ export function EmployeeDialog({
                 )}
               </Field>
             </div>
+            {/* Gestão de treinamentos: uma capacidade, não um perfil. A analista
+                que cuida dos treinamentos continua Analista no resto do sistema e
+                ganha só este módulo. Aparece para quem define perfil de acesso
+                (owner/admin), porque conceder acesso é da administração; no
+                banco, uma trava recusa a marca vinda de qualquer outro papel. */}
+            {canSetRole && isEdit && (
+              <>
+                <input type="hidden" name="gestao_treinamentos_presente" value="1" />
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                  <input type="checkbox" name="is_training_manager" value="1" defaultChecked={employee?.isTrainingManager ?? false} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>Gestão de treinamentos</strong>
+                    <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                      Cria e edita treinamentos, trilhas, turmas e provas, convoca pessoas e acompanha o
+                      progresso de todos. Não muda o tipo de usuário nem dá acesso a outros módulos.
+                    </span>
+                  </span>
+                </label>
+              </>
+            )}
             <div style={grid2}>
               <Field label="Setor" req>
                 <select name="department_id" className="select" required value={deptId} onChange={(e) => setDeptId(e.target.value)}>

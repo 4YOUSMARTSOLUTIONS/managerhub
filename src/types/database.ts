@@ -395,6 +395,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_ticket_manager: boolean
+          is_training_manager: boolean
           manager_id: string | null
           position_id: string | null
           position_level_id: string | null
@@ -413,6 +414,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_ticket_manager?: boolean
+          is_training_manager?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
@@ -431,6 +433,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_ticket_manager?: boolean
+          is_training_manager?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
@@ -1981,6 +1984,8 @@ export type Database = {
       // `training_materialize_exec` NÃO entra: é a engrenagem, revogada de
       // `authenticated`. O app chama a porta com guarda.
       training_materialize: { Args: { p_training: string }; Returns: number }
+      /** owner, admin, hr OU quem tem a marca de gestão de treinamentos */
+      gere_treinamentos: { Args: { p_tenant: string }; Returns: boolean }
       pode_gerir_treinamento: { Args: { p_training: string }; Returns: boolean }
       pode_gerir_turma: { Args: { p_session: string }; Returns: boolean }
       pode_gerir_trilha: { Args: { p_path: string }; Returns: boolean }
