@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { PeoplePicker } from "@/components/PeoplePicker";
+import { opcoesDeSubsetor } from "@/lib/subsetor-options";
 import { saveTrilha, type RegraTrilha, type TrilhaForEdit } from "@/lib/actions/training-paths";
 import type { Opt, PersonOpt, SubOpt, TrainingRow } from "@/components/TrainingsManager";
 
@@ -85,11 +86,17 @@ export function TrainingPathDialog({
     ]);
 
   const nomeDaRegra = (r: RegraTrilha) => {
+    // subsetor leva o setor junto: "1º turno" existe em mais de um setor
+    if (r.kind === "subdepartment") {
+      const s = subdepartments.find((x) => x.id === r.refId);
+      if (!s) return "Removido";
+      const setor = departments.find((d) => d.id === s.departmentId)?.name;
+      return setor ? `${s.name} · ${setor}` : s.name;
+    }
     const fonte =
       r.kind === "user" ? people
         : r.kind === "position" ? positions
         : r.kind === "department" ? departments
-        : r.kind === "subdepartment" ? subdepartments
         : units;
     return fonte.find((x) => x.id === r.refId)?.name ?? "Removido";
   };
@@ -242,6 +249,7 @@ export function TrainingPathDialog({
             <MultiSelect
               label="Por cargo"
               searchable
+              selectAll
               allLabel="Nenhum cargo"
               options={positions.map((p) => ({ value: p.id, label: p.name }))}
               selected={marcados("position")}
@@ -250,6 +258,7 @@ export function TrainingPathDialog({
             <MultiSelect
               label="Por setor"
               searchable
+              selectAll
               allLabel="Nenhum setor"
               options={departments.map((d) => ({ value: d.id, label: d.name }))}
               selected={marcados("department")}
@@ -258,13 +267,15 @@ export function TrainingPathDialog({
             <MultiSelect
               label="Por subsetor"
               searchable
+              selectAll
               allLabel="Nenhum subsetor"
-              options={subdepartments.map((s) => ({ value: s.id, label: s.name }))}
+              options={opcoesDeSubsetor(subdepartments, departments)}
               selected={marcados("subdepartment")}
               onChange={(ids) => sincronizar("subdepartment", ids)}
             />
             <MultiSelect
               label="Por unidade"
+              selectAll
               allLabel="Nenhuma unidade"
               options={units.map((u) => ({ value: u.id, label: u.name }))}
               selected={marcados("unit")}

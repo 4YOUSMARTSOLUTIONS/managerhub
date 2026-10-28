@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Minus, X } from "lucide-react";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -50,6 +50,8 @@ export function MultiSelect({
   legacyHint,
   inline = false,
   single = false,
+  selectAll = false,
+  allSelectedHint,
 }: {
   label: string;
   options: MultiOption[];
@@ -78,6 +80,22 @@ export function MultiSelect({
    * entrega. Daí a opção morar aqui e não virar outro componente.
    */
   single?: boolean;
+  /**
+   * Linha "Selecionar tudo" no topo da lista. Com texto na busca, ela age só
+   * sobre o que a busca encontrou ("Selecionar os 4 resultados"), que é o que
+   * permite marcar todos os "turno" de uma vez ou marcar tudo e tirar dois.
+   *
+   * Opt-in, e não padrão: num filtro, marcar tudo é o mesmo que não marcar
+   * nada, e a linha só ocuparia espaço. Com menos de três opções ela também
+   * não aparece, porque não economiza clique nenhum.
+   */
+  selectAll?: boolean;
+  /**
+   * Aviso exibido quando tudo está marcado. Existe para os campos em que
+   * "em branco" quer dizer "todos": marcar tudo congela a lista de hoje, e o
+   * que for criado depois fica de fora sem ninguém perceber.
+   */
+  allSelectedHint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -118,6 +136,21 @@ export function MultiSelect({
     }
     return [...m];
   }, [ativos]);
+
+  // "Selecionar tudo" mira o que está em vista (a busca já recortou) e deixa de
+  // fora os legados, que estão na lista só para não sumirem dos dados antigos
+  const totalAtivos = useMemo(() => options.filter((o) => !o.legacy).length, [options]);
+  const buscando = term.trim() !== "";
+  const mostraSelecionarTudo = selectAll && !single && totalAtivos >= 3 && ativos.length >= 2;
+  const tudoEmVistaMarcado = ativos.length > 0 && ativos.every((o) => selected.includes(o.value));
+  const algumEmVistaMarcado = ativos.some((o) => selected.includes(o.value));
+  const alternarTudo = () => {
+    const emVista = new Set(ativos.map((o) => o.value));
+    onChange(tudoEmVistaMarcado
+      ? selected.filter((v) => !emVista.has(v))
+      : [...selected, ...ativos.map((o) => o.value).filter((v) => !selected.includes(v))]);
+  };
+  const tudoMarcado = totalAtivos > 0 && options.every((o) => o.legacy || selected.includes(o.value));
 
   const toggle = (value: string) => {
     if (single) {
@@ -171,7 +204,9 @@ export function MultiSelect({
         style={inline
           ? { display: "inline-flex", alignItems: "center", gap: "0.35rem", maxWidth: 280, padding: "0.24rem 0.5rem", fontSize: "0.76rem", lineHeight: 1.5, borderRadius: 6, border: "1px solid var(--mh-border)", background: "var(--mh-surface-1)", color: "var(--text)", cursor: "pointer", fontFamily: "inherit" }
           : { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.4rem", textAlign: "left", cursor: "pointer" }}
-        title={selected.length > 1 ? selected.join(", ") : undefined}
+        title={selected.length > 1
+          ? selected.map((v) => options.find((o) => o.value === v)?.label ?? v).join(", ")
+          : undefined}
       >
         {inline && <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>{label}:</span>}
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected.length ? "var(--text)" : "var(--text-muted)" }}>
@@ -216,6 +251,33 @@ export function MultiSelect({
                 placeholder={placeholder}
                 style={{ width: "100%", padding: "0.35rem 0.6rem", fontSize: "0.82rem" }}
               />
+            </div>
+          )}
+
+          {/* fora da área que rola: com 200 cargos na lista, a linha continua à
+              mão depois de descer até o fim */}
+          {mostraSelecionarTudo && (
+            <div style={{ padding: "0.25rem 0.25rem 0", borderBottom: "1px solid var(--border)" }}>
+              <button
+                type="button"
+                onClick={alternarTudo}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.5rem", marginBottom: "0.25rem", background: "none", border: "none", borderRadius: 6, cursor: "pointer", textAlign: "left", fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}
+              >
+                <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 4, border: "1px solid var(--border-strong)", display: "inline-flex", alignItems: "center", justifyContent: "center", background: algumEmVistaMarcado ? "var(--mh-primary-500)" : "transparent" }}>
+                  {tudoEmVistaMarcado
+                    ? <Check size={11} color="#fff" />
+                    : algumEmVistaMarcado && <Minus size={11} color="#fff" />}
+                </span>
+                <span>
+                  {tudoEmVistaMarcado ? "Desmarcar" : "Selecionar"}{" "}
+                  {buscando ? `os ${ativos.length} resultados` : "tudo"}
+                </span>
+              </button>
+              {allSelectedHint && tudoMarcado && !buscando && (
+                <p className="soft" style={{ fontSize: "0.72rem", lineHeight: 1.35, margin: "0 0.5rem 0.4rem" }}>
+                  {allSelectedHint}
+                </p>
+              )}
             </div>
           )}
 

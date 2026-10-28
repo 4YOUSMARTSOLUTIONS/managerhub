@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { opcoesDeSubsetor } from "@/lib/subsetor-options";
 import {
   saveTraining,
   type EscopoTreinamento, type RegraPublico, type ResponsavelTreinamento, type TrainingForEdit,
@@ -180,9 +181,15 @@ export function TrainingDialog({
     ]);
   };
   const nomeDaRegra = (r: RegraPublico): string => {
+    // subsetor leva o setor junto: "1º turno" existe em mais de um setor
+    if (r.kind === "subdepartment") {
+      const s = subdepartments.find((x) => x.id === r.refId);
+      if (!s) return "—";
+      const setor = departments.find((d) => d.id === s.departmentId)?.name;
+      return setor ? `${s.name} · ${setor}` : s.name;
+    }
     const lista = r.kind === "position" ? positions
       : r.kind === "department" ? departments
-      : r.kind === "subdepartment" ? subdepartments
       : r.kind === "unit" ? units
       : people;
     return lista.find((o) => o.id === r.refId)?.name ?? "—";
@@ -311,6 +318,8 @@ export function TrainingDialog({
             <MultiSelect
               label="Unidades"
               allLabel="Todas as unidades"
+              selectAll
+              allSelectedHint="Tudo marcado vale só para as unidades de hoje. Em branco vale para todas, inclusive as criadas depois."
               options={units.map((u) => ({ value: u.id, label: u.name }))}
               selected={unitIds}
               onChange={setUnitIds}
@@ -319,6 +328,8 @@ export function TrainingDialog({
               label="Setores"
               allLabel="Todos os setores"
               searchable
+              selectAll
+              allSelectedHint="Tudo marcado vale só para os setores de hoje. Em branco vale para todos, inclusive os criados depois."
               options={departments.map((d) => ({ value: d.id, label: d.name }))}
               selected={deptIds}
               onChange={(v) => {
@@ -332,7 +343,9 @@ export function TrainingDialog({
               label="Subsetores"
               allLabel="Todos os subsetores"
               searchable
-              options={subsDoSetor.map((s) => ({ value: s.id, label: s.name }))}
+              selectAll
+              allSelectedHint="Tudo marcado deixa de fora quem não tem subsetor e os subsetores criados depois. Em branco vale para todos."
+              options={opcoesDeSubsetor(subsDoSetor, departments)}
               selected={subIds}
               onChange={setSubIds}
             />
@@ -413,6 +426,7 @@ export function TrainingDialog({
             <MultiSelect
               label="Por cargo"
               searchable
+              selectAll
               allLabel={cargosNoEscopo.length > 0 ? "Nenhum cargo" : "Nenhum cargo no escopo"}
               options={cargosNoEscopo.map((p) => ({ value: p.id, label: p.name }))}
               selected={marcados("position")}
@@ -421,6 +435,7 @@ export function TrainingDialog({
             <MultiSelect
               label="Por setor"
               searchable
+              selectAll
               allLabel="Nenhum setor"
               options={setoresNoEscopo.map((d) => ({ value: d.id, label: d.name }))}
               selected={marcados("department")}
@@ -429,13 +444,15 @@ export function TrainingDialog({
             <MultiSelect
               label="Por subsetor"
               searchable
+              selectAll
               allLabel="Nenhum subsetor"
-              options={subsNoEscopo.map((x) => ({ value: x.id, label: x.name }))}
+              options={opcoesDeSubsetor(subsNoEscopo, departments)}
               selected={marcados("subdepartment")}
               onChange={(ids) => sincronizar("subdepartment", ids)}
             />
             <MultiSelect
               label="Por unidade"
+              selectAll
               allLabel="Nenhuma unidade"
               options={unidadesParaPublico.map((u) => ({ value: u.id, label: u.name }))}
               selected={marcados("unit")}
