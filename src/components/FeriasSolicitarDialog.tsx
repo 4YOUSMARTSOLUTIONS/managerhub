@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
@@ -12,7 +12,9 @@ import {
 } from "@/lib/ferias";
 import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
-import { lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias } from "@/lib/actions/ferias";
+import {
+  getAquisitivosDe, lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias,
+} from "@/lib/actions/ferias";
 
 /**
  * O formulário da previsão de férias: até 3 períodos, abono pecuniário e
@@ -22,12 +24,14 @@ import { lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias } from "
  * Três modos no mesmo formulário:
  *  - solicitar: o colaborador pede as próprias férias (aquisitivos dele à vista);
  *  - lancar: o gestor programa para alguém da equipe (caminho do operacional);
+ *    os aquisitivos da pessoa escolhida são buscados na hora, para o saldo
+ *    aparecer e a recusa vir antes do envio;
  *  - reenviar: corrige UMA previsão devolvida.
  *
  * Fecha por X ou Cancelar, nunca por clique no fundo.
  */
 export function FeriasSolicitarDialog({
-  modo, pessoas, aquisitivos, feriados, hoje, inicial, onFechar,
+  modo, pessoas, aquisitivos, feriados, hoje, inicial, ehDp = false, usaFolha = false, onFechar,
 }: {
   modo: "solicitar" | "lancar" | "reenviar" | "reagendar";
   /** só no modo lancar: quem o usuário pode programar */
@@ -38,9 +42,20 @@ export function FeriasSolicitarDialog({
   hoje: string;
   /** nos modos reenviar e reagendar: a linha de origem */
   inicial?: { id: string; inicio: string; fim: string; abono: number; decimo: boolean };
+  /** o DP pode lançar férias em dobro (prazo de concessão vencido) */
+  ehDp?: boolean;
+  /** a empresa importa os aquisitivos da folha */
+  usaFolha?: boolean;
   onFechar: () => void;
 }) {
   const [userId, setUserId] = useState<string[]>([]);
+  // aquisitivos de quem está sendo lançado (modo lancar)
+  const [doAlvo, setDoAlvo] = useState<AquisitivoInfo[] | null>(null);
+  const [carregandoAlvo, setCarregandoAlvo] = useState(false);
+  const [erroAlvo, setErroAlvo] = useState("");
+  const pedido = useRef(0);
+  const [dobro, setDobro] = useState(false);
+  const [justificativa, setJustificativa] = useState("");
   const [periodos, setPeriodos] = useState<PeriodoInput[]>([
     inicial
       ? { inicio: inicial.inicio, fim: inicial.fim, abono: inicial.abono, decimo: inicial.decimo }
@@ -67,15 +82,41 @@ export function FeriasSolicitarDialog({
   const mudar = (i: number, patch: Partial<PeriodoInput>) =>
     setPeriodos((xs) => xs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
+  // no lançamento, o saldo é o de quem foi escolhido
+  const aqs = modo === "lancar" ? doAlvo : aquisitivos;
+
+  /** Busca no evento de escolha (não num efeito): resposta velha não sobrescreve a nova. */
+  const escolherPessoa = (ids: string[]) => {
+    setUserId(ids);
+    setDoAlvo(null);
+    setErroAlvo("");
+    const n = ++pedido.current;
+    if (ids.length === 0) { setCarregandoAlvo(false); return; }
+    setCarregandoAlvo(true);
+    getAquisitivosDe({ userId: ids[0], hoje }).then((r) => {
+      if (n !== pedido.current) return;
+      setCarregandoAlvo(false);
+      if (r.error !== undefined) { setErroAlvo(r.error); return; }
+      setDoAlvo(r.aquisitivos);
+    });
+  };
+
   const salvar = () => {
     setErro("");
     if (modo === "lancar" && userId.length === 0) {
       setErro("Escolha o colaborador.");
       return;
     }
+    if (modo === "lancar" && dobro && !justificativa.trim()) {
+      setErro("Escreva a justificativa das férias em dobro.");
+      return;
+    }
     // validação client: completa quando temos os aquisitivos, leve quando não
-    if (aquisitivos) {
-      const r = validarConjunto(periodos, aquisitivos, hoje, feriados);
+    if (aqs) {
+      const r = validarConjunto(periodos, aqs, hoje, feriados, {
+        permiteDobro: modo === "lancar" && dobro,
+        usaFolha,
+      });
       if (r.erro) { setErro(r.erro); return; }
     } else {
       for (let i = 0; i < periodos.length; i++) {
@@ -89,7 +130,10 @@ export function FeriasSolicitarDialog({
       const r = modo === "solicitar"
         ? await solicitarFerias({ periodos, hoje })
         : modo === "lancar"
-          ? await lancarFerias({ userId: userId[0], periodos, hoje })
+          ? await lancarFerias({
+              userId: userId[0], periodos, hoje,
+              justificativaDobro: dobro ? justificativa : undefined,
+            })
           : modo === "reagendar"
             ? await reagendarFerias({
                 id: inicial!.id, inicio: periodos[0].inicio, fim: periodos[0].fim,
@@ -130,7 +174,20 @@ export function FeriasSolicitarDialog({
           {modo === "lancar" && (
             <div>
               <label className="label">Colaborador <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-              <PeoplePicker people={pessoas ?? []} selected={userId} onChange={setUserId} single />
+              <PeoplePicker people={pessoas ?? []} selected={userId} onChange={escolherPessoa} single />
+              {carregandoAlvo && (
+                <p className="soft" style={{ fontSize: "0.78rem", margin: "0.4rem 0 0" }}>Buscando o saldo…</p>
+              )}
+              {erroAlvo && (
+                <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: "0.4rem 0 0" }}>{erroAlvo}</p>
+              )}
+              {doAlvo && doAlvo.length === 0 && (
+                <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: "0.4rem 0 0" }}>
+                  {usaFolha
+                    ? "Os períodos aquisitivos desta pessoa não vieram no relatório da folha: o lançamento será recusado até o departamento pessoal importar."
+                    : "A data de admissão desta pessoa não está cadastrada."}
+                </p>
+              )}
             </div>
           )}
 
@@ -141,16 +198,19 @@ export function FeriasSolicitarDialog({
             </p>
           )}
 
-          {aquisitivos && aquisitivos.length > 0 && (
+          {aqs && aqs.length > 0 && (
             <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.65rem 0.8rem" }}>
               <div className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>
                 Saldo por período aquisitivo
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                {aquisitivos.filter((a) => a.situacao !== "quitada" || a.diasUsados > 0).slice(-4).map((a) => (
-                  <div key={a.aqInicio} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem" }}>
+                {aqs.filter((a) => a.situacao !== "quitada" || a.diasUsados > 0).slice(-4).map((a) => (
+                  <div key={a.aqInicio} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 600, minWidth: 76 }}>{rotuloAquisitivo(a)}</span>
-                    <span className="soft">{formatDate(a.aqInicio)} a {formatDate(a.aqFim)}</span>
+                    <span className="soft">
+                      {formatDate(a.aqInicio)} a {formatDate(a.aqFim)}
+                      {a.situacao !== "em_curso" && a.situacao !== "quitada" && ` · gozar até ${formatDate(a.concessivoFim)}`}
+                    </span>
                     <span style={{ marginLeft: "auto" }} className="tabular">{a.saldo} dia(s)</span>
                     <Badge variant="quiet" tone={FERIAS_AQUISITIVO_TONE[a.situacao] ?? "gray"}>
                       {FERIAS_AQUISITIVO_SITUACAO[a.situacao] ?? a.situacao}
@@ -159,9 +219,33 @@ export function FeriasSolicitarDialog({
                 ))}
               </div>
               <p className="soft" style={{ fontSize: "0.74rem", margin: "0.45rem 0 0" }}>
-                O saldo mais antigo é usado primeiro. Início permitido de segunda a quinta, fora
-                de feriado e das vésperas (art. 134).
+                O saldo mais antigo é usado primeiro, e as férias precisam terminar dentro do prazo
+                de concessão. Início permitido de segunda a quinta, fora de feriado e das vésperas
+                (art. 134).
               </p>
+            </div>
+          )}
+
+          {modo === "lancar" && ehDp && (
+            <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "0.7rem 0.8rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.84rem", cursor: "pointer" }}>
+                <input type="checkbox" checked={dobro} onChange={(e) => setDobro(e.target.checked)} />
+                Férias em dobro (o gozo termina depois do prazo de concessão)
+              </label>
+              {dobro && (
+                <>
+                  <p className="soft" style={{ fontSize: "0.76rem", margin: "0.4rem 0 0.5rem" }}>
+                    Só para regularizar um período que já passou do prazo: os dias depois dele são
+                    pagos em dobro (art. 137). A justificativa fica registrada na previsão.
+                  </p>
+                  <label className="label">Justificativa <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <textarea
+                    className="input" rows={2} value={justificativa}
+                    placeholder="Ex.: período vencido durante o afastamento pelo INSS."
+                    onChange={(e) => setJustificativa(e.target.value)}
+                  />
+                </>
+              )}
             </div>
           )}
 
@@ -221,7 +305,7 @@ export function FeriasSolicitarDialog({
             ) : <span />}
             {totalDias > 0 && (
               <span className="soft" style={{ fontSize: "0.8rem" }}>
-                Total do pedido: <strong>{totalDias}</strong> de 30 dias (gozo + abono)
+                Total do pedido: <strong>{totalDias}</strong> dia(s) (gozo + abono)
               </span>
             )}
           </div>

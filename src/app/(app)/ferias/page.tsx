@@ -3,8 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { minhaEquipe } from "@/lib/team";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { FeriasManager, type FeriasPainel, type FeriasRow } from "@/components/FeriasManager";
-import type { AquisitivoInfo } from "@/lib/ferias";
+import {
+  FeriasManager, type FeriasPainel, type FeriasRow, type UltimaImportacaoFolha,
+} from "@/components/FeriasManager";
+import { aquisitivoDaLinha, type AquisitivoInfo } from "@/lib/ferias";
 
 /**
  * Férias.
@@ -45,7 +47,7 @@ export default async function FeriasPage() {
   const [
     { data: linhas }, membros, equipe,
     { data: meuVinculo }, { data: bloqueados }, { data: feriados },
-    { data: aquisitivos }, { data: painel },
+    { data: aquisitivos }, { data: painel }, { data: importacao },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
@@ -66,7 +68,14 @@ export default async function FeriasPage() {
     supabase.rpc("ferias_painel", {
       p_tenant: tenant.id, p_hoje: hoje, p_unit_ids: unidades,
     }),
+    // a empresa importa os aquisitivos da folha? (e, para o DP, a última importação)
+    supabase.rpc("ferias_situacao_importacao", { p_tenant: tenant.id }),
   ]);
+
+  const situacaoFolha = (importacao ?? null) as {
+    usaFolha?: boolean; ultima?: UltimaImportacaoFolha | null;
+  } | null;
+  const usaFolha = !!situacaoFolha?.usaFolha;
 
   const nomePorId = new Map<string, string>();
   for (const m of membros) {
@@ -104,18 +113,27 @@ export default async function FeriasPage() {
     efetivacaoNote: l.efetivacao_note,
     cancelledAt: l.cancelled_at,
     cancelNote: l.cancel_note,
+    emDobro: l.em_dobro,
+    justificativaDobro: l.justificativa_dobro,
     createdAt: l.created_at,
   }));
+
+  const meusAquisitivos: AquisitivoInfo[] = (aquisitivos ?? []).map(aquisitivoDaLinha);
 
   const nivelBloqueado = !!meuVinculo?.hierarchy_level_id
     && (bloqueados ?? []).some((b) => b.hierarchy_level_id === meuVinculo.hierarchy_level_id);
   const semAdmissao = !meuVinculo?.admission_date;
-  const podeSolicitar = !nivelBloqueado && !semAdmissao;
+  // A empresa importa da folha e a pessoa não veio no relatório: não há saldo
+  // conferível, e o banco recusaria o pedido de qualquer jeito.
+  const semFolha = usaFolha && meusAquisitivos.length === 0;
+  const podeSolicitar = !nivelBloqueado && !semAdmissao && !semFolha;
   const avisoSolicitar = nivelBloqueado
     ? "As férias do seu nível são programadas pelo seu gestor. Você acompanha por aqui o saldo e as previsões lançadas para você."
     : semAdmissao
       ? "Sua data de admissão ainda não está cadastrada, então o saldo não pode ser calculado. Peça ao departamento pessoal para completar o seu cadastro."
-      : null;
+      : semFolha
+        ? "Seus períodos aquisitivos ainda não foram carregados da folha de pagamento, então o saldo de férias não pode ser conferido. Procure o departamento pessoal."
+        : null;
 
   // Para quem o usuário pode lançar: o DP para qualquer colaborador ativo, o
   // gestor para a própria cadeia. O servidor revalida (manages_user / papel).
@@ -125,18 +143,6 @@ export default async function FeriasPage() {
     .map((id) => ({ id, name: nomePorId.get(id) ?? "" }))
     .filter((p) => p.name)
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-
-  const meusAquisitivos: AquisitivoInfo[] = (aquisitivos ?? []).map((a) => ({
-    aqInicio: a.aq_inicio,
-    aqFim: a.aq_fim,
-    concessivoFim: a.concessivo_fim,
-    diasDireito: a.dias_direito,
-    diasUsados: a.dias_usados,
-    abonoUsado: a.abono_usado,
-    saldo: a.saldo,
-    qtdPeriodos: a.qtd_periodos,
-    situacao: a.situacao,
-  }));
 
   return (
     <div>
@@ -157,6 +163,8 @@ export default async function FeriasPage() {
         feriados={(feriados ?? []).map((f) => ({ day: f.day, name: f.name }))}
         hoje={hoje}
         painel={(painel ?? null) as FeriasPainel | null}
+        usaFolha={usaFolha}
+        ultimaImportacao={situacaoFolha?.ultima ?? null}
       />
     </div>
   );

@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { actionContext, dpActionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Json } from "@/types/database";
+import { aquisitivoDaLinha, type AquisitivoInfo } from "@/lib/ferias";
+import type { PeriodoFolha } from "@/lib/ferias-folha";
+import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type IndiceDeAlvos } from "@/lib/import-pessoa";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Férias: o PROCESSO da previsão (solicitação -> aprovação do gestor ->
@@ -59,13 +63,15 @@ export async function solicitarFerias(
 }
 
 export async function lancarFerias(
-  input: { userId: string; periodos: PeriodoFerias[]; hoje: string },
+  input: { userId: string; periodos: PeriodoFerias[]; hoje: string; justificativaDobro?: string },
 ): Promise<ActionState> {
   try {
     const { supabase, tenantId } = await actionContext();
     const { error } = await supabase.rpc("ferias_lancar", {
       p_tenant: tenantId, p_user: input.userId,
       p_periodos: comoJson(input.periodos), p_hoje: input.hoje,
+      // só o DP lança em dobro; o banco recusa a justificativa vinda de outro papel
+      p_justificativa_dobro: input.justificativaDobro?.trim() || null,
     });
     if (error) return { error: error.message };
     revalidar();
@@ -167,6 +173,12 @@ export type ContextoEfetivacao = {
   qtdPeriodos: number | null;
   situacao: string | null;
   concessivoFim: string | null;
+  /** "folha" quando o aquisitivo veio do relatório importado */
+  origem: string | null;
+  direitoFolha: number | null;
+  gozadosFolha: number | null;
+  /** emissão do relatório da folha */
+  referencia: string | null;
   irmas: { id: string; inicio: string; fim: string; dias: number; abono: number; status: string }[];
 };
 
@@ -217,6 +229,239 @@ export async function setNivelSolicitaFerias(
     revalidar();
     revalidatePath("/configuracoes");
     return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Saldo de outra pessoa: o lançamento do gestor e do DP confere antes de enviar
+// ---------------------------------------------------------------------------
+
+/**
+ * Os aquisitivos de quem vai sair de férias, para o formulário de lançamento
+ * mostrar o saldo e recusar antes do envio. A alçada é da RPC (o próprio, o
+ * gestor da cadeia ou o DP); o banco revalida tudo no envio de qualquer jeito.
+ */
+export async function getAquisitivosDe(
+  input: { userId: string; hoje: string },
+): Promise<{ aquisitivos: AquisitivoInfo[]; error?: undefined } | { error: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { data, error } = await supabase.rpc("ferias_periodos_aquisitivos", {
+      p_tenant: tenantId, p_user: input.userId, p_hoje: input.hoje,
+    });
+    if (error) return { error: error.message };
+    return { aquisitivos: (data ?? []).map(aquisitivoDaLinha) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Importação do relatório "Programação de Férias" da folha
+// ---------------------------------------------------------------------------
+
+export type PessoaFolhaEnvio = {
+  bloco: number;
+  linha: number;
+  codigo: string;
+  nome: string;
+  periodos: PeriodoFolha[];
+};
+
+export type RecusaFolha = { linha: number; codigo: string; nome: string; motivo: string };
+
+export type AnaliseFolha = {
+  unidades: string[];
+  multiUnidade: boolean;
+  /** a unidade de cada bloco: a escolhida na tela ou, sem escolha, a sugerida */
+  unidadePorBloco: Record<string, string>;
+  aImportar: number;
+  periodos: number;
+  recusadas: RecusaFolha[];
+  error?: string;
+};
+
+export type ResultadoImportacaoFolha = {
+  ok?: true;
+  error?: string;
+  pessoas?: number;
+  periodos?: number;
+  reatribuidas?: number;
+  conflitos?: { id: string; nome: string; inicio: string; fim: string }[];
+  recusadas?: RecusaFolha[];
+};
+
+type Supa = Awaited<ReturnType<typeof actionContext>>["supabase"];
+
+/**
+ * Índice de matrícula da empresa, no mesmo molde das outras importações
+ * (`import-pessoa.ts`): unidade + matrícula, nunca nome. O desligado entra no
+ * índice para a recusa dizer "desligado" em vez de "não encontrada".
+ */
+async function indiceDaEmpresa(supabase: Supa, tenantId: string) {
+  const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+    fetchAll(() => supabase.from("memberships")
+      .select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId).order("id")),
+    supabase.from("units").select("id, name").eq("tenant_id", tenantId).order("name"),
+    // a RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
+    fetchAll(() => supabase.from("membership_units")
+      .select("membership_id, unit_id").order("membership_id").order("unit_id")),
+  ]);
+  const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
+  const unidadesDoVinculo = new Map<string, string[]>();
+  for (const v of vinculoUnidade ?? []) {
+    const nm = nomeUnidade.get(v.unit_id);
+    if (!nm) continue;
+    unidadesDoVinculo.set(v.membership_id, [...(unidadesDoVinculo.get(v.membership_id) ?? []), nm]);
+  }
+  const ativo = new Map<string, boolean>();
+  const refs = (membros ?? []).map((m) => {
+    ativo.set(m.user_id, m.is_active);
+    return {
+      id: m.user_id, code: m.employee_code, units: unidadesDoVinculo.get(m.id) ?? [],
+      origem: (m.is_active ? "ativo" : "desligado") as "ativo" | "desligado",
+    };
+  });
+  const nomes = (unidades ?? []).map((u) => u.name);
+  return { idx: indiceDeAlvos(refs, nomes), unidades: nomes, ativo };
+}
+
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+function periodosLegiveis(ps: PeriodoFolha[]): boolean {
+  return Array.isArray(ps) && ps.length > 0 && ps.every((p) =>
+    ISO.test(p.aqInicio) && ISO.test(p.aqFim) && p.aqFim >= p.aqInicio
+    && Number.isInteger(p.gozados) && Number.isInteger(p.restantes)
+    && p.gozados >= 0 && p.restantes >= 0 && p.gozados + p.restantes <= 30
+    && (p.limite === null || ISO.test(p.limite)));
+}
+
+/**
+ * Cada bloco do relatório é uma empresa, e o relatório não diz qual. A
+ * sugestão é a unidade em que mais matrículas do bloco resolvem; quem decide é
+ * o DP na tela, e a sugestão só preenche o seletor.
+ */
+function sugerirUnidades(pessoas: PessoaFolhaEnvio[], unidades: string[], idx: IndiceDeAlvos) {
+  const out: Record<string, string> = {};
+  for (const b of [...new Set(pessoas.map((p) => p.bloco))]) {
+    const doBloco = pessoas.filter((p) => p.bloco === b);
+    let melhor = unidades[0] ?? "";
+    let max = -1;
+    for (const u of unidades) {
+      const n = doBloco.filter((p) => resolverAlvo(p.codigo, u, idx).alvoId).length;
+      if (n > max) { max = n; melhor = u; }
+    }
+    out[String(b)] = melhor;
+  }
+  return out;
+}
+
+function resolverFolha(
+  pessoas: PessoaFolhaEnvio[],
+  unidadePorBloco: Record<string, string>,
+  idx: IndiceDeAlvos,
+  ativo: Map<string, boolean>,
+) {
+  const aceitas: { pessoa: PessoaFolhaEnvio; userId: string }[] = [];
+  const recusadas: RecusaFolha[] = [];
+  const vistos = new Map<string, number>();
+  for (const p of pessoas) {
+    const recusar = (motivo: string) =>
+      recusadas.push({ linha: p.linha, codigo: p.codigo, nome: p.nome, motivo });
+    const unidade = idx.multiUnidade ? unidadePorBloco[String(p.bloco)] ?? "" : "";
+    const alvo = resolverAlvo(p.codigo, unidade, idx);
+    if (!alvo.alvoId) { recusar(MOTIVO_LABEL[alvo.motivo!]); continue; }
+    if (!ativo.get(alvo.alvoId)) { recusar("desligado no cadastro"); continue; }
+    const antes = vistos.get(alvo.alvoId);
+    if (antes !== undefined) { recusar(`repetido no relatório (linha ${antes})`); continue; }
+    if (!periodosLegiveis(p.periodos)) { recusar("período aquisitivo ilegível"); continue; }
+    vistos.set(alvo.alvoId, p.linha);
+    aceitas.push({ pessoa: p, userId: alvo.alvoId });
+  }
+  return { aceitas, recusadas };
+}
+
+/** A prévia: quem entra, quem fica de fora e por quê, sem gravar nada. */
+export async function analisarFolha(
+  input: { pessoas: PessoaFolhaEnvio[]; unidadePorBloco?: Record<string, string> },
+): Promise<AnaliseFolha> {
+  const vazia: AnaliseFolha = {
+    unidades: [], multiUnidade: false, unidadePorBloco: {}, aImportar: 0, periodos: 0, recusadas: [],
+  };
+  try {
+    const { supabase, tenantId } = await dpActionContext();
+    const { idx, unidades, ativo } = await indiceDaEmpresa(supabase, tenantId);
+    const sugeridas = sugerirUnidades(input.pessoas, unidades, idx);
+    const unidadePorBloco = { ...sugeridas, ...(input.unidadePorBloco ?? {}) };
+    const { aceitas, recusadas } = resolverFolha(input.pessoas, unidadePorBloco, idx, ativo);
+    return {
+      unidades,
+      multiUnidade: idx.multiUnidade,
+      unidadePorBloco,
+      aImportar: aceitas.length,
+      periodos: aceitas.reduce((s, a) => s + a.pessoa.periodos.length, 0),
+      recusadas,
+    };
+  } catch (e) {
+    return { ...vazia, error: (e as Error).message };
+  }
+}
+
+export async function importarFolha(input: {
+  pessoas: PessoaFolhaEnvio[];
+  unidadePorBloco: Record<string, string>;
+  emissao: string;
+  dataBase: string | null;
+  arquivo: string;
+}): Promise<ResultadoImportacaoFolha> {
+  try {
+    const { supabase, tenantId } = await dpActionContext();
+    if (!ISO.test(input.emissao)) return { error: "A data de emissão do relatório não foi reconhecida." };
+    const { idx, ativo } = await indiceDaEmpresa(supabase, tenantId);
+    if (idx.multiUnidade) {
+      const semUnidade = [...new Set(input.pessoas.map((p) => p.bloco))]
+        .filter((b) => !input.unidadePorBloco[String(b)]);
+      if (semUnidade.length) return { error: "Escolha a unidade de cada bloco do relatório." };
+    }
+    const { aceitas, recusadas } = resolverFolha(input.pessoas, input.unidadePorBloco, idx, ativo);
+    if (aceitas.length === 0) {
+      return { error: "Nenhum colaborador do relatório foi encontrado no cadastro. Confira a unidade de cada bloco.", recusadas };
+    }
+
+    const { data, error } = await supabase.rpc("ferias_importar_aquisitivos", {
+      p_tenant: tenantId,
+      p_referencia: input.emissao,
+      p_data_base: input.dataBase && ISO.test(input.dataBase) ? input.dataBase : null,
+      p_arquivo: input.arquivo,
+      p_pessoas: aceitas.map(({ pessoa, userId }) => ({
+        user_id: userId,
+        nome: pessoa.nome,
+        periodos: pessoa.periodos.map((q) => ({
+          aq_inicio: q.aqInicio, aq_fim: q.aqFim,
+          gozados: q.gozados, restantes: q.restantes, proporcionais: q.proporcionais,
+          limite: q.limite, afastamento: q.afastamento, faltas: q.faltas,
+        })),
+      })) as unknown as Json,
+      p_recusadas: recusadas as unknown as Json,
+    });
+    if (error) return { error: error.message, recusadas };
+
+    const r = (data ?? {}) as {
+      pessoas?: number; periodos?: number; reatribuidas?: number;
+      conflitos?: { id: string; nome: string; inicio: string; fim: string }[];
+    };
+    revalidatePath(RP_FERIAS);
+    revalidatePath("/configuracoes");
+    return {
+      ok: true,
+      pessoas: r.pessoas ?? aceitas.length,
+      periodos: r.periodos ?? 0,
+      reatribuidas: r.reatribuidas ?? 0,
+      conflitos: r.conflitos ?? [],
+      recusadas,
+    };
   } catch (e) {
     return { error: (e as Error).message };
   }

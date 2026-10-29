@@ -194,10 +194,20 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
     const saidaPorUser = new Map<string, string>();
     for (const m of membros ?? []) if (m.dismissed_at) saidaPorUser.set(m.user_id, m.dismissed_at);
 
-    const { data: existentes } = await supabase
+    const { data: existentes } = await fetchAll(() => supabase
       .from("employee_absences")
       .select("id, user_id, start_date, end_date")
-      .eq("tenant_id", tenantId);
+      .eq("tenant_id", tenantId)
+      .order("id"));
+
+    // Férias depois do último relatório da folha só entram pelo módulo Férias
+    // (o banco recusa no gatilho `employee_absences_ferias_so_historico`).
+    // Conferido aqui linha a linha, para a planilha não cair inteira por uma.
+    let cortes: { padrao: string | null; pessoas: Record<string, string> } = { padrao: null, pessoas: {} };
+    if ((rows ?? []).some((l) => parseTipo(l.kind ?? "") === "ferias")) {
+      const { data: c } = await supabase.rpc("ferias_cortes_historico", { p_tenant: tenantId });
+      if (c) cortes = c as unknown as typeof cortes;
+    }
 
     // o que já está no banco, mais o que esta planilha já aceitou: as duas coisas
     // precisam entrar na conta, senão duas linhas cruzadas da MESMA planilha
@@ -262,6 +272,13 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
       const doDono = porDono.get(userIdAlvo) ?? [];
       const igual = doDono.find((x) => x.inicio === inicio && x.fim === fim);
       if (igual?.id) { updates.push({ id: igual.id, payload }); continue; }
+
+      const corte = kind === "ferias" ? cortes.pessoas[userIdAlvo] ?? cortes.padrao : null;
+      if (corte && inicio >= corte) {
+        r.invalid += 1;
+        recusar(`Férias a partir de ${corte.slice(8, 10)}/${corte.slice(5, 7)}/${corte.slice(0, 4)} só entram pelo módulo Férias`);
+        continue;
+      }
       if (doDono.some((x) => periodosCruzam(inicio, fim, x.inicio, x.fim))) {
         r.overlapping += 1;
         recusar("Cruza com um período já lançado");

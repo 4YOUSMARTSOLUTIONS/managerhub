@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Ban, CalendarPlus, Check, Pencil, Plane, Send, Trash2, Undo2,
+  Ban, CalendarPlus, Check, Pencil, Plane, Send, Trash2, Undo2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailModal } from "@/components/ui/DetailModal";
@@ -16,6 +16,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
 import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
+import { FeriasImportarFolhaDialog } from "@/components/FeriasImportarFolhaDialog";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
@@ -37,9 +38,22 @@ export type FeriasPainel = {
     userId: string; nome: string | null; setor: string | null; saldo: number;
     situacao: string | null; aquisitivoInicio: string | null; aquisitivoFim: string | null;
     gozarAte: string | null;
+    /** a empresa importa da folha e a pessoa não veio no relatório */
+    semFolha?: boolean;
   }[];
+  usaFolha?: boolean;
   janelaInicio: string;
   janelaFim: string;
+};
+
+/** a última importação do relatório da folha (só o DP recebe) */
+export type UltimaImportacaoFolha = {
+  referencia: string;
+  dataBase: string | null;
+  importadoEm: string;
+  importadoPor: string | null;
+  pessoas: number;
+  periodos: number;
 };
 
 export type FeriasRow = {
@@ -73,6 +87,9 @@ export type FeriasRow = {
   efetivacaoNote: string | null;
   cancelledAt: string | null;
   cancelNote: string | null;
+  /** gozo depois do prazo de concessão, lançado pelo DP (art. 137) */
+  emDobro: boolean;
+  justificativaDobro: string | null;
   createdAt: string;
 };
 
@@ -88,7 +105,7 @@ export type FeriasRow = {
  */
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, podeSolicitar, avisoSolicitar,
-  pessoasLancar, meusAquisitivos, feriados, hoje, painel,
+  pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -104,8 +121,12 @@ export function FeriasManager({
   feriados: FeriadoCustom[];
   hoje: string;
   painel: FeriasPainel | null;
+  /** a empresa importa os aquisitivos da folha */
+  usaFolha: boolean;
+  ultimaImportacao: UltimaImportacaoFolha | null;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
+  const [importando, setImportando] = useState(false);
   const [reenvio, setReenvio] = useState<FeriasRow | null>(null);
   const [reagendando, setReagendando] = useState<FeriasRow | null>(null);
   const [detalhe, setDetalhe] = useState<FeriasRow | null>(null);
@@ -164,13 +185,20 @@ export function FeriasManager({
   }
   if (podeGerir && painel) {
     abas.push({ id: "visao", label: "Visão geral", content: (
-      <VisaoGeral painel={painel} hoje={hoje} />
+      <VisaoGeral painel={painel} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
+        onImportar={ehDp ? () => setImportando(true) : undefined} />
     ) });
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", flexWrap: "wrap", marginTop: "-3.2rem", marginBottom: "0.4rem" }}>
+        {ehDp && (
+          <button type="button" className="btn btn-ghost" onClick={() => setImportando(true)}
+            title="Carregar o relatório Programação de Férias da folha">
+            <Upload size={15} aria-hidden /> Importar da folha
+          </button>
+        )}
         {podeSolicitar && (
           <button type="button" className="btn btn-ghost" onClick={() => setDialogo("solicitar")}>
             <Plane size={15} aria-hidden /> Solicitar férias
@@ -205,6 +233,9 @@ export function FeriasManager({
 
       <Tabs tabs={abas} />
 
+      {importando && (
+        <FeriasImportarFolhaDialog ultima={ultimaImportacao} onFechar={() => setImportando(false)} />
+      )}
       {dialogo && (
         <FeriasSolicitarDialog
           modo={dialogo}
@@ -212,6 +243,8 @@ export function FeriasManager({
           aquisitivos={dialogo === "solicitar" ? meusAquisitivos : null}
           feriados={feriados}
           hoje={hoje}
+          ehDp={ehDp}
+          usaFolha={usaFolha}
           onFechar={() => setDialogo(null)}
         />
       )}
@@ -221,6 +254,7 @@ export function FeriasManager({
           aquisitivos={reenvio.userId === meuId ? meusAquisitivos : null}
           feriados={feriados}
           hoje={hoje}
+          usaFolha={usaFolha}
           inicial={{
             id: reenvio.id, inicio: reenvio.startDate, fim: reenvio.endDate,
             abono: reenvio.abonoDias, decimo: reenvio.decimo,
@@ -284,6 +318,21 @@ export function FeriasManager({
 // Minhas férias
 // ============================================================================
 
+/**
+ * De onde sai o saldo: o direito do aquisitivo menos o que a folha já registrou
+ * como gozado e o que está previsto aqui. Escrito por extenso porque "18 dias
+ * de saldo" sozinho não explica por que não são 30.
+ */
+function composicaoDoSaldo(a: AquisitivoInfo): string {
+  const previstos = a.diasUsados - a.gozadosFolha - a.abonoUsado;
+  const partes: string[] = [];
+  if (a.gozadosFolha > 0) partes.push(`${a.gozadosFolha} já gozado(s)`);
+  if (previstos > 0) partes.push(`${previstos} previsto(s)`);
+  if (a.abonoUsado > 0) partes.push(`${a.abonoUsado} de abono`);
+  const direito = `${a.diasDireito} dias de direito`;
+  return partes.length ? `${direito}: ${partes.join(", ")}` : direito;
+}
+
 function MinhasFerias({
   minhas, aquisitivos, podeSolicitar, avisoSolicitar, onSolicitar, onReenviar, onDetalhe, onCancelar, onReagendar, hoje,
 }: {
@@ -323,11 +372,9 @@ function MinhasFerias({
               <div style={{ fontSize: "1.35rem", fontWeight: 700 }} className="tabular">
                 {a.saldo} <span className="soft" style={{ fontSize: "0.8rem", fontWeight: 400 }}>dia(s) de saldo</span>
               </div>
-              {(a.diasUsados > 0 || a.abonoUsado > 0) && (
-                <p className="soft" style={{ fontSize: "0.76rem", margin: "0.3rem 0 0" }}>
-                  {a.diasUsados - a.abonoUsado} em gozo previsto{a.abonoUsado > 0 ? `, ${a.abonoUsado} de abono` : ""}, em {a.qtdPeriodos} período(s)
-                </p>
-              )}
+              <p className="soft" style={{ fontSize: "0.76rem", margin: "0.3rem 0 0" }}>
+                {composicaoDoSaldo(a)}
+              </p>
             </div>
           ))}
         </div>
@@ -518,11 +565,13 @@ function FilaDp({
               <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
               <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
               <td>
-                {r.reagendadaDe
-                  ? <Badge variant="quiet" tone="amber">Reagendamento</Badge>
-                  : r.lancadaPeloGestor
-                    ? <Badge variant="quiet" tone="blue">Pelo gestor</Badge>
-                    : <Badge variant="quiet" tone="gray">Solicitada</Badge>}
+                {r.emDobro
+                  ? <Badge variant="quiet" tone="red">Em dobro</Badge>
+                  : r.reagendadaDe
+                    ? <Badge variant="quiet" tone="amber">Reagendamento</Badge>
+                    : r.lancadaPeloGestor
+                      ? <Badge variant="quiet" tone="blue">Pelo gestor</Badge>
+                      : <Badge variant="quiet" tone="gray">Solicitada</Badge>}
               </td>
               <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: "inline-flex", gap: "0.35rem" }}>
@@ -675,6 +724,7 @@ function DetalheFerias({
       badges={
         <>
           <Badge tone={FERIAS_STATUS_TONE[row.status]}>{FERIAS_STATUS[row.status]}</Badge>
+          {row.emDobro && <Badge variant="quiet" tone="red">Em dobro</Badge>}
           {row.reagendadaDe && <Badge variant="quiet" tone="amber">Reagendamento</Badge>}
           {row.lancadaPeloGestor && <Badge variant="quiet" tone="blue">Lançada pelo gestor</Badge>}
           {row.decimo && <Badge variant="quiet" tone="gray">Adianta o 13º</Badge>}
@@ -738,6 +788,12 @@ function DetalheFerias({
           <Field label="Abono pecuniário">{row.abonoDias ? `${row.abonoDias} dia(s)` : "Não"}</Field>
           <Field label="Aquisitivo">{`${formatDate(row.aquisitivoInicio)} a ${formatDate(row.aquisitivoFim)}`}</Field>
         </FieldGrid>
+        {row.emDobro && (
+          <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-danger)" }}>
+            <strong>Férias em dobro</strong> (gozo depois do prazo de concessão, art. 137).
+            {row.justificativaDobro ? ` Justificativa do DP: ${row.justificativaDobro}` : ""}
+          </p>
+        )}
       </DetailSection>
 
       <DetailSection title="O trâmite">
@@ -815,6 +871,7 @@ function EfetivarDialog({
       badges={
         <>
           <Badge tone="amber">{FERIAS_STATUS.aprovada}</Badge>
+          {row.emDobro && <Badge variant="quiet" tone="red">Em dobro</Badge>}
           {row.reagendadaDe && <Badge variant="quiet" tone="amber">Reagendamento</Badge>}
           {row.decimo && <Badge variant="quiet" tone="gray">Adianta o 13º</Badge>}
         </>
@@ -841,19 +898,34 @@ function EfetivarDialog({
         {c && <Field label="Saldo do aquisitivo">{`${c.saldo ?? "—"} dia(s)`}</Field>}
         {c?.concessivoFim && <Field label="Gozar até">{formatDate(c.concessivoFim)}</Field>}
       </FieldGrid>
+      {row.emDobro && (
+        <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-danger)" }}>
+          <strong>Férias em dobro</strong>: o gozo termina depois do prazo de concessão (art. 137).
+          {row.justificativaDobro ? ` Justificativa: ${row.justificativaDobro}` : ""}
+        </p>
+      )}
 
-      <DetailSection title="Informativo do art. 130 (faltas injustificadas)">
+      <DetailSection title={c?.origem === "folha" ? "O que a folha informa" : "Informativo do art. 130 (faltas injustificadas)"}>
         {c == null ? (
           <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Carregando…</p>
         ) : (
           <>
             <FieldGrid min={160}>
-              <Field label="Faltas no aquisitivo">{`${c.faltasDias} dia(s) em ${c.faltasQtd} registro(s)`}</Field>
-              <Field label="Direito pela tabela">{`${c.direitoArt130} dias`}</Field>
+              {c.origem === "folha" && (
+                <>
+                  <Field label="Direito no aquisitivo">{`${c.direitoFolha ?? "—"} dias`}</Field>
+                  <Field label="Já gozados na folha">{`${c.gozadosFolha ?? 0} dia(s)`}</Field>
+                  {c.referencia && <Field label="Relatório de">{formatDate(c.referencia)}</Field>}
+                </>
+              )}
+              <Field label="Faltas registradas aqui">{`${c.faltasDias} dia(s) em ${c.faltasQtd} registro(s)`}</Field>
+              {c.origem !== "folha" && <Field label="Direito pela tabela">{`${c.direitoArt130} dias`}</Field>}
             </FieldGrid>
             <p className="soft" style={{ fontSize: "0.76rem", margin: "0.5rem 0 0" }}>
-              Só informação para o cálculo da folha: o sistema não reduz o saldo sozinho.
-              {c.direitoArt130 < 30 ? " Atenção: pelas faltas registradas, o direito seria menor que 30 dias." : ""}
+              {c.origem === "folha"
+                ? "O direito e os dias gozados vêm do último relatório importado da folha, que já aplica as faltas do art. 130. Ao confirmar, o sistema confere de novo o saldo e o prazo."
+                : "Só informação para o cálculo da folha: o sistema não reduz o saldo sozinho."}
+              {c.origem !== "folha" && c.direitoArt130 < 30 ? " Atenção: pelas faltas registradas, o direito seria menor que 30 dias." : ""}
             </p>
             {c.irmas.length > 0 && (
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.4rem 0 0" }}>
@@ -891,8 +963,17 @@ function EfetivarDialog({
 // Visão geral (gestor e DP)
 // ============================================================================
 
-function VisaoGeral({ painel, hoje }: { painel: FeriasPainel; hoje: string }) {
-  const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer");
+function VisaoGeral({
+  painel, hoje, ultimaImportacao, onImportar,
+}: {
+  painel: FeriasPainel;
+  hoje: string;
+  /** só o DP recebe */
+  ultimaImportacao: UltimaImportacaoFolha | null;
+  onImportar?: () => void;
+}) {
+  const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer" || s.semFolha);
+  const semFolhaQtd = painel.saldos.filter((s) => s.semFolha).length;
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const listaSaldos = mostrarTodos ? painel.saldos : comPendencia;
 
@@ -957,15 +1038,32 @@ function VisaoGeral({ painel, hoje }: { painel: FeriasPainel; hoje: string }) {
             <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
               O próximo período aquisitivo a programar de cada colaborador. Vencida = a
               concessão passou do prazo e agora é em dobro (art. 137).
+              {painel.usaFolha && " Os períodos, os dias de direito e os já gozados vêm do relatório da folha."}
             </p>
+            {ultimaImportacao && (
+              <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
+                Último relatório: emitido em {formatDate(ultimaImportacao.referencia)}, importado
+                em {formatDateTime(ultimaImportacao.importadoEm)}
+                {ultimaImportacao.importadoPor ? ` por ${shortName(ultimaImportacao.importadoPor)}` : ""},
+                {" "}{ultimaImportacao.pessoas} colaboradores.
+                {semFolhaQtd > 0 && ` ${semFolhaQtd} ativo(s) sem período da folha.`}
+              </p>
+            )}
           </div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMostrarTodos((v) => !v)}>
-            {mostrarTodos ? "Ver só as pendências" : `Ver todos (${painel.saldos.length})`}
-          </button>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            {onImportar && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onImportar}>
+                <Upload size={13} aria-hidden /> Importar da folha
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMostrarTodos((v) => !v)}>
+              {mostrarTodos ? "Ver só as pendências" : `Ver todos (${painel.saldos.length})`}
+            </button>
+          </div>
         </div>
         {listaSaldos.length === 0 ? (
           <p className="soft" style={{ fontSize: "0.82rem", margin: "0.7rem 0 0" }}>
-            Nenhum período a vencer ou vencido. Tudo em dia.
+            Nenhum período a vencer ou vencido, e ninguém sem período da folha. Tudo em dia.
           </p>
         ) : (
           <div style={{ overflowX: "auto", marginTop: "0.7rem" }}>
@@ -991,7 +1089,11 @@ function VisaoGeral({ painel, hoje }: { painel: FeriasPainel; hoje: string }) {
                     <td className="tabular" style={{ textAlign: "right" }}>{s.saldo}</td>
                     <td className="muted" style={{ fontSize: "0.82rem" }}>{s.gozarAte ? formatDate(s.gozarAte) : "—"}</td>
                     <td>
-                      {s.situacao ? (
+                      {s.semFolha ? (
+                        // não é "em dia": a pessoa não veio no relatório, e sem ele
+                        // não há saldo conferível (pedidos dela são recusados)
+                        <Badge tone="amber">Sem período da folha</Badge>
+                      ) : s.situacao ? (
                         <Badge tone={FERIAS_AQUISITIVO_TONE[s.situacao] ?? "gray"}>
                           {FERIAS_AQUISITIVO_SITUACAO[s.situacao] ?? s.situacao}
                         </Badge>

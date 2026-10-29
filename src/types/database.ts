@@ -863,7 +863,7 @@ export type Database = {
       // privilégio real, o grant de authenticated é só select/delete. O FATO
       // continua em `employee_absences` (kind 'ferias'), criado na efetivação.
       ferias_solicitacoes: {
-        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["ferias_status"]; start_date: string; end_date: string; dias: number; abono_dias: number; adiantar_decimo_terceiro: boolean; aquisitivo_inicio: string; aquisitivo_fim: string; snap_admission_date: string; reagendada_de: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; snap_hierarchy_name: string | null; created_by: string; lancada_pelo_gestor: boolean; decided_at: string | null; decided_by: string | null; decision_note: string | null; efetivada_at: string | null; efetivada_by: string | null; efetivacao_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; absence_id: string | null; created_at: string; updated_at: string }
+        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["ferias_status"]; start_date: string; end_date: string; dias: number; abono_dias: number; adiantar_decimo_terceiro: boolean; aquisitivo_inicio: string; aquisitivo_fim: string; snap_admission_date: string; reagendada_de: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; snap_hierarchy_name: string | null; created_by: string; lancada_pelo_gestor: boolean; decided_at: string | null; decided_by: string | null; decision_note: string | null; efetivada_at: string | null; efetivada_by: string | null; efetivacao_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; absence_id: string | null; em_dobro: boolean; justificativa_dobro: string | null; created_at: string; updated_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -2030,7 +2030,8 @@ export type Database = {
       // occurred_on do absenteísmo). Só a efetivação escreve em
       // employee_absences.
       ferias_solicitar: { Args: { p_tenant: string; p_periodos: Json; p_hoje?: string }; Returns: undefined }
-      ferias_lancar: { Args: { p_tenant: string; p_user: string; p_periodos: Json; p_hoje?: string }; Returns: undefined }
+      // `p_justificativa_dobro`: só o DP; permite gozo depois do prazo de concessão
+      ferias_lancar: { Args: { p_tenant: string; p_user: string; p_periodos: Json; p_hoje?: string; p_justificativa_dobro?: string | null }; Returns: undefined }
       ferias_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
       ferias_reenviar: { Args: { p_id: string; p_inicio: string; p_fim: string; p_abono?: number; p_decimo?: boolean; p_hoje?: string }; Returns: undefined }
       ferias_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
@@ -2045,8 +2046,22 @@ export type Database = {
           aq_inicio: string; aq_fim: string; concessivo_fim: string
           dias_direito: number; dias_usados: number; abono_usado: number
           saldo: number; qtd_periodos: number; situacao: string
+          // "folha" (relatório importado) ou "admissao" (empresa que não importa)
+          origem: string; referencia: string | null; gozados_folha: number
+          limite_gozo: string | null; tem14: boolean
         }[]
       }
+      // Períodos aquisitivos da folha (relatório "Programação de Férias").
+      // As tabelas `ferias_importacoes` e `ferias_aquisitivos` não têm grant:
+      // escrita só por esta RPC (DP), leitura pelas duas abaixo.
+      ferias_importar_aquisitivos: {
+        Args: { p_tenant: string; p_referencia: string; p_data_base: string | null; p_arquivo: string; p_pessoas: Json; p_recusadas?: Json }
+        Returns: Json
+      }
+      // { usaFolha, ultima: { referencia, dataBase, importadoEm, importadoPor, pessoas, periodos } | null } (ultima só para o DP)
+      ferias_situacao_importacao: { Args: { p_tenant: string }; Returns: Json }
+      // { padrao: data, pessoas: { user_id: data } }: corte do registro direto (só histórico antes dele)
+      ferias_cortes_historico: { Args: { p_tenant: string }; Returns: Json }
       // Chat interno. Criar conversa mexe em canal + membros na mesma
       // transação, com dedup de DM; a visão geral devolve só os canais de quem
       // chama (a de administração é outra função).

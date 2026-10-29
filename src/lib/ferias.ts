@@ -20,6 +20,7 @@ export type PeriodoInput = {
 export type AquisitivoInfo = {
   aqInicio: string;
   aqFim: string;
+  /** último dia em que o gozo pode cair sem virar dobra */
   concessivoFim: string;
   diasDireito: number;
   diasUsados: number;
@@ -27,7 +28,43 @@ export type AquisitivoInfo = {
   saldo: number;
   qtdPeriodos: number;
   situacao: string;
+  /** "folha" (relatório importado) ou "admissao" (calculado, empresa que não importa) */
+  origem: string;
+  /** emissão do relatório da folha de onde o aquisitivo veio */
+  referencia: string | null;
+  /** dias que a folha já registrou como gozados */
+  gozadosFolha: number;
+  /** "Limite p/ gozo" da folha: último dia para começar o saldo */
+  limiteGozo: string | null;
+  /** já existe um período com o mínimo do art. 134 (14 dias, ou o direito todo) */
+  tem14: boolean;
 };
+
+/** A linha de `ferias_periodos_aquisitivos` no formato da tela. */
+export function aquisitivoDaLinha(a: {
+  aq_inicio: string; aq_fim: string; concessivo_fim: string;
+  dias_direito: number; dias_usados: number; abono_usado: number; saldo: number;
+  qtd_periodos: number; situacao: string;
+  origem: string; referencia: string | null; gozados_folha: number;
+  limite_gozo: string | null; tem14: boolean;
+}): AquisitivoInfo {
+  return {
+    aqInicio: a.aq_inicio,
+    aqFim: a.aq_fim,
+    concessivoFim: a.concessivo_fim,
+    diasDireito: a.dias_direito,
+    diasUsados: a.dias_usados,
+    abonoUsado: a.abono_usado,
+    saldo: a.saldo,
+    qtdPeriodos: a.qtd_periodos,
+    situacao: a.situacao,
+    origem: a.origem,
+    referencia: a.referencia,
+    gozadosFolha: a.gozados_folha ?? 0,
+    limiteGozo: a.limite_gozo,
+    tem14: !!a.tem14,
+  };
+}
 
 /** Data local ancorada ao meio-dia: aritmética de dias sem surpresa de fuso. */
 export const dataLocal = (iso: string) => new Date(`${iso}T12:00:00`);
@@ -63,18 +100,23 @@ export function motivoInicioInvalido(inicio: string, feriados: FeriadoCustom[]):
 
 export type ResultadoValidacao =
   | { erro: string }
-  | { erro?: undefined; atribuicoes: { aqInicio: string; aqFim: string }[] };
+  | { erro?: undefined; atribuicoes: { aqInicio: string; aqFim: string; emDobro: boolean }[] };
 
 /**
  * O mesmo FIFO do banco: o aquisitivo aberto mais antigo com saldo paga
  * primeiro, sem transbordo. Devolve a que aquisitivo cada período vai, ou a
  * primeira infração encontrada.
+ *
+ * `permiteDobro`: o DP lançando férias em dobro (gozo depois do prazo de
+ * concessão). `usaFolha`: a empresa importa os aquisitivos da folha, e a falta
+ * deles quer dizer "não veio no relatório", não "sem admissão".
  */
 export function validarConjunto(
   periodos: PeriodoInput[],
   aquisitivos: AquisitivoInfo[],
   hoje: string,
   feriados: FeriadoCustom[],
+  opcoes: { permiteDobro?: boolean; usaFolha?: boolean } = {},
 ): ResultadoValidacao {
   if (periodos.length === 0) return { erro: "Informe ao menos um período de férias." };
   if (periodos.length > 3) return { erro: "As férias podem ser divididas em no máximo 3 períodos (art. 134)." };
@@ -101,12 +143,16 @@ export function validarConjunto(
   }
 
   if (aquisitivos.length === 0) {
-    return { erro: "A data de admissão não está cadastrada. Peça ao departamento pessoal." };
+    return {
+      erro: opcoes.usaFolha
+        ? "Os períodos aquisitivos ainda não foram carregados da folha de pagamento, então o saldo não pode ser conferido. Peça ao departamento pessoal."
+        : "A data de admissão não está cadastrada. Peça ao departamento pessoal.",
+    };
   }
 
   // cópia mutável para simular os débitos na ordem
-  const aq = aquisitivos.map((a) => ({ ...a, tem14: false, rotulo: rotuloAquisitivo(a) }));
-  const atribuicoes: { aqInicio: string; aqFim: string }[] = [];
+  const aq = aquisitivos.map((a) => ({ ...a, rotulo: rotuloAquisitivo(a) }));
+  const atribuicoes: { aqInicio: string; aqFim: string; emDobro: boolean }[] = [];
 
   for (const p of ordenados) {
     const alvo = aq.find((a) => a.saldo > 0);
@@ -121,27 +167,33 @@ export function validarConjunto(
       return { erro: `O período de ${dias} dias${p.abono > 0 ? ` (mais ${p.abono} de abono)` : ""} excede o saldo de ${alvo.saldo} dias do aquisitivo ${alvo.rotulo}.` };
     }
     if (alvo.qtdPeriodos + 1 > 3) {
-      return { erro: `O aquisitivo ${alvo.rotulo} já tem 3 períodos previstos (art. 134).` };
+      return { erro: `O aquisitivo ${alvo.rotulo} já tem 3 períodos (art. 134).` };
     }
-    if (alvo.abonoUsado + p.abono > 10) {
-      return { erro: `O abono pecuniário do aquisitivo ${alvo.rotulo} passaria de 10 dias (art. 143).` };
+    // art. 143: até um terço do direito (30 → 10; 18 → 6)
+    const tetoAbono = Math.floor(alvo.diasDireito / 3);
+    if (alvo.abonoUsado + p.abono > tetoAbono) {
+      return { erro: `O abono pecuniário do aquisitivo ${alvo.rotulo} passaria de ${tetoAbono} dias, um terço do direito (art. 143).` };
+    }
+    // art. 134 e 137: o gozo cabe no prazo de concessão; o que passa vira dobra
+    const emDobro = p.fim > alvo.concessivoFim;
+    if (emDobro && !opcoes.permiteDobro) {
+      return { erro: `As férias do aquisitivo ${alvo.rotulo} precisam terminar até ${dataBr(alvo.concessivoFim)} (fim do prazo de concessão). Depois disso elas viram férias em dobro (art. 137), e só o departamento pessoal pode lançar, com justificativa.` };
     }
     alvo.saldo -= dias + p.abono;
     alvo.qtdPeriodos += 1;
     alvo.abonoUsado += p.abono;
-    if (dias >= 14) alvo.tem14 = true;
-    atribuicoes.push({ aqInicio: alvo.aqInicio, aqFim: alvo.aqFim });
+    if (dias >= Math.min(14, alvo.diasDireito)) alvo.tem14 = true;
+    atribuicoes.push({ aqInicio: alvo.aqInicio, aqFim: alvo.aqFim, emDobro });
   }
 
-  // invariante do art. 134 §1º: ou já entrou um período >= 14, ou o saldo
-  // restante ainda comporta um. Períodos já vivos no banco contam via
-  // qtdPeriodos/saldo; o >= 14 existente é aproximado por "saldo <= 16"
-  // (30 - 14 = 16): se o aquisitivo tinha uso e sobrou pouco, o banco decide.
+  // invariante do art. 134 §1º: ou já existe um período com o mínimo, ou o
+  // saldo restante ainda comporta um. Quem tem direito menor que 14 (art. 130)
+  // não tem como fracionar: o mínimo vira o próprio direito.
   for (const a of aq) {
     const usadoAgora = atribuicoes.some((x) => x.aqInicio === a.aqInicio);
-    const tinhaUso = (aquisitivos.find((x) => x.aqInicio === a.aqInicio)?.diasUsados ?? 0) > 0;
-    if (usadoAgora && !a.tem14 && !tinhaUso && a.saldo < 14) {
-      return { erro: `Um dos períodos do aquisitivo ${a.rotulo} precisa ter ao menos 14 dias corridos (art. 134): restariam só ${a.saldo} dias para isso.` };
+    const minimo = Math.min(14, a.diasDireito);
+    if (usadoAgora && !a.tem14 && a.saldo < minimo) {
+      return { erro: `Um dos períodos do aquisitivo ${a.rotulo} precisa ter ao menos ${minimo} dias corridos (art. 134): com este pedido restariam só ${a.saldo} dias para isso.` };
     }
   }
 
