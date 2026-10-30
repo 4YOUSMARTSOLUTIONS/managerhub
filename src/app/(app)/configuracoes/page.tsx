@@ -556,7 +556,7 @@ export default async function SettingsPage() {
                 canEdit={canEditDP}
                 kinds={["ferias"]}
                 title="Férias"
-                description="Registro direto, só para histórico: aceita férias que começaram antes do último relatório da folha importado no módulo Férias. Dali em diante, férias entram pelo módulo, que confere o saldo e o prazo. As linhas criadas por lá são editadas por lá, e a exclusão delas aqui é recusada."
+                description="Registro direto, só para histórico: aceita férias que começaram antes da data da última importação de períodos aquisitivos, feita no módulo Férias. Dali em diante, férias entram pelo módulo, que confere o saldo e o prazo. As linhas criadas por lá são editadas por lá, e a exclusão delas aqui é recusada."
                 exportFilename="ferias.xlsx"
               />
             </>

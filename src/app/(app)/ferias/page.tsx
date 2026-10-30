@@ -132,7 +132,7 @@ export default async function FeriasPage() {
     : semAdmissao
       ? "Sua data de admissão ainda não está cadastrada, então o saldo não pode ser calculado. Peça ao departamento pessoal para completar o seu cadastro."
       : semFolha
-        ? "Seus períodos aquisitivos ainda não foram carregados da folha de pagamento, então o saldo de férias não pode ser conferido. Procure o departamento pessoal."
+        ? "Seus períodos aquisitivos de férias ainda não foram importados, então o saldo não pode ser conferido. Procure o departamento pessoal."
         : null;
 
   // Para quem o usuário pode lançar: o DP para qualquer colaborador ativo, o

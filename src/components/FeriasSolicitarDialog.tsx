@@ -184,7 +184,7 @@ export function FeriasSolicitarDialog({
               {doAlvo && doAlvo.length === 0 && (
                 <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: "0.4rem 0 0" }}>
                   {usaFolha
-                    ? "Os períodos aquisitivos desta pessoa não vieram no relatório da folha: o lançamento será recusado até o departamento pessoal importar."
+                    ? "Os períodos aquisitivos desta pessoa ainda não foram importados: o lançamento será recusado até o departamento pessoal importar."
                     : "A data de admissão desta pessoa não está cadastrada."}
                 </p>
               )}

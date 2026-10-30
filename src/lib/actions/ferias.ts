@@ -267,6 +267,8 @@ export type PessoaFolhaEnvio = {
   linha: number;
   codigo: string;
   nome: string;
+  /** modelo do MANAGERHUB: a unidade vem na linha; no relatório da folha, vem do bloco */
+  unidade?: string;
   periodos: PeriodoFolha[];
 };
 
@@ -331,11 +333,16 @@ async function indiceDaEmpresa(supabase: Supa, tenantId: string) {
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 function periodosLegiveis(ps: PeriodoFolha[]): boolean {
-  return Array.isArray(ps) && ps.length > 0 && ps.every((p) =>
+  if (!Array.isArray(ps) || ps.length === 0) return false;
+  const ok = ps.every((p) =>
     ISO.test(p.aqInicio) && ISO.test(p.aqFim) && p.aqFim >= p.aqInicio
     && Number.isInteger(p.gozados) && Number.isInteger(p.restantes)
     && p.gozados >= 0 && p.restantes >= 0 && p.gozados + p.restantes <= 30
     && (p.limite === null || ISO.test(p.limite)));
+  if (!ok) return false;
+  // dois aquisitivos da mesma pessoa não se cruzam (e o banco tem chave pelo início)
+  const ordem = [...ps].sort((a, b) => a.aqInicio.localeCompare(b.aqInicio));
+  return ordem.every((p, i) => i === 0 || p.aqInicio > ordem[i - 1].aqFim);
 }
 
 /**
@@ -345,8 +352,10 @@ function periodosLegiveis(ps: PeriodoFolha[]): boolean {
  */
 function sugerirUnidades(pessoas: PessoaFolhaEnvio[], unidades: string[], idx: IndiceDeAlvos) {
   const out: Record<string, string> = {};
-  for (const b of [...new Set(pessoas.map((p) => p.bloco))]) {
-    const doBloco = pessoas.filter((p) => p.bloco === b);
+  // no modelo cada linha diz a própria unidade: só os blocos da folha precisam de sugestão
+  const semUnidade = pessoas.filter((p) => !p.unidade);
+  for (const b of [...new Set(semUnidade.map((p) => p.bloco))]) {
+    const doBloco = semUnidade.filter((p) => p.bloco === b);
     let melhor = unidades[0] ?? "";
     let max = -1;
     for (const u of unidades) {
@@ -370,7 +379,11 @@ function resolverFolha(
   for (const p of pessoas) {
     const recusar = (motivo: string) =>
       recusadas.push({ linha: p.linha, codigo: p.codigo, nome: p.nome, motivo });
-    const unidade = idx.multiUnidade ? unidadePorBloco[String(p.bloco)] ?? "" : "";
+    // a unidade da linha (modelo) vale mesmo em empresa de unidade única: se
+    // veio, é conferida; a do bloco (folha) só é usada quando há mais de uma
+    const unidade = p.unidade?.trim()
+      ? p.unidade
+      : idx.multiUnidade ? unidadePorBloco[String(p.bloco)] ?? "" : "";
     const alvo = resolverAlvo(p.codigo, unidade, idx);
     if (!alvo.alvoId) { recusar(MOTIVO_LABEL[alvo.motivo!]); continue; }
     if (!ativo.get(alvo.alvoId)) { recusar("desligado no cadastro"); continue; }
@@ -381,6 +394,48 @@ function resolverFolha(
     aceitas.push({ pessoa: p, userId: alvo.alvoId });
   }
   return { aceitas, recusadas };
+}
+
+/**
+ * A lista que vai pré-preenchida no modelo: os ativos com matrícula, uma linha
+ * por pessoa, ordenados por unidade e nome. Quem não tem matrícula fica de
+ * fora porque não teria como ser importado (a chave é unidade + matrícula).
+ */
+export async function dadosDoModeloDeFerias(): Promise<{
+  pessoas: { unidade: string; matricula: string; nome: string }[];
+  error?: string;
+}> {
+  try {
+    const { supabase, tenantId } = await dpActionContext();
+    const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }] = await Promise.all([
+      fetchAll(() => supabase.from("memberships")
+        .select("id, employee_code, profiles!memberships_user_id_fkey(full_name)")
+        .eq("tenant_id", tenantId).eq("is_active", true).order("id")),
+      supabase.from("units").select("id, name").eq("tenant_id", tenantId),
+      fetchAll(() => supabase.from("membership_units")
+        .select("membership_id, unit_id").order("membership_id").order("unit_id")),
+    ]);
+    const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
+    const unidadesDo = new Map<string, string[]>();
+    for (const v of vinculoUnidade ?? []) {
+      const nm = nomeUnidade.get(v.unit_id);
+      if (nm) unidadesDo.set(v.membership_id, [...(unidadesDo.get(v.membership_id) ?? []), nm]);
+    }
+    const pessoas = (membros ?? [])
+      .filter((m) => (m.employee_code ?? "").trim())
+      .map((m) => {
+        const perfil = m.profiles as unknown as { full_name: string | null } | { full_name: string | null }[] | null;
+        const nome = (Array.isArray(perfil) ? perfil[0]?.full_name : perfil?.full_name) ?? "";
+        // quem está em mais de uma unidade (diretoria) sai com a primeira: qualquer
+        // uma delas resolve a matrícula
+        const uns = (unidadesDo.get(m.id) ?? []).sort((a, b) => a.localeCompare(b, "pt-BR"));
+        return { unidade: uns[0] ?? "", matricula: String(m.employee_code).trim(), nome };
+      })
+      .sort((a, b) => a.unidade.localeCompare(b.unidade, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
+    return { pessoas };
+  } catch (e) {
+    return { pessoas: [], error: (e as Error).message };
+  }
 }
 
 /** A prévia: quem entra, quem fica de fora e por quê, sem gravar nada. */
@@ -421,7 +476,7 @@ export async function importarFolha(input: {
     if (!ISO.test(input.emissao)) return { error: "A data de emissão do relatório não foi reconhecida." };
     const { idx, ativo } = await indiceDaEmpresa(supabase, tenantId);
     if (idx.multiUnidade) {
-      const semUnidade = [...new Set(input.pessoas.map((p) => p.bloco))]
+      const semUnidade = [...new Set(input.pessoas.filter((p) => !p.unidade).map((p) => p.bloco))]
         .filter((b) => !input.unidadePorBloco[String(b)]);
       if (semUnidade.length) return { error: "Escolha a unidade de cada bloco do relatório." };
     }

@@ -195,8 +195,8 @@ export function FeriasManager({
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", flexWrap: "wrap", marginTop: "-3.2rem", marginBottom: "0.4rem" }}>
         {ehDp && (
           <button type="button" className="btn btn-ghost" onClick={() => setImportando(true)}
-            title="Carregar o relatório Programação de Férias da folha">
-            <Upload size={15} aria-hidden /> Importar da folha
+            title="Importar os períodos aquisitivos (modelo do MANAGERHUB ou relatório da folha)">
+            <Upload size={15} aria-hidden /> Importar períodos
           </button>
         )}
         {podeSolicitar && (
@@ -905,7 +905,7 @@ function EfetivarDialog({
         </p>
       )}
 
-      <DetailSection title={c?.origem === "folha" ? "O que a folha informa" : "Informativo do art. 130 (faltas injustificadas)"}>
+      <DetailSection title={c?.origem === "folha" ? "Dados importados do aquisitivo" : "Informativo do art. 130 (faltas injustificadas)"}>
         {c == null ? (
           <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Carregando…</p>
         ) : (
@@ -914,8 +914,8 @@ function EfetivarDialog({
               {c.origem === "folha" && (
                 <>
                   <Field label="Direito no aquisitivo">{`${c.direitoFolha ?? "—"} dias`}</Field>
-                  <Field label="Já gozados na folha">{`${c.gozadosFolha ?? 0} dia(s)`}</Field>
-                  {c.referencia && <Field label="Relatório de">{formatDate(c.referencia)}</Field>}
+                  <Field label="Já gozados (importados)">{`${c.gozadosFolha ?? 0} dia(s)`}</Field>
+                  {c.referencia && <Field label="Dados de">{formatDate(c.referencia)}</Field>}
                 </>
               )}
               <Field label="Faltas registradas aqui">{`${c.faltasDias} dia(s) em ${c.faltasQtd} registro(s)`}</Field>
@@ -923,7 +923,7 @@ function EfetivarDialog({
             </FieldGrid>
             <p className="soft" style={{ fontSize: "0.76rem", margin: "0.5rem 0 0" }}>
               {c.origem === "folha"
-                ? "O direito e os dias gozados vêm do último relatório importado da folha, que já aplica as faltas do art. 130. Ao confirmar, o sistema confere de novo o saldo e o prazo."
+                ? "O direito e os dias gozados vêm da última importação de períodos aquisitivos, que já considera as faltas do art. 130. Ao confirmar, o sistema confere de novo o saldo e o prazo."
                 : "Só informação para o cálculo da folha: o sistema não reduz o saldo sozinho."}
               {c.origem !== "folha" && c.direitoArt130 < 30 ? " Atenção: pelas faltas registradas, o direito seria menor que 30 dias." : ""}
             </p>
@@ -1038,22 +1038,22 @@ function VisaoGeral({
             <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
               O próximo período aquisitivo a programar de cada colaborador. Vencida = a
               concessão passou do prazo e agora é em dobro (art. 137).
-              {painel.usaFolha && " Os períodos, os dias de direito e os já gozados vêm do relatório da folha."}
+              {painel.usaFolha && " Os períodos, os dias de direito e os já gozados vêm da importação de períodos aquisitivos."}
             </p>
             {ultimaImportacao && (
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
-                Último relatório: emitido em {formatDate(ultimaImportacao.referencia)}, importado
+                Última importação: dados de {formatDate(ultimaImportacao.referencia)}, importados
                 em {formatDateTime(ultimaImportacao.importadoEm)}
                 {ultimaImportacao.importadoPor ? ` por ${shortName(ultimaImportacao.importadoPor)}` : ""},
                 {" "}{ultimaImportacao.pessoas} colaboradores.
-                {semFolhaQtd > 0 && ` ${semFolhaQtd} ativo(s) sem período da folha.`}
+                {semFolhaQtd > 0 && ` ${semFolhaQtd} ativo(s) sem período importado.`}
               </p>
             )}
           </div>
           <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
             {onImportar && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={onImportar}>
-                <Upload size={13} aria-hidden /> Importar da folha
+                <Upload size={13} aria-hidden /> Importar períodos
               </button>
             )}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMostrarTodos((v) => !v)}>
@@ -1063,7 +1063,7 @@ function VisaoGeral({
         </div>
         {listaSaldos.length === 0 ? (
           <p className="soft" style={{ fontSize: "0.82rem", margin: "0.7rem 0 0" }}>
-            Nenhum período a vencer ou vencido, e ninguém sem período da folha. Tudo em dia.
+            Nenhum período a vencer ou vencido, e ninguém sem período importado. Tudo em dia.
           </p>
         ) : (
           <div style={{ overflowX: "auto", marginTop: "0.7rem" }}>
@@ -1092,7 +1092,7 @@ function VisaoGeral({
                       {s.semFolha ? (
                         // não é "em dia": a pessoa não veio no relatório, e sem ele
                         // não há saldo conferível (pedidos dela são recusados)
-                        <Badge tone="amber">Sem período da folha</Badge>
+                        <Badge tone="amber">Sem período importado</Badge>
                       ) : s.situacao ? (
                         <Badge tone={FERIAS_AQUISITIVO_TONE[s.situacao] ?? "gray"}>
                           {FERIAS_AQUISITIVO_SITUACAO[s.situacao] ?? s.situacao}

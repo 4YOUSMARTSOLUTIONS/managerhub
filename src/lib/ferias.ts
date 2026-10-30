@@ -145,7 +145,7 @@ export function validarConjunto(
   if (aquisitivos.length === 0) {
     return {
       erro: opcoes.usaFolha
-        ? "Os períodos aquisitivos ainda não foram carregados da folha de pagamento, então o saldo não pode ser conferido. Peça ao departamento pessoal."
+        ? "Os períodos aquisitivos ainda não foram importados, então o saldo não pode ser conferido. Peça ao departamento pessoal."
         : "A data de admissão não está cadastrada. Peça ao departamento pessoal.",
     };
   }
