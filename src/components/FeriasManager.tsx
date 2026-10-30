@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Ban, CalendarPlus, Check, Pencil, Plane, Send, Trash2, Undo2, Upload,
+  Ban, CalendarPlus, Check, FileSpreadsheet, Pencil, Plane, Send, Trash2, Undo2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailModal } from "@/components/ui/DetailModal";
@@ -18,6 +18,7 @@ import type { Person } from "@/components/PeoplePicker";
 import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
 import { FeriasImportarFolhaDialog } from "@/components/FeriasImportarFolhaDialog";
 import { FeriasCalendario } from "@/components/FeriasCalendario";
+import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDialog";
 import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
@@ -134,6 +135,7 @@ export function FeriasManager({
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
+  const [loteAberto, setLoteAberto] = useState(false);
   const [reenvio, setReenvio] = useState<FeriasRow | null>(null);
   const [reagendando, setReagendando] = useState<FeriasRow | null>(null);
   const [detalhe, setDetalhe] = useState<FeriasRow | null>(null);
@@ -234,6 +236,12 @@ export function FeriasManager({
           </button>
         )}
         {podeGerir && pessoasLancar.length > 0 && (
+          <button type="button" className="btn btn-ghost" onClick={() => setLoteAberto(true)}
+            title="Lançar as férias da equipe de uma vez, por planilha">
+            <FileSpreadsheet size={15} aria-hidden /> Importar programação
+          </button>
+        )}
+        {podeGerir && pessoasLancar.length > 0 && (
           <button type="button" className="btn btn-primary" onClick={() => setDialogo("lancar")}>
             <CalendarPlus size={15} aria-hidden /> Lançar férias
           </button>
@@ -264,6 +272,9 @@ export function FeriasManager({
 
       {importando && (
         <FeriasImportarFolhaDialog ultima={ultimaImportacao} onFechar={() => setImportando(false)} />
+      )}
+      {loteAberto && (
+        <FeriasLancarPlanilhaDialog hoje={hoje} onFechar={() => setLoteAberto(false)} />
       )}
       {dialogo && (
         <FeriasSolicitarDialog

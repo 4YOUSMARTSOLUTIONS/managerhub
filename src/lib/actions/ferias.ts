@@ -7,6 +7,7 @@ import type { Json } from "@/types/database";
 import { aquisitivoDaLinha, type AquisitivoInfo } from "@/lib/ferias";
 import type { PeriodoFolha } from "@/lib/ferias-folha";
 import type { AgendaItem } from "@/lib/ferias-agenda";
+import type { ModeloLotePessoa } from "@/lib/ferias-lote";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type IndiceDeAlvos } from "@/lib/import-pessoa";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
@@ -281,6 +282,96 @@ export async function getAgendaFerias(
     return { itens: (data ?? []) as unknown as AgendaItem[] };
   } catch (e) {
     return { error: (e as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lançamento em lote pelo gestor (planilha de programação da equipe)
+// ---------------------------------------------------------------------------
+
+/** O modelo: quem só o gestor lança (na alçada de quem baixa), com o saldo. */
+export async function modeloDeLancamentoEmLote(
+  input: { hoje: string },
+): Promise<{ pessoas: ModeloLotePessoa[]; error?: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { data, error } = await supabase.rpc("ferias_modelo_lancamento", { p_tenant: tenantId, p_hoje: input.hoje });
+    if (error) return { pessoas: [], error: error.message };
+    return { pessoas: (data ?? []) as unknown as ModeloLotePessoa[] };
+  } catch (e) {
+    return { pessoas: [], error: (e as Error).message };
+  }
+}
+
+export type PessoaLoteEnvio = {
+  linhas: number[];
+  unidade?: string;
+  codigo: string;
+  nome: string;
+  periodos: PeriodoFerias[];
+};
+
+export type ResultadoLote = {
+  linhas: number[];
+  codigo: string;
+  nome: string;
+  periodos: PeriodoFerias[];
+  ok: boolean;
+  motivo?: string;
+};
+
+/**
+ * Prévia (`somenteValidar`) ou envio da programação. As pessoas são achadas
+ * por unidade + matrícula, como nas outras importações; cada uma é lançada
+ * por `ferias_lancar_lote`, que roda o mesmo `ferias_lancar` do botão
+ * individual (alçada e regras inclusas). Na prévia o banco desfaz tudo.
+ */
+export async function lancarFeriasEmLote(input: {
+  pessoas: PessoaLoteEnvio[];
+  hoje: string;
+  somenteValidar: boolean;
+}): Promise<{ resultados: ResultadoLote[]; error?: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { idx, ativo } = await indiceDaEmpresa(supabase, tenantId);
+
+    const resultados: ResultadoLote[] = [];
+    const paraEnviar: { pos: number; userId: string; periodos: PeriodoFerias[] }[] = [];
+    const vistos = new Map<string, number[]>();
+    for (const p of input.pessoas ?? []) {
+      const base = { linhas: p.linhas, codigo: p.codigo, nome: p.nome, periodos: p.periodos };
+      const alvo = resolverAlvo(p.codigo, p.unidade ?? "", idx);
+      if (!alvo.alvoId) { resultados.push({ ...base, ok: false, motivo: MOTIVO_LABEL[alvo.motivo!] }); continue; }
+      if (!ativo.get(alvo.alvoId)) { resultados.push({ ...base, ok: false, motivo: "desligado no cadastro" }); continue; }
+      const antes = vistos.get(alvo.alvoId);
+      if (antes) {
+        resultados.push({ ...base, ok: false, motivo: `mesma pessoa das linhas ${antes.join(", ")} com outra unidade ou matrícula` });
+        continue;
+      }
+      vistos.set(alvo.alvoId, p.linhas);
+      paraEnviar.push({ pos: resultados.length, userId: alvo.alvoId, periodos: p.periodos });
+      resultados.push({ ...base, ok: false, motivo: "" });
+    }
+
+    if (paraEnviar.length > 0) {
+      const { data, error } = await supabase.rpc("ferias_lancar_lote", {
+        p_tenant: tenantId,
+        p_lancamentos: paraEnviar.map((x) => ({ user_id: x.userId, periodos: comoJson(x.periodos) })) as unknown as Json,
+        p_hoje: input.hoje,
+        p_somente_validar: input.somenteValidar,
+      });
+      if (error) return { resultados, error: error.message };
+      const volta = (data ?? []) as unknown as { user_id: string; ok: boolean; erro?: string }[];
+      paraEnviar.forEach((x, i) => {
+        const r = volta[i];
+        resultados[x.pos] = { ...resultados[x.pos], ok: !!r?.ok, motivo: r?.ok ? undefined : r?.erro ?? "não foi possível lançar" };
+      });
+    }
+
+    if (!input.somenteValidar && resultados.some((r) => r.ok)) revalidar();
+    return { resultados };
+  } catch (e) {
+    return { resultados: [], error: (e as Error).message };
   }
 }
 

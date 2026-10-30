@@ -2062,6 +2062,10 @@ export type Database = {
       ferias_situacao_importacao: { Args: { p_tenant: string }; Returns: Json }
       // { padrao: data, pessoas: { user_id: data } }: corte do registro direto (só histórico antes dele)
       ferias_cortes_historico: { Args: { p_tenant: string }; Returns: Json }
+      // lançamento em lote: cada pessoa passa por ferias_lancar; prévia desfaz tudo. [{ user_id, ok, erro }]
+      ferias_lancar_lote: { Args: { p_tenant: string; p_lancamentos: Json; p_hoje: string; p_somente_validar?: boolean }; Returns: Json }
+      // modelo do lote: quem só o gestor lança, na alçada de quem baixa, com o saldo (ModeloLotePessoa[])
+      ferias_modelo_lancamento: { Args: { p_tenant: string; p_hoje?: string }; Returns: Json }
       // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
       ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
       // Chat interno. Criar conversa mexe em canal + membros na mesma
