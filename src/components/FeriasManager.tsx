@@ -7,6 +7,8 @@ import {
   Ban, CalendarPlus, Check, FileSpreadsheet, Pencil, Plane, Send, Trash2, Undo2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
@@ -221,32 +223,68 @@ export function FeriasManager({
     ) });
   }
 
+  // As ações da tela num menu só, no espaço de ação do cabeçalho: quatro botões
+  // soltos disputavam a linha com o subtítulo e passavam por cima dele. Quem
+  // tem uma ação só (o colaborador, que só solicita) vê um botão direto.
+  const podeLancar = podeGerir && pessoasLancar.length > 0;
+  const acoes: { id: string; grupo: "ferias" | "dp"; rotulo: string; icone: React.ReactNode; titulo?: string; fazer: () => void }[] = [];
+  if (podeSolicitar) {
+    acoes.push({ id: "solicitar", grupo: "ferias", rotulo: "Solicitar férias", icone: <Plane size={14} />, fazer: () => setDialogo("solicitar") });
+  }
+  if (podeLancar) {
+    acoes.push(
+      { id: "lancar", grupo: "ferias", rotulo: "Lançar férias", icone: <CalendarPlus size={14} />,
+        titulo: "Programar as férias de alguém da equipe", fazer: () => setDialogo("lancar") },
+      { id: "lote", grupo: "ferias", rotulo: "Importar programação", icone: <FileSpreadsheet size={14} />,
+        titulo: "Lançar as férias da equipe de uma vez, por planilha", fazer: () => setLoteAberto(true) },
+    );
+  }
+  if (ehDp) {
+    acoes.push({ id: "periodos", grupo: "dp", rotulo: "Importar períodos aquisitivos", icone: <Upload size={14} />,
+      titulo: "Modelo do MANAGERHUB ou relatório da folha", fazer: () => setImportando(true) });
+  }
+  const tituloGrupo = (texto: string) => (
+    <div className="soft" style={{ fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", padding: "0 0.6rem" }}>
+      {texto}
+    </div>
+  );
+  const menuDeAcoes = acoes.length === 0 ? null : acoes.length === 1 ? (
+    <button type="button" className="btn btn-primary" onClick={acoes[0].fazer} title={acoes[0].titulo}>
+      {acoes[0].icone} {acoes[0].rotulo}
+    </button>
+  ) : (
+    <Dropdown rotulo="Ações" variante="primary" alinharDireita largura={270}>
+      {(fechar) => (
+        <>
+          {acoes.some((a) => a.grupo === "ferias") && tituloGrupo("Férias")}
+          {acoes.filter((a) => a.grupo === "ferias").map((a) => (
+            <ItemDeMenu key={a.id} titulo={a.titulo} onClick={() => { fechar(); a.fazer(); }}>
+              <span style={{ display: "inline-flex", marginRight: 8 }}>{a.icone}</span>{a.rotulo}
+            </ItemDeMenu>
+          ))}
+          {acoes.some((a) => a.grupo === "dp") && (
+            <div style={{ borderTop: "1px solid var(--mh-border)", paddingTop: "0.6rem" }}>
+              {tituloGrupo("Departamento pessoal")}
+            </div>
+          )}
+          {acoes.filter((a) => a.grupo === "dp").map((a) => (
+            <ItemDeMenu key={a.id} titulo={a.titulo} onClick={() => { fechar(); a.fazer(); }}>
+              <span style={{ display: "inline-flex", marginRight: 8 }}>{a.icone}</span>{a.rotulo}
+            </ItemDeMenu>
+          ))}
+        </>
+      )}
+    </Dropdown>
+  );
+
   return (
+    <>
+    <PageHeader
+      title="Férias"
+      subtitle="A previsão vira ausência de verdade só depois que o departamento pessoal efetiva"
+      action={menuDeAcoes}
+    />
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", flexWrap: "wrap", marginTop: "-3.2rem", marginBottom: "0.4rem" }}>
-        {ehDp && (
-          <button type="button" className="btn btn-ghost" onClick={() => setImportando(true)}
-            title="Importar os períodos aquisitivos (modelo do MANAGERHUB ou relatório da folha)">
-            <Upload size={15} aria-hidden /> Importar períodos
-          </button>
-        )}
-        {podeSolicitar && (
-          <button type="button" className="btn btn-ghost" onClick={() => setDialogo("solicitar")}>
-            <Plane size={15} aria-hidden /> Solicitar férias
-          </button>
-        )}
-        {podeGerir && pessoasLancar.length > 0 && (
-          <button type="button" className="btn btn-ghost" onClick={() => setLoteAberto(true)}
-            title="Lançar as férias da equipe de uma vez, por planilha">
-            <FileSpreadsheet size={15} aria-hidden /> Importar programação
-          </button>
-        )}
-        {podeGerir && pessoasLancar.length > 0 && (
-          <button type="button" className="btn btn-primary" onClick={() => setDialogo("lancar")}>
-            <CalendarPlus size={15} aria-hidden /> Lançar férias
-          </button>
-        )}
-      </div>
 
       {podeGerir && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
@@ -351,6 +389,7 @@ export function FeriasManager({
         />
       )}
     </div>
+    </>
   );
 }
 

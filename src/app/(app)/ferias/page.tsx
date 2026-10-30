@@ -2,7 +2,6 @@ import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { minhaEquipe } from "@/lib/team";
 import { moduleGate } from "@/lib/module-gate";
-import { PageHeader } from "@/components/ui/PageHeader";
 import {
   FeriasManager, type FeriasPainel, type FeriasRow, type UltimaImportacaoFolha,
 } from "@/components/FeriasManager";
@@ -148,10 +147,8 @@ export default async function FeriasPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Férias"
-        subtitle="A previsão vira ausência de verdade só depois que o departamento pessoal efetiva"
-      />
+      {/* o cabeçalho é desenhado pelo FeriasManager: o menu de ações dele
+          depende dos diálogos que moram lá */}
       <FeriasManager
         rows={rows}
         meuId={user.id}

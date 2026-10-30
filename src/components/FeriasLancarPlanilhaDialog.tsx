@@ -237,7 +237,7 @@ export function FeriasLancarPlanilhaDialog({ hoje, onFechar }: { hoje: string; o
             <>
               <button type="button" className="btn btn-ghost" onClick={onFechar}>Cancelar</button>
               <button type="button" className="btn btn-primary" disabled={prontos === 0 || lendo || enviando} onClick={enviar}>
-                {enviando ? "Lançando…" : `Lançar ${prontos} colaborador(es)`}
+                {enviando ? "Lançando…" : linhas ? `Lançar ${prontos} colaborador(es)` : "Lançar"}
               </button>
             </>
           )}
