@@ -17,6 +17,9 @@ import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
 import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
 import { FeriasImportarFolhaDialog } from "@/components/FeriasImportarFolhaDialog";
+import { FeriasCalendario } from "@/components/FeriasCalendario";
+import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
+import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
@@ -105,7 +108,7 @@ export type FeriasRow = {
  */
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, podeSolicitar, avisoSolicitar,
-  pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao,
+  pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -124,6 +127,10 @@ export function FeriasManager({
   /** a empresa importa os aquisitivos da folha */
   usaFolha: boolean;
   ultimaImportacao: UltimaImportacaoFolha | null;
+  /** cadastro de setores: a cor de cada um no calendário sai da ordem dele aqui */
+  setores: { id: string; name: string }[];
+  /** unidades do seletor do topo (null = todas) */
+  unidades: string[] | null;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
@@ -183,10 +190,32 @@ export function FeriasManager({
       <TabelaGeral rows={rows} onDetalhe={setDetalhe} />
     ) });
   }
-  if (podeGerir && painel) {
-    abas.push({ id: "visao", label: "Visão geral", content: (
-      <VisaoGeral painel={painel} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
-        onImportar={ehDp ? () => setImportando(true) : undefined} />
+  if (podeGerir) {
+    // As leituras de gestão moram juntas: visão geral, calendário do mês, quem
+    // está fora num período e a programação por pessoa. Cada subaba busca o
+    // próprio período quando é aberta (o Tabs só monta a aba visível).
+    const subabas: Tab[] = [];
+    if (painel) {
+      subabas.push({ id: "visao", label: "Visão geral", content: (
+        <VisaoGeral painel={painel} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
+          onImportar={ehDp ? () => setImportando(true) : undefined} />
+      ) });
+    }
+    subabas.push(
+      { id: "calendario", label: "Calendário", content: (
+        <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} />
+      ) },
+      { id: "acompanhamento", label: "Acompanhamento", content: (
+        <FeriasAcompanhamento setores={setores} unidades={unidades} hoje={hoje} />
+      ) },
+      { id: "programacao", label: "Programação", content: (
+        <FeriasProgramacao setores={setores} unidades={unidades} hoje={hoje} />
+      ) },
+    );
+    abas.push({ id: "painel", label: "Painel", content: (
+      <div style={{ paddingTop: "0.6rem" }}>
+        <Tabs variant="sub" tabs={subabas} />
+      </div>
     ) });
   }
 

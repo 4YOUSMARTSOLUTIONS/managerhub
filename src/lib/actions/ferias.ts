@@ -6,6 +6,7 @@ import type { ActionState } from "./types";
 import type { Json } from "@/types/database";
 import { aquisitivoDaLinha, type AquisitivoInfo } from "@/lib/ferias";
 import type { PeriodoFolha } from "@/lib/ferias-folha";
+import type { AgendaItem } from "@/lib/ferias-agenda";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type IndiceDeAlvos } from "@/lib/import-pessoa";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
@@ -253,6 +254,31 @@ export async function getAquisitivosDe(
     });
     if (error) return { error: error.message };
     return { aquisitivos: (data ?? []).map(aquisitivoDaLinha) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Férias num período: calendário, acompanhamento e programação
+// ---------------------------------------------------------------------------
+
+/**
+ * As férias (fato e processo em trâmite) que cruzam [inicio, fim]. O recorte
+ * de quem aparece é da RPC (DP e gerencial: empresa; gestor: cadeia); as
+ * unidades do seletor do topo só encolhem.
+ */
+export async function getAgendaFerias(
+  input: { inicio: string; fim: string; unidades: string[] | null },
+): Promise<{ itens: AgendaItem[]; error?: undefined } | { error: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { data, error } = await supabase.rpc("ferias_agenda", {
+      p_tenant: tenantId, p_inicio: input.inicio, p_fim: input.fim,
+      p_unit_ids: input.unidades && input.unidades.length ? input.unidades : null,
+    });
+    if (error) return { error: error.message };
+    return { itens: (data ?? []) as unknown as AgendaItem[] };
   } catch (e) {
     return { error: (e as Error).message };
   }

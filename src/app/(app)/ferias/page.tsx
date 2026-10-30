@@ -47,7 +47,7 @@ export default async function FeriasPage() {
   const [
     { data: linhas }, membros, equipe,
     { data: meuVinculo }, { data: bloqueados }, { data: feriados },
-    { data: aquisitivos }, { data: painel }, { data: importacao },
+    { data: aquisitivos }, { data: painel }, { data: importacao }, { data: setores },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
@@ -70,6 +70,8 @@ export default async function FeriasPage() {
     }),
     // a empresa importa os aquisitivos da folha? (e, para o DP, a última importação)
     supabase.rpc("ferias_situacao_importacao", { p_tenant: tenant.id }),
+    // a cor de cada setor no calendário vem da posição dele no cadastro
+    supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
   ]);
 
   const situacaoFolha = (importacao ?? null) as {
@@ -165,6 +167,8 @@ export default async function FeriasPage() {
         painel={(painel ?? null) as FeriasPainel | null}
         usaFolha={usaFolha}
         ultimaImportacao={situacaoFolha?.ultima ?? null}
+        setores={(setores ?? []).map((s) => ({ id: s.id, name: s.name }))}
+        unidades={unidades}
       />
     </div>
   );

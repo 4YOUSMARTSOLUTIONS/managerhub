@@ -2062,6 +2062,8 @@ export type Database = {
       ferias_situacao_importacao: { Args: { p_tenant: string }; Returns: Json }
       // { padrao: data, pessoas: { user_id: data } }: corte do registro direto (só histórico antes dele)
       ferias_cortes_historico: { Args: { p_tenant: string }; Returns: Json }
+      // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
+      ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
       // Chat interno. Criar conversa mexe em canal + membros na mesma
       // transação, com dedup de DM; a visão geral devolve só os canais de quem
       // chama (a de administração é outra função).
