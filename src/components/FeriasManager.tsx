@@ -24,6 +24,9 @@ import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDia
 import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
+import {
+  SituacaoBadge, SituacaoColaboradorModal, type SituacaoColaborador,
+} from "@/components/SituacaoColaborador";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
@@ -46,6 +49,8 @@ export type FeriasPainel = {
     gozarAte: string | null;
     /** a empresa importa da folha e a pessoa não veio no relatório */
     semFolha?: boolean;
+    /** afastamento/licença registrado pelo DP; nulo = ativo */
+    statusColaborador?: SituacaoColaborador | null;
   }[];
   usaFolha?: boolean;
   janelaInicio: string;
@@ -202,7 +207,7 @@ export function FeriasManager({
     if (painel) {
       subabas.push({ id: "visao", label: "Visão geral", content: (
         <VisaoGeral painel={painel} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
-          onImportar={ehDp ? () => setImportando(true) : undefined} />
+          onImportar={ehDp ? () => setImportando(true) : undefined} ehDp={ehDp} />
       ) });
     }
     subabas.push(
@@ -1043,13 +1048,15 @@ function EfetivarDialog({
 // ============================================================================
 
 function VisaoGeral({
-  painel, hoje, ultimaImportacao, onImportar,
+  painel, hoje, ultimaImportacao, onImportar, ehDp,
 }: {
   painel: FeriasPainel;
   hoje: string;
   /** só o DP recebe */
   ultimaImportacao: UltimaImportacaoFolha | null;
   onImportar?: () => void;
+  /** o DP corrige a situação do colaborador direto na linha */
+  ehDp: boolean;
 }) {
   const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer" || s.semFolha);
   const semFolhaQtd = painel.saldos.filter((s) => s.semFolha).length;
@@ -1118,6 +1125,7 @@ function VisaoGeral({
               O próximo período aquisitivo a programar de cada colaborador. Vencida = a
               concessão passou do prazo e agora é em dobro (art. 137).
               {painel.usaFolha && " Os períodos, os dias de direito e os já gozados vêm da importação de períodos aquisitivos."}
+              {" "}O status do colaborador mostra afastamentos e licenças registrados pelo departamento pessoal.
             </p>
             {ultimaImportacao && (
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
@@ -1155,6 +1163,7 @@ function VisaoGeral({
                   <th style={{ width: 80, textAlign: "right" }}>Saldo</th>
                   <th style={{ width: 120 }}>Gozar até</th>
                   <th style={{ width: 130 }}>Situação</th>
+                  <th style={{ width: 220 }}>Status do colaborador</th>
                 </tr>
               </thead>
               <tbody>
@@ -1178,6 +1187,15 @@ function VisaoGeral({
                         </Badge>
                       ) : (
                         <Badge variant="quiet" tone="green">Em dia</Badge>
+                      )}
+                    </td>
+                    <td>
+                      {/* explica a situação: "Vencida" de quem está afastado pelo
+                          INSS há anos não é atraso do gestor */}
+                      {ehDp ? (
+                        <SituacaoColaboradorModal userId={s.userId} nome={s.nome} atual={s.statusColaborador ?? null} />
+                      ) : (
+                        <SituacaoBadge situacao={s.statusColaborador} />
                       )}
                     </td>
                   </tr>

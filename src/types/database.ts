@@ -2068,6 +2068,24 @@ export type Database = {
       ferias_modelo_lancamento: { Args: { p_tenant: string; p_hoje?: string }; Returns: Json }
       // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
       ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
+      // Situação do colaborador (afastamento, licença). A tabela é fechada: o
+      // motivo pode ser dado de saúde. Grava só o DP; lê DP e Gerencial (empresa)
+      // e Gestor (cadeia). `p_situacao` nulo ou "ativo" apaga (voltou ao trabalho).
+      colaborador_situacao_definir: {
+        Args: { p_tenant: string; p_user: string; p_situacao: string | null; p_desde?: string | null; p_observacao?: string | null }
+        Returns: undefined
+      }
+      colaboradores_situacoes: {
+        Args: { p_tenant: string }
+        Returns: {
+          user_id: string
+          situacao: string
+          desde: string | null
+          observacao: string | null
+          atualizado_em: string
+          atualizado_por: string | null
+        }[]
+      }
       // Chat interno. Criar conversa mexe em canal + membros na mesma
       // transação, com dedup de DM; a visão geral devolve só os canais de quem
       // chama (a de administração é outra função).

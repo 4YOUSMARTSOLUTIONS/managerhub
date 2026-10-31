@@ -382,6 +382,17 @@ export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
   quitada: "green",
 };
 
+// ---------- Situação do colaborador ----------
+// Fora do trabalho normal, sem estar desligado. Sem registro = "Ativo".
+// A ordem aqui é a ordem do seletor.
+export const SITUACAO_COLABORADOR: Record<string, string> = {
+  afastado_inss: "Afastado pelo INSS",
+  acidente_trabalho: "Afastado por acidente de trabalho",
+  licenca_maternidade: "Licença-maternidade",
+  aposentadoria_invalidez: "Aposentadoria por invalidez",
+  outro: "Outro afastamento",
+};
+
 // ---------- Feedbacks ----------
 export const FEEDBACK_TYPE_LABEL: Record<Enums<"feedback_type">, string> = {
   reconhecimento: "Reconhecimento",

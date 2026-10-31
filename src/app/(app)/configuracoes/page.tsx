@@ -122,7 +122,7 @@ export default async function SettingsPage() {
     { data: segOcorrenciasData }, { data: segOcTipos }, { data: segOcLocais }, { data: segOcAreas },
     { data: blitzMeiosData }, { data: blitzPerguntasData }, { data: blitzPerguntaMeios },
     { data: blitzMotivosData }, { data: veiculosData },
-    { data: feriasBloqueadosData },
+    { data: feriasBloqueadosData }, { data: situacoesData },
   ] = await Promise.all([
     fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -242,6 +242,8 @@ export default async function SettingsPage() {
       .eq("tenant_id", tenant.id).order("placa"),
     // níveis de hierarquia que não solicitam as próprias férias
     supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id),
+    // afastamentos e licenças: a tabela é fechada (pode ser dado de saúde), só por RPC
+    supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -275,6 +277,7 @@ export default async function SettingsPage() {
   // desse recorte viraria "—" na tela sem nenhum erro aparecer.
   const profById = new Map((profilesData ?? []).map((p) => [p.id, p]));
   const pessoaisById = new Map((pessoaisData ?? []).map((d) => [d.id, d]));
+  const situacaoById = new Map((situacoesData ?? []).map((s) => [s.user_id, s]));
   const unitById = new Map((units ?? []).map((u) => [u.id, u]));
   const deptById = new Map((departments ?? []).map((d) => [d.id, d]));
   const subById = new Map((subdepartments ?? []).map((s) => [s.id, s]));
@@ -294,6 +297,7 @@ export default async function SettingsPage() {
   const employeesTodos: EmployeeRow[] = mems.map((m) => {
     const p = profById.get(m.user_id);
     const d = pessoaisById.get(m.user_id);
+    const sit = situacaoById.get(m.user_id);
     const uIds = unitsByMem.get(m.id) ?? [];
     return {
       userId: m.user_id,
@@ -324,6 +328,7 @@ export default async function SettingsPage() {
       managerCode: m.manager_id ? codeByUser.get(m.manager_id) ?? null : null,
       unitNames: uIds.map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
       active: m.is_active,
+      situacao: sit ? { situacao: sit.situacao, desde: sit.desde, observacao: sit.observacao } : null,
     };
   })
     // Ordenado pela MATRÍCULA, e como NÚMERO.

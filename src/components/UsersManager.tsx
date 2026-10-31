@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -17,6 +17,10 @@ import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
 import { EmployeeViewDialog } from "./EmployeeViewDialog";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { UserCog } from "lucide-react";
+import {
+  SituacaoColaboradorModal, detalheSituacao, rotuloSituacao, type SituacaoColaborador,
+} from "./SituacaoColaborador";
 
 export type EmployeeRow = EmployeeData & {
   departmentName: string | null;
@@ -30,6 +34,8 @@ export type EmployeeRow = EmployeeData & {
   unitNames: string[];
   active: boolean;
   dismissedAt: string | null;
+  /** afastamento ou licença registrado pelo DP; nulo = trabalhando normalmente */
+  situacao: SituacaoColaborador | null;
 };
 
 function roleLabel(role: string): string {
@@ -118,8 +124,13 @@ export function UsersManager({
   const [deptFilter, setDeptFilter] = useState("");
   const [posFilter, setPosFilter] = useState("");
   const [hierFilter, setHierFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "afastado">("all");
+  // A página vale para um conjunto de filtros: quando eles mudam, volta para a
+  // primeira sem precisar de efeito (a chave muda e a página guardada é ignorada).
+  const chaveDosFiltros = [query, deptFilter, posFilter, hierFilter, statusFilter].join("|");
+  const [pagina, setPagina] = useState({ chave: chaveDosFiltros, n: 1 });
+  const page = pagina.chave === chaveDosFiltros ? pagina.n : 1;
+  const setPage = (f: (p: number) => number) => setPagina({ chave: chaveDosFiltros, n: f(page) });
 
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -203,12 +214,11 @@ export function UsersManager({
       if (hierFilter && e.hierarchyLevelId !== hierFilter) return false;
       if (statusFilter === "active" && !e.active) return false;
       if (statusFilter === "inactive" && e.active) return false;
+      // afastado continua com vínculo ativo: entra em "Ativos" também
+      if (statusFilter === "afastado" && !(e.active && e.situacao)) return false;
       return true;
     });
   }, [employees, query, deptFilter, posFilter, hierFilter, statusFilter]);
-
-  // sempre que os filtros mudam, volta para a primeira página
-  useEffect(() => { setPage(1); }, [query, deptFilter, posFilter, hierFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageClamped = Math.min(page, totalPages);
@@ -264,9 +274,10 @@ export function UsersManager({
           <option value="">Toda a hierarquia</option>
           {hierarchies.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
         </select>
-        <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")} style={{ width: 160, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
+        <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive" | "afastado")} style={{ width: 160, padding: "0.4rem 0.7rem", fontSize: "0.85rem" }}>
           <option value="all">Todos os status</option>
           <option value="active">Ativos</option>
+          <option value="afastado">Afastados</option>
           <option value="inactive">Inativos</option>
         </select>
         {hasFilters && (
@@ -309,13 +320,33 @@ export function UsersManager({
                     {e.hierarchyName && <div className="soft" style={{ fontSize: "0.72rem" }}>{e.hierarchyName}</div>}
                   </td>
                   <td><Badge tone={roleTone(e.role)}>{roleLabel(e.role)}</Badge></td>
-                  <td><Badge tone={e.active ? "green" : "red"}>{e.active ? "Ativo" : "Inativo"}</Badge></td>
+                  <td>
+                    {!e.active ? (
+                      <Badge tone="red">Inativo</Badge>
+                    ) : e.situacao ? (
+                      <span title={detalheSituacao(e.situacao) || undefined}>
+                        <Badge tone="amber">{rotuloSituacao(e.situacao)}</Badge>
+                      </span>
+                    ) : (
+                      <Badge tone="green">Ativo</Badge>
+                    )}
+                  </td>
                   <td style={{ textAlign: "right" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                       <button className="icon-btn" type="button" title="Ver ficha completa" onClick={() => setViewing(e)}><Ico d={ICON.eye} /></button>
                       {canEdit && (
                         <>
                           <button className="icon-btn" title="Editar" onClick={() => openEdit(e)}><Ico d={ICON.edit} /></button>
+                          {e.active && (
+                            <SituacaoColaboradorModal
+                              userId={e.userId}
+                              nome={e.fullName}
+                              atual={e.situacao}
+                              trigger={<UserCog size={16} strokeWidth={1.8} aria-hidden />}
+                              triggerClassName="icon-btn"
+                              triggerTitle="Situação (afastamento ou licença)"
+                            />
+                          )}
                           {canAct && (
                             <button className="icon-btn" type="button" title={e.active ? "Inativar" : "Ativar"} onClick={() => toggleActive(e.userId, !e.active, e.fullName)}><Ico d={ICON.power} /></button>
                           )}

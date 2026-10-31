@@ -8,6 +8,7 @@ import { USER_TYPE } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 import { formatDate } from "@/lib/format";
 import { roleTone, type EmployeeRow } from "./UsersManager";
+import { rotuloSituacao } from "./SituacaoColaborador";
 
 const GENDER: Record<string, string> = {
   masculino: "Masculino", feminino: "Feminino", outro: "Outro", nao_informado: "Não informado",
@@ -57,7 +58,13 @@ export function EmployeeViewDialog({
           <div style={{ minWidth: 0 }}>
             <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>{employee.fullName ?? "—"}</h2>
             <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.4rem" }}>
-              <Badge tone={employee.active ? "green" : "red"}>{employee.active ? "Ativo" : "Inativo"}</Badge>
+              {!employee.active ? (
+                <Badge tone="red">Inativo</Badge>
+              ) : employee.situacao ? (
+                <Badge tone="amber">{rotuloSituacao(employee.situacao)}</Badge>
+              ) : (
+                <Badge tone="green">Ativo</Badge>
+              )}
               <Badge tone={roleTone(employee.role)}>
                 {employee.role === "owner" ? "Proprietário" : USER_TYPE[employee.role as keyof typeof USER_TYPE] ?? employee.role}
               </Badge>
@@ -92,6 +99,17 @@ export function EmployeeViewDialog({
               <Field label="Unidades">{employee.unitNames.length > 0 ? employee.unitNames.join(", ") : ""}</Field>
             </div>
           </div>
+
+          {employee.active && employee.situacao && (
+            <div>
+              <p style={sectionTitle}>Situação</p>
+              <div style={grid}>
+                <Field label="Situação">{rotuloSituacao(employee.situacao)}</Field>
+                <Field label="Desde">{employee.situacao.desde ? formatDate(employee.situacao.desde) : ""}</Field>
+                <Field label="Observação">{employee.situacao.observacao}</Field>
+              </div>
+            </div>
+          )}
 
           <div>
             <p style={sectionTitle}>Movimentações</p>
