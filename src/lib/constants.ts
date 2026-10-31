@@ -382,16 +382,39 @@ export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
   quitada: "green",
 };
 
-// ---------- Situação do colaborador ----------
-// Fora do trabalho normal, sem estar desligado. Sem registro = "Ativo".
-// A ordem aqui é a ordem do seletor.
+// ---------- Motivo do afastamento / situação do colaborador ----------
+/**
+ * Detalhe de um afastamento ou licença (`employee_absences.motivo`). Cada motivo
+ * pertence a UM tipo, e o banco confere (constraint `employee_absences_motivo`).
+ * A ordem aqui é a ordem do seletor.
+ */
+export const AFASTAMENTO_MOTIVO: Record<string, { label: string; kind: "afastamento" | "licenca" }> = {
+  afastado_inss: { label: "Afastado pelo INSS", kind: "afastamento" },
+  acidente_trabalho: { label: "Acidente de trabalho", kind: "afastamento" },
+  aposentadoria_invalidez: { label: "Aposentadoria por invalidez", kind: "afastamento" },
+  licenca_maternidade: { label: "Licença-maternidade", kind: "licenca" },
+};
+
+/**
+ * A situação do colaborador é CALCULADA: o afastamento ou a licença em vigor
+ * hoje. Vem como o motivo, ou como o tipo quando não há motivo.
+ */
 export const SITUACAO_COLABORADOR: Record<string, string> = {
   afastado_inss: "Afastado pelo INSS",
   acidente_trabalho: "Afastado por acidente de trabalho",
-  licenca_maternidade: "Licença-maternidade",
   aposentadoria_invalidez: "Aposentadoria por invalidez",
-  outro: "Outro afastamento",
+  licenca_maternidade: "Licença-maternidade",
+  afastamento: "Afastado",
+  licenca: "De licença",
 };
+
+/**
+ * "Sem data de retorno" (aposentadoria por invalidez, INSS sem alta prevista).
+ * Data distante e não NULL: a RV e as metas comparam `iso <= fim` como texto, e
+ * com NULL o dia de quem está afastado contaria como trabalhado. Só afastamento
+ * e licença aceitam (constraint `employee_absences_sem_retorno`).
+ */
+export const SEM_RETORNO = "9999-12-31";
 
 // ---------- Feedbacks ----------
 export const FEEDBACK_TYPE_LABEL: Record<Enums<"feedback_type">, string> = {

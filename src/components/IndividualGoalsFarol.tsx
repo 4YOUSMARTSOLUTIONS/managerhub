@@ -20,7 +20,7 @@ import {
   copyPreviousMonthEntries,
 } from "@/lib/actions/individual-goals";
 import { lockRvPeriod, reopenRvPeriod } from "@/lib/actions/rv-lock";
-import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK } from "@/lib/constants";
+import { GOAL_DIRECTION, FAROL_LABEL, FAROL_TONE, GOAL_ENTRY_STATUS, GOAL_ENTRY_STATUS_TONE, isMetaBinaria, BINARIA_OK, SEM_RETORNO } from "@/lib/constants";
 import { farolAttainment, attainmentCredit, exigeEvidencia, type FarolStatus } from "@/lib/goals-farol";
 import { fatorRv, type AusenciaLite, type FatorRv, type VinculoLite } from "@/lib/rv-proporcional";
 import { redutoresDoMes, kindsComRedutor, type RegraRedutor, type SancaoLite, type ResultadoRedutor } from "@/lib/rv-redutores";
@@ -766,7 +766,11 @@ export function IndividualGoalsFarol({
               const eu = d.ownerId === currentUserId;
               const quem = eu ? "Você" : d.nome;
               const periodos = ausenciasDoMes(d.ownerId, d.f.dias);
-              const datas = periodos.map((a) => `${formatDate(a.inicio)} a ${formatDate(a.fim)}`).join("; ");
+              const datas = periodos
+                .map((a) => (a.fim === SEM_RETORNO
+                  ? `desde ${formatDate(a.inicio)}, sem data de retorno`
+                  : `${formatDate(a.inicio)} a ${formatDate(a.fim)}`))
+                .join("; ");
               // corte por conduta: nomeia o motivo e a quantidade que caiu na
               // faixa. O detalhe do fato (qual punição, qual observação) NÃO sai
               // do servidor — aqui chega só o rótulo do motivo e o percentual.

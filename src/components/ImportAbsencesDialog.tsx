@@ -7,7 +7,10 @@ import { importAbsences, type AbsenceImportRow, type AbsenceImportResult, type L
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 // as MESMAS regras que o servidor aplica: se divergissem, a prévia mentiria
-import { normTexto as norm, parseDataPlanilha, parseTipo } from "@/lib/absences-import";
+import {
+  normTexto as norm, parseDataPlanilha, parseTipo, parseFimPlanilha, fimValido,
+} from "@/lib/absences-import";
+import { SEM_RETORNO } from "@/lib/constants";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO, type AlvoDeImportacao } from "@/lib/import-pessoa";
 
 const SITUACAO: Record<string, string> = { ativo: "Ativo", desligado: "Desligado", contrato_anterior: "Contrato anterior" };
@@ -22,7 +25,8 @@ const SITUACAO: Record<string, string> = { ativo: "Ativo", desligado: "Desligado
  * gravar; lá é a que vale.
  */
 
-const fmtBR = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
+const fmtBR = (iso: string) =>
+  iso === SEM_RETORNO ? "sem retorno" : iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "";
 
 export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImportacao[]; unidades: string[] }) {
   const [open, setOpen] = useState(false);
@@ -75,8 +79,11 @@ export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImporta
     const idx = indiceDeAlvos(alvos, unidades);
     return rows.map((r) => {
       const alvo = resolverAlvo(r.code ?? "", r.unit ?? "", idx);
-      const badDates = !r.start || !r.end || r.end < r.start;
-      const badKind = parseTipo(r.kind ?? "") === null;
+      const kind = parseTipo(r.kind ?? "");
+      // "Sem retorno" só vale para afastamento e licença (o servidor confere igual)
+      const fim = fimValido(r.end, kind);
+      const badDates = !r.start || !fim || fim < r.start;
+      const badKind = kind === null;
       const invalid = alvo.motivo === "sem_matricula" || badDates || badKind;
       return {
         row: r,
@@ -110,8 +117,9 @@ export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImporta
       ["ID", "Unidade", "Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"],
       [exemploId, exemploUn, exemplo, "Férias", "16/07/2026", "04/08/2026", "Sim", "1º período aquisitivo"],
       [exemploId, exemploUn, exemplo, "Atestado", "10/09/2026", "11/09/2026", "Não", ""],
+      [exemploId, exemploUn, exemplo, "Aposentadoria por invalidez", "01/10/2026", "Sem retorno", "Sim", ""],
     ]);
-    ws["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 30 }];
+    ws["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 34 }, { wch: 28 }, { wch: 12 }, { wch: 13 }, { wch: 13 }, { wch: 30 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
       ["ID", "Sim", "A matrícula do colaborador, como no cadastro (copie da aba Colaboradores). É ela que identifica a pessoa, junto com a Unidade. O nome NÃO identifica."],
@@ -119,15 +127,16 @@ export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImporta
         ? "Obrigatória: a empresa tem mais de uma unidade, e a mesma matrícula pode existir em unidades diferentes. Escreva o nome da unidade como cadastrado."
         : "A empresa tem uma única unidade; pode deixar em branco."],
       ["Colaborador", "Não", "Somente conferência visual. O sistema identifica por ID e Unidade, nunca pelo nome."],
-      ["Tipo", "Não", "Férias, Licença, Afastamento ou Atestado. Em branco vale Férias."],
+      ["Tipo", "Não", "Férias, Licença, Afastamento, Atestado ou Falta. Para afastamento e licença, pode escrever o motivo no lugar do tipo: Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez ou Licença-maternidade. Em branco vale Férias."],
       ["Início", "Sim", "Primeiro dia de ausência, no formato DD/MM/AAAA. Este dia conta como ausência."],
-      ["Fim", "Sim", "Último dia de ausência, no formato DD/MM/AAAA. Este dia também conta."],
+      ["Fim", "Sim", "Último dia de ausência, no formato DD/MM/AAAA. Este dia também conta. Afastamento ou licença sem data de retorno (aposentadoria por invalidez, INSS sem alta prevista): escreva Sem retorno. Em branco a linha é recusada, para um afastamento não ficar aberto por esquecimento."],
       ["Desconta RV", "Não", "Sim ou Não. Em branco vale o padrão do tipo: Férias, Licença e Afastamento descontam; Atestado não."],
       ["Observação", "Não", "Texto livre."],
       ["", "", ""],
       ["Como a RV é calculada", "", "O valor do mês fica proporcional aos dias trabalhados, em dias corridos. Julho tem 31 dias: quem sai de férias no dia 16 trabalhou 15 e recebe 15/31 do valor."],
       ["Reimportar a mesma planilha", "", "Não duplica. Período com as mesmas datas para a mesma pessoa é atualizado no lugar."],
       ["Períodos que se cruzam", "", "Uma pessoa não pode ter dois períodos sobrepostos. Linhas que cruzam com um período já lançado são recusadas e aparecem no resumo."],
+      ["Status do colaborador", "", "O afastamento ou a licença em vigor hoje aparece como status do colaborador em Colaboradores e em Férias. Para encerrar um afastamento sem retorno, edite o período e informe o último dia."],
     ]);
     wsI["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 100 }];
     // a aba de apoio lista TAMBÉM desligados e contratos anteriores, com a
@@ -180,7 +189,8 @@ export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImporta
           unit: get(r, unitIdx),
           kind: get(r, kindIdx),
           start: parseDataPlanilha(startIdx >= 0 ? r[startIdx] : ""),
-          end: parseDataPlanilha(endIdx >= 0 ? r[endIdx] : ""),
+          // data, "Sem retorno" (vira SEM_RETORNO) ou vazio
+          end: parseFimPlanilha(endIdx >= 0 ? r[endIdx] : ""),
           discounts: get(r, discIdx),
           note: get(r, noteIdx),
         });

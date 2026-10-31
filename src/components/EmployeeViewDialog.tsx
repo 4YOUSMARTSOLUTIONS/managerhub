@@ -106,6 +106,7 @@ export function EmployeeViewDialog({
               <div style={grid}>
                 <Field label="Situação">{rotuloSituacao(employee.situacao)}</Field>
                 <Field label="Desde">{employee.situacao.desde ? formatDate(employee.situacao.desde) : ""}</Field>
+                <Field label="Retorno">{employee.situacao.retorno ? formatDate(employee.situacao.retorno) : "Sem data de retorno"}</Field>
                 <Field label="Observação">{employee.situacao.observacao}</Field>
               </div>
             </div>

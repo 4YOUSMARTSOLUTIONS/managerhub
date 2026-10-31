@@ -171,37 +171,3 @@ export async function updateCompany(
     return { error: (e as Error).message };
   }
 }
-
-/**
- * Situação do colaborador (afastado pelo INSS, licença-maternidade...). Quem
- * grava é o DP; a guarda de verdade está em `colaborador_situacao_definir`, que
- * roda com o papel de quem chama. "ativo" apaga o registro (voltou ao trabalho).
- */
-export async function definirSituacaoColaborador(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  try {
-    const { supabase, tenantId } = await dpActionContext();
-    const userId = String(formData.get("user_id") ?? "");
-    if (!userId) return { error: "Colaborador não informado." };
-    const situacao = String(formData.get("situacao") ?? "ativo");
-    const desde = String(formData.get("desde") ?? "").trim();
-    const observacao = String(formData.get("observacao") ?? "").trim();
-    const ativo = situacao === "ativo";
-
-    const { error } = await supabase.rpc("colaborador_situacao_definir", {
-      p_tenant: tenantId,
-      p_user: userId,
-      p_situacao: situacao,
-      p_desde: ativo || !desde ? null : desde,
-      p_observacao: ativo || !observacao ? null : observacao,
-    });
-    if (error) return { error: error.message };
-    revalidatePath("/configuracoes");
-    revalidatePath("/ferias");
-    return { ok: true };
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-}

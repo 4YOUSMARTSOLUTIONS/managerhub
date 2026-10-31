@@ -11,7 +11,7 @@
  */
 
 import type { Enums } from "@/types/database";
-import { ABSENCE_DESCONTA_PADRAO } from "@/lib/constants";
+import { ABSENCE_DESCONTA_PADRAO, AFASTAMENTO_MOTIVO, SEM_RETORNO } from "@/lib/constants";
 
 export type AbsenceKind = Enums<"absence_kind">;
 
@@ -64,8 +64,49 @@ export function parseTipo(v: string): AbsenceKind | null {
   if (s.includes("afasta")) return "afastamento";
   if (s.includes("atestad")) return "atestado";
   if (s.includes("falta")) return "falta";
+  // o motivo escrito no lugar do tipo ("Aposentadoria por invalidez") também vale
+  if (s.includes("matern")) return "licenca";
+  if (["aposentad", "invalidez", "inss", "auxilio", "acidente"].some((k) => s.includes(k))) return "afastamento";
   return null;
 }
+
+/**
+ * O motivo do afastamento escrito na coluna Tipo, ou `null` (só o tipo). Só
+ * devolve motivo que combina com o tipo: o banco recusaria a combinação errada.
+ */
+export function parseMotivo(v: string, kind: AbsenceKind): string | null {
+  const s = normTexto(v ?? "");
+  let m: string | null = null;
+  if (s.includes("invalidez") || s.includes("aposentad")) m = "aposentadoria_invalidez";
+  else if (s.includes("acidente")) m = "acidente_trabalho";
+  else if (s.includes("inss") || s.includes("auxilio") || s.includes("doenca")) m = "afastado_inss";
+  else if (s.includes("matern")) m = "licenca_maternidade";
+  return m && AFASTAMENTO_MOTIVO[m]?.kind === kind ? m : null;
+}
+
+/** só afastamento e licença podem ficar sem data de retorno */
+export const aceitaSemRetorno = (kind: AbsenceKind | null) => kind === "afastamento" || kind === "licenca";
+
+const SEM_RETORNO_TEXTO = ["sem retorno", "sem data", "indeterminad", "em aberto"];
+
+/**
+ * A coluna Fim: uma data, `SEM_RETORNO` quando escreveram "Sem retorno" (ou
+ * "indeterminado"), ou "" quando está vazia ou ilegível.
+ *
+ * Em branco NÃO vira "sem retorno" de propósito: um afastamento aberto sem
+ * querer zeraria a remuneração variável de todos os meses seguintes, e uma
+ * célula esquecida não pode ter esse efeito calado.
+ */
+export function parseFimPlanilha(v: unknown): string {
+  const data = parseDataPlanilha(v);
+  if (data) return data;
+  const s = normTexto(typeof v === "string" ? v : "");
+  return SEM_RETORNO_TEXTO.some((k) => s.includes(k)) ? SEM_RETORNO : "";
+}
+
+/** "Sem retorno" com um tipo que não aceita vira inválido (""). */
+export const fimValido = (fim: string, kind: AbsenceKind | null) =>
+  fim === SEM_RETORNO && !aceitaSemRetorno(kind) ? "" : fim;
 
 /**
  * Reexportado de `constants.ts`, e não redefinido aqui: o padrão que o

@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
-import { parseDataPlanilha, parseTipo, parseDesconta, periodosCruzam } from "@/lib/absences-import";
+import {
+  parseDataPlanilha, parseTipo, parseMotivo, parseDesconta, periodosCruzam, aceitaSemRetorno, fimValido,
+} from "@/lib/absences-import";
+import { AFASTAMENTO_MOTIVO, SEM_RETORNO } from "@/lib/constants";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, ORIGEM_AVISO, type Origem } from "@/lib/import-pessoa";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
@@ -32,9 +35,12 @@ export type AbsenceInput = {
   user_id: string;
   kind: Enums<"absence_kind">;
   start_date: string;
+  /** `SEM_RETORNO` = sem data de retorno (só afastamento e licença) */
   end_date: string;
   discounts_rv: boolean;
   note?: string | null;
+  /** detalhe do afastamento/licença (AFASTAMENTO_MOTIVO); precisa combinar com o tipo */
+  motivo?: string | null;
 };
 
 /** Traduz o erro do banco em algo que a pessoa entenda na tela. */
@@ -43,6 +49,12 @@ function mensagem(e: { code?: string; message?: string }): string {
   const msg = e.message ?? "";
   if (cod === "23P01" || msg.includes("employee_absences_sem_sobreposicao")) {
     return "Já existe um período lançado para este colaborador que se sobrepõe a este.";
+  }
+  if (msg.includes("employee_absences_motivo")) {
+    return "Esse motivo não combina com o tipo escolhido.";
+  }
+  if (msg.includes("employee_absences_sem_retorno")) {
+    return "Só afastamento e licença podem ficar sem data de retorno.";
   }
   if (cod === "23514" || msg.includes("employee_absences_periodo")) {
     return "A data de fim não pode ser anterior à de início.";
@@ -60,6 +72,13 @@ export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
     if (!input.user_id) return { error: "Escolha o colaborador." };
     if (!DATA.test(start_date) || !DATA.test(end_date)) return { error: "Informe as datas de início e de fim." };
     if (end_date < start_date) return { error: "A data de fim não pode ser anterior à de início." };
+    if (end_date === SEM_RETORNO && !aceitaSemRetorno(input.kind)) {
+      return { error: "Só afastamento e licença podem ficar sem data de retorno." };
+    }
+    const motivo = (input.motivo ?? "").trim() || null;
+    if (motivo && AFASTAMENTO_MOTIVO[motivo]?.kind !== input.kind) {
+      return { error: "Esse motivo não combina com o tipo escolhido." };
+    }
 
     // A RLS confere o tenant da LINHA, e o tenant vem daqui, do servidor. O que
     // ela não confere é se a PESSOA é desta empresa: sem isto daria para gravar
@@ -80,6 +99,7 @@ export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
       end_date,
       discounts_rv: !!input.discounts_rv,
       note: (input.note ?? "").trim() || null,
+      motivo,
       created_by: userId,
     };
 
@@ -105,8 +125,10 @@ export type AbsenceImportRow = {
   code?: string;
   /** unidade da linha; obrigatória em empresa com mais de uma unidade */
   unit?: string;
+  /** tipo OU motivo ("Aposentadoria por invalidez" vira afastamento com motivo) */
   kind: string;
   start: string;
+  /** data ISO, `SEM_RETORNO` ou "" (vazio/ilegível) */
   end: string;
   /** "sim" | "nao" | "" (vazio = padrão do tipo) */
   discounts: string;
@@ -237,11 +259,17 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
         });
       };
       const inicio = parseDataPlanilha(linha.start ?? "");
-      const fim = parseDataPlanilha(linha.end ?? "");
       const kind = parseTipo(linha.kind ?? "");
+      const fimBruto = parseDataPlanilha(linha.end ?? "");
+      const fim = fimValido(fimBruto, kind);
       if (!inicio || !fim || fim < inicio || !kind) {
         r.invalid += 1;
-        recusar(!kind ? "Tipo não reconhecido" : !inicio || !fim ? "Data de início ou fim ilegível" : "Fim anterior ao início");
+        recusar(
+          !kind ? "Tipo não reconhecido"
+            : fimBruto === SEM_RETORNO && !fim ? "Sem retorno só vale para afastamento e licença"
+              : !inicio || !fim ? "Data de início ou fim ilegível"
+                : "Fim anterior ao início",
+        );
         continue;
       }
 
@@ -266,6 +294,7 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
         end_date: fim,
         discounts_rv: parseDesconta(linha.discounts ?? "", kind),
         note: (linha.note ?? "").trim() || null,
+        motivo: parseMotivo(linha.kind ?? "", kind),
         created_by: userId,
       };
 

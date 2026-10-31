@@ -24,9 +24,7 @@ import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDia
 import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
-import {
-  SituacaoBadge, SituacaoColaboradorModal, type SituacaoColaborador,
-} from "@/components/SituacaoColaborador";
+import { SituacaoBadge, type SituacaoColaborador } from "@/components/SituacaoColaborador";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
@@ -49,7 +47,7 @@ export type FeriasPainel = {
     gozarAte: string | null;
     /** a empresa importa da folha e a pessoa não veio no relatório */
     semFolha?: boolean;
-    /** afastamento/licença registrado pelo DP; nulo = ativo */
+    /** afastamento/licença em vigor na data; nulo = ativo */
     statusColaborador?: SituacaoColaborador | null;
   }[];
   usaFolha?: boolean;
@@ -207,7 +205,7 @@ export function FeriasManager({
     if (painel) {
       subabas.push({ id: "visao", label: "Visão geral", content: (
         <VisaoGeral painel={painel} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
-          onImportar={ehDp ? () => setImportando(true) : undefined} ehDp={ehDp} />
+          onImportar={ehDp ? () => setImportando(true) : undefined} />
       ) });
     }
     subabas.push(
@@ -1048,15 +1046,13 @@ function EfetivarDialog({
 // ============================================================================
 
 function VisaoGeral({
-  painel, hoje, ultimaImportacao, onImportar, ehDp,
+  painel, hoje, ultimaImportacao, onImportar,
 }: {
   painel: FeriasPainel;
   hoje: string;
   /** só o DP recebe */
   ultimaImportacao: UltimaImportacaoFolha | null;
   onImportar?: () => void;
-  /** o DP corrige a situação do colaborador direto na linha */
-  ehDp: boolean;
 }) {
   const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer" || s.semFolha);
   const semFolhaQtd = painel.saldos.filter((s) => s.semFolha).length;
@@ -1125,7 +1121,7 @@ function VisaoGeral({
               O próximo período aquisitivo a programar de cada colaborador. Vencida = a
               concessão passou do prazo e agora é em dobro (art. 137).
               {painel.usaFolha && " Os períodos, os dias de direito e os já gozados vêm da importação de períodos aquisitivos."}
-              {" "}O status do colaborador mostra afastamentos e licenças registrados pelo departamento pessoal.
+              {" "}O status do colaborador vem dos afastamentos e licenças em vigor, lançados em Configurações.
             </p>
             {ultimaImportacao && (
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
@@ -1190,13 +1186,9 @@ function VisaoGeral({
                       )}
                     </td>
                     <td>
-                      {/* explica a situação: "Vencida" de quem está afastado pelo
-                          INSS há anos não é atraso do gestor */}
-                      {ehDp ? (
-                        <SituacaoColaboradorModal userId={s.userId} nome={s.nome} atual={s.statusColaborador ?? null} />
-                      ) : (
-                        <SituacaoBadge situacao={s.statusColaborador} />
-                      )}
+                      {/* explica a situação: "Vencida" de quem está aposentado por
+                          invalidez há anos não é atraso do gestor */}
+                      <SituacaoBadge situacao={s.statusColaborador} />
                     </td>
                   </tr>
                 ))}

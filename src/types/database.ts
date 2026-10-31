@@ -738,9 +738,11 @@ export type Database = {
       employee_absences: {
         // `waived` (abonada) entra no histórico e no indicador, mas NÃO pesa na
         // remuneração variável: quem lê para calcular precisa filtrar.
-        Row: { id: string; tenant_id: string; user_id: string; kind: Database["public"]["Enums"]["absence_kind"]; start_date: string; end_date: string; discounts_rv: boolean; waived: boolean; note: string | null; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; user_id: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date: string; end_date: string; discounts_rv?: boolean; waived?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; user_id?: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date?: string; end_date?: string; discounts_rv?: boolean; waived?: boolean; note?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        // `end_date` = 9999-12-31 (SEM_RETORNO) é afastamento/licença sem data de
+        // retorno; `motivo` detalha afastamento/licença (AFASTAMENTO_MOTIVO).
+        Row: { id: string; tenant_id: string; user_id: string; kind: Database["public"]["Enums"]["absence_kind"]; start_date: string; end_date: string; discounts_rv: boolean; waived: boolean; note: string | null; motivo: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date: string; end_date: string; discounts_rv?: boolean; waived?: boolean; note?: string | null; motivo?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; user_id?: string; kind?: Database["public"]["Enums"]["absence_kind"]; start_date?: string; end_date?: string; discounts_rv?: boolean; waived?: boolean; note?: string | null; motivo?: string | null; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       // Catálogo de tipos de absenteísmo. `kind` é a AMARRA com a remuneração
@@ -2068,22 +2070,18 @@ export type Database = {
       ferias_modelo_lancamento: { Args: { p_tenant: string; p_hoje?: string }; Returns: Json }
       // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
       ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
-      // Situação do colaborador (afastamento, licença). A tabela é fechada: o
-      // motivo pode ser dado de saúde. Grava só o DP; lê DP e Gerencial (empresa)
-      // e Gestor (cadeia). `p_situacao` nulo ou "ativo" apaga (voltou ao trabalho).
-      colaborador_situacao_definir: {
-        Args: { p_tenant: string; p_user: string; p_situacao: string | null; p_desde?: string | null; p_observacao?: string | null }
-        Returns: undefined
-      }
+      // Situação do colaborador, CALCULADA: o afastamento ou a licença em vigor
+      // hoje (fuso do Brasil). `situacao` = motivo, ou o tipo sem motivo;
+      // `retorno` nulo = sem data de retorno. DP e Gerencial veem a empresa,
+      // Gestor a própria cadeia, o resto nada.
       colaboradores_situacoes: {
         Args: { p_tenant: string }
         Returns: {
           user_id: string
           situacao: string
-          desde: string | null
+          desde: string
+          retorno: string | null
           observacao: string | null
-          atualizado_em: string
-          atualizado_por: string | null
         }[]
       }
       // Chat interno. Criar conversa mexe em canal + membros na mesma

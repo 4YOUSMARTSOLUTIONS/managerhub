@@ -10,9 +10,16 @@ import { ImportAbsencesDialog } from "@/components/ImportAbsencesDialog";
 import type { AlvoDeImportacao } from "@/lib/import-pessoa";
 import { confirmDialog } from "@/components/ui/confirm";
 import { upsertAbsence, deleteAbsence } from "@/lib/actions/absences";
-import { ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE, ABSENCE_DESCONTA_PADRAO } from "@/lib/constants";
+import {
+  ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE, ABSENCE_DESCONTA_PADRAO, AFASTAMENTO_MOTIVO, SEM_RETORNO,
+} from "@/lib/constants";
 import { formatDate, normalizar } from "@/lib/format";
 import { contarDias } from "@/lib/rv-proporcional";
+import { aceitaSemRetorno } from "@/lib/absences-import";
+
+/** o rótulo da linha: o motivo quando há ("Aposentadoria por invalidez"), senão o tipo */
+const rotuloDoTipo = (kind: Enums<"absence_kind">, motivo?: string | null) =>
+  (motivo && AFASTAMENTO_MOTIVO[motivo]?.label) || ABSENCE_KIND_LABEL[kind];
 import type { Enums } from "@/types/database";
 
 /**
@@ -33,9 +40,12 @@ export type AbsenceRow = {
   userId: string;
   kind: Enums<"absence_kind">;
   startDate: string;
+  /** `SEM_RETORNO` = sem data de retorno */
   endDate: string;
   discountsRv: boolean;
   note: string | null;
+  /** detalhe do afastamento/licença (AFASTAMENTO_MOTIVO) */
+  motivo?: string | null;
   /**
    * Veio de um lançamento aprovado em Absenteísmos?
    *
@@ -58,6 +68,8 @@ type Rascunho = {
   endDate: string;
   discountsRv: boolean;
   note: string;
+  /** "" = sem motivo específico */
+  motivo: string;
 };
 
 const novo = (kind: Enums<"absence_kind">): Rascunho => ({
@@ -67,6 +79,7 @@ const novo = (kind: Enums<"absence_kind">): Rascunho => ({
   endDate: hoje(),
   discountsRv: ABSENCE_DESCONTA_PADRAO[kind],
   note: "",
+  motivo: "",
 });
 
 export function AbsencesManager({
@@ -103,7 +116,10 @@ export function AbsencesManager({
   // anos com lançamento: um período de dezembro a janeiro aparece nos dois
   const anos = useMemo(() => {
     const s = new Set<string>();
-    for (const a of absences) { s.add(a.startDate.slice(0, 4)); s.add(a.endDate.slice(0, 4)); }
+    for (const a of absences) {
+      s.add(a.startDate.slice(0, 4));
+      if (a.endDate !== SEM_RETORNO) s.add(a.endDate.slice(0, 4));
+    }
     return [...s].sort((x, y) => y.localeCompare(x));
   }, [absences]);
 
@@ -111,20 +127,33 @@ export function AbsencesManager({
   const lista = useMemo(() => {
     return absences
       .filter((a) => !termo || normalizar(nomePorId.get(a.userId) ?? "").includes(termo))
-      .filter((a) => !ano || a.startDate.slice(0, 4) === ano || a.endDate.slice(0, 4) === ano)
+      // o ano vale se cai DENTRO do período: um afastamento sem retorno aberto
+      // em 2003 aparece em todos os anos desde então
+      .filter((a) => !ano || (a.startDate.slice(0, 4) <= ano && ano <= a.endDate.slice(0, 4)))
       .sort((a, b) => b.startDate.localeCompare(a.startDate) || (nomePorId.get(a.userId) ?? "").localeCompare(nomePorId.get(b.userId) ?? "", "pt-BR"));
   }, [absences, termo, ano, nomePorId]);
 
   const abrirNovo = () => { setErro(""); setRascunho(novo(kinds[0] ?? "ferias")); };
   const abrirEdicao = (a: AbsenceRow) => {
     setErro("");
-    setRascunho({ id: a.id, userId: a.userId, kind: a.kind, startDate: a.startDate, endDate: a.endDate, discountsRv: a.discountsRv, note: a.note ?? "" });
+    setRascunho({ id: a.id, userId: a.userId, kind: a.kind, startDate: a.startDate, endDate: a.endDate, discountsRv: a.discountsRv, note: a.note ?? "", motivo: a.motivo ?? "" });
   };
 
   // trocar o tipo reposiciona a marcação no padrão daquele tipo, e ela continua
-  // editável: quem quiser um atestado que desconte só desmarca de volta
+  // editável: quem quiser um atestado que desconte só desmarca de volta. Motivo
+  // e "sem retorno" que não servem ao tipo novo caem.
   const trocarTipo = (kind: Enums<"absence_kind">) =>
-    setRascunho((r) => (r ? { ...r, kind, discountsRv: ABSENCE_DESCONTA_PADRAO[kind] } : r));
+    setRascunho((r) => (r ? {
+      ...r,
+      kind,
+      discountsRv: ABSENCE_DESCONTA_PADRAO[kind],
+      motivo: AFASTAMENTO_MOTIVO[r.motivo]?.kind === kind ? r.motivo : "",
+      endDate: r.endDate === SEM_RETORNO && !aceitaSemRetorno(kind) ? r.startDate : r.endDate,
+    } : r));
+  const semRetorno = rascunho?.endDate === SEM_RETORNO;
+  const motivosDoTipo = rascunho
+    ? Object.entries(AFASTAMENTO_MOTIVO).filter(([, m]) => m.kind === rascunho.kind)
+    : [];
 
   const salvar = () => {
     if (!rascunho) return;
@@ -141,6 +170,7 @@ export function AbsencesManager({
         end_date: rascunho.endDate,
         discounts_rv: rascunho.discountsRv,
         note: rascunho.note,
+        motivo: rascunho.motivo || null,
       });
       if (res.error) { setErro(res.error); return; }
       setRascunho(null);
@@ -153,13 +183,13 @@ export function AbsencesManager({
     const ok = await confirmDialog({
       tone: "danger",
       confirmLabel: "Excluir",
-      message: `Excluir o período de ${ABSENCE_KIND_LABEL[a.kind].toLowerCase()} de ${quem}? A remuneração variável dos meses afetados volta ao valor cheio.`,
+      message: `Excluir o período de ${rotuloDoTipo(a.kind, a.motivo).toLowerCase()} de ${quem}? A remuneração variável dos meses afetados volta ao valor cheio.`,
     });
     if (!ok) return;
     iniciar(async () => { await deleteAbsence(a.id); router.refresh(); });
   };
 
-  const dias = rascunho ? contarDias(rascunho.startDate, rascunho.endDate) : 0;
+  const dias = rascunho && !semRetorno ? contarDias(rascunho.startDate, rascunho.endDate) : 0;
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -192,9 +222,10 @@ export function AbsencesManager({
             headers={["Colaborador", "Tipo", "Início", "Fim", "Desconta RV", "Observação"]}
             rows={lista.map((a) => [
               nomePorId.get(a.userId) ?? "",
-              ABSENCE_KIND_LABEL[a.kind],
+              // motivo e "Sem retorno" saem do jeito que a importação lê de volta
+              rotuloDoTipo(a.kind, a.motivo),
               formatDate(a.startDate),
-              formatDate(a.endDate),
+              a.endDate === SEM_RETORNO ? "Sem retorno" : formatDate(a.endDate),
               a.discountsRv ? "Sim" : "Não",
               a.note ?? "",
             ])}
@@ -226,13 +257,35 @@ export function AbsencesManager({
                 {kinds.map((t) => <option key={t} value={t}>{ABSENCE_KIND_LABEL[t]}</option>)}
               </select>
             </div>
+            {motivosDoTipo.length > 0 && (
+              <div>
+                <label className="label">Motivo</label>
+                <select className="select" value={rascunho.motivo} onChange={(e) => setRascunho((r) => (r ? { ...r, motivo: e.target.value } : r))}>
+                  <option value="">Sem motivo específico</option>
+                  {motivosDoTipo.map(([valor, m]) => <option key={valor} value={valor}>{m.label}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label className="label">Início</label>
               <input type="date" className="input" value={rascunho.startDate} onChange={(e) => setRascunho((r) => (r ? { ...r, startDate: e.target.value } : r))} />
             </div>
             <div>
               <label className="label">Fim</label>
-              <input type="date" className="input" value={rascunho.endDate} onChange={(e) => setRascunho((r) => (r ? { ...r, endDate: e.target.value } : r))} />
+              {semRetorno ? (
+                <input className="input" value="Sem data de retorno" disabled />
+              ) : (
+                <input type="date" className="input" value={rascunho.endDate} onChange={(e) => setRascunho((r) => (r ? { ...r, endDate: e.target.value } : r))} />
+              )}
+              {aceitaSemRetorno(rascunho.kind) && (
+                <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.35rem", fontSize: "0.8rem" }}>
+                  <input
+                    type="checkbox" checked={semRetorno}
+                    onChange={(e) => setRascunho((r) => (r ? { ...r, endDate: e.target.checked ? SEM_RETORNO : r.startDate } : r))}
+                  />
+                  Sem data de retorno
+                </label>
+              )}
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <label className="label">Observação (opcional)</label>
@@ -249,6 +302,11 @@ export function AbsencesManager({
             <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={salvar}>{pendente ? "Salvando…" : "Salvar"}</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRascunho(null)}>Cancelar</button>
             {dias > 0 && <span className="soft" style={{ fontSize: "0.78rem" }}>{dias} dia(s) no período</span>}
+            {semRetorno && (
+              <span className="soft" style={{ fontSize: "0.78rem" }}>
+                Fica em vigor até alguém lançar a data de retorno{rascunho.discountsRv ? ", e desconta a remuneração variável de todos os meses até lá" : ""}.
+              </span>
+            )}
             {erro && <span style={{ color: "var(--mh-danger)", fontSize: "0.8rem" }}>{erro}</span>}
           </div>
         </div>
@@ -279,9 +337,15 @@ export function AbsencesManager({
                 {nomePorId.get(a.userId) ?? "—"}
                 {a.note && <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 400 }}>{a.note}</div>}
               </td>
-              <td><Badge tone={ABSENCE_KIND_TONE[a.kind]}>{ABSENCE_KIND_LABEL[a.kind]}</Badge></td>
-              <td style={{ whiteSpace: "nowrap" }}>{formatDate(a.startDate)} a {formatDate(a.endDate)}</td>
-              <td style={{ textAlign: "right" }}>{contarDias(a.startDate, a.endDate)}</td>
+              <td><Badge tone={ABSENCE_KIND_TONE[a.kind]}>{rotuloDoTipo(a.kind, a.motivo)}</Badge></td>
+              <td style={{ whiteSpace: "nowrap" }}>
+                {a.endDate === SEM_RETORNO
+                  ? `Desde ${formatDate(a.startDate)}, sem data de retorno`
+                  : `${formatDate(a.startDate)} a ${formatDate(a.endDate)}`}
+              </td>
+              <td style={{ textAlign: "right" }}>
+                {a.endDate === SEM_RETORNO ? <span className="soft">em aberto</span> : contarDias(a.startDate, a.endDate)}
+              </td>
               <td>
                 {a.discountsRv
                   ? <span style={{ fontSize: "0.8rem" }}>Proporcional aos dias trabalhados</span>

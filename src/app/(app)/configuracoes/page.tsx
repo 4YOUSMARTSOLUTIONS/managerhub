@@ -163,7 +163,7 @@ export default async function SettingsPage() {
     // férias e afastamentos: a RLS é owner/admin, e esta tela já é
     supabase
       .from("employee_absences")
-      .select("id, user_id, kind, start_date, end_date, discounts_rv, note")
+      .select("id, user_id, kind, start_date, end_date, discounts_rv, note, motivo")
       .eq("tenant_id", tenant.id)
       .order("start_date", { ascending: false }),
     // Redutores da RV. Catálogo e regras são configuração (qualquer membro lê);
@@ -242,7 +242,8 @@ export default async function SettingsPage() {
       .eq("tenant_id", tenant.id).order("placa"),
     // níveis de hierarquia que não solicitam as próprias férias
     supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id),
-    // afastamentos e licenças: a tabela é fechada (pode ser dado de saúde), só por RPC
+    // situação do colaborador: o afastamento ou a licença em vigor hoje (fuso do
+    // Brasil, decidido dentro da RPC)
     supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }),
   ]);
 
@@ -328,7 +329,7 @@ export default async function SettingsPage() {
       managerCode: m.manager_id ? codeByUser.get(m.manager_id) ?? null : null,
       unitNames: uIds.map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
       active: m.is_active,
-      situacao: sit ? { situacao: sit.situacao, desde: sit.desde, observacao: sit.observacao } : null,
+      situacao: sit ? { situacao: sit.situacao, desde: sit.desde, retorno: sit.retorno, observacao: sit.observacao } : null,
     };
   })
     // Ordenado pela MATRÍCULA, e como NÚMERO.
@@ -494,6 +495,7 @@ export default async function SettingsPage() {
     endDate: a.end_date,
     discountsRv: a.discounts_rv,
     note: a.note,
+    motivo: a.motivo,
     fromLancamento: ausenciasDeLancamento.has(a.id),
   }));
 
@@ -579,7 +581,7 @@ export default async function SettingsPage() {
               canEdit={canEditDP}
               kinds={["licenca", "afastamento", "atestado", "falta"]}
               title="Absenteísmos e afastamentos"
-              description="Licenças, afastamentos, atestados e faltas. As linhas com origem em lançamento vieram do módulo de Absenteísmos, já aprovadas pelo RH, e são editadas por lá. O registro direto serve para o histórico e para quem não usa o módulo."
+              description="Licenças, afastamentos, atestados e faltas. As linhas com origem em lançamento vieram do módulo de Absenteísmos, já aprovadas pelo RH, e são editadas por lá. O registro direto serve para o histórico, para quem não usa o módulo e para afastamentos longos, como aposentadoria por invalidez ou INSS, que podem ficar sem data de retorno. O afastamento ou a licença em vigor aparece como status do colaborador em Colaboradores e em Férias."
               exportFilename="absenteismos_e_afastamentos.xlsx"
             />
           ),
