@@ -72,8 +72,12 @@ export default async function FeriasPage() {
     supabase.rpc("ferias_situacao_importacao", { p_tenant: tenant.id }),
     // a cor de cada setor no calendário vem da posição dele no cadastro
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
-    // antecedência mínima do pedido do colaborador (Configurações > Férias)
-    supabase.from("ferias_config").select("antecedencia_minima_dias").eq("tenant_id", tenant.id).maybeSingle(),
+    // antecedência mínima por quem lança (Configurações > Férias)
+    supabase
+      .from("ferias_config")
+      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias")
+      .eq("tenant_id", tenant.id)
+      .maybeSingle(),
   ]);
 
   const situacaoFolha = (importacao ?? null) as {
@@ -169,7 +173,11 @@ export default async function FeriasPage() {
         ultimaImportacao={situacaoFolha?.ultima ?? null}
         setores={(setores ?? []).map((s) => ({ id: s.id, name: s.name }))}
         unidades={unidades}
-        antecedencia={config?.antecedencia_minima_dias ?? 0}
+        antecedencia={{
+          colaborador: config?.antecedencia_minima_dias ?? 0,
+          gestor: config?.antecedencia_gestor_dias ?? 0,
+          dp: config?.antecedencia_dp_dias ?? 0,
+        }}
       />
     </div>
   );

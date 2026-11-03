@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Ban, CalendarPlus, Check, FileSpreadsheet, Pencil, Plane, Send, Trash2, Undo2, Upload,
+  Ban, CalendarPlus, Check, FileSpreadsheet, Pencil, Plane, Send, Settings, Trash2, Undo2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
@@ -29,7 +29,7 @@ import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/
 import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
 } from "@/lib/constants";
-import { rotuloAquisitivo, type AquisitivoInfo, type FeriadoCustom } from "@/lib/ferias";
+import { rotuloAquisitivo, type AquisitivoInfo, type FeriadoCustom, type QuemLanca } from "@/lib/ferias";
 import {
   cancelarFerias, decidirFerias, efetivarFerias, excluirFerias, getContextoEfetivacao,
   type ContextoEfetivacao,
@@ -138,8 +138,8 @@ export function FeriasManager({
   setores: { id: string; name: string }[];
   /** unidades do seletor do topo (null = todas) */
   unidades: string[] | null;
-  /** antecedência mínima, em dias, do pedido do próprio colaborador (0 = sem) */
-  antecedencia: number;
+  /** antecedência mínima, em dias, por quem lança (0 = sem); Configurações > Férias */
+  antecedencia: Record<QuemLanca, number>;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
@@ -152,6 +152,16 @@ export function FeriasManager({
   const router = useRouter();
 
   const minhas = useMemo(() => rows.filter((r) => r.userId === meuId), [rows, meuId]);
+
+  /**
+   * De quem é a antecedência mínima no lançamento e no reagendamento, como o
+   * banco decide: o DP é sempre DP (mesmo quando é o gestor da pessoa ou
+   * reagenda as próprias férias); fora isso, o próprio dono é colaborador e
+   * quem mexe na equipe é gestor. O "Solicitar" e a correção do pedido próprio
+   * não passam por aqui: são sempre do colaborador.
+   */
+  const quemNo = (caso: "colaborador" | "lancamento"): QuemLanca =>
+    ehDp ? "dp" : caso === "colaborador" ? "colaborador" : "gestor";
 
   /**
    * Os 13º que a pessoa já pediu (uma vez por ano), sem a linha em edição: o
@@ -256,8 +266,15 @@ export function FeriasManager({
     );
   }
   if (ehDp) {
-    acoes.push({ id: "periodos", grupo: "dp", rotulo: "Importar períodos aquisitivos", icone: <Upload size={14} />,
-      titulo: "Modelo do MANAGERHUB ou relatório da folha", fazer: () => setImportando(true) });
+    acoes.push(
+      { id: "periodos", grupo: "dp", rotulo: "Importar períodos aquisitivos", icone: <Upload size={14} />,
+        titulo: "Modelo do MANAGERHUB ou relatório da folha", fazer: () => setImportando(true) },
+      // as regras (antecedência, quem solicita) moram em Configurações; o atalho
+      // existe porque lá elas ficavam fora da vista de quem opera o módulo
+      { id: "config", grupo: "dp", rotulo: "Configurações de férias", icone: <Settings size={14} />,
+        titulo: "Antecedência mínima e quem solicita as próprias férias",
+        fazer: () => router.push("/configuracoes?aba=ferias") },
+    );
   }
   const tituloGrupo = (texto: string) => (
     <div className="soft" style={{ fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", padding: "0 0.6rem" }}>
@@ -339,9 +356,11 @@ export function FeriasManager({
           hoje={hoje}
           ehDp={ehDp}
           usaFolha={usaFolha}
-          // a antecedência vale para o pedido do próprio colaborador; no
+          // cada um com a sua antecedência (o banco decide igual, pelo papel); no
           // lançamento, os 13º da pessoa escolhida vêm junto com o saldo dela
-          antecedencia={dialogo === "solicitar" ? antecedencia : 0}
+          // ("Solicitar" é sempre o pedido próprio: a do colaborador, até para o DP)
+          antecedencia={antecedencia[dialogo === "solicitar" ? "colaborador" : quemNo("lancamento")]}
+          antecedenciaQuem={dialogo === "solicitar" ? "colaborador" : quemNo("lancamento")}
           decimos={dialogo === "solicitar" ? decimosDe(meuId) : undefined}
           onFechar={() => setDialogo(null)}
         />
@@ -353,9 +372,10 @@ export function FeriasManager({
           feriados={feriados}
           hoje={hoje}
           usaFolha={usaFolha}
-          // corrigir um pedido do próprio colaborador segue a antecedência; o
-          // lançado pelo gestor, não (o banco aplica a mesma regra)
-          antecedencia={reenvio.lancadaPeloGestor ? 0 : antecedencia}
+          // o pedido do colaborador segue a dele; o lançado pelo gestor/DP, a de
+          // quem corrige (o banco aplica a mesma regra)
+          antecedencia={antecedencia[reenvio.lancadaPeloGestor ? quemNo("lancamento") : "colaborador"]}
+          antecedenciaQuem={reenvio.lancadaPeloGestor ? quemNo("lancamento") : "colaborador"}
           decimos={decimosDe(reenvio.userId, reenvio.id)}
           inicial={{
             id: reenvio.id, inicio: reenvio.startDate, fim: reenvio.endDate,
@@ -370,8 +390,9 @@ export function FeriasManager({
           aquisitivos={null}
           feriados={feriados}
           hoje={hoje}
-          // o próprio dono reagendando (sem ser DP) passa pela antecedência
-          antecedencia={reagendando.userId === meuId && !ehDp ? antecedencia : 0}
+          // o DP com a dele; o próprio dono com a do colaborador; o gestor da equipe com a do gestor
+          antecedencia={antecedencia[quemNo(reagendando.userId === meuId ? "colaborador" : "lancamento")]}
+          antecedenciaQuem={quemNo(reagendando.userId === meuId ? "colaborador" : "lancamento")}
           decimos={decimosDe(reagendando.userId, reagendando.id)}
           inicial={{
             id: reagendando.id, inicio: reagendando.startDate, fim: reagendando.endDate,

@@ -210,26 +210,37 @@ export async function excluirFerias(id: string): Promise<ActionState> {
 }
 
 /**
- * Configuração: antecedência mínima, em dias, para o colaborador pedir as
- * próprias férias (0 = sem). O DP precisa desse tempo para calcular e pagar.
+ * Configuração: antecedência mínima, em dias, por quem lança (0 = sem). O DP
+ * precisa desse tempo para calcular e pagar. A regra roda no banco
+ * (`ferias_checar_antecedencia`); aqui só se grava.
  */
-export async function setAntecedenciaFerias(input: { dias: number }): Promise<ActionState> {
+export async function setAntecedenciaFerias(
+  input: { colaborador: number; gestor: number; dp: number },
+): Promise<ActionState> {
   try {
     const { supabase, tenantId, userId } = await dpActionContext();
-    const dias = Math.trunc(Number(input.dias));
-    if (!Number.isFinite(dias) || dias < 0 || dias > 180) {
-      return { error: "Informe de 0 a 180 dias." };
+    const valores = [input.colaborador, input.gestor, input.dp].map((v) => Math.trunc(Number(v)));
+    if (valores.some((v) => !Number.isFinite(v) || v < 0 || v > 180)) {
+      return { error: "Informe de 0 a 180 dias em cada campo." };
     }
+    const [colaborador, gestor, dp] = valores;
     const { error } = await supabase
       .from("ferias_config")
       .upsert(
-        { tenant_id: tenantId, antecedencia_minima_dias: dias, updated_by: userId, updated_at: new Date().toISOString() },
+        {
+          tenant_id: tenantId,
+          antecedencia_minima_dias: colaborador,
+          antecedencia_gestor_dias: gestor,
+          antecedencia_dp_dias: dp,
+          updated_by: userId,
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: "tenant_id" },
       );
     if (error) return { error: error.message };
     revalidar();
     revalidatePath("/configuracoes");
-    return { ok: true, message: dias > 0 ? `Antecedência mínima: ${dias} dias.` : "Sem antecedência mínima." };
+    return { ok: true, message: "Antecedência mínima salva." };
   } catch (e) {
     return { error: (e as Error).message };
   }

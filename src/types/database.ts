@@ -880,12 +880,13 @@ export type Database = {
         Relationships: []
       }
       // Parâmetros do módulo por empresa (uma linha por tenant; sem linha = padrões).
-      // Lê quem é da empresa; grava o DP. `antecedencia_minima_dias` vale só para
-      // o pedido do próprio colaborador (ferias_checar_antecedencia).
+      // Lê quem é da empresa; grava o DP. Antecedência mínima por quem lança
+      // (ferias_checar_antecedencia): `antecedencia_minima_dias` = o colaborador,
+      // `antecedencia_gestor_dias` = o gestor, `antecedencia_dp_dias` = o DP.
       ferias_config: {
-        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; updated_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; updated_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { antecedencia_minima_dias?: number; updated_by?: string | null; updated_at?: string }
+        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; antecedencia_gestor_dias: number; antecedencia_dp_dias: number; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; updated_by?: string | null; updated_at?: string }
         Relationships: []
       }
       // Dedup do varredor semanal de vencimento (cron): cada (pessoa,

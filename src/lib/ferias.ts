@@ -111,8 +111,10 @@ export type OpcoesValidacao = {
   permiteDobro?: boolean;
   /** a empresa importa os aquisitivos da folha */
   usaFolha?: boolean;
-  /** antecedência mínima do pedido do colaborador, em dias (0 = sem) */
+  /** antecedência mínima de quem lança, em dias (0 = sem) */
   antecedencia?: number;
+  /** quem lança: muda só a mensagem (cada um tem o seu valor em Configurações) */
+  antecedenciaQuem?: QuemLanca;
   /** os 13º já pedidos por esta pessoa, para a regra de uma vez por ano */
   decimos?: DecimoPedido[];
 };
@@ -122,8 +124,19 @@ export function inicioMinimo(hoje: string, antecedencia: number): string | null 
   return antecedencia > 0 ? somarDias(hoje, antecedencia) : null;
 }
 
-export function mensagemAntecedencia(hoje: string, antecedencia: number): string {
-  return `As férias precisam ser solicitadas com pelo menos ${antecedencia} dias de antecedência, para o departamento pessoal calcular e pagar a tempo. O início mais próximo possível é ${dataBr(somarDias(hoje, antecedencia))}.`;
+/** Quem está lançando: cada um tem a sua antecedência mínima (Configurações > Férias). */
+export type QuemLanca = "colaborador" | "gestor" | "dp";
+
+/** A mesma mensagem de `ferias_checar_antecedencia`. */
+export function mensagemAntecedencia(hoje: string, antecedencia: number, quem: QuemLanca = "colaborador"): string {
+  const data = dataBr(somarDias(hoje, antecedencia));
+  if (quem === "gestor") {
+    return `Férias lançadas pelo gestor precisam começar com pelo menos ${antecedencia} dias de antecedência, para o departamento pessoal calcular e pagar a tempo. O início mais próximo possível é ${data}.`;
+  }
+  if (quem === "dp") {
+    return `Férias lançadas pelo departamento pessoal precisam começar com pelo menos ${antecedencia} dias de antecedência. O início mais próximo possível é ${data}.`;
+  }
+  return `As férias precisam ser solicitadas com pelo menos ${antecedencia} dias de antecedência, para o departamento pessoal calcular e pagar a tempo. O início mais próximo possível é ${data}.`;
 }
 
 const anoDe = (iso: string) => iso.slice(0, 4);
@@ -250,10 +263,10 @@ export function validarConjunto(
     }
   }
 
-  // antecedência mínima do pedido do colaborador (o banco usa o "hoje" do servidor)
+  // antecedência mínima de quem lança (o banco usa o "hoje" do servidor)
   const minimo = inicioMinimo(hoje, opcoes.antecedencia ?? 0);
   if (minimo && ordenados[0].inicio < minimo) {
-    return { erro: mensagemAntecedencia(hoje, opcoes.antecedencia ?? 0) };
+    return { erro: mensagemAntecedencia(hoje, opcoes.antecedencia ?? 0, opcoes.antecedenciaQuem) };
   }
 
   const decimo = erroDecimo(ordenados, opcoes.decimos ?? []);

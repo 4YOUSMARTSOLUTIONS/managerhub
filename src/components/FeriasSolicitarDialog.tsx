@@ -10,7 +10,7 @@ import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import {
   diasDoPeriodo, inicioMinimo, mensagemAntecedencia, motivoInicioInvalido, permissoesPorPeriodo,
   rotuloAquisitivo, validarConjunto,
-  type AquisitivoInfo, type DecimoPedido, type FeriadoCustom, type PeriodoInput,
+  type AquisitivoInfo, type DecimoPedido, type FeriadoCustom, type PeriodoInput, type QuemLanca,
 } from "@/lib/ferias";
 import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
@@ -34,7 +34,7 @@ import {
  */
 export function FeriasSolicitarDialog({
   modo, pessoas, aquisitivos, feriados, hoje, inicial, ehDp = false, usaFolha = false,
-  antecedencia = 0, decimos, onFechar,
+  antecedencia = 0, antecedenciaQuem = "colaborador", decimos, onFechar,
 }: {
   modo: "solicitar" | "lancar" | "reenviar" | "reagendar";
   /** só no modo lancar: quem o usuário pode programar */
@@ -50,10 +50,13 @@ export function FeriasSolicitarDialog({
   /** a empresa importa os aquisitivos da folha */
   usaFolha?: boolean;
   /**
-   * Antecedência mínima, em dias, quando é o colaborador quem pede (Configurações
-   * > Férias). 0 no lançamento do gestor e do DP. O banco confere de novo.
+   * Antecedência mínima, em dias, de quem está lançando (Configurações > Férias
+   * tem um valor para o colaborador, outro para o gestor e outro para o DP). O
+   * banco confere de novo.
    */
   antecedencia?: number;
+  /** quem lança: muda a mensagem da antecedência */
+  antecedenciaQuem?: QuemLanca;
   /** fora do modo lancar: os 13º que a pessoa já pediu (sem a linha em edição) */
   decimos?: DecimoPedido[];
   onFechar: () => void;
@@ -89,9 +92,9 @@ export function FeriasSolicitarDialog({
   const avisos = useMemo(() => periodos.map((p) => {
     if (!p.inicio) return null;
     if (p.inicio <= hoje) return "A previsão precisa começar depois de hoje.";
-    if (minimo && p.inicio < minimo) return mensagemAntecedencia(hoje, antecedencia);
+    if (minimo && p.inicio < minimo) return mensagemAntecedencia(hoje, antecedencia, antecedenciaQuem);
     return motivoInicioInvalido(p.inicio, feriados);
-  }), [periodos, hoje, feriados, minimo, antecedencia]);
+  }), [periodos, hoje, feriados, minimo, antecedencia, antecedenciaQuem]);
 
   const mudar = (i: number, patch: Partial<PeriodoInput>) =>
     setPeriodos((xs) => xs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
@@ -139,6 +142,7 @@ export function FeriasSolicitarDialog({
         permiteDobro: modo === "lancar" && dobro,
         usaFolha,
         antecedencia,
+        antecedenciaQuem,
         decimos: decs,
       });
       if (r.erro) { setErro(r.erro); return; }
@@ -219,8 +223,9 @@ export function FeriasSolicitarDialog({
 
           {minimo && (
             <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
-              Peça com pelo menos {antecedencia} dias de antecedência, para o departamento pessoal
-              calcular e pagar a tempo: o primeiro dia possível é <strong>{formatDate(minimo)}</strong>.
+              {antecedenciaQuem === "colaborador" ? "Peça" : "Lance"} com pelo menos {antecedencia} dias
+              de antecedência, para o departamento pessoal calcular e pagar a tempo: o primeiro dia
+              possível é <strong>{formatDate(minimo)}</strong>.
             </p>
           )}
 

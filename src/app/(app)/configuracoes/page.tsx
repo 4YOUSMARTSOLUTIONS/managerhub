@@ -67,7 +67,12 @@ import {
 } from "@/lib/actions/tickets";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ aba?: string }>;
+}) {
+  const { aba } = await searchParams;
   const { tenant, role, user, isSuperAdmin, unitScope } = await requireContext();
 
   // Duas perguntas separadas, e é a separação que sustenta a tela inteira.
@@ -246,7 +251,11 @@ export default async function SettingsPage() {
     // Brasil, decidido dentro da RPC)
     supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }),
     // parâmetros do módulo Férias (sem linha = padrões)
-    supabase.from("ferias_config").select("antecedencia_minima_dias").eq("tenant_id", tenant.id).maybeSingle(),
+    supabase
+      .from("ferias_config")
+      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias")
+      .eq("tenant_id", tenant.id)
+      .maybeSingle(),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -542,36 +551,9 @@ export default async function SettingsPage() {
             />
           ),
         },
-        // Duas abas sobre a MESMA tabela (`employee_absences`), com recortes
-        // diferentes. Férias é programada e tem tela própria; o resto é o que o
-        // módulo de Absenteísmos alimenta ao aprovar, mais o registro direto do
-        // DP. A separação é de leitura, não de dado: a constraint de
-        // sobreposição continua valendo entre as duas.
-        {
-          id: "ausencias",
-          label: "Férias",
-          content: (
-            <>
-              <FeriasConfigManager
-                niveis={(hierarchies ?? []).map((h) => ({ id: h.id, name: h.name, active: h.active }))}
-                bloqueados={(feriasBloqueadosData ?? []).map((b) => b.hierarchy_level_id)}
-                antecedencia={feriasConfigData?.antecedencia_minima_dias ?? 0}
-                canEdit={canEditDP}
-              />
-              <AbsencesManager
-                members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
-                alvos={importTargets}
-                unidades={(units ?? []).map((u) => u.name)}
-                absences={absenceRows.filter((a) => a.kind === "ferias")}
-                canEdit={canEditDP}
-                kinds={["ferias"]}
-                title="Férias"
-                description="Registro direto, só para histórico: aceita férias que começaram antes da data da última importação de períodos aquisitivos, feita no módulo Férias. Dali em diante, férias entram pelo módulo, que confere o saldo e o prazo. As linhas criadas por lá são editadas por lá, e a exclusão delas aqui é recusada."
-                exportFilename="ferias.xlsx"
-              />
-            </>
-          ),
-        },
+        // Mesma tabela (`employee_absences`) que o registro direto de férias, em
+        // Configurações > Férias: a separação é de leitura, não de dado, e a
+        // constraint de sobreposição continua valendo entre as duas.
         {
           id: "afastamentos",
           label: "Absenteísmos e afastamentos",
@@ -586,6 +568,49 @@ export default async function SettingsPage() {
               title="Absenteísmos e afastamentos"
               description="Licenças, afastamentos, atestados e faltas. As linhas com origem em lançamento vieram do módulo de Absenteísmos, já aprovadas pelo RH, e são editadas por lá. O registro direto serve para o histórico, para quem não usa o módulo e para afastamentos longos, como aposentadoria por invalidez ou INSS, que podem ficar sem data de retorno. O afastamento ou a licença em vigor aparece como status do colaborador em Colaboradores e em Férias."
               exportFilename="absenteismos_e_afastamentos.xlsx"
+            />
+          ),
+        },
+      ]}
+    />
+  );
+
+  // Férias tem aba própria: escondida como subaba de Colaboradores, o DP não a
+  // achava. As regras do módulo e o registro direto do histórico ficam juntos.
+  const feriasTab = (
+    <Tabs
+      variant="sub"
+      tabs={[
+        {
+          id: "ferias-regras",
+          label: "Regras",
+          content: (
+            <FeriasConfigManager
+              niveis={(hierarchies ?? []).map((h) => ({ id: h.id, name: h.name, active: h.active }))}
+              bloqueados={(feriasBloqueadosData ?? []).map((b) => b.hierarchy_level_id)}
+              antecedencia={{
+                colaborador: feriasConfigData?.antecedencia_minima_dias ?? 0,
+                gestor: feriasConfigData?.antecedencia_gestor_dias ?? 0,
+                dp: feriasConfigData?.antecedencia_dp_dias ?? 0,
+              }}
+              canEdit={canEditDP}
+            />
+          ),
+        },
+        {
+          id: "ferias-registro",
+          label: "Registro direto",
+          content: (
+            <AbsencesManager
+              members={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}
+              alvos={importTargets}
+              unidades={(units ?? []).map((u) => u.name)}
+              absences={absenceRows.filter((a) => a.kind === "ferias")}
+              canEdit={canEditDP}
+              kinds={["ferias"]}
+              title="Férias"
+              description="Registro direto, só para histórico: aceita férias que começaram antes da data da última importação de períodos aquisitivos, feita no módulo Férias. Dali em diante, férias entram pelo módulo, que confere o saldo e o prazo. As linhas criadas por lá são editadas por lá, e a exclusão delas aqui é recusada."
+              exportFilename="ferias.xlsx"
             />
           ),
         },
@@ -1354,6 +1379,7 @@ export default async function SettingsPage() {
         />
       ),
     },
+    { id: "ferias", label: "Férias", content: feriasTab },
     {
       id: "seguranca",
       label: "Segurança",
@@ -1541,7 +1567,7 @@ export default async function SettingsPage() {
   // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
   // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as duas
   // abas que SÃO o departamento pessoal.
-  const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos"]);
+  const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos", "ferias"]);
   const tabsVisiveis = isHr ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
 
   return (
@@ -1567,7 +1593,8 @@ export default async function SettingsPage() {
           </span>
         </div>
       )}
-      <Tabs tabs={tabsVisiveis} />
+      {/* `?aba=ferias` abre direto numa aba (o atalho do módulo Férias usa) */}
+      <Tabs tabs={tabsVisiveis} initialId={aba} />
     </div>
   );
 }
