@@ -879,6 +879,15 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // Parâmetros do módulo por empresa (uma linha por tenant; sem linha = padrões).
+      // Lê quem é da empresa; grava o DP. `antecedencia_minima_dias` vale só para
+      // o pedido do próprio colaborador (ferias_checar_antecedencia).
+      ferias_config: {
+        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { antecedencia_minima_dias?: number; updated_by?: string | null; updated_at?: string }
+        Relationships: []
+      }
       // Dedup do varredor semanal de vencimento (cron): cada (pessoa,
       // aquisitivo, tipo) avisa uma vez. Escrita só pela função do cron.
       ferias_alertas_enviados: {

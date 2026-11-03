@@ -7,6 +7,7 @@
 // Sem IO e sem dependência de framework: usado pelo dialog no cliente.
 
 import { holidayName } from "@/lib/holidays";
+import { somarDias } from "@/lib/format";
 
 export type FeriadoCustom = { day: string; name: string };
 
@@ -102,6 +103,113 @@ export type ResultadoValidacao =
   | { erro: string }
   | { erro?: undefined; atribuicoes: { aqInicio: string; aqFim: string; emDobro: boolean }[] };
 
+/** Um período que já pediu o adiantamento do 13º (o próprio pedido em edição fica de fora). */
+export type DecimoPedido = { inicio: string; fim: string };
+
+export type OpcoesValidacao = {
+  /** o DP lançando férias em dobro (gozo depois do prazo de concessão) */
+  permiteDobro?: boolean;
+  /** a empresa importa os aquisitivos da folha */
+  usaFolha?: boolean;
+  /** antecedência mínima do pedido do colaborador, em dias (0 = sem) */
+  antecedencia?: number;
+  /** os 13º já pedidos por esta pessoa, para a regra de uma vez por ano */
+  decimos?: DecimoPedido[];
+};
+
+/** O primeiro dia em que um pedido com essa antecedência pode começar. */
+export function inicioMinimo(hoje: string, antecedencia: number): string | null {
+  return antecedencia > 0 ? somarDias(hoje, antecedencia) : null;
+}
+
+export function mensagemAntecedencia(hoje: string, antecedencia: number): string {
+  return `As férias precisam ser solicitadas com pelo menos ${antecedencia} dias de antecedência, para o departamento pessoal calcular e pagar a tempo. O início mais próximo possível é ${dataBr(somarDias(hoje, antecedencia))}.`;
+}
+
+const anoDe = (iso: string) => iso.slice(0, 4);
+
+/**
+ * Lei 4.749/65: a 1ª parcela do 13º se adianta uma vez por ano (o do início do
+ * período). Devolve a primeira infração, ou null.
+ */
+function erroDecimo(periodos: PeriodoInput[], decimos: DecimoPedido[]): string | null {
+  const ordenados = [...periodos].filter((p) => p.inicio).sort((a, b) => a.inicio.localeCompare(b.inicio));
+  const vistos = new Set<string>();
+  for (const p of ordenados) {
+    if (!p.decimo) continue;
+    const ano = anoDe(p.inicio);
+    if (vistos.has(ano)) {
+      return `O adiantamento da 1ª parcela do 13º só pode ser pedido uma vez por ano: deixe marcado apenas o primeiro período de ${ano} deste pedido.`;
+    }
+    vistos.add(ano);
+    const ja = decimos.find((d) => anoDe(d.inicio) === ano);
+    if (ja) {
+      return `O adiantamento da 1ª parcela do 13º de ${ano} já foi pedido nas férias de ${dataBr(ja.inicio)} a ${dataBr(ja.fim)}. Ele é pago uma vez por ano, então este período fica sem a opção.`;
+    }
+  }
+  return null;
+}
+
+export type PermissaoCampo = { ok: true } | { ok: false; motivo: string };
+
+/**
+ * O que cada período do formulário pode pedir, na ordem em que aparecem na
+ * tela (não na ordem de data):
+ *  - abono: só no primeiro período de gozo do aquisitivo (art. 143). Usa o
+ *    mesmo FIFO do banco; `null` quando ainda faltam datas para saber.
+ *  - 13º: uma vez por ano (o do início do período).
+ */
+export function permissoesPorPeriodo(
+  periodos: PeriodoInput[],
+  aquisitivos: AquisitivoInfo[] | null,
+  decimos: DecimoPedido[],
+): { abono: PermissaoCampo | null; decimo: PermissaoCampo }[] {
+  const completos = periodos
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.inicio && p.fim && p.fim >= p.inicio)
+    .sort((a, b) => a.p.inicio.localeCompare(b.p.inicio));
+
+  // abono: simula o FIFO só quando há saldo à vista e todas as datas preenchidas
+  const abono: (PermissaoCampo | null)[] = periodos.map(() => null);
+  if (aquisitivos && aquisitivos.length > 0 && completos.length === periodos.length) {
+    const aq = aquisitivos.map((a) => ({ ...a, usadoAgora: false }));
+    for (const { p, i } of completos) {
+      const alvo = aq.find((a) => a.saldo > 0);
+      if (!alvo) break;
+      if (alvo.qtdPeriodos === 0) {
+        abono[i] = { ok: true };
+      } else {
+        abono[i] = {
+          ok: false,
+          motivo: alvo.usadoAgora
+            ? "O abono vai no período mais cedo deste pedido."
+            : alvo.gozadosFolha > 0 && alvo.qtdPeriodos === 1
+              ? `O abono só vale no primeiro período do aquisitivo ${rotuloAquisitivo(alvo)}, e a folha já registra ${alvo.gozadosFolha} dia(s) gozados dele.`
+              : `O abono só vale no primeiro período do aquisitivo ${rotuloAquisitivo(alvo)}, que já tem férias programadas.`,
+        };
+      }
+      alvo.saldo -= diasDoPeriodo(p.inicio, p.fim) + p.abono;
+      alvo.qtdPeriodos += 1;
+      alvo.usadoAgora = true;
+    }
+  }
+
+  // 13º: o primeiro período de cada ano (por data) fica com a opção
+  const decimo: PermissaoCampo[] = periodos.map((p, i) => {
+    if (!p.inicio) return { ok: true };
+    const ano = anoDe(p.inicio);
+    const ja = decimos.find((d) => anoDe(d.inicio) === ano);
+    if (ja) return { ok: false, motivo: `O 13º de ${ano} já foi adiantado nas férias de ${dataBr(ja.inicio)} a ${dataBr(ja.fim)}.` };
+    const outro = periodos.findIndex((q, j) =>
+      j !== i && q.decimo && q.inicio && anoDe(q.inicio) === ano
+        && (!p.decimo || q.inicio < p.inicio));
+    if (outro >= 0) return { ok: false, motivo: `O 13º de ${ano} já está marcado no período ${outro + 1} (uma vez por ano).` };
+    return { ok: true };
+  });
+
+  return periodos.map((_, i) => ({ abono: abono[i], decimo: decimo[i] }));
+}
+
 /**
  * O mesmo FIFO do banco: o aquisitivo aberto mais antigo com saldo paga
  * primeiro, sem transbordo. Devolve a que aquisitivo cada período vai, ou a
@@ -116,7 +224,7 @@ export function validarConjunto(
   aquisitivos: AquisitivoInfo[],
   hoje: string,
   feriados: FeriadoCustom[],
-  opcoes: { permiteDobro?: boolean; usaFolha?: boolean } = {},
+  opcoes: OpcoesValidacao = {},
 ): ResultadoValidacao {
   if (periodos.length === 0) return { erro: "Informe ao menos um período de férias." };
   if (periodos.length > 3) return { erro: "As férias podem ser divididas em no máximo 3 períodos (art. 134)." };
@@ -142,6 +250,15 @@ export function validarConjunto(
     }
   }
 
+  // antecedência mínima do pedido do colaborador (o banco usa o "hoje" do servidor)
+  const minimo = inicioMinimo(hoje, opcoes.antecedencia ?? 0);
+  if (minimo && ordenados[0].inicio < minimo) {
+    return { erro: mensagemAntecedencia(hoje, opcoes.antecedencia ?? 0) };
+  }
+
+  const decimo = erroDecimo(ordenados, opcoes.decimos ?? []);
+  if (decimo) return { erro: decimo };
+
   if (aquisitivos.length === 0) {
     return {
       erro: opcoes.usaFolha
@@ -151,7 +268,7 @@ export function validarConjunto(
   }
 
   // cópia mutável para simular os débitos na ordem
-  const aq = aquisitivos.map((a) => ({ ...a, rotulo: rotuloAquisitivo(a) }));
+  const aq = aquisitivos.map((a) => ({ ...a, rotulo: rotuloAquisitivo(a), usadoAgora: false }));
   const atribuicoes: { aqInicio: string; aqFim: string; emDobro: boolean }[] = [];
 
   for (const p of ordenados) {
@@ -169,6 +286,18 @@ export function validarConjunto(
     if (alvo.qtdPeriodos + 1 > 3) {
       return { erro: `O aquisitivo ${alvo.rotulo} já tem 3 períodos (art. 134).` };
     }
+    // art. 143: o abono vai no PRIMEIRO período de gozo do aquisitivo.
+    // `qtdPeriodos` já conta o gozo da folha e as previsões do módulo. (O banco
+    // ainda recusa um período que passe à frente de outro que já leva o abono;
+    // aqui não há as datas das previsões para conferir isso.)
+    if (p.abono > 0 && alvo.qtdPeriodos > 0) {
+      const motivo = alvo.usadoAgora
+        ? "coloque o abono no período mais cedo deste pedido"
+        : alvo.gozadosFolha > 0 && alvo.qtdPeriodos === 1
+          ? `a folha já registra ${alvo.gozadosFolha} dia(s) gozados dele`
+          : "o aquisitivo já tem férias programadas";
+      return { erro: `O abono pecuniário só pode ser pedido no primeiro período de gozo do aquisitivo ${alvo.rotulo} (art. 143), e este não é o primeiro: ${motivo}.` };
+    }
     // art. 143: até um terço do direito (30 → 10; 18 → 6)
     const tetoAbono = Math.floor(alvo.diasDireito / 3);
     if (alvo.abonoUsado + p.abono > tetoAbono) {
@@ -181,6 +310,7 @@ export function validarConjunto(
     }
     alvo.saldo -= dias + p.abono;
     alvo.qtdPeriodos += 1;
+    alvo.usadoAgora = true;
     alvo.abonoUsado += p.abono;
     if (dias >= Math.min(14, alvo.diasDireito)) alvo.tem14 = true;
     atribuicoes.push({ aqInicio: alvo.aqInicio, aqFim: alvo.aqFim, emDobro });

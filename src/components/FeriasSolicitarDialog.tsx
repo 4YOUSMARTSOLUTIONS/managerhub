@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import {
-  diasDoPeriodo, motivoInicioInvalido, rotuloAquisitivo, validarConjunto,
-  type AquisitivoInfo, type FeriadoCustom, type PeriodoInput,
+  diasDoPeriodo, inicioMinimo, mensagemAntecedencia, motivoInicioInvalido, permissoesPorPeriodo,
+  rotuloAquisitivo, validarConjunto,
+  type AquisitivoInfo, type DecimoPedido, type FeriadoCustom, type PeriodoInput,
 } from "@/lib/ferias";
 import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
@@ -31,7 +33,8 @@ import {
  * Fecha por X ou Cancelar, nunca por clique no fundo.
  */
 export function FeriasSolicitarDialog({
-  modo, pessoas, aquisitivos, feriados, hoje, inicial, ehDp = false, usaFolha = false, onFechar,
+  modo, pessoas, aquisitivos, feriados, hoje, inicial, ehDp = false, usaFolha = false,
+  antecedencia = 0, decimos, onFechar,
 }: {
   modo: "solicitar" | "lancar" | "reenviar" | "reagendar";
   /** só no modo lancar: quem o usuário pode programar */
@@ -46,11 +49,19 @@ export function FeriasSolicitarDialog({
   ehDp?: boolean;
   /** a empresa importa os aquisitivos da folha */
   usaFolha?: boolean;
+  /**
+   * Antecedência mínima, em dias, quando é o colaborador quem pede (Configurações
+   * > Férias). 0 no lançamento do gestor e do DP. O banco confere de novo.
+   */
+  antecedencia?: number;
+  /** fora do modo lancar: os 13º que a pessoa já pediu (sem a linha em edição) */
+  decimos?: DecimoPedido[];
   onFechar: () => void;
 }) {
   const [userId, setUserId] = useState<string[]>([]);
   // aquisitivos de quem está sendo lançado (modo lancar)
   const [doAlvo, setDoAlvo] = useState<AquisitivoInfo[] | null>(null);
+  const [decimosAlvo, setDecimosAlvo] = useState<DecimoPedido[]>([]);
   const [carregandoAlvo, setCarregandoAlvo] = useState(false);
   const [erroAlvo, setErroAlvo] = useState("");
   const pedido = useRef(0);
@@ -72,23 +83,33 @@ export function FeriasSolicitarDialog({
   const totalDias = periodos.reduce(
     (s, p) => s + (p.inicio && p.fim && p.fim >= p.inicio ? diasDoPeriodo(p.inicio, p.fim) + p.abono : 0), 0);
 
+  const minimo = inicioMinimo(hoje, antecedencia);
+
   // o aviso por período aparece embaixo do campo, sem esperar o Salvar
   const avisos = useMemo(() => periodos.map((p) => {
     if (!p.inicio) return null;
     if (p.inicio <= hoje) return "A previsão precisa começar depois de hoje.";
+    if (minimo && p.inicio < minimo) return mensagemAntecedencia(hoje, antecedencia);
     return motivoInicioInvalido(p.inicio, feriados);
-  }), [periodos, hoje, feriados]);
+  }), [periodos, hoje, feriados, minimo, antecedencia]);
 
   const mudar = (i: number, patch: Partial<PeriodoInput>) =>
     setPeriodos((xs) => xs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
-  // no lançamento, o saldo é o de quem foi escolhido
+  // no lançamento, o saldo e os 13º são os de quem foi escolhido
   const aqs = modo === "lancar" ? doAlvo : aquisitivos;
+  const decs = useMemo(
+    () => (modo === "lancar" ? decimosAlvo : decimos ?? []),
+    [modo, decimosAlvo, decimos],
+  );
+  // abono só no primeiro período do aquisitivo; 13º uma vez por ano
+  const permissoes = useMemo(() => permissoesPorPeriodo(periodos, aqs, decs), [periodos, aqs, decs]);
 
   /** Busca no evento de escolha (não num efeito): resposta velha não sobrescreve a nova. */
   const escolherPessoa = (ids: string[]) => {
     setUserId(ids);
     setDoAlvo(null);
+    setDecimosAlvo([]);
     setErroAlvo("");
     const n = ++pedido.current;
     if (ids.length === 0) { setCarregandoAlvo(false); return; }
@@ -98,6 +119,7 @@ export function FeriasSolicitarDialog({
       setCarregandoAlvo(false);
       if (r.error !== undefined) { setErroAlvo(r.error); return; }
       setDoAlvo(r.aquisitivos);
+      setDecimosAlvo(r.decimos);
     });
   };
 
@@ -116,6 +138,8 @@ export function FeriasSolicitarDialog({
       const r = validarConjunto(periodos, aqs, hoje, feriados, {
         permiteDobro: modo === "lancar" && dobro,
         usaFolha,
+        antecedencia,
+        decimos: decs,
       });
       if (r.erro) { setErro(r.erro); return; }
     } else {
@@ -123,6 +147,8 @@ export function FeriasSolicitarDialog({
         const p = periodos[i];
         if (!p.inicio || !p.fim) { setErro("Informe o início e o término de cada período."); return; }
         if (avisos[i]) { setErro(avisos[i] as string); return; }
+        const d = permissoes[i].decimo;
+        if (p.decimo && !d.ok) { setErro(d.motivo); return; }
       }
     }
 
@@ -191,6 +217,13 @@ export function FeriasSolicitarDialog({
             </div>
           )}
 
+          {minimo && (
+            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
+              Peça com pelo menos {antecedencia} dias de antecedência, para o departamento pessoal
+              calcular e pagar a tempo: o primeiro dia possível é <strong>{formatDate(minimo)}</strong>.
+            </p>
+          )}
+
           {modo === "reagendar" && inicial && (
             <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
               Reagendando as férias de {formatDate(inicial.inicio)} a {formatDate(inicial.fim)}.
@@ -249,7 +282,14 @@ export function FeriasSolicitarDialog({
             </div>
           )}
 
-          {periodos.map((p, i) => (
+          {periodos.map((p, i) => {
+            const permAbono = permissoes[i].abono;
+            const permDecimo = permissoes[i].decimo;
+            // campo travado só quando está zerado: com valor, fica aberto para
+            // a pessoa poder zerar (e o aviso diz por quê)
+            const abonoTravado = permAbono?.ok === false && p.abono === 0;
+            const decimoTravado = !permDecimo.ok && !p.decimo;
+            return (
             <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "0.7rem 0.8rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
                 <span style={{ fontSize: "0.8rem", fontWeight: 700 }}>
@@ -270,29 +310,66 @@ export function FeriasSolicitarDialog({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px", gap: "0.6rem" }}>
                 <div>
                   <label className="label">Início <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-                  <input className="input" type="date" value={p.inicio} min={hoje} onChange={(e) => mudar(i, { inicio: e.target.value })} />
+                  <input className="input" type="date" value={p.inicio} min={minimo ?? hoje} onChange={(e) => mudar(i, { inicio: e.target.value })} />
                 </div>
                 <div>
                   <label className="label">Término <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-                  <input className="input" type="date" value={p.fim} min={p.inicio || hoje} onChange={(e) => mudar(i, { fim: e.target.value })} />
+                  <input className="input" type="date" value={p.fim} min={p.inicio || minimo || hoje} onChange={(e) => mudar(i, { fim: e.target.value })} />
                 </div>
                 <div>
-                  <label className="label">Abono (dias)</label>
+                  <label className="label" style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                    Abono (dias)
+                    <InfoHint label="O que é o abono pecuniário" align="right">
+                      <strong>Abono pecuniário</strong>{" "}é a &quot;venda&quot; de parte das férias: você
+                      trabalha esses dias e recebe por eles, além do pagamento normal das férias.
+                      <br /><br />
+                      Vai até um terço do direito (10 dias para quem tem 30) e só pode ser pedido no
+                      primeiro período de gozo do período aquisitivo (ou no único, se as férias não
+                      forem divididas). Ex.: 20 dias de férias e 10 de abono.
+                    </InfoHint>
+                  </label>
                   <input
                     className="input" type="number" min={0} max={10} value={p.abono}
+                    disabled={abonoTravado}
+                    title={abonoTravado && permAbono?.ok === false ? permAbono.motivo : undefined}
                     onChange={(e) => mudar(i, { abono: Math.max(0, Math.min(10, Number(e.target.value) || 0)) })}
                   />
                 </div>
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", marginTop: "0.5rem", cursor: "pointer" }}>
-                <input type="checkbox" checked={p.decimo} onChange={(e) => mudar(i, { decimo: e.target.checked })} />
+              <label
+                style={{
+                  display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", marginTop: "0.5rem",
+                  cursor: decimoTravado ? "not-allowed" : "pointer", opacity: decimoTravado ? 0.6 : 1,
+                }}
+              >
+                <input
+                  type="checkbox" checked={p.decimo} disabled={decimoTravado}
+                  onChange={(e) => mudar(i, { decimo: e.target.checked })}
+                />
                 Adiantar a 1ª parcela do 13º junto destas férias
               </label>
+              {!permDecimo.ok && (
+                <p
+                  className={p.decimo ? undefined : "soft"}
+                  style={{ fontSize: "0.76rem", margin: "0.3rem 0 0", color: p.decimo ? "var(--mh-danger)" : undefined }}
+                >
+                  {permDecimo.motivo}
+                </p>
+              )}
+              {permAbono?.ok === false && (
+                <p
+                  className={p.abono > 0 ? undefined : "soft"}
+                  style={{ fontSize: "0.76rem", margin: "0.3rem 0 0", color: p.abono > 0 ? "var(--mh-danger)" : undefined }}
+                >
+                  {permAbono.motivo}{p.abono > 0 ? " Zere o abono deste período." : ""}
+                </p>
+              )}
               {avisos[i] && (
                 <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: "0.45rem 0 0" }}>{avisos[i]}</p>
               )}
             </div>
-          ))}
+            );
+          })}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
             {(modo === "solicitar" || modo === "lancar") && periodos.length < 3 ? (

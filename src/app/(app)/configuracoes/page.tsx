@@ -122,7 +122,7 @@ export default async function SettingsPage() {
     { data: segOcorrenciasData }, { data: segOcTipos }, { data: segOcLocais }, { data: segOcAreas },
     { data: blitzMeiosData }, { data: blitzPerguntasData }, { data: blitzPerguntaMeios },
     { data: blitzMotivosData }, { data: veiculosData },
-    { data: feriasBloqueadosData }, { data: situacoesData },
+    { data: feriasBloqueadosData }, { data: situacoesData }, { data: feriasConfigData },
   ] = await Promise.all([
     fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -245,6 +245,8 @@ export default async function SettingsPage() {
     // situação do colaborador: o afastamento ou a licença em vigor hoje (fuso do
     // Brasil, decidido dentro da RPC)
     supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }),
+    // parâmetros do módulo Férias (sem linha = padrões)
+    supabase.from("ferias_config").select("antecedencia_minima_dias").eq("tenant_id", tenant.id).maybeSingle(),
   ]);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
@@ -553,6 +555,7 @@ export default async function SettingsPage() {
               <FeriasConfigManager
                 niveis={(hierarchies ?? []).map((h) => ({ id: h.id, name: h.name, active: h.active }))}
                 bloqueados={(feriasBloqueadosData ?? []).map((b) => b.hierarchy_level_id)}
+                antecedencia={feriasConfigData?.antecedencia_minima_dias ?? 0}
                 canEdit={canEditDP}
               />
               <AbsencesManager

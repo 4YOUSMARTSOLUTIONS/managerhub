@@ -115,6 +115,7 @@ export type FeriasRow = {
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
+  antecedencia,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -137,6 +138,8 @@ export function FeriasManager({
   setores: { id: string; name: string }[];
   /** unidades do seletor do topo (null = todas) */
   unidades: string[] | null;
+  /** antecedência mínima, em dias, do pedido do próprio colaborador (0 = sem) */
+  antecedencia: number;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
@@ -149,6 +152,16 @@ export function FeriasManager({
   const router = useRouter();
 
   const minhas = useMemo(() => rows.filter((r) => r.userId === meuId), [rows, meuId]);
+
+  /**
+   * Os 13º que a pessoa já pediu (uma vez por ano), sem a linha em edição: o
+   * formulário trava a opção nesses anos. O banco confere de novo.
+   */
+  const decimosDe = (userId: string, excluir?: string) =>
+    rows
+      .filter((r) => r.userId === userId && r.id !== excluir && r.decimo
+        && (r.status === "solicitada" || r.status === "aprovada" || r.status === "efetivada"))
+      .map((r) => ({ inicio: r.startDate, fim: r.endDate }));
   const fila = useMemo(
     () => rows.filter((r) => r.status === "solicitada" && r.userId !== meuId),
     [rows, meuId]);
@@ -326,6 +339,10 @@ export function FeriasManager({
           hoje={hoje}
           ehDp={ehDp}
           usaFolha={usaFolha}
+          // a antecedência vale para o pedido do próprio colaborador; no
+          // lançamento, os 13º da pessoa escolhida vêm junto com o saldo dela
+          antecedencia={dialogo === "solicitar" ? antecedencia : 0}
+          decimos={dialogo === "solicitar" ? decimosDe(meuId) : undefined}
           onFechar={() => setDialogo(null)}
         />
       )}
@@ -336,6 +353,10 @@ export function FeriasManager({
           feriados={feriados}
           hoje={hoje}
           usaFolha={usaFolha}
+          // corrigir um pedido do próprio colaborador segue a antecedência; o
+          // lançado pelo gestor, não (o banco aplica a mesma regra)
+          antecedencia={reenvio.lancadaPeloGestor ? 0 : antecedencia}
+          decimos={decimosDe(reenvio.userId, reenvio.id)}
           inicial={{
             id: reenvio.id, inicio: reenvio.startDate, fim: reenvio.endDate,
             abono: reenvio.abonoDias, decimo: reenvio.decimo,
@@ -349,6 +370,9 @@ export function FeriasManager({
           aquisitivos={null}
           feriados={feriados}
           hoje={hoje}
+          // o próprio dono reagendando (sem ser DP) passa pela antecedência
+          antecedencia={reagendando.userId === meuId && !ehDp ? antecedencia : 0}
+          decimos={decimosDe(reagendando.userId, reagendando.id)}
           inicial={{
             id: reagendando.id, inicio: reagendando.startDate, fim: reagendando.endDate,
             abono: reagendando.abonoDias, decimo: reagendando.decimo,

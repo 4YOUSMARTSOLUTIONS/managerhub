@@ -8,10 +8,13 @@ export function InfoHint({
   children,
   label = "Ajuda",
   size = 14,
+  align = "left",
 }: {
   children: React.ReactNode;
   label?: string;
   size?: number;
+  /** "right" abre o balão para a esquerda: para ícones perto da borda direita */
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
 
@@ -47,7 +50,7 @@ export function InfoHint({
           role="tooltip"
           style={{
             position: "absolute",
-            left: 0,
+            ...(align === "right" ? { right: 0 } : { left: 0 }),
             top: "calc(100% + 6px)",
             zIndex: 50,
             width: "max-content",

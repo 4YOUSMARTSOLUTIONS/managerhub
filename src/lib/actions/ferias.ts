@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext, dpActionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Json } from "@/types/database";
-import { aquisitivoDaLinha, type AquisitivoInfo } from "@/lib/ferias";
+import { aquisitivoDaLinha, type AquisitivoInfo, type DecimoPedido } from "@/lib/ferias";
 import type { PeriodoFolha } from "@/lib/ferias-folha";
 import type { AgendaItem } from "@/lib/ferias-agenda";
 import type { ModeloLotePessoa } from "@/lib/ferias-lote";
@@ -209,6 +209,32 @@ export async function excluirFerias(id: string): Promise<ActionState> {
   }
 }
 
+/**
+ * Configuração: antecedência mínima, em dias, para o colaborador pedir as
+ * próprias férias (0 = sem). O DP precisa desse tempo para calcular e pagar.
+ */
+export async function setAntecedenciaFerias(input: { dias: number }): Promise<ActionState> {
+  try {
+    const { supabase, tenantId, userId } = await dpActionContext();
+    const dias = Math.trunc(Number(input.dias));
+    if (!Number.isFinite(dias) || dias < 0 || dias > 180) {
+      return { error: "Informe de 0 a 180 dias." };
+    }
+    const { error } = await supabase
+      .from("ferias_config")
+      .upsert(
+        { tenant_id: tenantId, antecedencia_minima_dias: dias, updated_by: userId, updated_at: new Date().toISOString() },
+        { onConflict: "tenant_id" },
+      );
+    if (error) return { error: error.message };
+    revalidar();
+    revalidatePath("/configuracoes");
+    return { ok: true, message: dias > 0 ? `Antecedência mínima: ${dias} dias.` : "Sem antecedência mínima." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 /** Configuração: marca ou desmarca um nível de hierarquia como "não solicita". */
 export async function setNivelSolicitaFerias(
   input: { hierarchyLevelId: string; solicita: boolean },
@@ -247,14 +273,30 @@ export async function setNivelSolicitaFerias(
  */
 export async function getAquisitivosDe(
   input: { userId: string; hoje: string },
-): Promise<{ aquisitivos: AquisitivoInfo[]; error?: undefined } | { error: string }> {
+): Promise<
+  { aquisitivos: AquisitivoInfo[]; decimos: DecimoPedido[]; error?: undefined } | { error: string }
+> {
   try {
     const { supabase, tenantId } = await actionContext();
-    const { data, error } = await supabase.rpc("ferias_periodos_aquisitivos", {
-      p_tenant: tenantId, p_user: input.userId, p_hoje: input.hoje,
-    });
+    const [{ data, error }, { data: comDecimo }] = await Promise.all([
+      supabase.rpc("ferias_periodos_aquisitivos", {
+        p_tenant: tenantId, p_user: input.userId, p_hoje: input.hoje,
+      }),
+      // o 13º se adianta uma vez por ano: o formulário trava a opção nos anos já
+      // pedidos (a RLS `pode_ver_ferias` dá a mesma alçada da RPC acima)
+      supabase
+        .from("ferias_solicitacoes")
+        .select("start_date, end_date")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", input.userId)
+        .eq("adiantar_decimo_terceiro", true)
+        .in("status", ["solicitada", "aprovada", "efetivada"]),
+    ]);
     if (error) return { error: error.message };
-    return { aquisitivos: (data ?? []).map(aquisitivoDaLinha) };
+    return {
+      aquisitivos: (data ?? []).map(aquisitivoDaLinha),
+      decimos: (comDecimo ?? []).map((d) => ({ inicio: d.start_date, fim: d.end_date })),
+    };
   } catch (e) {
     return { error: (e as Error).message };
   }
