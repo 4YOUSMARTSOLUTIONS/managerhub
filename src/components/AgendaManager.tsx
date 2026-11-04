@@ -254,7 +254,8 @@ export function AgendaManager(props: {
     const vistos = new Set<string>();
     const outros: Opt[] = [];
     for (const id of permitidos) {
-      if (id === currentUserId || vistos.has(id) || !comAgenda.has(id)) continue;
+      // fora do `nameById` = desligado: a cadeia o mantém, a lista de pessoas não
+      if (id === currentUserId || vistos.has(id) || !comAgenda.has(id) || !(id in nameById)) continue;
       vistos.add(id);
       outros.push({ id, name: nameById[id] ?? "Usuário" });
     }
@@ -385,8 +386,10 @@ export function AgendaManager(props: {
   })();
   const teamPeopleIds = isAdmin && showAllTeam
     ? people.map((p) => p.id).filter((id) => id !== currentUserId)
-    : reportIds;
-  const teamPeople = teamPeopleIds.map((id) => ({ id, name: nameById[id] ?? "Usuário" }));
+    // a cadeia inclui desligados (o gestor ainda vê o histórico); a lista da
+    // equipe é de quem está ativo, o único que tem nome em `nameById`
+    : reportIds.filter((id) => id in nameById);
+  const teamPeople = teamPeopleIds.map((id) => ({ id, name: nameById[id] }));
   const [teamUser, setTeamUser] = useState<string>("");
   const [teamDate, setTeamDate] = useState(props.today);
   useEffect(() => { setTeamDate(todayStr); }, [todayStr]);

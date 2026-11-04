@@ -107,7 +107,13 @@ export function TimeMotionManager(props: {
     };
   }, [range, agendas, holidays]);
 
-  const teamIds = isAdmin && showAll ? people.map((p) => p.id) : [currentUserId, ...reportIds.filter((id) => id !== currentUserId)];
+  // A cadeia (`my_managed_memberships`) inclui quem já foi desligado, de
+  // propósito: o gestor ainda vê o histórico dele. Carga planejada é só de quem
+  // está ativo, e o nome só existe para ativos (`nameById`); sem este filtro o
+  // desligado virava uma linha "Usuário" zerada.
+  const teamIds = isAdmin && showAll
+    ? people.map((p) => p.id)
+    : [currentUserId, ...reportIds.filter((id) => id !== currentUserId && id in nameById)];
   const teamRows = teamIds.map((id) => ({ id, name: nameById[id] ?? "Usuário", l: load(id) })).sort((a, b) => b.l.avg - a.l.avg);
 
   const sel = load(selected);
