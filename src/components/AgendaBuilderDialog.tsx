@@ -129,7 +129,10 @@ export function AgendaBuilderDialog({
     }
   }, [open, agenda, currentUserId]);
 
-  const overlaps = useMemo(() => findOverlaps(tasks), [tasks]);
+  // na agenda de demandas não previstas a sobreposição é a regra, não o erro:
+  // a demanda surge no meio de outra coisa
+  const imprevistos = !!agenda?.imprevistos;
+  const overlaps = useMemo(() => (imprevistos ? [] : findOverlaps(tasks)), [tasks, imprevistos]);
 
   if (!open) return null;
 
@@ -197,11 +200,12 @@ export function AgendaBuilderDialog({
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
               <label className="label">Responsável</label>
-              <SearchSelect options={people} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" />
+              {/* a agenda de demandas não previstas é de uma pessoa só */}
+              <SearchSelect options={people} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" disabled={imprevistos} />
             </div>
           </div>
 
-          {!isSelf && (
+          {!isSelf && !imprevistos && (
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
               <input type="checkbox" checked={canEdit} onChange={(e) => setCanEdit(e.target.checked)} />
               Permitir que o responsável edite as tarefas desta agenda

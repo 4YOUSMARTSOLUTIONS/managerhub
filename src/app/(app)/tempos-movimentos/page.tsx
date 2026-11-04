@@ -16,7 +16,8 @@ export default async function TemposMovimentosPage() {
 
   const [members, agendaRes, holidayRes, reportRes] = await Promise.all([
     getMembers(tenant.id),
-    supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id).eq("active", true),
+    // carga PLANEJADA: as demandas não previstas do atalho do diário ficam de fora
+    supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id).eq("active", true).eq("imprevistos", false),
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
     supabase.rpc("my_managed_memberships").eq("tenant_id", tenant.id),
   ]);
@@ -34,6 +35,7 @@ export default async function TemposMovimentosPage() {
     ownerId: a.owner_id, ownerName: nameById[a.owner_id] ?? "Usuário",
     responsibleId: a.responsible_id, responsibleName: nameById[a.responsible_id] ?? "Usuário",
     canResponsibleEdit: a.can_responsible_edit, active: a.active, createdDate: (a.created_at ?? "").slice(0, 10),
+    imprevistos: a.imprevistos ?? false,
     tasks: (a.agenda_tasks ?? []).slice().sort((x, y) => x.sort - y.sort).map((t) => ({
       id: t.id, title: t.title, description: t.description, scheduledTime: t.scheduled_time,
       durationMinutes: t.duration_minutes, frequency: t.frequency, weekdays: t.weekdays ?? [],

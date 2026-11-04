@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Pencil, Power, Users } from "lucide-react";
+import { Eye, Pencil, Plus, Power, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -19,6 +19,7 @@ import { AgendaMonthView } from "./AgendaMonthView";
 import { AgendaBuilderDialog } from "./AgendaBuilderDialog";
 import { AgendaViewDialog } from "./AgendaViewDialog";
 import { AgendaLogDetail, type LogDetailCtx } from "./AgendaLogDetail";
+import { DemandaNaoPrevistaDialog } from "./DemandaNaoPrevistaDialog";
 import { AGENDA_STATUS_LABEL, AGENDA_STATUS_TONE } from "@/lib/constants";
 import { formatDate, shortName } from "@/lib/format";
 import {
@@ -74,6 +75,7 @@ export function AgendaManager(props: {
   const [viewing, setViewing] = useState<AgendaFull | null>(null);
   const [detail, setDetail] = useState<LogDetailCtx | null>(null);
   const [detailCanFill, setDetailCanFill] = useState(true);
+  const [demandaOpen, setDemandaOpen] = useState(false);
 
   /**
    * Status clicado que ainda não voltou do servidor, por `taskId|data`.
@@ -119,7 +121,9 @@ export function AgendaManager(props: {
     let reserved = 0;
     for (const a of agendas) {
       if (!a.active || a.responsibleId !== subjectUserId) continue;
-      if (dateStr < a.createdDate) continue; // agenda ainda não existia nessa data
+      // a de demandas não previstas nasce no primeiro uso, e a demanda pode ser
+      // de dias antes disso: lá quem manda é a data da própria tarefa
+      if (!a.imprevistos && dateStr < a.createdDate) continue; // agenda ainda não existia nessa data
       for (const t of a.tasks) {
         if (!t.active) continue;
         if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, date)) continue;
@@ -130,7 +134,11 @@ export function AgendaManager(props: {
           kind: "task", key: `t-${t.id}`, date: dateStr, title: t.title, agendaName: a.name,
           time: t.flexible ? null : t.scheduledTime, durationMin: t.durationMinutes,
           status: t.flexible ? "feito" : (otimista ?? log?.status ?? "pendente"), note: log?.note ?? null,
-          chargeable: !nonWorking, flexible: t.flexible, taskId: t.id, agendaId: a.id, logId: log?.id ?? null,
+          // demanda não prevista conta na carga (reserved, acima), mas fica fora
+          // da aderência: quem a registra é quem a marca como feita, e o
+          // indicador mede a rotina pactuada (mesma razão do Planner, abaixo)
+          chargeable: !nonWorking && !a.imprevistos, imprevista: a.imprevistos || undefined,
+          flexible: t.flexible, taskId: t.id, agendaId: a.id, logId: log?.id ?? null,
           hasDetail: !!(log?.note ?? "").trim() || (!!log && comDetalhe.has(log.id)),
         });
       }
@@ -187,6 +195,7 @@ export function AgendaManager(props: {
         const isPast = ds < todayStr;
         for (const a of agendas) {
           if (!a.active || a.responsibleId !== subjectUserId) continue;
+          if (a.imprevistos) continue; // fora da aderência e das "tarefas planejadas"
           if (ds < a.createdDate) continue; // não cobra dias anteriores à criação da agenda
           for (const t of a.tasks) {
             if (!t.active) continue;
@@ -234,6 +243,7 @@ export function AgendaManager(props: {
     setDetail({
       agendaId: item.agendaId, taskId: item.taskId, logDate: dateStr, title: item.title,
       agendaName: item.agendaName, status: item.status, note: item.note, logId: item.logId ?? null,
+      imprevista: item.imprevista,
     });
   };
 
@@ -576,7 +586,15 @@ export function AgendaManager(props: {
           ? (
             <div style={{ display: "inline-flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
               {seletorDeDiario}
-              <button className="btn btn-primary" onClick={() => { setEditing(null); setBuilderOpen(true); }}><Users size={15} /> Nova agenda</button>
+              {/* No diário, a ação do dia a dia é registrar o que surgiu; montar
+                  agenda é da tela Agendas. Por isso o destaque troca de lado
+                  aqui. Só no próprio diário: a demanda entra no de quem registra. */}
+              {section === "diario" && isMe && (
+                <button className="btn btn-primary" onClick={() => setDemandaOpen(true)} title="Registrar uma demanda que surgiu fora da rotina">
+                  <Plus size={15} /> Demanda não prevista
+                </button>
+              )}
+              <button className={`btn ${section === "diario" && isMe ? "btn-ghost" : "btn-primary"}`} onClick={() => { setEditing(null); setBuilderOpen(true); }}><Users size={15} /> Nova agenda</button>
             </div>
           )
           : undefined}
@@ -589,6 +607,18 @@ export function AgendaManager(props: {
       <AgendaViewDialog agenda={viewing} onClose={() => setViewing(null)} />
       <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} currentUserId={currentUserId} />
       <AgendaLogDetail ctx={detail} onClose={() => setDetail(null)} canFill={detailCanFill} nameById={nameById} />
+      {demandaOpen && (
+        <DemandaNaoPrevistaDialog
+          dataInicial={meDate}
+          onClose={() => setDemandaOpen(false)}
+          onSaved={(ds) => {
+            setDemandaOpen(false);
+            setMeDate(ds); // leva o diário até o dia da demanda, para ela aparecer
+            toast.success("Demanda registrada no diário.");
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -142,6 +142,132 @@ export async function deleteAgenda(formData: FormData): Promise<ActionState> {
   } catch (e) { return { error: (e as Error).message }; }
 }
 
+// ---------- Demandas não previstas (atalho do diário de bordo) ----------
+//
+// Não entram na agenda da rotina: ela é do gestor, e o colaborador só escreve
+// nela quando o gestor libera. Cada pessoa ganha, no primeiro uso, uma agenda
+// própria marcada com `imprevistos`, e cada demanda vira uma tarefa de data
+// única lá dentro. Assim herda tudo do diário (status, observação, anexos,
+// histórico) sem regra de permissão nova: a dona da agenda é a própria pessoa.
+
+const NOME_AGENDA_IMPREVISTOS = "Demandas não previstas";
+const RE_DATA = /^\d{4}-\d{2}-\d{2}$/;
+const RE_HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** a mesma janela que o diário carrega: antes disso o status nem apareceria */
+const DIAS_PARA_TRAS = 90;
+
+/** A agenda de demandas não previstas de quem está logado, criada no primeiro uso. */
+async function agendaDeImprevistos(ctx: Ctx): Promise<{ id: string } | { error: string }> {
+  const buscar = () => ctx.supabase.from("agendas").select("id, active")
+    .eq("tenant_id", ctx.tenantId).eq("responsible_id", ctx.userId).eq("imprevistos", true).maybeSingle();
+
+  let { data: ag } = await buscar();
+  if (!ag) {
+    const { error } = await ctx.supabase.from("agendas").insert({
+      tenant_id: ctx.tenantId,
+      unit_id: null, // aparece em qualquer recorte de unidade, como a pessoa
+      name: NOME_AGENDA_IMPREVISTOS,
+      description: "Demandas que surgiram fora da rotina, registradas pelo atalho do diário de bordo.",
+      owner_id: ctx.userId,
+      responsible_id: ctx.userId,
+      can_responsible_edit: true,
+      imprevistos: true,
+      created_by: ctx.userId,
+    });
+    // 23505: outro clique criou no mesmo instante (índice único por pessoa)
+    if (error && error.code !== "23505") return { error: error.message };
+    ({ data: ag } = await buscar());
+    if (!ag) return { error: "Não foi possível preparar a agenda de demandas não previstas." };
+  }
+  // inativada à mão: registrar uma demanda nova é pedir para ela voltar a valer
+  if (!ag.active) {
+    const { error } = await ctx.supabase.from("agendas")
+      .update({ active: true, updated_at: new Date().toISOString() }).eq("id", ag.id);
+    if (error) return { error: error.message };
+  }
+  return { id: ag.id };
+}
+
+export type DemandaNaoPrevistaInput = {
+  title: string;
+  description?: string | null;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  duration_minutes: number;
+};
+
+export async function registrarDemandaNaoPrevista(input: DemandaNaoPrevistaInput): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    const title = (input.title ?? "").trim();
+    if (!title) return { error: "Descreva a demanda que surgiu." };
+    if (title.length > 200) return { error: "O título passou de 200 caracteres. Detalhe na descrição." };
+    if (!RE_DATA.test(input.date ?? "") || Number.isNaN(Date.parse(`${input.date}T12:00:00`))) {
+      return { error: "Informe a data da demanda." };
+    }
+    const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+    const limite = new Date(`${hoje}T12:00:00`);
+    limite.setDate(limite.getDate() - DIAS_PARA_TRAS);
+    if (input.date < limite.toLocaleDateString("sv-SE")) {
+      return { error: `A data pode voltar no máximo ${DIAS_PARA_TRAS} dias.` };
+    }
+    if (!RE_HORA.test(input.time ?? "")) return { error: "Informe o horário em que a demanda começou." };
+    const duracao = Math.round(Number(input.duration_minutes));
+    if (!Number.isFinite(duracao) || duracao < 5 || duracao > 720) {
+      return { error: "Informe a duração em minutos, de 5 a 720." };
+    }
+
+    const ag = await agendaDeImprevistos(ctx);
+    if ("error" in ag) return { error: ag.error };
+
+    const { error } = await ctx.supabase.from("agenda_tasks").insert({
+      tenant_id: ctx.tenantId,
+      agenda_id: ag.id,
+      title,
+      description: clean(input.description),
+      scheduled_time: input.time,
+      duration_minutes: duracao,
+      frequency: "unica",
+      weekdays: [],
+      day_of_month: null,
+      fixed_date: input.date,
+      sort: 0,
+      active: true,
+      flexible: false,
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/agenda");
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
+/** Exclui uma demanda não prevista registrada por engano (só dessas: rotina se edita na agenda). */
+export async function excluirDemandaNaoPrevista(taskId: string): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    const { data: t } = await ctx.supabase.from("agenda_tasks").select("id, agenda_id").eq("id", taskId).maybeSingle();
+    if (!t) return { error: "Demanda não encontrada." };
+    const { data: ag } = await ctx.supabase.from("agendas").select("imprevistos").eq("id", t.agenda_id).maybeSingle();
+    if (!ag?.imprevistos) return { error: "Por aqui só se excluem demandas não previstas. Tarefas da rotina se editam na agenda." };
+
+    // anexos saem do storage antes: o cascade apaga só as linhas
+    const { data: logs } = await ctx.supabase.from("agenda_logs").select("id").eq("task_id", taskId);
+    const logIds = (logs ?? []).map((l) => l.id);
+    if (logIds.length) {
+      const { data: atts } = await ctx.supabase.from("agenda_log_attachments").select("path").in("log_id", logIds);
+      const paths = (atts ?? []).map((a) => a.path);
+      if (paths.length) { const rm = await ctx.supabase.storage.from(BUCKET).remove(paths); if (rm.error) console.error("agenda att cleanup:", rm.error.message); }
+    }
+
+    const { data: apagadas, error } = await ctx.supabase.from("agenda_tasks").delete().eq("id", taskId).select("id");
+    if (error) return { error: error.message };
+    // a RLS recusa em silêncio (zero linhas), sem erro
+    if (!apagadas?.length) return { error: "Você não tem permissão para excluir esta demanda." };
+    revalidatePath("/agenda");
+    return { ok: true };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
 // ---------- Logs (preenchimento diário) ----------
 /** Garante que existe um log (task_id, log_date); retorna o id. Não altera status existente. */
 async function ensureLog(ctx: Ctx, agendaId: string, taskId: string, logDate: string): Promise<string | null> {

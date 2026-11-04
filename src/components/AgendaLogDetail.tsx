@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Paperclip, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
+import { confirmDialog } from "@/components/ui/confirm";
 import { AGENDA_STATUS_LABEL, AGENDA_STATUS_TONE } from "@/lib/constants";
 import { formatDateTime, shortName } from "@/lib/format";
 import type { Enums } from "@/types/database";
 import {
   openLog, setLogStatus, addLogComment, uploadLogAttachments, deleteLogAttachment,
-  getLogThread, getAgendaAttachmentUrl, type LogThread,
+  getLogThread, getAgendaAttachmentUrl, excluirDemandaNaoPrevista, type LogThread,
 } from "@/lib/actions/agenda";
 
 /** Ordem de leitura, do melhor para o pior. `pendente` é o "ainda não". */
@@ -34,6 +35,8 @@ export type LogDetailCtx = {
   status: Enums<"agenda_log_status">;
   note: string | null;
   logId: string | null;
+  /** demanda não prevista: pode ser excluída daqui (rotina se edita na agenda) */
+  imprevista?: boolean;
 };
 
 export function AgendaLogDetail({
@@ -124,6 +127,23 @@ export function AgendaLogDetail({
     if (r.error) { toast.error(r.error); return; }
     await reload();
   });
+
+  const excluirDemanda = async () => {
+    const ok = await confirmDialog({
+      title: "Excluir demanda",
+      message: <>Excluir <strong>{ctx.title}</strong> do diário, com observação, comentários e anexos?</>,
+      confirmLabel: "Excluir",
+      tone: "danger",
+    });
+    if (!ok) return;
+    start(async () => {
+      const r = await excluirDemandaNaoPrevista(ctx.taskId);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success("Demanda excluída.");
+      onClose();
+      router.refresh();
+    });
+  };
 
   const openAtt = async (path: string) => {
     const url = await getAgendaAttachmentUrl(path);
@@ -242,6 +262,16 @@ export function AgendaLogDetail({
             </div>
           </div>
         </div>
+
+        {/* só para demanda não prevista: foi registrada pelo atalho e pode ter
+            sido por engano. Tarefa da rotina se remove na agenda. */}
+        {canFill && ctx.imprevista && (
+          <div style={{ display: "flex", justifyContent: "flex-start", padding: "0.85rem 1.25rem", borderTop: "1px solid var(--mh-border)" }}>
+            <button type="button" className="btn btn-ghost btn-sm" style={{ color: "var(--mh-danger)" }} onClick={excluirDemanda} disabled={pending}>
+              <Trash2 size={14} /> Excluir demanda
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

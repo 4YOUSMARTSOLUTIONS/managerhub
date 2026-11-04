@@ -13,9 +13,9 @@ export type Database = {
   public: {
     Tables: {
       agendas: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; owner_id: string; responsible_id: string; can_responsible_edit: boolean; active: boolean; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; owner_id: string; responsible_id: string; can_responsible_edit?: boolean; active?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; unit_id?: string | null; name?: string; description?: string | null; owner_id?: string; responsible_id?: string; can_responsible_edit?: boolean; active?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; owner_id: string; responsible_id: string; can_responsible_edit: boolean; active: boolean; imprevistos: boolean; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; owner_id: string; responsible_id: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string | null; name?: string; description?: string | null; owner_id?: string; responsible_id?: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       agenda_tasks: {

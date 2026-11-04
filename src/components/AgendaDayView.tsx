@@ -110,7 +110,9 @@ export function AgendaDayView({
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {items.map((it) => (
-            <div key={it.key} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.55rem 1.1rem", borderBottom: "1px solid var(--mh-border)", opacity: it.chargeable ? 1 : 0.6 }}>
+            // a demanda não prevista fica fora da aderência mas é trabalho do dia:
+            // apagada ela pareceria desabilitada
+            <div key={it.key} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.55rem 1.1rem", borderBottom: "1px solid var(--mh-border)", opacity: it.chargeable || (it.imprevista && !nonWorking) ? 1 : 0.6 }}>
               {it.kind === "task" ? (
                 <InterruptorStatus
                   item={it}
@@ -135,8 +137,11 @@ export function AgendaDayView({
                 {/* o nome da agenda saiu: repetia em toda linha, e a tela toda
                     já é de um responsável só. Fica a duração, que muda por linha. */}
                 {it.durationMin > 0 && (
-                  <div className="soft" style={{ fontSize: "0.74rem" }}>
-                    {fmtMinutes(it.durationMin)}{it.flexible ? " (média)" : ""}
+                  // o selo de não prevista mora aqui e não ao lado do título: o
+                  // título corta com reticências no celular e levava o selo junto
+                  <div className="soft" style={{ fontSize: "0.74rem", display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                    <span>{fmtMinutes(it.durationMin)}{it.flexible ? " (média)" : ""}</span>
+                    {it.imprevista && <Badge variant="quiet" tone="amber">Não prevista</Badge>}
                   </div>
                 )}
               </div>

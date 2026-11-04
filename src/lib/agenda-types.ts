@@ -27,6 +27,8 @@ export type AgendaFull = {
   canResponsibleEdit: boolean;
   active: boolean;
   createdDate: string; // YYYY-MM-DD (não cobra dias anteriores à criação)
+  /** agenda pessoal de demandas não previstas: fora da aderência e da carga planejada */
+  imprevistos: boolean;
   tasks: AgendaTaskFull[];
 };
 
@@ -78,6 +80,8 @@ export type DayItem = {
   note: string | null;
   chargeable: boolean;
   flexible?: boolean; // tarefa de duração média, sem horário fixo
+  /** demanda não prevista, registrada pelo atalho do diário (fora da aderência) */
+  imprevista?: boolean;
   // task
   taskId?: string;
   agendaId?: string;

@@ -80,6 +80,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
     ownerId: a.owner_id, ownerName: nameById[a.owner_id] ?? "Usuário",
     responsibleId: a.responsible_id, responsibleName: nameById[a.responsible_id] ?? "Usuário",
     canResponsibleEdit: a.can_responsible_edit, active: a.active, createdDate: (a.created_at ?? "").slice(0, 10),
+    imprevistos: a.imprevistos ?? false,
     tasks: (a.agenda_tasks ?? []).slice().sort((x, y) => x.sort - y.sort).map((t) => ({
       id: t.id, title: t.title, description: t.description, scheduledTime: t.scheduled_time,
       durationMinutes: t.duration_minutes, frequency: t.frequency, weekdays: t.weekdays ?? [],
