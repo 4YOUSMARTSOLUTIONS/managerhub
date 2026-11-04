@@ -394,6 +394,14 @@ export function validarConjunto(
     if (usadoAgora && !a.tem14 && a.saldo < minimo) {
       return { erro: `Um dos períodos do aquisitivo ${a.rotulo} precisa ter ao menos ${minimo} dias corridos (art. 134): com este pedido restariam só ${a.saldo} dias para isso.` };
     }
+    // art. 134 §1º: nenhum período tem menos de 5 dias, e são no máximo 3. O
+    // que sobrar no aquisitivo precisa caber num período futuro.
+    if (usadoAgora && a.saldo >= 1 && a.saldo <= 4) {
+      return { erro: `Com este pedido sobrariam ${a.saldo} dia(s) no aquisitivo ${a.rotulo}, e nenhum período de férias pode ter menos de 5 dias (art. 134). Use o saldo todo ou deixe ao menos 5 dias para um próximo período.` };
+    }
+    if (usadoAgora && a.qtdPeriodos >= 3 && a.saldo > 0) {
+      return { erro: `O aquisitivo ${a.rotulo} chegaria ao 3º período com ${a.saldo} dia(s) ainda sobrando, e as férias podem ser divididas em no máximo 3 períodos (art. 134). Use o saldo todo neste período.` };
+    }
   }
 
   // prazos legais do pedido: no banco rodam depois de todas as regras acima
