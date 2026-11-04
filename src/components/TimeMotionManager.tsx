@@ -151,6 +151,15 @@ export function TimeMotionManager(props: {
         )}
       </div>
 
+      {/* Resumo do colaborador selecionado: acima da tabela, que é onde se escolhe quem */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.85rem", marginBottom: "1rem" }}>
+        <StatCard label="Carga média/dia" value={fmtMinutes(Math.round(sel.avg))} hint={`${shortName(nameById[selected] ?? "")}`} tone={loadTone(sel.avg)} />
+        <StatCard label="% da jornada (8h)" value={`${selPct}%`} hint={selPct > 100 ? "Acima da jornada" : selPct < 40 ? "Folga na agenda" : "Dentro da jornada"} tone={loadTone(sel.avg)} />
+        <StatCard label="Pico em um dia" value={fmtMinutes(sel.peak)} tone={sel.peak > BUDGET ? "red" : "blue"} />
+        <StatCard label="Tarefas ativas" value={sel.taskCount} tone="purple" />
+        <StatCard label="Dias acima de 8h" value={sel.overDays} tone={sel.overDays > 0 ? "red" : "gray"} />
+      </div>
+
       {/* Tabela da equipe (gestor/admin) */}
       {isManagerView && (
         <div style={{ marginBottom: "1rem" }}>
@@ -186,15 +195,6 @@ export function TimeMotionManager(props: {
           </Section>
         </div>
       )}
-
-      {/* Detalhe do colaborador selecionado */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.85rem", marginBottom: "1rem" }}>
-        <StatCard label="Carga média/dia" value={fmtMinutes(Math.round(sel.avg))} hint={`${shortName(nameById[selected] ?? "")}`} tone={loadTone(sel.avg)} />
-        <StatCard label="% da jornada (8h)" value={`${selPct}%`} hint={selPct > 100 ? "Acima da jornada" : selPct < 40 ? "Folga na agenda" : "Dentro da jornada"} tone={loadTone(sel.avg)} />
-        <StatCard label="Pico em um dia" value={fmtMinutes(sel.peak)} tone={sel.peak > BUDGET ? "red" : "blue"} />
-        <StatCard label="Tarefas ativas" value={sel.taskCount} tone="purple" />
-        <StatCard label="Dias acima de 8h" value={sel.overDays} tone={sel.overDays > 0 ? "red" : "gray"} />
-      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(280px, 1.4fr)", gap: "1rem", alignItems: "start" }}>
         <Section title="Carga por dia da semana">
