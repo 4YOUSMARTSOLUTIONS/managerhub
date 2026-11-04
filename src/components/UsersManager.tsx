@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { setUserPassword, removeUser, setMemberActive, enviarLinkDeRecuperacao } from "@/lib/actions/users";
-import { USER_TYPE, type Tone } from "@/lib/constants";
+import type { Tone } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
 import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
@@ -18,6 +18,9 @@ import { EmployeeViewDialog } from "./EmployeeViewDialog";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { detalheSituacao, rotuloSituacao, type SituacaoColaborador } from "./SituacaoColaborador";
+import {
+  COLUNAS_PLANILHA_COLABORADORES, linhaDaPlanilhaDeColaboradores, rotuloPerfil,
+} from "@/lib/planilha-colaboradores";
 
 export type EmployeeRow = EmployeeData & {
   departmentName: string | null;
@@ -38,10 +41,7 @@ export type EmployeeRow = EmployeeData & {
   situacao: SituacaoColaborador | null;
 };
 
-function roleLabel(role: string): string {
-  if (role === "owner") return "Proprietário";
-  return USER_TYPE[role as keyof typeof USER_TYPE] ?? role;
-}
+const roleLabel = rotuloPerfil;
 
 /** Cor do selo por perfil. Exportada porque a ficha do colaborador usa a mesma. */
 export function roleTone(role: string): Tone {
@@ -246,16 +246,10 @@ export function UsersManager({
           <ExportButton
             filename="colaboradores.xlsx"
             sheetName="Colaboradores"
-            // A exportação tem as MESMAS colunas do modelo de importação, e só
-            // elas: o arquivo exportado é o que volta pela importação, então toda
-            // coluna daqui ou é lida na volta, ou é ruído que convida a ser
-            // preenchida à toa. Por isso o gestor sai só como matrícula, sem o
-            // nome. Para conferir o organograma com nomes, a tela é "Minha equipe".
-            headers={["Empresa", "Código Funcionário", "Nome Completo", "Admissão", "Função", "Perfil Função", "Setor", "Sub Setor", "Data de Nascimento", "CPF", "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil", "Hierarquia"]}
-            rows={employees.map((e) => {
-              const brDate = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : (d ?? ""));
-              return [e.unitNames.join("; "), e.employeeCode ?? "", e.fullName ?? "", brDate(e.admissionDate), e.positionName ?? "", e.levelName ?? "", e.departmentName ?? "", e.subdepartmentName ?? "", brDate(e.birthDate), e.cpf ?? "", brDate(e.dismissedAt), e.gender ?? "", e.phone ?? "", e.email ?? "", e.managerCode ?? "", roleLabel(e.role), e.hierarchyName ?? ""];
-            })}
+            // as MESMAS colunas do modelo de importação (o formato mora em
+            // planilha-colaboradores.ts, que a exportação de Minha equipe também usa)
+            headers={COLUNAS_PLANILHA_COLABORADORES}
+            rows={employees.map(linhaDaPlanilhaDeColaboradores)}
           />
           {canEdit && <button className="btn btn-primary btn-sm" onClick={openCreate}>+ Novo colaborador</button>}
         </div>

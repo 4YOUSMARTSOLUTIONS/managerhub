@@ -2208,6 +2208,18 @@ export type Database = {
           gender: Database["public"]["Enums"]["gender_type"] | null
         }[]
       }
+      // Os mesmos dados, mas só da CADEIA de quem chama (my_managed_memberships):
+      // a planilha que o gestor exporta em Minha equipe. Exige papel de Gestor ou acima.
+      equipe_dados_pessoais: {
+        Args: { p_tenant: string }
+        Returns: {
+          id: string
+          cpf: string | null
+          phone: string | null
+          birth_date: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
+        }[]
+      }
       catalog_usage: {
         Args: { p_tenant: string }
         Returns: {

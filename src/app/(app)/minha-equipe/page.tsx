@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { TeamList, type TeamMember } from "@/components/TeamList";
 import { TeamOrgChart } from "@/components/TeamOrgChart";
+import { ExportarEquipeButton } from "@/components/ExportarEquipeButton";
 
 /**
  * "Minha equipe": a ficha de quem está abaixo do Gestor no organograma.
@@ -18,9 +19,11 @@ import { TeamOrgChart } from "@/components/TeamOrgChart";
  * Módulo `core`, então NÃO passa por `moduleGate` (que recusa módulo base). A
  * guarda de papel é feita aqui, no mesmo formato de /auditoria.
  *
- * CPF, telefone e nascimento ficam DE FORA. Não é decisão de tela: essas colunas
- * foram revogadas de `authenticated` por privilégio de coluna (ver AGENTS.md), e
- * um `.select("cpf")` aqui quebraria na compilação, que é o efeito pretendido.
+ * CPF, telefone e nascimento ficam DE FORA da tela. Não é decisão de tela: essas
+ * colunas foram revogadas de `authenticated` por privilégio de coluna (ver
+ * AGENTS.md), e um `.select("cpf")` aqui quebraria na compilação, que é o efeito
+ * pretendido. A planilha exportada traz esses dados da equipe por outro caminho
+ * (`equipe_dados_pessoais`, só a cadeia de quem exporta), buscados no clique.
  */
 export default async function MinhaEquipePage() {
   const { tenant, role, user } = await requireContext();
@@ -64,10 +67,13 @@ export default async function MinhaEquipePage() {
   // Colaboradores já usa, então não invento um segundo jeito de fazer o mesmo.
   const [{ data: vinculos }, { data: deps }, { data: subs }, { data: cargos }, { data: niveis }, { data: hierarquias }, { data: perfis }] =
     await Promise.all([
-      supabase
+      // a empresa passa de 1000 vínculos: sem `fetchAll` o PostgREST corta calado
+      // e parte da equipe some da lista e do organograma
+      fetchAll(() => supabase
         .from("memberships")
         .select("user_id, employee_code, admission_date, is_active, manager_id, role, department_id, subdepartment_id, position_id, position_level_id, hierarchy_level_id")
-        .eq("tenant_id", tenant.id),
+        .eq("tenant_id", tenant.id)
+        .order("user_id")),
       supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
       supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
@@ -156,7 +162,13 @@ export default async function MinhaEquipePage() {
 
   return (
     <div>
-      <PageHeader title="Minha equipe" subtitle={`${membros.length} pessoa(s) sob sua gestão, incluindo níveis indiretos`} />
+      <PageHeader
+        title="Minha equipe"
+        subtitle={`${membros.length} pessoa(s) sob sua gestão, incluindo níveis indiretos`}
+        // a mesma planilha de Configurações > Colaboradores, só da equipe; sem
+        // importação, que continua com o DP
+        action={<ExportarEquipeButton />}
+      />
       <Tabs tabs={abas} />
     </div>
   );
