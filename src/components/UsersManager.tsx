@@ -391,6 +391,8 @@ export function UsersManager({
             people={people}
             canSetOwner={isSuperAdmin}
             canSetRole={canManageAccess}
+            // ao desligar um gestor, a equipe dele continua apontando para ele
+            subordinadosAtivos={editing ? employees.filter((e) => e.active && e.managerId === editing.userId).length : 0}
           />
 
           {canEdit && <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} podeDefinirPerfil={canManageAccess} />}

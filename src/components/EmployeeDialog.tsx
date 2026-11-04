@@ -32,6 +32,8 @@ export type EmployeeData = {
   unitIds: string[];
   /** marca de gestão de treinamentos (capacidade, independente do papel) */
   isTrainingManager?: boolean;
+  /** data de desligamento (demissão); null = vínculo ativo */
+  dismissedAt?: string | null;
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -66,6 +68,7 @@ export function EmployeeDialog({
   people,
   canSetOwner = false,
   canSetRole = true,
+  subordinadosAtivos = 0,
 }: {
   open: boolean;
   onClose: () => void;
@@ -90,11 +93,29 @@ export function EmployeeDialog({
    * `memberships_rh_nao_define_papel` recusaria a troca no banco.
    */
   canSetRole?: boolean;
+  /**
+   * Quantas pessoas ativas têm este colaborador como gestor: ao desligá-lo, elas
+   * continuam apontando para ele até alguém trocar o gestor delas.
+   */
+  subordinadosAtivos?: number;
 }) {
   const isEdit = !!employee;
+  // A data de desligamento em edição vale para ESTA abertura da ficha: trocou de
+  // colaborador (ou reabriu), a chave muda e o campo volta ao que está gravado,
+  // sem efeito sincronizando estado.
+  const chaveDeslig = `${open}|${employee?.userId ?? ""}|${employee?.dismissedAt ?? ""}`;
+  const [desligEstado, setDesligEstado] = useState({ chave: chaveDeslig, valor: employee?.dismissedAt ?? "" });
+  const desligamento = desligEstado.chave === chaveDeslig ? desligEstado.valor : (employee?.dismissedAt ?? "");
+  const setDesligamento = (valor: string) => setDesligEstado({ chave: chaveDeslig, valor });
+  const hojeSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
   const action = isEdit ? updateEmployee : createEmployee;
   const [state, formAction] = useActionState(action, initialActionState);
-  const [deptId, setDeptId] = useState(employee?.departmentId ?? "");
+  // setor selecionado (campo controlado): mesma técnica, reabrir ou trocar de
+  // colaborador volta ao setor gravado
+  const chaveDept = `${open}|${employee?.userId ?? ""}|${employee?.departmentId ?? ""}`;
+  const [deptEstado, setDeptEstado] = useState({ chave: chaveDept, valor: employee?.departmentId ?? "" });
+  const deptId = deptEstado.chave === chaveDept ? deptEstado.valor : (employee?.departmentId ?? "");
+  const setDeptId = (valor: string) => setDeptEstado({ chave: chaveDept, valor });
   const router = useRouter();
 
   useEffect(() => {
@@ -104,11 +125,6 @@ export function EmployeeDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
-
-  // ao (re)abrir para outro colaborador, sincroniza o setor selecionado (campo controlado)
-  useEffect(() => {
-    if (open) setDeptId(employee?.departmentId ?? "");
-  }, [open, employee]);
 
   if (!open) return null;
 
@@ -289,6 +305,39 @@ export function EmployeeDialog({
                   </p>
                 </Field>
               </div>
+            )}
+
+            {isEdit && (
+              <>
+                <p style={sectionTitle}>Desligamento</p>
+                {/* o marcador diz ao servidor que o campo estava na tela: sem ele,
+                    "vazio" não distinguiria "não desligado" de "campo ausente" */}
+                <input type="hidden" name="desligamento_presente" value="1" />
+                <div style={grid2}>
+                  <Field label="Data de desligamento">
+                    <input
+                      name="dismissed_at" type="date" className="input"
+                      value={desligamento} max={hojeSP}
+                      onChange={(e) => setDesligamento(e.target.value)}
+                    />
+                    <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>
+                      Preencha para desligar: o colaborador perde o acesso e sai das listas de
+                      ativos. Para desfazer um desligamento lançado por engano, apague a data.
+                    </p>
+                  </Field>
+                </div>
+                {desligamento && !employee?.dismissedAt && (
+                  <p style={{ fontSize: "0.8rem", margin: 0, padding: "0.5rem 0.7rem", borderRadius: 8, background: "var(--mh-warning-soft)", color: "var(--mh-warning)" }}>
+                    Ao salvar, o colaborador será desligado em {desligamento.split("-").reverse().join("/")} e perderá o acesso ao sistema.
+                    {subordinadosAtivos > 0 && ` Ele é gestor de ${subordinadosAtivos} pessoa(s) ativa(s): troque o gestor delas depois.`}
+                  </p>
+                )}
+                {!desligamento && employee?.dismissedAt && (
+                  <p style={{ fontSize: "0.8rem", margin: 0, padding: "0.5rem 0.7rem", borderRadius: 8, background: "var(--mh-warning-soft)", color: "var(--mh-warning)" }}>
+                    Ao salvar, o desligamento é desfeito e o colaborador volta a ter acesso.
+                  </p>
+                )}
+              </>
             )}
 
             {!isEdit && (

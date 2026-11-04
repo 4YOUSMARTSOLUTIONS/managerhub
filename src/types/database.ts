@@ -2210,6 +2210,12 @@ export type Database = {
           gender: Database["public"]["Enums"]["gender_type"] | null
         }[]
       }
+      // Desligamento pela ficha (o mesmo da coluna Demissão da importação). Data
+      // = desliga e corta o acesso; null em quem estava desligado = desfaz. DP só.
+      colaborador_definir_desligamento: {
+        Args: { p_tenant: string; p_user: string; p_data: string | null }
+        Returns: undefined
+      }
       // Os mesmos dados, mas só da CADEIA de quem chama (my_managed_memberships):
       // a planilha que o gestor exporta em Minha equipe. Exige papel de Gestor ou acima.
       equipe_dados_pessoais: {

@@ -120,11 +120,31 @@ export async function updateEmployee(
     if (!isValidCpf(cpf)) return { error: "CPF inválido. Confira os números." };
     if (!String(formData.get("employee_code") ?? "").trim()) return { error: "Informe a matrícula do colaborador." };
 
+    // Desligamento: conferido ANTES de salvar a ficha, para um erro na data não
+    // deixar metade gravada (a ficha e a demissão são duas chamadas). O banco
+    // confere tudo de novo em `colaborador_definir_desligamento`.
+    const temDesligamento = formData.get("desligamento_presente") === "1";
+    const desligamento = String(formData.get("dismissed_at") ?? "").trim() || null;
+    if (temDesligamento && desligamento) {
+      const hoje = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+      const admissao = String(formData.get("admission_date") ?? "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(desligamento)) return { error: "Data de desligamento inválida." };
+      if (desligamento > hoje) return { error: "A data de desligamento não pode ser futura: lance no dia em que o desligamento acontecer." };
+      if (admissao && desligamento < admissao) return { error: "A data de desligamento não pode ser antes da admissão." };
+    }
+
     const { error } = await supabase.rpc("admin_update_employee", {
       p_user: userId,
       p_data: buildData(formData, cpf),
     });
     if (error) return { error: error.message };
+
+    if (temDesligamento) {
+      const { error: eDeslig } = await supabase.rpc("colaborador_definir_desligamento", {
+        p_tenant: tenantId, p_user: userId, p_data: desligamento,
+      });
+      if (eDeslig) return { error: `A ficha foi salva, mas o desligamento não: ${eDeslig.message}` };
+    }
 
     // A marca de gestão de treinamentos vai à parte, e só quando o campo estava
     // na tela (o marcador distingue "desmarcado" de "não exibido"): o RH salva
