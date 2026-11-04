@@ -66,6 +66,7 @@ import {
   createTicketCategory, deleteTicketCategory, setTicketCategoryActive,
 } from "@/lib/actions/tickets";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { minhaEquipe } from "@/lib/team";
 
 export default async function SettingsPage({
   searchParams,
@@ -88,8 +89,15 @@ export default async function SettingsPage({
   // `canEditDP` faz o papel do `canEdit`. Duas coisas ficam fora da alçada dele
   // dentro da própria aba de Colaboradores, e são travadas pelo `canManageAccess`:
   // redefinir senha e mudar o perfil de acesso.
+  //
+  // O Gestor (desde 04/11/2026, decisão do LUIZ) entra como o Gerencial, só para
+  // ler, mas onde há dado de PESSOA vê só a própria equipe (a cadeia de Minha
+  // equipe): a lista de Colaboradores é recortada aqui, e ausências, punições e
+  // RV individual chegam recortadas pela RLS. Regras e cadastros sem dado de
+  // pessoa ele vê inteiros.
   const isHr = role === "hr";
-  const canView = role === "owner" || role === "admin" || role === "manager" || isHr;
+  const isGestor = role === "team_lead";
+  const canView = role === "owner" || role === "admin" || role === "manager" || isHr || isGestor;
   const canEdit = role === "owner" || role === "admin";
   const canEditDP = canEdit || isHr;
 
@@ -97,7 +105,7 @@ export default async function SettingsPage({
     return (
       <div>
         <PageHeader title="Configurações" />
-        <EmptyState title="Acesso restrito" description="Apenas proprietários, administradores e o perfil Gerencial podem acessar as configurações." />
+        <EmptyState title="Acesso restrito" description="Apenas proprietários, administradores, RH, Gerencial e Gestores acessam as configurações." />
       </div>
     );
   }
@@ -128,6 +136,7 @@ export default async function SettingsPage({
     { data: blitzMeiosData }, { data: blitzPerguntasData }, { data: blitzPerguntaMeios },
     { data: blitzMotivosData }, { data: veiculosData },
     { data: feriasBloqueadosData }, { data: situacoesData }, { data: feriasConfigData },
+    equipeDoGestor,
   ] = await Promise.all([
     fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")),
     supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
@@ -158,9 +167,11 @@ export default async function SettingsPage({
     fetchAll(() => supabase.from("profiles").select("id, full_name, email").order("id")),
     // CPF, telefone, nascimento e sexo saíram do alcance da chave pública: a RLS
     // libera a LINHA do colega e não tem granularidade de coluna, então qualquer
-    // funcionário lia a base inteira pelo PostgREST. Vêm por RPC, que exige
-    // owner/admin da empresa ativa.
-    supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
+    // funcionário lia a base inteira pelo PostgREST. Vêm por RPC: a da empresa
+    // (owner/admin/manager/hr) ou, para o Gestor, a da própria equipe.
+    isGestor
+      ? supabase.rpc("equipe_dados_pessoais", { p_tenant: tenant.id })
+      : supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
     fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
     // contratos encerrados: as importações aceitam lançar histórico pela
     // matrícula antiga, e a PRÉVIA precisa reconhecê-la igual ao servidor
@@ -256,7 +267,10 @@ export default async function SettingsPage({
       .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias")
       .eq("tenant_id", tenant.id)
       .maybeSingle(),
+    // a cadeia do Gestor (os outros perfis não usam o recorte)
+    isGestor ? minhaEquipe(supabase, tenant.id) : Promise.resolve(null),
   ]);
+  const equipe = equipeDoGestor ? new Set(equipeDoGestor) : null;
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
   // Antes esta tela baixava a tabela de AÇÕES INTEIRA (7.522 linhas) e todos os
@@ -377,9 +391,12 @@ export default async function SettingsPage({
   // resolvendo, e "catálogo em uso" que só olhasse a unidade ativa deixaria
   // excluir uma hierarquia ainda usada na outra.
   const unidadesDoEscopo = effectiveUnitFilter(unitScope);
+  // o Gestor vê só a própria equipe (e os dados pessoais dela vêm da RPC da
+  // equipe); a exportação nasce desta lista, então sai com o mesmo recorte
+  const daAlcada = equipe ? employeesTodos.filter((e) => equipe.has(e.userId)) : employeesTodos;
   const employees = unidadesDoEscopo
-    ? employeesTodos.filter((e) => e.unitIds.length === 0 || e.unitIds.some((id) => unidadesDoEscopo.includes(id)))
-    : employeesTodos;
+    ? daAlcada.filter((e) => e.unitIds.length === 0 || e.unitIds.some((id) => unidadesDoEscopo.includes(id)))
+    : daAlcada;
 
   const people = (profilesData ?? []).map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
   const unitOpts = (units ?? []).map((u) => ({ id: u.id, name: u.name, kind: u.kind }));
@@ -411,6 +428,14 @@ export default async function SettingsPage({
       positionName: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+  // Remuneração variável > Valores, para o Gestor: só a equipe e as funções que
+  // ela ocupa (a RLS entrega os valores no mesmo recorte). A lista acima continua
+  // inteira porque também resolve nomes em Segurança.
+  const rvMembersDaAlcada = equipe ? rvMembers.filter((m) => equipe.has(m.userId)) : rvMembers;
+  const funcoesDaEquipe = equipe
+    ? new Set(mems.filter((m) => equipe.has(m.user_id) && m.position_id).map((m) => m.position_id as string))
+    : null;
 
   /**
    * Quem as IMPORTAÇÕES podem alcançar: o quadro ativo, os desligados e os
@@ -1263,7 +1288,7 @@ export default async function SettingsPage({
         <Tabs
           variant="sub"
           tabs={[
-            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={posOpts} members={rvMembers} configs={rvConfigs} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} canEdit={canEditDP} /> },
+            { id: "rv-valores", label: "Valores", content: <RvConfigEditor positions={funcoesDaEquipe ? posOpts.filter((p) => funcoesDaEquipe.has(p.id)) : posOpts} members={rvMembersDaAlcada} configs={rvConfigs} alvos={importTargets} unidades={(units ?? []).map((u) => u.name)} canEdit={canEditDP} /> },
             { id: "rv-redutores", label: "Redutores", content: <RvReducerEditor regras={reducerRules} tiposPunicao={sanctionTypeOpts.filter((t) => t.active)} canEdit={canEditDP} /> },
           ]}
         />
@@ -1588,7 +1613,9 @@ export default async function SettingsPage({
           <span>
             <strong>Somente leitura.</strong>{" "}
             <span className="muted">
-              Você enxerga toda a configuração da empresa, mas alterações são feitas pelo proprietário ou por um administrador.
+              {isGestor
+                ? "Você enxerga as regras e os cadastros da empresa e, onde há dados de pessoas (colaboradores, ausências, punições e remuneração variável), só a sua equipe. Alterações são feitas pelo proprietário, por um administrador ou pelo RH."
+                : "Você enxerga toda a configuração da empresa, mas alterações são feitas pelo proprietário ou por um administrador."}
             </span>
           </span>
         </div>

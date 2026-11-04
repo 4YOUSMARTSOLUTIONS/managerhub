@@ -141,10 +141,12 @@ export const MODULES: ModuleDef[] = [
   // NÃO é `core`: quem contrata decide se a empresa tem a tela, unidade por
   // unidade, pelo Painel ADM. O papel é o piso, o entitlement é o teto.
   { key: "auditoria", label: "Logs do sistema", href: "/auditoria", group: null, minRole: "admin" },
-  // Gerencial entra, mas só para LER: a tela inteira sai em modo consulta para
-  // ele (ver `canEdit` em src/app/(app)/configuracoes/page.tsx). O menu não
-  // distingue ver de mexer, então o corte de escrita não mora aqui.
-  { key: "configuracoes", label: "Configurações", href: "/configuracoes", group: null, core: true, minRole: "manager" },
+  // Gerencial e Gestor entram, mas só para LER: a tela inteira sai em modo
+  // consulta para eles (ver `canEdit` em src/app/(app)/configuracoes/page.tsx), e
+  // o Gestor vê só a própria equipe onde há dado de pessoa. O RH entra para as
+  // abas do DP. O menu não distingue ver de mexer, então o corte de escrita não
+  // mora aqui.
+  { key: "configuracoes", label: "Configurações", href: "/configuracoes", group: null, core: true, minRole: "team_lead_hr" },
   { key: "admin", label: "Painel ADM", href: "/admin", group: null, core: true, minRole: "super" },
 ];
 
