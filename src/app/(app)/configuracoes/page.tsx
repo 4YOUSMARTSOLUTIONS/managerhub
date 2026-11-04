@@ -264,7 +264,7 @@ export default async function SettingsPage({
     // parâmetros do módulo Férias (sem linha = padrões)
     supabase
       .from("ferias_config")
-      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias")
+      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo")
       .eq("tenant_id", tenant.id)
       .maybeSingle(),
     // a cadeia do Gestor (os outros perfis não usam o recorte)
@@ -617,6 +617,10 @@ export default async function SettingsPage({
                 colaborador: feriasConfigData?.antecedencia_minima_dias ?? 0,
                 gestor: feriasConfigData?.antecedencia_gestor_dias ?? 0,
                 dp: feriasConfigData?.antecedencia_dp_dias ?? 0,
+              }}
+              prazos={{
+                abono: feriasConfigData?.abono_fora_prazo === "bloquear" ? "bloquear" : "alerta",
+                decimo: feriasConfigData?.decimo_fora_prazo === "bloquear" ? "bloquear" : "alerta",
               }}
               canEdit={canEditDP}
             />

@@ -29,7 +29,9 @@ import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/
 import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
 } from "@/lib/constants";
-import { rotuloAquisitivo, type AquisitivoInfo, type FeriadoCustom, type QuemLanca } from "@/lib/ferias";
+import {
+  rotuloAquisitivo, type AquisitivoInfo, type FeriadoCustom, type PrazosLegais, type QuemLanca,
+} from "@/lib/ferias";
 import {
   cancelarFerias, decidirFerias, efetivarFerias, excluirFerias, getContextoEfetivacao,
   type ContextoEfetivacao,
@@ -99,8 +101,38 @@ export type FeriasRow = {
   /** gozo depois do prazo de concessão, lançado pelo DP (art. 137) */
   emDobro: boolean;
   justificativaDobro: string | null;
+  /** abono pedido depois de 15 dias antes do fim do aquisitivo (art. 143 §1º) */
+  abonoForaPrazo: boolean;
+  /** adiantamento do 13º pedido depois de janeiro do ano das férias (Lei 4.749/65) */
+  decimoForaPrazo: boolean;
   createdAt: string;
 };
+
+/** "Abono fora do prazo", "13º fora do prazo", os dois, ou null. */
+function rotuloForaPrazo(r: FeriasRow): string | null {
+  if (r.abonoForaPrazo && r.decimoForaPrazo) return "Abono e 13º fora do prazo";
+  if (r.abonoForaPrazo) return "Abono fora do prazo";
+  if (r.decimoForaPrazo) return "13º fora do prazo";
+  return null;
+}
+
+/** A explicação da marca, para a ficha e a efetivação. */
+function NotaForaPrazo({ row }: { row: FeriasRow }) {
+  if (!row.abonoForaPrazo && !row.decimoForaPrazo) return null;
+  const partes = [
+    row.abonoForaPrazo ? "o abono foi pedido depois de 15 dias antes do fim do período aquisitivo (art. 143 §1º)" : null,
+    row.decimoForaPrazo ? "o adiantamento do 13º foi pedido depois de janeiro do ano das férias (Lei 4.749/65)" : null,
+  ].filter(Boolean).join(", e ");
+  return (
+    <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-warning)" }}>
+      <strong>Fora do prazo legal:</strong> {partes}. A empresa podia recusar; seguir com a previsão é aceitar.
+    </p>
+  );
+}
+
+/** A data (no fuso do Brasil) em que um pedido foi aberto. */
+const dataDoPedido = (iso: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(iso));
 
 /**
  * A tela de férias, com as caras que o papel pede:
@@ -115,7 +147,7 @@ export type FeriasRow = {
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
-  antecedencia,
+  antecedencia, prazos,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -140,6 +172,8 @@ export function FeriasManager({
   unidades: string[] | null;
   /** antecedência mínima, em dias, por quem lança (0 = sem); Configurações > Férias */
   antecedencia: Record<QuemLanca, number>;
+  /** abono e 13º pedidos fora do prazo legal: alerta ou bloqueio do colaborador */
+  prazos: PrazosLegais;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
@@ -361,6 +395,7 @@ export function FeriasManager({
           // ("Solicitar" é sempre o pedido próprio: a do colaborador, até para o DP)
           antecedencia={antecedencia[dialogo === "solicitar" ? "colaborador" : quemNo("lancamento")]}
           antecedenciaQuem={dialogo === "solicitar" ? "colaborador" : quemNo("lancamento")}
+          prazos={prazos}
           decimos={dialogo === "solicitar" ? decimosDe(meuId) : undefined}
           onFechar={() => setDialogo(null)}
         />
@@ -376,6 +411,12 @@ export function FeriasManager({
           // quem corrige (o banco aplica a mesma regra)
           antecedencia={antecedencia[reenvio.lancadaPeloGestor ? quemNo("lancamento") : "colaborador"]}
           antecedenciaQuem={reenvio.lancadaPeloGestor ? quemNo("lancamento") : "colaborador"}
+          prazos={prazos}
+          // o que já vinha pedido conta pela data do pedido original (o banco faz igual)
+          pedidoEm={{
+            abono: reenvio.abonoDias > 0 ? dataDoPedido(reenvio.createdAt) : null,
+            decimo: reenvio.decimo ? dataDoPedido(reenvio.createdAt) : null,
+          }}
           decimos={decimosDe(reenvio.userId, reenvio.id)}
           inicial={{
             id: reenvio.id, inicio: reenvio.startDate, fim: reenvio.endDate,
@@ -393,6 +434,11 @@ export function FeriasManager({
           // o DP com a dele; o próprio dono com a do colaborador; o gestor da equipe com a do gestor
           antecedencia={antecedencia[quemNo(reagendando.userId === meuId ? "colaborador" : "lancamento")]}
           antecedenciaQuem={quemNo(reagendando.userId === meuId ? "colaborador" : "lancamento")}
+          prazos={prazos}
+          pedidoEm={{
+            abono: reagendando.abonoDias > 0 ? dataDoPedido(reagendando.createdAt) : null,
+            decimo: reagendando.decimo ? dataDoPedido(reagendando.createdAt) : null,
+          }}
           decimos={decimosDe(reagendando.userId, reagendando.id)}
           inicial={{
             id: reagendando.id, inicio: reagendando.startDate, fim: reagendando.endDate,
@@ -592,9 +638,11 @@ function FilaGestor({
   const router = useRouter();
 
   const aprovar = async (r: FeriasRow) => {
+    const fora = rotuloForaPrazo(r);
     if (!(await confirmDialog({
       title: "Aprovar a previsão",
-      message: `${shortName(r.fullName)}: ${formatDate(r.startDate)} a ${formatDate(r.endDate)} (${r.dias} dias${r.abonoDias ? ` + ${r.abonoDias} de abono` : ""}). A previsão segue para a efetivação do departamento pessoal.`,
+      message: `${shortName(r.fullName)}: ${formatDate(r.startDate)} a ${formatDate(r.endDate)} (${r.dias} dias${r.abonoDias ? ` + ${r.abonoDias} de abono` : ""}). A previsão segue para a efetivação do departamento pessoal.`
+        + (fora ? ` Atenção: ${fora.toLowerCase()} legal, a empresa pode recusar. Aprovar é aceitar.` : ""),
       confirmLabel: "Aprovar",
     }))) return;
     iniciar(async () => {
@@ -623,6 +671,7 @@ function FilaGestor({
             <th style={{ width: 190 }}>Período</th>
             <th style={{ width: 70, textAlign: "right" }}>Dias</th>
             <th style={{ width: 80, textAlign: "right" }}>Abono</th>
+            <th style={{ width: 190 }}>Prazo legal</th>
             <th style={{ width: 250, textAlign: "right" }}>Decisão</th>
           </tr>
         </thead>
@@ -634,6 +683,11 @@ function FilaGestor({
               <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
               <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
               <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
+              <td>
+                {rotuloForaPrazo(r)
+                  ? <Badge variant="quiet" tone="amber">{rotuloForaPrazo(r)}</Badge>
+                  : <span className="soft">—</span>}
+              </td>
               <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: "inline-flex", gap: "0.35rem" }}>
                   <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => aprovar(r)}>
@@ -681,6 +735,7 @@ function FilaDp({
             <th style={{ width: 190 }}>Período</th>
             <th style={{ width: 70, textAlign: "right" }}>Dias</th>
             <th style={{ width: 110 }}>Origem</th>
+            <th style={{ width: 190 }}>Prazo legal</th>
             <th style={{ width: 230, textAlign: "right" }}>Efetivação</th>
           </tr>
         </thead>
@@ -699,6 +754,11 @@ function FilaDp({
                     : r.lancadaPeloGestor
                       ? <Badge variant="quiet" tone="blue">Pelo gestor</Badge>
                       : <Badge variant="quiet" tone="gray">Solicitada</Badge>}
+              </td>
+              <td>
+                {rotuloForaPrazo(r)
+                  ? <Badge variant="quiet" tone="amber">{rotuloForaPrazo(r)}</Badge>
+                  : <span className="soft">—</span>}
               </td>
               <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: "inline-flex", gap: "0.35rem" }}>
@@ -855,6 +915,7 @@ function DetalheFerias({
           {row.reagendadaDe && <Badge variant="quiet" tone="amber">Reagendamento</Badge>}
           {row.lancadaPeloGestor && <Badge variant="quiet" tone="blue">Lançada pelo gestor</Badge>}
           {row.decimo && <Badge variant="quiet" tone="gray">Adianta o 13º</Badge>}
+          {rotuloForaPrazo(row) && <Badge variant="quiet" tone="amber">{rotuloForaPrazo(row)}</Badge>}
         </>
       }
       footer={
@@ -921,6 +982,7 @@ function DetalheFerias({
             {row.justificativaDobro ? ` Justificativa do DP: ${row.justificativaDobro}` : ""}
           </p>
         )}
+        <NotaForaPrazo row={row} />
       </DetailSection>
 
       <DetailSection title="O trâmite">
@@ -1001,6 +1063,7 @@ function EfetivarDialog({
           {row.emDobro && <Badge variant="quiet" tone="red">Em dobro</Badge>}
           {row.reagendadaDe && <Badge variant="quiet" tone="amber">Reagendamento</Badge>}
           {row.decimo && <Badge variant="quiet" tone="gray">Adianta o 13º</Badge>}
+          {rotuloForaPrazo(row) && <Badge variant="quiet" tone="amber">{rotuloForaPrazo(row)}</Badge>}
         </>
       }
       footer={
@@ -1031,6 +1094,7 @@ function EfetivarDialog({
           {row.justificativaDobro ? ` Justificativa: ${row.justificativaDobro}` : ""}
         </p>
       )}
+      <NotaForaPrazo row={row} />
 
       <DetailSection title={c?.origem === "folha" ? "Dados importados do aquisitivo" : "Informativo do art. 130 (faltas injustificadas)"}>
         {c == null ? (

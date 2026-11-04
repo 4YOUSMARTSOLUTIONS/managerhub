@@ -75,7 +75,7 @@ export default async function FeriasPage() {
     // antecedência mínima por quem lança (Configurações > Férias)
     supabase
       .from("ferias_config")
-      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias")
+      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo")
       .eq("tenant_id", tenant.id)
       .maybeSingle(),
   ]);
@@ -123,6 +123,8 @@ export default async function FeriasPage() {
     cancelNote: l.cancel_note,
     emDobro: l.em_dobro,
     justificativaDobro: l.justificativa_dobro,
+    abonoForaPrazo: l.abono_fora_prazo,
+    decimoForaPrazo: l.decimo_fora_prazo,
     createdAt: l.created_at,
   }));
 
@@ -177,6 +179,10 @@ export default async function FeriasPage() {
           colaborador: config?.antecedencia_minima_dias ?? 0,
           gestor: config?.antecedencia_gestor_dias ?? 0,
           dp: config?.antecedencia_dp_dias ?? 0,
+        }}
+        prazos={{
+          abono: config?.abono_fora_prazo === "bloquear" ? "bloquear" : "alerta",
+          decimo: config?.decimo_fora_prazo === "bloquear" ? "bloquear" : "alerta",
         }}
       />
     </div>

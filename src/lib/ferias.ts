@@ -117,6 +117,8 @@ export type OpcoesValidacao = {
   antecedenciaQuem?: QuemLanca;
   /** os 13º já pedidos por esta pessoa, para a regra de uma vez por ano */
   decimos?: DecimoPedido[];
+  /** prazos legais do pedido de abono e de 13º (o bloqueio só vale para o colaborador) */
+  prazos?: ContextoPrazos;
 };
 
 /** O primeiro dia em que um pedido com essa antecedência pode começar. */
@@ -163,19 +165,73 @@ function erroDecimo(periodos: PeriodoInput[], decimos: DecimoPedido[]): string |
   return null;
 }
 
-export type PermissaoCampo = { ok: true } | { ok: false; motivo: string };
+/** `aviso` = permitido, mas fora do prazo legal (a empresa pode recusar). */
+export type PermissaoCampo = { ok: true; aviso?: string } | { ok: false; motivo: string };
+
+// ---------- Prazos legais do pedido (abono e 13º) ----------
+
+/** O que a empresa faz com o pedido do colaborador fora do prazo (Configurações > Férias). */
+export type ModoPrazo = "alerta" | "bloquear";
+export type PrazosLegais = { abono: ModoPrazo; decimo: ModoPrazo };
+
+export type ContextoPrazos = {
+  modos: PrazosLegais;
+  /** só o colaborador é bloqueado; o lançamento do gestor/DP é o aceite da empresa */
+  quem: QuemLanca;
+  hoje: string;
+  /** na correção e no reagendamento, o que já vinha pedido conta pela data original */
+  pedidoAbono?: string | null;
+  pedidoDecimo?: string | null;
+};
+
+/** art. 143 §1º: até 15 dias antes do fim do aquisitivo (fim 01/02 → até 18/01). */
+export const prazoDoAbono = (aqFim: string) => somarDias(aqFim, -14);
+/** Lei 4.749/65: até janeiro do ano das férias. */
+export const prazoDoDecimo = (inicio: string) => `${inicio.slice(0, 4)}-01-31`;
+
+/** As mesmas mensagens de `ferias_aplicar_prazos_legais`. */
+function avaliarAbonoNoPrazo(aqInicio: string, aqFim: string, ctx: ContextoPrazos): PermissaoCampo {
+  const prazo = prazoDoAbono(aqFim);
+  if ((ctx.pedidoAbono ?? ctx.hoje) <= prazo) return { ok: true };
+  if (ctx.quem === "colaborador" && ctx.modos.abono === "bloquear") {
+    return { ok: false, motivo: `O abono pecuniário do aquisitivo ${anoDe(aqInicio)}/${anoDe(aqFim)} precisava ser pedido até ${dataBr(prazo)}, 15 dias antes do fim do período aquisitivo (art. 143 §1º). Fora desse prazo, só o gestor ou o departamento pessoal podem lançar.` };
+  }
+  return {
+    ok: true,
+    aviso: ctx.quem === "colaborador"
+      ? `Pedido fora do prazo (até ${dataBr(prazo)}, art. 143 §1º): a empresa pode recusar o abono.`
+      : `Fora do prazo legal (até ${dataBr(prazo)}, art. 143 §1º): lançando, a empresa aceita o abono.`,
+  };
+}
+
+function avaliarDecimoNoPrazo(inicio: string, ctx: ContextoPrazos): PermissaoCampo {
+  const ano = anoDe(inicio);
+  if ((ctx.pedidoDecimo ?? ctx.hoje) <= prazoDoDecimo(inicio)) return { ok: true };
+  if (ctx.quem === "colaborador" && ctx.modos.decimo === "bloquear") {
+    return { ok: false, motivo: `O adiantamento da 1ª parcela do 13º com férias em ${ano} precisava ser pedido até 31/01/${ano} (Lei 4.749/65). Fora desse prazo, só o gestor ou o departamento pessoal podem lançar.` };
+  }
+  return {
+    ok: true,
+    aviso: ctx.quem === "colaborador"
+      ? `Pedido fora do prazo (até 31/01/${ano}): a empresa pode recusar o adiantamento do 13º.`
+      : `Fora do prazo legal (até 31/01/${ano}): lançando, a empresa aceita o adiantamento do 13º.`,
+  };
+}
 
 /**
  * O que cada período do formulário pode pedir, na ordem em que aparecem na
  * tela (não na ordem de data):
- *  - abono: só no primeiro período de gozo do aquisitivo (art. 143). Usa o
- *    mesmo FIFO do banco; `null` quando ainda faltam datas para saber.
- *  - 13º: uma vez por ano (o do início do período).
+ *  - abono: só no primeiro período de gozo do aquisitivo (art. 143) e, com
+ *    `prazos`, pedido até 15 dias antes do fim dele. Usa o mesmo FIFO do banco;
+ *    `null` quando ainda faltam datas para saber.
+ *  - 13º: uma vez por ano (o do início do período) e, com `prazos`, pedido até
+ *    janeiro desse ano.
  */
 export function permissoesPorPeriodo(
   periodos: PeriodoInput[],
   aquisitivos: AquisitivoInfo[] | null,
   decimos: DecimoPedido[],
+  prazos?: ContextoPrazos,
 ): { abono: PermissaoCampo | null; decimo: PermissaoCampo }[] {
   const completos = periodos
     .map((p, i) => ({ p, i }))
@@ -190,7 +246,7 @@ export function permissoesPorPeriodo(
       const alvo = aq.find((a) => a.saldo > 0);
       if (!alvo) break;
       if (alvo.qtdPeriodos === 0) {
-        abono[i] = { ok: true };
+        abono[i] = prazos ? avaliarAbonoNoPrazo(alvo.aqInicio, alvo.aqFim, prazos) : { ok: true };
       } else {
         abono[i] = {
           ok: false,
@@ -217,7 +273,7 @@ export function permissoesPorPeriodo(
       j !== i && q.decimo && q.inicio && anoDe(q.inicio) === ano
         && (!p.decimo || q.inicio < p.inicio));
     if (outro >= 0) return { ok: false, motivo: `O 13º de ${ano} já está marcado no período ${outro + 1} (uma vez por ano).` };
-    return { ok: true };
+    return prazos ? avaliarDecimoNoPrazo(p.inicio, prazos) : { ok: true };
   });
 
   return periodos.map((_, i) => ({ abono: abono[i], decimo: decimo[i] }));
@@ -337,6 +393,23 @@ export function validarConjunto(
     const minimo = Math.min(14, a.diasDireito);
     if (usadoAgora && !a.tem14 && a.saldo < minimo) {
       return { erro: `Um dos períodos do aquisitivo ${a.rotulo} precisa ter ao menos ${minimo} dias corridos (art. 134): com este pedido restariam só ${a.saldo} dias para isso.` };
+    }
+  }
+
+  // prazos legais do pedido: no banco rodam depois de todas as regras acima
+  // (`ferias_aplicar_prazos_legais`), e só barram o colaborador
+  if (opcoes.prazos) {
+    for (let k = 0; k < ordenados.length; k++) {
+      const p = ordenados[k];
+      const a = atribuicoes[k];
+      if (p.abono > 0) {
+        const r = avaliarAbonoNoPrazo(a.aqInicio, a.aqFim, opcoes.prazos);
+        if (!r.ok) return { erro: r.motivo };
+      }
+      if (p.decimo) {
+        const r = avaliarDecimoNoPrazo(p.inicio, opcoes.prazos);
+        if (!r.ok) return { erro: r.motivo };
+      }
     }
   }
 

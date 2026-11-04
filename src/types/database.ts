@@ -865,7 +865,7 @@ export type Database = {
       // privilégio real, o grant de authenticated é só select/delete. O FATO
       // continua em `employee_absences` (kind 'ferias'), criado na efetivação.
       ferias_solicitacoes: {
-        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["ferias_status"]; start_date: string; end_date: string; dias: number; abono_dias: number; adiantar_decimo_terceiro: boolean; aquisitivo_inicio: string; aquisitivo_fim: string; snap_admission_date: string; reagendada_de: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; snap_hierarchy_name: string | null; created_by: string; lancada_pelo_gestor: boolean; decided_at: string | null; decided_by: string | null; decision_note: string | null; efetivada_at: string | null; efetivada_by: string | null; efetivacao_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; absence_id: string | null; em_dobro: boolean; justificativa_dobro: string | null; created_at: string; updated_at: string }
+        Row: { id: string; tenant_id: string; user_id: string; status: Database["public"]["Enums"]["ferias_status"]; start_date: string; end_date: string; dias: number; abono_dias: number; adiantar_decimo_terceiro: boolean; aquisitivo_inicio: string; aquisitivo_fim: string; snap_admission_date: string; reagendada_de: string | null; snap_full_name: string | null; snap_employee_code: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_subdepartment_id: string | null; snap_subdepartment_name: string | null; snap_position_id: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; snap_hierarchy_name: string | null; created_by: string; lancada_pelo_gestor: boolean; decided_at: string | null; decided_by: string | null; decision_note: string | null; efetivada_at: string | null; efetivada_by: string | null; efetivacao_note: string | null; cancelled_at: string | null; cancelled_by: string | null; cancel_note: string | null; absence_id: string | null; em_dobro: boolean; justificativa_dobro: string | null; abono_fora_prazo: boolean; decimo_fora_prazo: boolean; created_at: string; updated_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -884,9 +884,11 @@ export type Database = {
       // (ferias_checar_antecedencia): `antecedencia_minima_dias` = o colaborador,
       // `antecedencia_gestor_dias` = o gestor, `antecedencia_dp_dias` = o DP.
       ferias_config: {
-        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; antecedencia_gestor_dias: number; antecedencia_dp_dias: number; updated_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; updated_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; updated_by?: string | null; updated_at?: string }
+        // `abono_fora_prazo`/`decimo_fora_prazo`: 'alerta' | 'bloquear' (o pedido do
+        // colaborador fora do prazo legal; ferias_aplicar_prazos_legais)
+        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; antecedencia_gestor_dias: number; antecedencia_dp_dias: number; abono_fora_prazo: string; decimo_fora_prazo: string; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; updated_by?: string | null; updated_at?: string }
         Relationships: []
       }
       // Dedup do varredor semanal de vencimento (cron): cada (pessoa,

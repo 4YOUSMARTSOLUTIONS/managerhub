@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext, dpActionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Json } from "@/types/database";
-import { aquisitivoDaLinha, type AquisitivoInfo, type DecimoPedido } from "@/lib/ferias";
+import { aquisitivoDaLinha, type AquisitivoInfo, type DecimoPedido, type PrazosLegais } from "@/lib/ferias";
 import type { PeriodoFolha } from "@/lib/ferias-folha";
 import type { AgendaItem } from "@/lib/ferias-agenda";
 import type { ModeloLotePessoa } from "@/lib/ferias-lote";
@@ -241,6 +241,40 @@ export async function setAntecedenciaFerias(
     revalidar();
     revalidatePath("/configuracoes");
     return { ok: true, message: "Antecedência mínima salva." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Configuração: o que fazer quando o COLABORADOR pede abono (até 15 dias antes
+ * do fim do aquisitivo) ou o adiantamento do 13º (até janeiro do ano das
+ * férias) fora do prazo legal: 'alerta' deixa pedir e marca o pedido; 'bloquear'
+ * recusa. O lançamento do gestor/DP nunca é bloqueado (é o aceite da empresa).
+ */
+export async function setPrazosLegaisFerias(
+  input: { abono: PrazosLegais["abono"]; decimo: PrazosLegais["decimo"] },
+): Promise<ActionState> {
+  try {
+    const { supabase, tenantId, userId } = await dpActionContext();
+    const valido = (v: string) => v === "alerta" || v === "bloquear";
+    if (!valido(input.abono) || !valido(input.decimo)) return { error: "Opção inválida." };
+    const { error } = await supabase
+      .from("ferias_config")
+      .upsert(
+        {
+          tenant_id: tenantId,
+          abono_fora_prazo: input.abono,
+          decimo_fora_prazo: input.decimo,
+          updated_by: userId,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id" },
+      );
+    if (error) return { error: error.message };
+    revalidar();
+    revalidatePath("/configuracoes");
+    return { ok: true, message: "Prazos legais salvos." };
   } catch (e) {
     return { error: (e as Error).message };
   }

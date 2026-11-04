@@ -4,7 +4,82 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
-import { setAntecedenciaFerias, setNivelSolicitaFerias } from "@/lib/actions/ferias";
+import { setAntecedenciaFerias, setNivelSolicitaFerias, setPrazosLegaisFerias } from "@/lib/actions/ferias";
+import type { ModoPrazo, PrazosLegais } from "@/lib/ferias";
+
+const REGRAS_DE_PRAZO: { chave: keyof PrazosLegais; rotulo: string; ajuda: string }[] = [
+  {
+    chave: "abono", rotulo: "Abono pecuniário",
+    ajuda: "Pedido até 15 dias antes do fim do período aquisitivo (art. 143 §1º). Ex.: aquisitivo termina em 01/02, pedido até 18/01.",
+  },
+  {
+    chave: "decimo", rotulo: "Adiantamento do 13º",
+    ajuda: "Pedido até 31 de janeiro do ano das férias (Lei 4.749/65).",
+  },
+];
+
+/**
+ * O que acontece quando o COLABORADOR pede fora do prazo legal. O gestor e o DP
+ * sempre conseguem lançar (é o aceite da empresa), e o pedido fica marcado.
+ */
+function PrazosLegaisDoPedido({ atual, canEdit }: { atual: PrazosLegais; canEdit: boolean }) {
+  const [valores, setValores] = useState<PrazosLegais>(atual);
+  const [salvando, iniciar] = useTransition();
+  const router = useRouter();
+  const mudou = valores.abono !== atual.abono || valores.decimo !== atual.decimo;
+
+  const salvar = () => {
+    iniciar(async () => {
+      const r = await setPrazosLegaisFerias(valores);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Salvo.");
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className="card card-pad" style={{ marginBottom: "1rem" }}>
+      <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Prazos legais do abono e do 13º</h3>
+      <p className="soft" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.8rem" }}>
+        O que acontece quando o colaborador pede fora do prazo da lei, que permite à empresa recusar.
+        O gestor e o departamento pessoal sempre conseguem lançar: o lançamento deles vale como aceite
+        da empresa, e o pedido fica marcado como fora do prazo.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {REGRAS_DE_PRAZO.map((r) => (
+          <div
+            key={r.chave}
+            style={{
+              display: "flex", alignItems: "center", gap: "0.8rem", flexWrap: "wrap",
+              padding: "0.5rem 0.6rem", border: "1px solid var(--border)", borderRadius: 8,
+            }}
+          >
+            <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: "0.86rem" }}>{r.rotulo}</div>
+              <div className="soft" style={{ fontSize: "0.76rem" }}>{r.ajuda}</div>
+            </div>
+            <select
+              className="select" value={valores[r.chave]} disabled={!canEdit || salvando}
+              onChange={(e) => setValores((v) => ({ ...v, [r.chave]: e.target.value as ModoPrazo }))}
+              style={{ maxWidth: 300 }}
+              aria-label={`${r.rotulo} fora do prazo`}
+            >
+              <option value="bloquear">Bloquear o pedido do colaborador</option>
+              <option value="alerta">Aceitar com alerta para quem aprova</option>
+            </select>
+          </div>
+        ))}
+      </div>
+      {canEdit && (
+        <div style={{ marginTop: "0.7rem" }}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={!mudou || salvando} onClick={salvar}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export type AntecedenciaFerias = { colaborador: number; gestor: number; dp: number };
 
@@ -106,12 +181,14 @@ function AntecedenciaMinima({ atual, canEdit }: { atual: AntecedenciaFerias; can
  * A lista chega ordenada por `rank`, que é a ordem real da hierarquia.
  */
 export function FeriasConfigManager({
-  niveis, bloqueados, antecedencia, canEdit,
+  niveis, bloqueados, antecedencia, prazos, canEdit,
 }: {
   niveis: { id: string; name: string; active: boolean }[];
   bloqueados: string[];
   /** antecedência mínima atual, em dias, por quem lança (0 = sem) */
   antecedencia: AntecedenciaFerias;
+  /** o que fazer com abono e 13º pedidos fora do prazo legal */
+  prazos: PrazosLegais;
   canEdit: boolean;
 }) {
   const [bloq, setBloq] = useState(new Set(bloqueados));
@@ -143,6 +220,7 @@ export function FeriasConfigManager({
   return (
     <>
     <AntecedenciaMinima atual={antecedencia} canEdit={canEdit} />
+    <PrazosLegaisDoPedido atual={prazos} canEdit={canEdit} />
     <div className="card card-pad" style={{ marginBottom: "1rem" }}>
       <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Quem solicita as próprias férias</h3>
       <p className="soft" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.8rem" }}>

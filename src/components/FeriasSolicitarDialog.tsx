@@ -10,7 +10,8 @@ import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import {
   diasDoPeriodo, inicioMinimo, mensagemAntecedencia, motivoInicioInvalido, permissoesPorPeriodo,
   rotuloAquisitivo, validarConjunto,
-  type AquisitivoInfo, type DecimoPedido, type FeriadoCustom, type PeriodoInput, type QuemLanca,
+  type AquisitivoInfo, type ContextoPrazos, type DecimoPedido, type FeriadoCustom, type PeriodoInput,
+  type PrazosLegais, type QuemLanca,
 } from "@/lib/ferias";
 import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
@@ -34,7 +35,7 @@ import {
  */
 export function FeriasSolicitarDialog({
   modo, pessoas, aquisitivos, feriados, hoje, inicial, ehDp = false, usaFolha = false,
-  antecedencia = 0, antecedenciaQuem = "colaborador", decimos, onFechar,
+  antecedencia = 0, antecedenciaQuem = "colaborador", decimos, prazos, pedidoEm, onFechar,
 }: {
   modo: "solicitar" | "lancar" | "reenviar" | "reagendar";
   /** só no modo lancar: quem o usuário pode programar */
@@ -59,6 +60,14 @@ export function FeriasSolicitarDialog({
   antecedenciaQuem?: QuemLanca;
   /** fora do modo lancar: os 13º que a pessoa já pediu (sem a linha em edição) */
   decimos?: DecimoPedido[];
+  /**
+   * O que a empresa faz com abono e 13º pedidos fora do prazo legal
+   * (Configurações > Férias). Quem lança é `antecedenciaQuem`: só o colaborador
+   * é bloqueado. O banco confere de novo.
+   */
+  prazos?: PrazosLegais;
+  /** correção e reagendamento: a data do pedido original do que já vinha pedido */
+  pedidoEm?: { abono?: string | null; decimo?: string | null };
   onFechar: () => void;
 }) {
   const [userId, setUserId] = useState<string[]>([]);
@@ -105,8 +114,19 @@ export function FeriasSolicitarDialog({
     () => (modo === "lancar" ? decimosAlvo : decimos ?? []),
     [modo, decimosAlvo, decimos],
   );
-  // abono só no primeiro período do aquisitivo; 13º uma vez por ano
-  const permissoes = useMemo(() => permissoesPorPeriodo(periodos, aqs, decs), [periodos, aqs, decs]);
+  // prazos legais do pedido (abono até 15 dias antes do fim do aquisitivo; 13º
+  // até janeiro do ano das férias): só o colaborador é bloqueado
+  const ctxPrazos = useMemo<ContextoPrazos | undefined>(
+    () => (prazos
+      ? { modos: prazos, quem: antecedenciaQuem, hoje, pedidoAbono: pedidoEm?.abono, pedidoDecimo: pedidoEm?.decimo }
+      : undefined),
+    [prazos, antecedenciaQuem, hoje, pedidoEm?.abono, pedidoEm?.decimo],
+  );
+  // abono só no primeiro período do aquisitivo; 13º uma vez por ano; e os prazos
+  const permissoes = useMemo(
+    () => permissoesPorPeriodo(periodos, aqs, decs, ctxPrazos),
+    [periodos, aqs, decs, ctxPrazos],
+  );
 
   /** Busca no evento de escolha (não num efeito): resposta velha não sobrescreve a nova. */
   const escolherPessoa = (ids: string[]) => {
@@ -144,6 +164,7 @@ export function FeriasSolicitarDialog({
         antecedencia,
         antecedenciaQuem,
         decimos: decs,
+        prazos: ctxPrazos,
       });
       if (r.erro) { setErro(r.erro); return; }
     } else {
@@ -331,6 +352,9 @@ export function FeriasSolicitarDialog({
                       Vai até um terço do direito (10 dias para quem tem 30) e só pode ser pedido no
                       primeiro período de gozo do período aquisitivo (ou no único, se as férias não
                       forem divididas). Ex.: 20 dias de férias e 10 de abono.
+                      <br /><br />
+                      O pedido precisa ser feito até 15 dias antes do fim do período aquisitivo
+                      (art. 143 §1º). Depois disso, a empresa pode recusar.
                     </InfoHint>
                   </label>
                   <input
@@ -352,6 +376,11 @@ export function FeriasSolicitarDialog({
                   onChange={(e) => mudar(i, { decimo: e.target.checked })}
                 />
                 Adiantar a 1ª parcela do 13º junto destas férias
+                <InfoHint label="Sobre o adiantamento do 13º">
+                  A 1ª parcela do 13º pode ser paga junto das férias, uma vez por ano. O pedido
+                  precisa ser feito até janeiro do ano das férias (Lei 4.749/65). Depois disso, a
+                  empresa pode recusar.
+                </InfoHint>
               </label>
               {!permDecimo.ok && (
                 <p
@@ -368,6 +397,13 @@ export function FeriasSolicitarDialog({
                 >
                   {permAbono.motivo}{p.abono > 0 ? " Zere o abono deste período." : ""}
                 </p>
+              )}
+              {/* fora do prazo, mas permitido: avisa quem pede ou lança */}
+              {permAbono?.ok && permAbono.aviso && p.abono > 0 && (
+                <p style={{ fontSize: "0.76rem", margin: "0.3rem 0 0", color: "var(--mh-warning)" }}>{permAbono.aviso}</p>
+              )}
+              {permDecimo.ok && permDecimo.aviso && p.decimo && (
+                <p style={{ fontSize: "0.76rem", margin: "0.3rem 0 0", color: "var(--mh-warning)" }}>{permDecimo.aviso}</p>
               )}
               {avisos[i] && (
                 <p style={{ color: "var(--mh-danger)", fontSize: "0.78rem", margin: "0.45rem 0 0" }}>{avisos[i]}</p>
