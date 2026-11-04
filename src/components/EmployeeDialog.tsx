@@ -6,6 +6,7 @@ import { createEmployee, updateEmployee } from "@/lib/actions/employees";
 import { initialActionState } from "@/lib/actions/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { SearchSelect } from "@/components/SearchSelect";
 import { GENDER, ROLE, UNIT_KIND, USER_TYPE, SEM_GESTOR, options } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
 
@@ -116,6 +117,13 @@ export function EmployeeDialog({
   const [deptEstado, setDeptEstado] = useState({ chave: chaveDept, valor: employee?.departmentId ?? "" });
   const deptId = deptEstado.chave === chaveDept ? deptEstado.valor : (employee?.departmentId ?? "");
   const setDeptId = (valor: string) => setDeptEstado({ chave: chaveDept, valor });
+  // gestor escolhido (campo com busca): mesma técnica. Na edição de quem não
+  // tem gestor, "Sem gestor" vem marcado, senão a ficha abriria inválida.
+  const gestorInicial = employee?.managerId ?? (isEdit ? SEM_GESTOR : "");
+  const chaveGestor = `${open}|${employee?.userId ?? ""}|${gestorInicial}`;
+  const [gestorEstado, setGestorEstado] = useState({ chave: chaveGestor, valor: gestorInicial });
+  const gestor = gestorEstado.chave === chaveGestor ? gestorEstado.valor : gestorInicial;
+  const setGestor = (valor: string) => setGestorEstado({ chave: chaveGestor, valor });
   const router = useRouter();
 
   useEffect(() => {
@@ -136,6 +144,15 @@ export function EmployeeDialog({
   const levelList = act(levels, employee?.positionLevelId);
   const hierarchyList = act(hierarchies, employee?.hierarchyLevelId);
   const subs = act(subdepartments.filter((s) => s.department_id === deptId), employee?.subdepartmentId);
+  // Gestor: só ativos, de A a Z, menos a própria pessoa. O gestor atual fica na
+  // lista mesmo inativo (marcado), para salvar a ficha não trocá-lo sozinho.
+  const gestorOpcoes = [
+    { id: SEM_GESTOR, name: "Sem gestor (topo da hierarquia)" },
+    ...act(people, employee?.managerId)
+      .filter((p) => p.id !== employee?.userId)
+      .map((p) => ({ id: p.id, name: p.active === false ? `${p.name} (inativo)` : p.name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+  ];
 
   return (
     <div
@@ -284,14 +301,22 @@ export function EmployeeDialog({
                     ser impossível de salvar. Na edição de quem já não tem
                     gestor, a opção vem escolhida, senão a ficha abriria inválida
                     para mexer em qualquer outro campo. */}
-                <select
-                  name="manager_id" className="select" required
-                  defaultValue={employee?.managerId ?? (isEdit ? SEM_GESTOR : "")}
-                >
-                  <option value="">Selecione…</option>
-                  <option value={SEM_GESTOR}>Sem gestor (topo da hierarquia)</option>
-                  {people.filter((p) => p.id !== employee?.userId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <div style={{ position: "relative" }}>
+                  <SearchSelect
+                    options={gestorOpcoes}
+                    value={gestor}
+                    onChange={setGestor}
+                    placeholder="Digite para buscar o gestor…"
+                    maxVisible={gestorOpcoes.length}
+                  />
+                  {/* leva o valor no formulário e trava o envio vazio com o aviso
+                      nativo do navegador, como o select fazia */}
+                  <input
+                    name="manager_id" required value={gestor} onChange={() => {}}
+                    tabIndex={-1} aria-hidden
+                    style={{ position: "absolute", left: 12, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                  />
+                </div>
               </Field>
             </div>
 

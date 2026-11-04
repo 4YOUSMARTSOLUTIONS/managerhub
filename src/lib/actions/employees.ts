@@ -6,6 +6,9 @@ import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import type { ActionState } from "./types";
 import { SEM_GESTOR } from "@/lib/constants";
 
+// "Sem gestor" é uma escolha (chega como marcador); em branco é esquecimento
+const GESTOR_EM_BRANCO = "Escolha o gestor, ou \"Sem gestor\" para quem está no topo da hierarquia.";
+
 function buildData(formData: FormData, cpf: string) {
   return {
     full_name: String(formData.get("full_name") ?? "").trim(),
@@ -42,6 +45,7 @@ export async function createEmployee(
     const cpf = onlyDigits(String(formData.get("cpf") ?? ""));
     if (!isValidCpf(cpf)) return { error: "CPF inválido. Confira os números." };
     if (!String(formData.get("employee_code") ?? "").trim()) return { error: "Informe a matrícula do colaborador." };
+    if (!String(formData.get("manager_id") ?? "")) return { error: GESTOR_EM_BRANCO };
     const password = String(formData.get("password") ?? "");
     if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
@@ -119,6 +123,7 @@ export async function updateEmployee(
     const cpf = onlyDigits(String(formData.get("cpf") ?? ""));
     if (!isValidCpf(cpf)) return { error: "CPF inválido. Confira os números." };
     if (!String(formData.get("employee_code") ?? "").trim()) return { error: "Informe a matrícula do colaborador." };
+    if (!String(formData.get("manager_id") ?? "")) return { error: GESTOR_EM_BRANCO };
 
     // Desligamento: conferido ANTES de salvar a ficha, para um erro na data não
     // deixar metade gravada (a ficha e a demissão são duas chamadas). O banco

@@ -27,8 +27,10 @@ export function SearchSelect({
   const selectedName = value ? byId.get(value) ?? "—" : "";
 
   const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
+    // sem acento e sem caixa: "joao" acha "JOÃO"
+    const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const q = norm(query.trim());
+    const list = q ? options.filter((o) => norm(o.name).includes(q)) : options;
     return list.slice(0, maxVisible);
   }, [options, query, maxVisible]);
 

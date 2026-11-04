@@ -135,6 +135,13 @@ export function UsersManager({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
+  // `people` são todos os perfis da empresa, desligados inclusive. A ficha só
+  // oferece ativos como gestor, então cada pessoa leva a marca de ativa.
+  const pessoasComStatus = useMemo(() => {
+    const ativos = new Set(employees.filter((e) => e.active).map((e) => e.userId));
+    return people.map((p) => ({ ...p, active: ativos.has(p.id) }));
+  }, [people, employees]);
+
   const openCreate = () => { setEditing(undefined); setOpen(true); };
   const openEdit = (e: EmployeeRow) => { setEditing(e); setOpen(true); };
 
@@ -388,7 +395,7 @@ export function UsersManager({
             positions={positions}
             levels={levels}
             hierarchies={hierarchies}
-            people={people}
+            people={pessoasComStatus}
             canSetOwner={isSuperAdmin}
             canSetRole={canManageAccess}
             // ao desligar um gestor, a equipe dele continua apontando para ele
