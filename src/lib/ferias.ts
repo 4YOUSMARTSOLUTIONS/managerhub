@@ -424,8 +424,14 @@ export function validarConjunto(
   return { atribuicoes };
 }
 
+/** Período aquisitivo por extenso, "01/02/2025 a 31/01/2026". Era só "2025/2026",
+ *  que não diz em que dia o direito nasce nem quando o aquisitivo se completa. */
+export function periodoAquisitivo(inicio: string, fim: string): string {
+  return `${dataBr(inicio)} a ${dataBr(fim)}`;
+}
+
 export function rotuloAquisitivo(a: { aqInicio: string; aqFim: string }): string {
-  return `${a.aqInicio.slice(0, 4)}/${a.aqFim.slice(0, 4)}`;
+  return periodoAquisitivo(a.aqInicio, a.aqFim);
 }
 
 const dataBr = (iso: string) => {

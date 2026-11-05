@@ -57,7 +57,7 @@ export function FeriasLancarPlanilhaDialog({ hoje, onFechar }: { hoje: string; o
       }
       const XLSX = await loadXlsx();
       const ws = XLSX.utils.aoa_to_sheet(linhasDoModeloLote(r.pessoas));
-      ws["!cols"] = [{ wch: 12 }, { wch: 11 }, { wch: 36 }, { wch: 18 }, { wch: 11 }, { wch: 12 }, { wch: 12 }, { wch: 17 }, { wch: 18 }, { wch: 13 }, { wch: 13 }];
+      ws["!cols"] = [{ wch: 12 }, { wch: 11 }, { wch: 36 }, { wch: 18 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 17 }, { wch: 18 }, { wch: 13 }, { wch: 13 }];
       const wsI = XLSX.utils.aoa_to_sheet(LOTE_INSTRUCOES);
       wsI["!cols"] = [{ wch: 120 }];
       const wb = XLSX.utils.book_new();

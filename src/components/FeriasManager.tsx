@@ -30,7 +30,7 @@ import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
 } from "@/lib/constants";
 import {
-  rotuloAquisitivo, type AquisitivoInfo, type FeriadoCustom, type PrazosLegais, type QuemLanca,
+  rotuloAquisitivo, periodoAquisitivo, type AquisitivoInfo, type FeriadoCustom, type PrazosLegais, type QuemLanca,
 } from "@/lib/ferias";
 import {
   cancelarFerias, decidirFerias, efetivarFerias, excluirFerias, getContextoEfetivacao,
@@ -540,7 +540,7 @@ function MinhasFerias({
                 </Badge>
               </div>
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.25rem 0 0.6rem" }}>
-                {formatDate(a.aqInicio)} a {formatDate(a.aqFim)} · gozar até {formatDate(a.concessivoFim)}
+                Gozar até {formatDate(a.concessivoFim)}
               </p>
               <div style={{ fontSize: "1.35rem", fontWeight: 700 }} className="tabular">
                 {a.saldo} <span className="soft" style={{ fontSize: "0.8rem", fontWeight: 400 }}>dia(s) de saldo</span>
@@ -573,7 +573,7 @@ function MinhasFerias({
                 <th>Período</th>
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 80, textAlign: "right" }}>Abono</th>
-                <th style={{ width: 120 }}>Aquisitivo</th>
+                <th style={{ width: 170 }}>Aquisitivo</th>
                 <th style={{ width: 170 }}>Situação</th>
                 <th style={{ width: 210, textAlign: "right" }}>Ações</th>
               </tr>
@@ -589,7 +589,7 @@ function MinhasFerias({
                   </td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
-                  <td className="muted" style={{ fontSize: "0.82rem" }}>{r.aquisitivoInicio.slice(0, 4)}/{r.aquisitivoFim.slice(0, 4)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>{periodoAquisitivo(r.aquisitivoInicio, r.aquisitivoFim)}</td>
                   <td>
                     <Badge tone={FERIAS_STATUS_TONE[r.status]}>{FERIAS_STATUS[r.status]}</Badge>
                   </td>
@@ -816,7 +816,7 @@ function TabelaGeral({ rows, onDetalhe }: { rows: FeriasRow[]; onDetalhe: (r: Fe
             rows={filtradas.map((r) => [
               r.fullName, r.employeeCode, r.departmentName, r.unitName,
               formatDate(r.startDate), formatDate(r.endDate), r.dias, r.abonoDias,
-              `${r.aquisitivoInicio.slice(0, 4)}/${r.aquisitivoFim.slice(0, 4)}`,
+              periodoAquisitivo(r.aquisitivoInicio, r.aquisitivoFim),
               FERIAS_STATUS[r.status], r.createdByName,
             ])}
           />
@@ -835,7 +835,7 @@ function TabelaGeral({ rows, onDetalhe }: { rows: FeriasRow[]; onDetalhe: (r: Fe
                 <th style={{ width: 110 }}>Unidade</th>
                 <th style={{ width: 180 }}>Período</th>
                 <th style={{ width: 64, textAlign: "right" }}>Dias</th>
-                <th style={{ width: 105 }}>Aquisitivo</th>
+                <th style={{ width: 170 }}>Aquisitivo</th>
                 <th style={{ width: 165 }}>Situação</th>
               </tr>
             </thead>
@@ -847,7 +847,7 @@ function TabelaGeral({ rows, onDetalhe }: { rows: FeriasRow[]; onDetalhe: (r: Fe
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.unitName ?? "—"}</td>
                   <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
-                  <td className="muted" style={{ fontSize: "0.82rem" }}>{r.aquisitivoInicio.slice(0, 4)}/{r.aquisitivoFim.slice(0, 4)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>{periodoAquisitivo(r.aquisitivoInicio, r.aquisitivoFim)}</td>
                   <td><Badge tone={FERIAS_STATUS_TONE[r.status]}>{FERIAS_STATUS[r.status]}</Badge></td>
                 </tr>
               ))}
@@ -1084,7 +1084,7 @@ function EfetivarDialog({
         <Field label="Período">{`${formatDate(row.startDate)} a ${formatDate(row.endDate)}`}</Field>
         <Field label="Dias de gozo">{String(row.dias)}</Field>
         <Field label="Abono">{row.abonoDias ? `${row.abonoDias} dia(s)` : "Não"}</Field>
-        <Field label="Aquisitivo">{`${row.aquisitivoInicio.slice(0, 4)}/${row.aquisitivoFim.slice(0, 4)}`}</Field>
+        <Field label="Aquisitivo">{periodoAquisitivo(row.aquisitivoInicio, row.aquisitivoFim)}</Field>
         {c && <Field label="Saldo do aquisitivo">{`${c.saldo ?? "—"} dia(s)`}</Field>}
         {c?.concessivoFim && <Field label="Gozar até">{formatDate(c.concessivoFim)}</Field>}
       </FieldGrid>
@@ -1264,7 +1264,7 @@ function VisaoGeral({
                 <tr>
                   <th>Colaborador</th>
                   <th style={{ width: 150 }}>Setor</th>
-                  <th style={{ width: 120 }}>Aquisitivo</th>
+                  <th style={{ width: 170 }}>Aquisitivo</th>
                   <th style={{ width: 80, textAlign: "right" }}>Saldo</th>
                   <th style={{ width: 120 }}>Gozar até</th>
                   <th style={{ width: 130 }}>Situação</th>
@@ -1276,8 +1276,8 @@ function VisaoGeral({
                   <tr key={s.userId}>
                     <td style={{ fontWeight: 600 }}>{shortName(s.nome)}</td>
                     <td className="muted" style={{ fontSize: "0.82rem" }}>{s.setor ?? "—"}</td>
-                    <td className="muted" style={{ fontSize: "0.82rem" }}>
-                      {s.aquisitivoInicio ? `${s.aquisitivoInicio.slice(0, 4)}/${s.aquisitivoFim?.slice(0, 4)}` : "—"}
+                    <td className="muted" style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>
+                      {s.aquisitivoInicio && s.aquisitivoFim ? periodoAquisitivo(s.aquisitivoInicio, s.aquisitivoFim) : "—"}
                     </td>
                     <td className="tabular" style={{ textAlign: "right" }}>{s.saldo}</td>
                     <td className="muted" style={{ fontSize: "0.82rem" }}>{s.gozarAte ? formatDate(s.gozarAte) : "—"}</td>

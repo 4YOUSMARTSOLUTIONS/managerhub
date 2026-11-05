@@ -265,11 +265,10 @@ export function FeriasSolicitarDialog({
               <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                 {aqs.filter((a) => a.situacao !== "quitada" || a.diasUsados > 0).slice(-4).map((a) => (
                   <div key={a.aqInicio} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 600, minWidth: 76 }}>{rotuloAquisitivo(a)}</span>
-                    <span className="soft">
-                      {formatDate(a.aqInicio)} a {formatDate(a.aqFim)}
-                      {a.situacao !== "em_curso" && a.situacao !== "quitada" && ` · gozar até ${formatDate(a.concessivoFim)}`}
-                    </span>
+                    <span style={{ fontWeight: 600 }}>{rotuloAquisitivo(a)}</span>
+                    {a.situacao !== "em_curso" && a.situacao !== "quitada" && (
+                      <span className="soft">gozar até {formatDate(a.concessivoFim)}</span>
+                    )}
                     <span style={{ marginLeft: "auto" }} className="tabular">{a.saldo} dia(s)</span>
                     <Badge variant="quiet" tone={FERIAS_AQUISITIVO_TONE[a.situacao] ?? "gray"}>
                       {FERIAS_AQUISITIVO_SITUACAO[a.situacao] ?? a.situacao}

@@ -10,6 +10,7 @@
  */
 
 import { parseDataPlanilha } from "@/lib/absences-import";
+import { periodoAquisitivo } from "@/lib/ferias";
 
 export const LOTE_ABA = "Programação";
 
@@ -59,7 +60,7 @@ export function linhasDoModeloLote(pessoas: ModeloLotePessoa[]): unknown[][] {
     [...LOTE_COLUNAS],
     ...pessoas.map((p) => [
       p.unidade ?? "", p.matricula ?? "", p.nome ?? "", p.setor ?? "",
-      p.aqInicio && p.aqFim ? `${p.aqInicio.slice(0, 4)}/${p.aqFim.slice(0, 4)}` : "",
+      p.aqInicio && p.aqFim ? periodoAquisitivo(p.aqInicio, p.aqFim) : "",
       p.saldo ?? "", br(p.gozarAte), "", "", "", "",
     ]),
   ];
