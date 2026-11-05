@@ -348,7 +348,7 @@ export function FeriasManager({
     <>
     <PageHeader
       title="Férias"
-      subtitle="A previsão vira ausência de verdade só depois que o departamento pessoal efetiva"
+      subtitle="A previsão vira planejamento de verdade só depois que o departamento pessoal efetiva"
       action={menuDeAcoes}
     />
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
