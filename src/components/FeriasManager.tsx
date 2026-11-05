@@ -211,42 +211,58 @@ export function FeriasManager({
         && (r.status === "solicitada" || r.status === "aprovada" || r.status === "efetivada"))
       .map((r) => ({ inicio: r.startDate, fim: r.endDate }));
   /**
-   * Minha equipe ou a empresa toda. Só pergunta a quem enxerga além da própria
-   * cadeia E lidera alguém (o dono, o DP que também é gestor, o Gerencial):
-   * para os demais as duas respostas seriam a mesma lista.
+   * Minha equipe ou a empresa toda: um recorte da TELA inteira (cartões, filas,
+   * todas as previsões e as subabas do painel). Só pergunta a quem enxerga além
+   * da própria cadeia E lidera alguém (o dono, o DP que também é gestor, o
+   * Gerencial): para os demais as duas respostas seriam a mesma lista.
+   * "Minhas férias" e o menu de ações ficam de fora: um é a própria pessoa, o
+   * outro é o que ela pode fazer, não o que ela está olhando.
+   *
+   * É filtro de visão, não de acesso: a RLS continua decidindo o que chega.
    */
   const equipeSet = useMemo(() => new Set(equipe), [equipe]);
   const escolheEscopo = vejoEmpresa && equipe.length > 0;
   // abre na própria equipe (decisão do LUIZ, 05/11/2026): a empresa toda é um clique
   const [escopo, setEscopo] = useState<Escopo>("equipe");
   const soEquipe = escolheEscopo && escopo === "equipe";
+  const pessoasNoEscopo = soEquipe ? equipeSet : null;
+
+  const rowsNoEscopo = useMemo(
+    () => (soEquipe ? rows.filter((r) => equipeSet.has(r.userId)) : rows),
+    [rows, soEquipe, equipeSet]);
+  const painelNoEscopo = useMemo<FeriasPainel | null>(() => {
+    if (!painel || !soEquipe) return painel;
+    const daEquipe = (x: { userId: string }) => equipeSet.has(x.userId);
+    return {
+      ...painel,
+      agora: painel.agora.filter(daEquipe),
+      proximas: painel.proximas.filter(daEquipe),
+      timeline: painel.timeline.filter(daEquipe),
+      saldos: painel.saldos.filter(daEquipe),
+    };
+  }, [painel, soEquipe, equipeSet]);
 
   // Quem decide a previsão é o gestor da pessoa ou o DP (`ferias_decidir`). O
   // Gerencial enxerga a empresa toda, mas só decide a própria cadeia: os
   // pedidos dos outros na fila dele virariam botão que só devolve erro.
-  const filaToda = useMemo(
-    () => rows.filter((r) => r.status === "solicitada" && r.userId !== meuId && (ehDp || equipeSet.has(r.userId))),
-    [rows, meuId, ehDp, equipeSet]);
-  const filaDaEquipe = useMemo(() => filaToda.filter((r) => equipeSet.has(r.userId)), [filaToda, equipeSet]);
-  const fila = soEquipe ? filaDaEquipe : filaToda;
-  const rowsNoEscopo = useMemo(
-    () => (soEquipe ? rows.filter((r) => equipeSet.has(r.userId)) : rows),
-    [rows, soEquipe, equipeSet]);
+  const fila = useMemo(
+    () => rowsNoEscopo.filter((r) => r.status === "solicitada" && r.userId !== meuId && (ehDp || equipeSet.has(r.userId))),
+    [rowsNoEscopo, meuId, ehDp, equipeSet]);
   const filaDp = useMemo(
-    () => [...rows.filter((r) => r.status === "aprovada")].sort((a, b) => a.startDate.localeCompare(b.startDate)),
-    [rows]);
+    () => rowsNoEscopo.filter((r) => r.status === "aprovada").sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    [rowsNoEscopo]);
 
   // o painel traz o FATO (employee_absences, inclusive o histórico pré-módulo);
   // sem ele, cai para as linhas do processo
-  const emGozoQtd = painel
-    ? painel.agora.length
-    : rows.filter((r) => r.status === "efetivada" && r.startDate <= hoje && r.endDate >= hoje).length;
-  const proximasQtd = painel
-    ? painel.proximas.length
-    : rows.filter((r) =>
+  const emGozoQtd = painelNoEscopo
+    ? painelNoEscopo.agora.length
+    : rowsNoEscopo.filter((r) => r.status === "efetivada" && r.startDate <= hoje && r.endDate >= hoje).length;
+  const proximasQtd = painelNoEscopo
+    ? painelNoEscopo.proximas.length
+    : rowsNoEscopo.filter((r) =>
         (r.status === "efetivada" || r.status === "aprovada") && r.startDate > hoje && r.startDate <= somarDias(hoje, 60)).length;
-  const aVencerQtd = painel ? painel.saldos.filter((s) => s.situacao === "a_vencer").length : 0;
-  const vencidasQtd = painel ? painel.saldos.filter((s) => s.situacao === "vencida").length : 0;
+  const aVencerQtd = painelNoEscopo ? painelNoEscopo.saldos.filter((s) => s.situacao === "a_vencer").length : 0;
+  const vencidasQtd = painelNoEscopo ? painelNoEscopo.saldos.filter((s) => s.situacao === "vencida").length : 0;
 
   const podeGerir = ehGestor || ehDp;
 
@@ -261,32 +277,23 @@ export function FeriasManager({
       />
     ) },
   ];
-  // na fila do Gerencial não há o que escolher: ele só decide a própria cadeia
-  const escopoNaFila = escolheEscopo && ehDp;
   if (podeGerir) {
     abas.push({ id: "fila", label: `Aprovações${fila.length ? ` (${fila.length})` : ""}`, content: (
-      <FilaGestor
-        fila={fila} onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })}
-        escopo={escopoNaFila ? (
-          <AlternadorDeEscopo escopo={escopo} onMudar={setEscopo}
-            qtdEquipe={filaDaEquipe.length} qtdEmpresa={filaToda.length} />
-        ) : null}
-        soEquipe={soEquipe && escopoNaFila}
-      />
+      // o aviso de "as outras estão em Toda a empresa" só vale para o DP: o
+      // Gerencial não decide as outras equipes, então elas nunca entram na fila dele
+      <FilaGestor fila={fila} soEquipe={soEquipe && ehDp}
+        onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
     ) });
   }
   if (ehDp) {
     abas.push({ id: "efetivacao", label: `Efetivação${filaDp.length ? ` (${filaDp.length})` : ""}`, content: (
-      <FilaDp fila={filaDp} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
+      <FilaDp fila={filaDp} soEquipe={soEquipe} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
         onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
     ) });
   }
   if (podeGerir) {
     abas.push({ id: "todas", label: "Todas as previsões", content: (
-      <TabelaGeral
-        rows={rowsNoEscopo} onDetalhe={setDetalhe}
-        escopo={escolheEscopo ? <AlternadorDeEscopo escopo={escopo} onMudar={setEscopo} /> : null}
-      />
+      <TabelaGeral rows={rowsNoEscopo} onDetalhe={setDetalhe} />
     ) });
   }
   if (podeGerir) {
@@ -294,21 +301,21 @@ export function FeriasManager({
     // está fora num período e a programação por pessoa. Cada subaba busca o
     // próprio período quando é aberta (o Tabs só monta a aba visível).
     const subabas: Tab[] = [];
-    if (painel) {
+    if (painelNoEscopo) {
       subabas.push({ id: "visao", label: "Visão geral", content: (
-        <VisaoGeral painel={painel} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
+        <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
           onImportar={ehDp ? () => setImportando(true) : undefined} />
       ) });
     }
     subabas.push(
       { id: "calendario", label: "Calendário", content: (
-        <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} />
+        <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
       ) },
       { id: "acompanhamento", label: "Acompanhamento", content: (
-        <FeriasAcompanhamento setores={setores} unidades={unidades} hoje={hoje} />
+        <FeriasAcompanhamento setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
       ) },
       { id: "programacao", label: "Programação", content: (
-        <FeriasProgramacao setores={setores} unidades={unidades} hoje={hoje} />
+        <FeriasProgramacao setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
       ) },
     );
     abas.push({ id: "painel", label: "Painel", content: (
@@ -384,16 +391,22 @@ export function FeriasManager({
     <PageHeader
       title="Férias"
       subtitle="A previsão vira planejamento de verdade só depois que o departamento pessoal efetiva"
-      action={menuDeAcoes}
+      action={escolheEscopo ? (
+        // ao lado das ações, e não dentro de uma aba: vale para a tela toda
+        <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+          <AlternadorDeEscopo escopo={escopo} onMudar={setEscopo} />
+          {menuDeAcoes}
+        </div>
+      ) : menuDeAcoes}
     />
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
 
       {podeGerir && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
           <StatCard label="De férias agora" value={emGozoQtd} tone="green"
-            hint={painel?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje"} />
+            hint={painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje"} />
           <StatCard label="Próximas saídas (60 dias)" value={proximasQtd} tone="blue" />
-          <StatCard label="Aguardando o gestor" value={rows.filter((r) => r.status === "solicitada").length}
+          <StatCard label="Aguardando o gestor" value={rowsNoEscopo.filter((r) => r.status === "solicitada").length}
             tone={fila.length > 0 ? "amber" : "gray"} />
           <StatCard label="Aguardando efetivação" value={filaDp.length} tone={filaDp.length > 0 ? "amber" : "gray"}
             hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
@@ -663,13 +676,12 @@ function MinhasFerias({
 // ============================================================================
 
 function FilaGestor({
-  fila, onDetalhe, onDevolver, escopo, soEquipe,
+  fila, onDetalhe, onDevolver, soEquipe,
 }: {
   fila: FeriasRow[];
   onDetalhe: (r: FeriasRow) => void;
   onDevolver: (r: FeriasRow) => void;
-  /** o alternador "Minha equipe / Toda a empresa", quando a pessoa tem as duas */
-  escopo?: React.ReactNode;
+  /** a tela está em "Minha equipe" e há outra fila em "Toda a empresa" */
   soEquipe?: boolean;
 }) {
   const [decidindo, iniciar] = useTransition();
@@ -692,8 +704,7 @@ function FilaGestor({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem", paddingTop: "0.9rem" }}>
-      {escopo && <div>{escopo}</div>}
+    <div style={{ paddingTop: "0.9rem" }}>
       {fila.length === 0 ? (
         <EmptyState
           title="Nada aguardando você"
@@ -755,21 +766,19 @@ function FilaGestor({
 type Escopo = "equipe" | "empresa";
 
 /**
- * O recorte de quem aparece nas listas de gestão. Começa em "Minha equipe", a
- * cadeia abaixo de mim no organograma, a mesma de `manages_user`, que é quem eu
- * decido como gestor; "Toda a empresa" é o que o DP opera.
+ * O recorte da tela de férias. Começa em "Minha equipe", a cadeia abaixo de
+ * mim no organograma, a mesma de `manages_user`, que é quem eu decido como
+ * gestor; "Toda a empresa" é o que o DP opera.
  */
 function AlternadorDeEscopo({
-  escopo, onMudar, qtdEquipe, qtdEmpresa,
+  escopo, onMudar,
 }: {
   escopo: Escopo;
   onMudar: (e: Escopo) => void;
-  qtdEquipe?: number;
-  qtdEmpresa?: number;
 }) {
-  const opcoes: { id: Escopo; rotulo: string; qtd?: number }[] = [
-    { id: "equipe", rotulo: "Minha equipe", qtd: qtdEquipe },
-    { id: "empresa", rotulo: "Toda a empresa", qtd: qtdEmpresa },
+  const opcoes: { id: Escopo; rotulo: string }[] = [
+    { id: "equipe", rotulo: "Minha equipe" },
+    { id: "empresa", rotulo: "Toda a empresa" },
   ];
   return (
     <div role="group" aria-label="Quem mostrar"
@@ -778,7 +787,7 @@ function AlternadorDeEscopo({
         <button key={o.id} type="button" aria-pressed={escopo === o.id}
           className={`btn btn-xs ${escopo === o.id ? "btn-primary" : "btn-ghost"}`}
           onClick={() => onMudar(o.id)}>
-          {o.rotulo}{o.qtd != null && <span className="tabular" style={{ opacity: 0.75 }}> ({o.qtd})</span>}
+          {o.rotulo}
         </button>
       ))}
     </div>
@@ -790,9 +799,11 @@ function AlternadorDeEscopo({
 // ============================================================================
 
 function FilaDp({
-  fila, onDetalhe, onEfetivar, onDevolver,
+  fila, soEquipe, onDetalhe, onEfetivar, onDevolver,
 }: {
   fila: FeriasRow[];
+  /** a tela está em "Minha equipe": o vazio aqui não quer dizer que a empresa não tem nada */
+  soEquipe?: boolean;
   onDetalhe: (r: FeriasRow) => void;
   onEfetivar: (r: FeriasRow) => void;
   onDevolver: (r: FeriasRow) => void;
@@ -800,7 +811,12 @@ function FilaDp({
   if (fila.length === 0) {
     return (
       <div style={{ paddingTop: "0.9rem" }}>
-        <EmptyState title="Nada para efetivar" description="Previsões aprovadas pelo gestor chegam aqui para o cálculo e a efetivação na folha." />
+        <EmptyState
+          title="Nada para efetivar"
+          description={soEquipe
+            ? "Nenhuma previsão da sua equipe aguarda efetivação. As das outras equipes estão em Toda a empresa."
+            : "Previsões aprovadas pelo gestor chegam aqui para o cálculo e a efetivação na folha."}
+        />
       </div>
     );
   }
@@ -862,12 +878,10 @@ function FilaDp({
 // ============================================================================
 
 function TabelaGeral({
-  rows, onDetalhe, escopo,
+  rows, onDetalhe,
 }: {
   rows: FeriasRow[];
   onDetalhe: (r: FeriasRow) => void;
-  /** o alternador "Minha equipe / Toda a empresa", quando a pessoa tem as duas */
-  escopo?: React.ReactNode;
 }) {
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
@@ -885,7 +899,6 @@ function TabelaGeral({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem", paddingTop: "0.9rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-        {escopo}
         <input
           className="input" placeholder="Buscar por pessoa, matrícula, setor ou unidade…"
           value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 320 }}

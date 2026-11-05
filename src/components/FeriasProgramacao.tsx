@@ -33,11 +33,13 @@ type Pessoa = {
  * planilha sai com duas abas: uma linha por período e o resumo por pessoa.
  */
 export function FeriasProgramacao({
-  setores, unidades, hoje,
+  setores, unidades, hoje, soUsuarios = null,
 }: {
   setores: { id: string; name: string }[];
   unidades: string[] | null;
   hoje: string;
+  /** "Minha equipe" do topo da tela de férias (null = todos que a RLS mostra) */
+  soUsuarios?: Set<string> | null;
 }) {
   const [filtros, setFiltros] = useState<FiltrosFerias>({
     de: hoje, ate: somarDias(hoje, 364), status: TODOS_OS_STATUS, setor: "", busca: "",
@@ -51,7 +53,7 @@ export function FeriasProgramacao({
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [gerando, setGerando] = useState(false);
 
-  const { itens, erro, carregando } = useAgendaFerias(buscado.de, buscado.ate, unidades);
+  const { itens, erro, carregando } = useAgendaFerias(buscado.de, buscado.ate, unidades, soUsuarios);
   const cores = useMemo(() => coresDosSetores(setores), [setores]);
 
   const pessoas = useMemo(() => {

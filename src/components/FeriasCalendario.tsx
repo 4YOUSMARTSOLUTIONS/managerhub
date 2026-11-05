@@ -40,15 +40,17 @@ type Segmento = { item: AgendaItem; c0: number; c1: number; comeca: boolean; ter
  * daquele período.
  */
 export function FeriasCalendario({
-  setores, unidades, hoje,
+  setores, unidades, hoje, soUsuarios = null,
 }: {
   setores: { id: string; name: string }[];
   unidades: string[] | null;
   hoje: string;
+  /** "Minha equipe" do topo da tela de férias (null = todos que a RLS mostra) */
+  soUsuarios?: Set<string> | null;
 }) {
   const [mes, setMes] = useState(`${hoje.slice(0, 7)}-01`);
   const { de, ate } = gradeDoMes(mes);
-  const { itens, erro, carregando } = useAgendaFerias(de, ate, unidades);
+  const { itens, erro, carregando } = useAgendaFerias(de, ate, unidades, soUsuarios);
   return (
     <CalendarioDeFerias
       mes={mes} onMes={setMes} itens={itens} carregando={carregando} erro={erro}

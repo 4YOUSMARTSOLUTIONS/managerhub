@@ -18,11 +18,13 @@ import {
  * de férias que cruza o intervalo escolhido, com quantos dias caem dentro dele.
  */
 export function FeriasAcompanhamento({
-  setores, unidades, hoje,
+  setores, unidades, hoje, soUsuarios = null,
 }: {
   setores: { id: string; name: string }[];
   unidades: string[] | null;
   hoje: string;
+  /** "Minha equipe" do topo da tela de férias (null = todos que a RLS mostra) */
+  soUsuarios?: Set<string> | null;
 }) {
   const [filtros, setFiltros] = useState<FiltrosFerias>({
     de: hoje, ate: somarDias(hoje, 29), status: TODOS_OS_STATUS, setor: "", busca: "",
@@ -35,7 +37,7 @@ export function FeriasAcompanhamento({
     if (!periodoValido(f)) setBuscado({ de: f.de, ate: f.ate });
   };
 
-  const { itens, erro, carregando } = useAgendaFerias(buscado.de, buscado.ate, unidades);
+  const { itens, erro, carregando } = useAgendaFerias(buscado.de, buscado.ate, unidades, soUsuarios);
   const cores = useMemo(() => coresDosSetores(setores), [setores]);
   const linhas = useMemo(() => aplicarFiltros(itens, filtros), [itens, filtros]);
 

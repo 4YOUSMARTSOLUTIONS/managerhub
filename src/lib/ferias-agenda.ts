@@ -6,7 +6,7 @@
  * período sob demanda.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAgendaFerias } from "@/lib/actions/ferias";
 
 export type StatusAgenda = "solicitada" | "aprovada" | "efetivada";
@@ -69,8 +69,14 @@ export function diasNoPeriodo(i: { inicio: string; fim: string }, de: string, at
  * Busca as férias de um período. O estado guarda a chave do pedido: enquanto a
  * resposta da chave atual não chega, `carregando` é verdadeiro, e uma resposta
  * velha (de um mês que a pessoa já deixou para trás) nunca aparece na tela.
+ *
+ * `soUsuarios` é o "Minha equipe" do topo da tela: recorta o que já veio, sem
+ * buscar de novo. É filtro de visão, não de acesso: quem escolhe já enxerga a
+ * empresa toda, e a RLS continua decidindo o que chega.
  */
-export function useAgendaFerias(inicio: string, fim: string, unidades: string[] | null) {
+export function useAgendaFerias(
+  inicio: string, fim: string, unidades: string[] | null, soUsuarios: Set<string> | null = null,
+) {
   const chave = `${inicio}|${fim}|${(unidades ?? []).join(",")}|${unidades ? 1 : 0}`;
   const [estado, setEstado] = useState<{ chave: string; itens: AgendaItem[]; erro: string } | null>(null);
   const [versao, setVersao] = useState(0);
@@ -89,8 +95,12 @@ export function useAgendaFerias(inicio: string, fim: string, unidades: string[] 
   }, [chave, versao]);
 
   const atual = estado?.chave === chave ? estado : null;
+  const itens = useMemo(() => {
+    const todos = atual?.itens ?? [];
+    return soUsuarios ? todos.filter((i) => soUsuarios.has(i.userId)) : todos;
+  }, [atual, soUsuarios]);
   return {
-    itens: atual?.itens ?? [],
+    itens,
     erro: atual?.erro ?? "",
     carregando: !atual,
     recarregar: () => setVersao((v) => v + 1),
