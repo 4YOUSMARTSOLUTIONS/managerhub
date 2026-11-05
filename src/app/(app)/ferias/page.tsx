@@ -164,6 +164,9 @@ export default async function FeriasPage() {
         ehDp={ehDp}
         ehOwner={role === "owner"}
         ehGestor={podeLiderar && (ehDp || equipe.length > 0)}
+        equipe={equipe}
+        // a RLS (`pode_ver_ferias`) abre a empresa toda ao DP e ao Gerencial
+        vejoEmpresa={ehDp || role === "manager"}
         podeSolicitar={podeSolicitar}
         avisoSolicitar={avisoSolicitar}
         pessoasLancar={pessoasLancar}

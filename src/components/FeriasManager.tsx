@@ -145,7 +145,7 @@ const dataDoPedido = (iso: string) =>
  * decide quais abas e botões existem.
  */
 export function FeriasManager({
-  rows, meuId, ehDp, ehOwner, ehGestor, podeSolicitar, avisoSolicitar,
+  rows, meuId, ehDp, ehOwner, ehGestor, equipe, vejoEmpresa, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
   antecedencia, prazos,
 }: {
@@ -155,6 +155,10 @@ export function FeriasManager({
   ehOwner: boolean;
   /** lidera equipe de fato (papel + subordinados) */
   ehGestor: boolean;
+  /** quem está abaixo de mim no organograma, a cadeia inteira (`my_managed_memberships`) */
+  equipe: string[];
+  /** a RLS me mostra a empresa toda (DP e Gerencial), não só a minha cadeia */
+  vejoEmpresa: boolean;
   podeSolicitar: boolean;
   /** por que o botão Solicitar não aparece (nível bloqueado, sem admissão) */
   avisoSolicitar: string | null;
@@ -206,9 +210,27 @@ export function FeriasManager({
       .filter((r) => r.userId === userId && r.id !== excluir && r.decimo
         && (r.status === "solicitada" || r.status === "aprovada" || r.status === "efetivada"))
       .map((r) => ({ inicio: r.startDate, fim: r.endDate }));
-  const fila = useMemo(
-    () => rows.filter((r) => r.status === "solicitada" && r.userId !== meuId),
-    [rows, meuId]);
+  /**
+   * Minha equipe ou a empresa toda. Só pergunta a quem enxerga além da própria
+   * cadeia E lidera alguém (o dono, o DP que também é gestor, o Gerencial):
+   * para os demais as duas respostas seriam a mesma lista.
+   */
+  const equipeSet = useMemo(() => new Set(equipe), [equipe]);
+  const escolheEscopo = vejoEmpresa && equipe.length > 0;
+  const [escopo, setEscopo] = useState<Escopo>("empresa");
+  const soEquipe = escolheEscopo && escopo === "equipe";
+
+  // Quem decide a previsão é o gestor da pessoa ou o DP (`ferias_decidir`). O
+  // Gerencial enxerga a empresa toda, mas só decide a própria cadeia: os
+  // pedidos dos outros na fila dele virariam botão que só devolve erro.
+  const filaToda = useMemo(
+    () => rows.filter((r) => r.status === "solicitada" && r.userId !== meuId && (ehDp || equipeSet.has(r.userId))),
+    [rows, meuId, ehDp, equipeSet]);
+  const filaDaEquipe = useMemo(() => filaToda.filter((r) => equipeSet.has(r.userId)), [filaToda, equipeSet]);
+  const fila = soEquipe ? filaDaEquipe : filaToda;
+  const rowsNoEscopo = useMemo(
+    () => (soEquipe ? rows.filter((r) => equipeSet.has(r.userId)) : rows),
+    [rows, soEquipe, equipeSet]);
   const filaDp = useMemo(
     () => [...rows.filter((r) => r.status === "aprovada")].sort((a, b) => a.startDate.localeCompare(b.startDate)),
     [rows]);
@@ -238,9 +260,18 @@ export function FeriasManager({
       />
     ) },
   ];
+  // na fila do Gerencial não há o que escolher: ele só decide a própria cadeia
+  const escopoNaFila = escolheEscopo && ehDp;
   if (podeGerir) {
     abas.push({ id: "fila", label: `Aprovações${fila.length ? ` (${fila.length})` : ""}`, content: (
-      <FilaGestor fila={fila} onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
+      <FilaGestor
+        fila={fila} onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })}
+        escopo={escopoNaFila ? (
+          <AlternadorDeEscopo escopo={escopo} onMudar={setEscopo}
+            qtdEquipe={filaDaEquipe.length} qtdEmpresa={filaToda.length} />
+        ) : null}
+        soEquipe={soEquipe && escopoNaFila}
+      />
     ) });
   }
   if (ehDp) {
@@ -251,7 +282,10 @@ export function FeriasManager({
   }
   if (podeGerir) {
     abas.push({ id: "todas", label: "Todas as previsões", content: (
-      <TabelaGeral rows={rows} onDetalhe={setDetalhe} />
+      <TabelaGeral
+        rows={rowsNoEscopo} onDetalhe={setDetalhe}
+        escopo={escolheEscopo ? <AlternadorDeEscopo escopo={escopo} onMudar={setEscopo} /> : null}
+      />
     ) });
   }
   if (podeGerir) {
@@ -628,11 +662,14 @@ function MinhasFerias({
 // ============================================================================
 
 function FilaGestor({
-  fila, onDetalhe, onDevolver,
+  fila, onDetalhe, onDevolver, escopo, soEquipe,
 }: {
   fila: FeriasRow[];
   onDetalhe: (r: FeriasRow) => void;
   onDevolver: (r: FeriasRow) => void;
+  /** o alternador "Minha equipe / Toda a empresa", quando a pessoa tem as duas */
+  escopo?: React.ReactNode;
+  soEquipe?: boolean;
 }) {
   const [decidindo, iniciar] = useTransition();
   const router = useRouter();
@@ -653,55 +690,96 @@ function FilaGestor({
     });
   };
 
-  if (fila.length === 0) {
-    return (
-      <div style={{ paddingTop: "0.9rem" }}>
-        <EmptyState title="Nada aguardando você" description="As solicitações da sua equipe aparecem aqui para aprovar ou devolver." />
-      </div>
-    );
-  }
-
   return (
-    <div className="card" style={{ overflowX: "auto", marginTop: "0.9rem" }}>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Colaborador</th>
-            <th style={{ width: 150 }}>Setor</th>
-            <th style={{ width: 190 }}>Período</th>
-            <th style={{ width: 70, textAlign: "right" }}>Dias</th>
-            <th style={{ width: 80, textAlign: "right" }}>Abono</th>
-            <th style={{ width: 190 }}>Prazo legal</th>
-            <th style={{ width: 250, textAlign: "right" }}>Decisão</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fila.map((r) => (
-            <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onDetalhe(r)}>
-              <td style={{ fontWeight: 600 }}>{shortName(r.fullName)}</td>
-              <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
-              <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
-              <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
-              <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
-              <td>
-                {rotuloForaPrazo(r)
-                  ? <Badge variant="quiet" tone="amber">{rotuloForaPrazo(r)}</Badge>
-                  : <span className="soft">—</span>}
-              </td>
-              <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                <div style={{ display: "inline-flex", gap: "0.35rem" }}>
-                  <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => aprovar(r)}>
-                    <Check size={13} aria-hidden /> Aprovar
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDevolver(r)}>
-                    <Undo2 size={13} aria-hidden /> Devolver
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem", paddingTop: "0.9rem" }}>
+      {escopo && <div>{escopo}</div>}
+      {fila.length === 0 ? (
+        <EmptyState
+          title="Nada aguardando você"
+          description={soEquipe
+            ? "Nenhuma solicitação da sua equipe aguarda decisão. As das outras equipes estão em Toda a empresa."
+            : "As solicitações da sua equipe aparecem aqui para aprovar ou devolver."}
+        />
+      ) : (
+        <div className="card" style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th style={{ width: 150 }}>Setor</th>
+                <th style={{ width: 190 }}>Período</th>
+                <th style={{ width: 70, textAlign: "right" }}>Dias</th>
+                <th style={{ width: 80, textAlign: "right" }}>Abono</th>
+                <th style={{ width: 190 }}>Prazo legal</th>
+                <th style={{ width: 250, textAlign: "right" }}>Decisão</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fila.map((r) => (
+                <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onDetalhe(r)}>
+                  <td style={{ fontWeight: 600 }}>{shortName(r.fullName)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
+                  <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
+                  <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
+                  <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
+                  <td>
+                    {rotuloForaPrazo(r)
+                      ? <Badge variant="quiet" tone="amber">{rotuloForaPrazo(r)}</Badge>
+                      : <span className="soft">—</span>}
+                  </td>
+                  <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: "inline-flex", gap: "0.35rem" }}>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => aprovar(r)}>
+                        <Check size={13} aria-hidden /> Aprovar
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDevolver(r)}>
+                        <Undo2 size={13} aria-hidden /> Devolver
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Minha equipe ou a empresa toda
+// ============================================================================
+
+type Escopo = "equipe" | "empresa";
+
+/**
+ * O recorte de quem aparece nas listas de gestão. Começa na empresa toda (o
+ * que o DP opera); "Minha equipe" é a cadeia abaixo de mim no organograma, a
+ * mesma de `manages_user`, que é quem eu decido como gestor.
+ */
+function AlternadorDeEscopo({
+  escopo, onMudar, qtdEquipe, qtdEmpresa,
+}: {
+  escopo: Escopo;
+  onMudar: (e: Escopo) => void;
+  qtdEquipe?: number;
+  qtdEmpresa?: number;
+}) {
+  const opcoes: { id: Escopo; rotulo: string; qtd?: number }[] = [
+    { id: "equipe", rotulo: "Minha equipe", qtd: qtdEquipe },
+    { id: "empresa", rotulo: "Toda a empresa", qtd: qtdEmpresa },
+  ];
+  return (
+    <div role="group" aria-label="Quem mostrar"
+      style={{ display: "inline-flex", gap: "0.25rem", padding: "0.2rem", background: "var(--mh-surface-2)", borderRadius: "var(--mh-radius-full)", border: "1px solid var(--mh-border)" }}>
+      {opcoes.map((o) => (
+        <button key={o.id} type="button" aria-pressed={escopo === o.id}
+          className={`btn btn-xs ${escopo === o.id ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => onMudar(o.id)}>
+          {o.rotulo}{o.qtd != null && <span className="tabular" style={{ opacity: 0.75 }}> ({o.qtd})</span>}
+        </button>
+      ))}
     </div>
   );
 }
@@ -782,7 +860,14 @@ function FilaDp({
 // Tabela geral
 // ============================================================================
 
-function TabelaGeral({ rows, onDetalhe }: { rows: FeriasRow[]; onDetalhe: (r: FeriasRow) => void }) {
+function TabelaGeral({
+  rows, onDetalhe, escopo,
+}: {
+  rows: FeriasRow[];
+  onDetalhe: (r: FeriasRow) => void;
+  /** o alternador "Minha equipe / Toda a empresa", quando a pessoa tem as duas */
+  escopo?: React.ReactNode;
+}) {
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
 
@@ -799,6 +884,7 @@ function TabelaGeral({ rows, onDetalhe }: { rows: FeriasRow[]; onDetalhe: (r: Fe
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem", paddingTop: "0.9rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+        {escopo}
         <input
           className="input" placeholder="Buscar por pessoa, matrícula, setor ou unidade…"
           value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 320 }}
