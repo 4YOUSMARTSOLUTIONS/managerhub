@@ -217,7 +217,8 @@ export function FeriasManager({
    */
   const equipeSet = useMemo(() => new Set(equipe), [equipe]);
   const escolheEscopo = vejoEmpresa && equipe.length > 0;
-  const [escopo, setEscopo] = useState<Escopo>("empresa");
+  // abre na própria equipe (decisão do LUIZ, 05/11/2026): a empresa toda é um clique
+  const [escopo, setEscopo] = useState<Escopo>("equipe");
   const soEquipe = escolheEscopo && escopo === "equipe";
 
   // Quem decide a previsão é o gestor da pessoa ou o DP (`ferias_decidir`). O
@@ -754,9 +755,9 @@ function FilaGestor({
 type Escopo = "equipe" | "empresa";
 
 /**
- * O recorte de quem aparece nas listas de gestão. Começa na empresa toda (o
- * que o DP opera); "Minha equipe" é a cadeia abaixo de mim no organograma, a
- * mesma de `manages_user`, que é quem eu decido como gestor.
+ * O recorte de quem aparece nas listas de gestão. Começa em "Minha equipe", a
+ * cadeia abaixo de mim no organograma, a mesma de `manages_user`, que é quem eu
+ * decido como gestor; "Toda a empresa" é o que o DP opera.
  */
 function AlternadorDeEscopo({
   escopo, onMudar, qtdEquipe, qtdEmpresa,
