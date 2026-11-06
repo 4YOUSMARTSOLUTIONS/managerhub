@@ -623,7 +623,7 @@ function MinhasFerias({
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 80, textAlign: "right" }}>Abono</th>
                 <th style={{ width: 170 }}>Aquisitivo</th>
-                <th style={{ width: 170 }}>Situação</th>
+                <th style={{ width: 330 }}>Situação</th>
                 <th style={{ width: 210, textAlign: "right" }}>Ações</th>
               </tr>
             </thead>
@@ -639,9 +639,7 @@ function MinhasFerias({
                   <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
                   <td className="muted" style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>{periodoAquisitivo(r.aquisitivoInicio, r.aquisitivoFim)}</td>
-                  <td>
-                    <Badge tone={FERIAS_STATUS_TONE[r.status]}>{FERIAS_STATUS[r.status]}</Badge>
-                  </td>
+                  <td><SituacaoDoMeuPedido status={r.status} /></td>
                   <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: "inline-flex", gap: "0.35rem" }}>
                       {r.status === "reprovada" && (
@@ -669,6 +667,26 @@ function MinhasFerias({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A situação do pedido pelos olhos de quem tirará as férias.
+ *
+ * Para o DP, "aprovada" é trabalho a fazer, e a tela dele segue em âmbar
+ * ("Aguardando efetivação"). Para o colaborador é uma notícia boa pela metade:
+ * o gestor já aprovou (verde), e falta o DP efetivar. As duas coisas ficam
+ * visíveis, numa pílula só, que é o limite por linha.
+ */
+function SituacaoDoMeuPedido({ status }: { status: FeriasRow["status"] }) {
+  if (status !== "aprovada") {
+    return <Badge tone={FERIAS_STATUS_TONE[status]}>{FERIAS_STATUS[status]}</Badge>;
+  }
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+      <Badge tone="green">Aprovada pelo gestor</Badge>
+      <span className="soft" style={{ fontSize: "0.78rem" }}>aguardando efetivação do DP</span>
+    </span>
   );
 }
 
@@ -1011,7 +1029,9 @@ function DetalheFerias({
       width="lg"
       badges={
         <>
-          <Badge tone={FERIAS_STATUS_TONE[row.status]}>{FERIAS_STATUS[row.status]}</Badge>
+          {row.userId === meuId
+            ? <SituacaoDoMeuPedido status={row.status} />
+            : <Badge tone={FERIAS_STATUS_TONE[row.status]}>{FERIAS_STATUS[row.status]}</Badge>}
           {row.emDobro && <Badge variant="quiet" tone="red">Em dobro</Badge>}
           {row.reagendadaDe && <Badge variant="quiet" tone="amber">Reagendamento</Badge>}
           {row.lancadaPeloGestor && <Badge variant="quiet" tone="blue">Lançada pelo gestor</Badge>}

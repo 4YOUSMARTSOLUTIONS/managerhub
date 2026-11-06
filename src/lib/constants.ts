@@ -378,6 +378,7 @@ export const FERIAS_AQUISITIVO_SITUACAO: Record<string, string> = {
   a_vencer: "A vencer",
   vencida: "Vencida",
   solicitada: "Solicitada",
+  aprovada: "Aprovada pelo gestor",
   agendada: "Agendada",
   em_gozo: "Em gozo",
   concluida: "Concluída",
@@ -391,6 +392,7 @@ export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
   a_vencer: "amber",
   vencida: "red",
   solicitada: "blue",
+  aprovada: "green",
   agendada: "green",
   em_gozo: "green",
   concluida: "gray",
@@ -399,7 +401,7 @@ export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
 
 /** O aquisitivo não tem mais saldo: todo o direito já foi pedido, programado ou gozado. */
 export const aquisitivoSemSaldo = (situacao: string) =>
-  situacao === "solicitada" || situacao === "agendada" || situacao === "em_gozo"
+  situacao === "solicitada" || situacao === "aprovada" || situacao === "agendada" || situacao === "em_gozo"
   || situacao === "concluida" || situacao === "quitada";
 
 // ---------- Motivo do afastamento / situação do colaborador ----------
