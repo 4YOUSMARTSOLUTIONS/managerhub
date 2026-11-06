@@ -216,12 +216,8 @@ const BUCKET_DOC = "absenteismo-documentos";
 
 type Contexto = Awaited<ReturnType<typeof actionContext>>;
 
-function ehDp(role: Enums<"member_role">) {
-  return role === "owner" || role === "admin" || role === "hr";
-}
-
 async function podeLancarPara(ctx: Contexto, userId: string): Promise<boolean> {
-  if (ehDp(ctx.role)) return true;
+  if (ctx.isDp) return true;
   return souGestorDe(ctx.supabase, userId, ctx.tenantId);
 }
 

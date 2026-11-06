@@ -25,9 +25,8 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
 const SO_ADMIN = "Apenas proprietário, administrador e RH lançam férias e afastamentos.";
 
-/** Espelha o `dpActionContext`: aqui a recusa vira mensagem na tela em vez de
- *  exceção, porque estas três actions devolvem `ActionState`. */
-const PODE_DP = new Set<Enums<"member_role">>(["owner", "admin", "hr"]);
+// Espelham o `dpActionContext` (`isDp`): aqui a recusa vira mensagem na tela em
+// vez de exceção, porque estas três actions devolvem `ActionState`.
 
 export type AbsenceInput = {
   /** ausente = criar */
@@ -64,8 +63,8 @@ function mensagem(e: { code?: string; message?: string }): string {
 
 export async function upsertAbsence(input: AbsenceInput): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { error: SO_ADMIN };
+    const { supabase, tenantId, userId, isDp } = await actionContext();
+    if (!isDp) return { error: SO_ADMIN };
 
     const start_date = (input.start_date ?? "").trim();
     const end_date = (input.end_date ?? "").trim();
@@ -174,8 +173,8 @@ export type LinhaRecusada = {
 export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceImportResult> {
   const vazio: AbsenceImportResult = { imported: 0, updated: 0, invalid: 0, notFound: 0, mismatch: 0, overlapping: 0, rejeitadas: [] };
   try {
-    const { supabase, tenantId, userId, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { ...vazio, error: SO_ADMIN };
+    const { supabase, tenantId, userId, isDp } = await actionContext();
+    if (!isDp) return { ...vazio, error: SO_ADMIN };
 
     const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
       fetchAll(() => supabase.from("memberships").select("id, user_id, is_active, employee_code, dismissed_at").eq("tenant_id", tenantId).order("id")),
@@ -353,8 +352,8 @@ export async function importAbsences(rows: AbsenceImportRow[]): Promise<AbsenceI
 
 export async function deleteAbsence(id: string): Promise<ActionState> {
   try {
-    const { supabase, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { error: SO_ADMIN };
+    const { supabase, isDp } = await actionContext();
+    if (!isDp) return { error: SO_ADMIN };
     const { error } = await supabase.from("employee_absences").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/configuracoes");

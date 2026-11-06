@@ -68,6 +68,7 @@ export function EmployeeViewDialog({
               <Badge tone={roleTone(employee.role)}>
                 {employee.role === "owner" ? "Proprietário" : USER_TYPE[employee.role as keyof typeof USER_TYPE] ?? employee.role}
               </Badge>
+              {employee.isHr && employee.role !== "hr" && <Badge variant="quiet">RH</Badge>}
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)", flexShrink: 0 }}>×</button>

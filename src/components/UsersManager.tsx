@@ -320,7 +320,13 @@ export function UsersManager({
                     {e.positionName && <div className="soft" style={{ fontSize: "0.75rem" }}>{e.positionName}{e.levelName ? ` · ${e.levelName}` : ""}</div>}
                     {e.hierarchyName && <div className="soft" style={{ fontSize: "0.72rem" }}>{e.hierarchyName}</div>}
                   </td>
-                  <td><Badge tone={roleTone(e.role)}>{roleLabel(e.role)}</Badge></td>
+                  <td>
+                    <span style={{ display: "inline-flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
+                      <Badge tone={roleTone(e.role)}>{roleLabel(e.role)}</Badge>
+                      {/* RH é atribuição: selo neutro ao lado do perfil */}
+                      {e.isHr && e.role !== "hr" && <Badge variant="quiet">RH</Badge>}
+                    </span>
+                  </td>
                   <td>
                     {!e.active ? (
                       <Badge tone="red">Inativo</Badge>

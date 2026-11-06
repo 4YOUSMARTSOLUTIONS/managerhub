@@ -25,8 +25,8 @@ export default async function AbsenteismosPage() {
   const gate = await moduleGate("absenteismos");
   if (gate) return gate;
 
-  const { tenant, user, role, unitScope } = await requireContext();
-  const ehDp = role === "owner" || role === "admin" || role === "hr";
+  const { tenant, user, role, unitScope, isDp } = await requireContext();
+  const ehDp = isDp;
   // Menu não é autorização: quem digitar a URL na mão para aqui.
   const podeAbrir = ehDp || role === "manager" || role === "team_lead";
   const supabase = await createClient();

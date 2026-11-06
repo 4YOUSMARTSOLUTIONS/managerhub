@@ -394,6 +394,8 @@ export type Database = {
           employee_code: string | null
           id: string
           is_active: boolean
+          /** RH (departamento pessoal): atribuição, não perfil. Só owner/admin concedem. */
+          is_hr: boolean
           is_ticket_manager: boolean
           is_training_manager: boolean
           manager_id: string | null
@@ -413,6 +415,7 @@ export type Database = {
           employee_code?: string | null
           id?: string
           is_active?: boolean
+          is_hr?: boolean
           is_ticket_manager?: boolean
           is_training_manager?: boolean
           manager_id?: string | null
@@ -432,6 +435,7 @@ export type Database = {
           employee_code?: string | null
           id?: string
           is_active?: boolean
+          is_hr?: boolean
           is_ticket_manager?: boolean
           is_training_manager?: boolean
           manager_id?: string | null

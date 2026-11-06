@@ -55,6 +55,7 @@ const GROUP_LABEL = Object.fromEntries(MODULE_GROUPS.map((g) => [g.key, g.label]
 
 export function Sidebar({
   role,
+  isHr = false,
   isSuperAdmin = false,
   moduleState,
   construction,
@@ -65,6 +66,8 @@ export function Sidebar({
   onNavigate,
 }: {
   role: Enums<"member_role">;
+  /** marca de RH (`memberships.is_hr`): atribuição, combina com qualquer perfil */
+  isHr?: boolean;
   isSuperAdmin?: boolean;
   /** estado resolvido no servidor (entitlement por unidade) */
   moduleState: Record<ModuleKey, ModuleState>;
@@ -83,18 +86,18 @@ export function Sidebar({
   // própria equipe, não da empresa: nada de Logs do sistema nem de triagem de
   // chamados. Para efeito de menu ele se comporta como Funcionário; o que ele
   // enxerga a mais vem da RLS, pelo vínculo de chefia, não do papel na tela.
-  // `hr` (RH) entra junto porque Configurações é a única porta do departamento
-  // pessoal: é lá que moram Colaboradores, Férias e Remuneração variável. Ele
-  // entra e vê SÓ essas abas, o recorte é feito na própria página.
-  const canManage = role === "owner" || role === "admin" || role === "manager" || role === "hr";
+  // O RH (marca `isHr`, não perfil) entra junto porque Configurações é a única
+  // porta do departamento pessoal: é lá que moram Colaboradores, Férias e
+  // Remuneração variável. O recorte das abas é feito na própria página.
+  const canManage = role === "owner" || role === "admin" || role === "manager" || isHr;
   const canAdmin = role === "owner" || role === "admin";
   // super admin de plataforma entra na empresa já como "owner" (requireContext),
   // então não precisa de exceção aqui
   const isOwner = role === "owner";
   // "Gestor ou acima": quem tem alçada sobre uma equipe. Some do menu de quem
   // não lidera ninguém, para "Minha equipe" não virar item morto para ~880 pessoas.
-  // RH fica de fora: a alçada dele é sobre o cadastro de todo mundo, não sobre
-  // uma equipe. Se ele também chefiar alguém, chefia pelo papel `team_lead`.
+  // A marca de RH não entra: a alçada dela é sobre o cadastro de todo mundo, não
+  // sobre uma equipe. Quem é do RH e chefia alguém tem o perfil Gestor.
   const canLeadTeam = role === "owner" || role === "admin" || role === "manager" || role === "team_lead";
 
   /** papel primeiro (como antes), depois o entitlement da unidade. */
@@ -104,7 +107,7 @@ export function Sidebar({
     if (m.minRole === "team_lead" && !canLeadTeam) return false;
     // "quem lidera equipe, mais o RH": Punições é lançada pelo gestor e aprovada
     // pelo RH, então nenhum dos dois pode ficar sem o item de menu.
-    if (m.minRole === "team_lead_hr" && !canLeadTeam && role !== "hr") return false;
+    if (m.minRole === "team_lead_hr" && !canLeadTeam && !isHr) return false;
     if (m.minRole === "manager" && !canManage) return false;
     if (m.minRole === "admin" && !canAdmin) return false;
     if (m.minRole === "owner" && !isOwner) return false;

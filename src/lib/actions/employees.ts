@@ -156,10 +156,15 @@ export async function updateEmployee(
     // a mesma ficha sem ver a caixa, e sem o marcador apagaria a marca de todo
     // mundo que ele editasse. Quem concede é owner/admin; a trava do banco
     // (`so_administracao_concede_treinamentos`) vale também fora desta tela.
+    // A marca de RH vai junto, pelo mesmo marcador e com a mesma trava no banco
+    // (`so_administracao_concede_rh`).
     if (formData.get("gestao_treinamentos_presente") === "1" && (role === "owner" || role === "admin")) {
       const { error: e2 } = await supabase
         .from("memberships")
-        .update({ is_training_manager: formData.get("is_training_manager") === "1" })
+        .update({
+          is_training_manager: formData.get("is_training_manager") === "1",
+          is_hr: formData.get("is_hr") === "1",
+        })
         .eq("tenant_id", tenantId)
         .eq("user_id", userId);
       if (e2) return { error: e2.message };

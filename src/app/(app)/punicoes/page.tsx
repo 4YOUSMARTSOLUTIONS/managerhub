@@ -23,8 +23,8 @@ export default async function PunicoesPage() {
   const gate = await moduleGate("punicoes");
   if (gate) return gate;
 
-  const { tenant, user, role, unitScope } = await requireContext();
-  const ehDp = role === "owner" || role === "admin" || role === "hr";
+  const { tenant, user, role, unitScope, isDp } = await requireContext();
+  const ehDp = isDp;
   // Quem tem alçada sobre alguém. O Funcionário não entra: ele não lança nem
   // acompanha punição, nem a própria (o documento é entregue em papel). O menu
   // já esconde a tela dele pelo `minRole`, e esta guarda é a que vale para quem

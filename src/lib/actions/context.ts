@@ -39,13 +39,16 @@ export const actionContext = cache(async function actionContext() {
   if (isSuper) {
     const { data: activeId } = await supabase.rpc("my_active_tenant");
     if (activeId) {
-      return { supabase, userId: user.id, tenantId: activeId as string, role: "owner" as Enums<"member_role"> };
+      return {
+        supabase, userId: user.id, tenantId: activeId as string, role: "owner" as Enums<"member_role">,
+        isHr: false, isDp: true,
+      };
     }
   }
 
   const { data } = await supabase
     .from("memberships")
-    .select("tenant_id, role, is_active, tenants(status)")
+    .select("tenant_id, role, is_active, is_hr, tenants(status)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1);
@@ -70,6 +73,10 @@ export const actionContext = cache(async function actionContext() {
     userId: user.id,
     tenantId: membership.tenant_id,
     role: membership.role,
+    /** RH é atribuição (`memberships.is_hr`), não perfil: combina com qualquer `role` */
+    isHr: membership.is_hr,
+    /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
+    isDp: membership.role === "owner" || membership.role === "admin" || membership.is_hr,
   };
 });
 
@@ -109,7 +116,7 @@ export async function adminActionContext() {
  */
 export async function dpActionContext() {
   const ctx = await actionContext();
-  if (ctx.role !== "owner" && ctx.role !== "admin" && ctx.role !== "hr") {
+  if (!ctx.isDp) {
     throw new Error("Apenas proprietário, administrador e RH podem alterar o departamento pessoal.");
   }
   return ctx;

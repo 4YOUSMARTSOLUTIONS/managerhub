@@ -74,7 +74,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ aba?: string }>;
 }) {
   const { aba } = await searchParams;
-  const { tenant, role, user, isSuperAdmin, unitScope } = await requireContext();
+  const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh } = await requireContext();
 
   // Duas perguntas separadas, e é a separação que sustenta a tela inteira.
   //
@@ -95,10 +95,16 @@ export default async function SettingsPage({
   // equipe): a lista de Colaboradores é recortada aqui, e ausências, punições e
   // RV individual chegam recortadas pela RLS. Regras e cadastros sem dado de
   // pessoa ele vê inteiros.
-  const isHr = role === "hr";
-  const isGestor = role === "team_lead";
-  const canView = role === "owner" || role === "admin" || role === "manager" || isHr || isGestor;
+  //
+  // RH é atribuição, não perfil (06/11/2026): combina com Gestor e Gerencial.
+  // Com a marca, o departamento pessoal manda nesta tela: a pessoa vê a empresa
+  // inteira (não só a equipe) e edita as abas do DP. Gerencial com a marca
+  // continua lendo o resto; Gestor e Funcionário com a marca veem só o DP.
   const canEdit = role === "owner" || role === "admin";
+  const isHr = marcaRh && !canEdit;
+  const isGerencial = role === "manager";
+  const isGestor = role === "team_lead" && !isHr;
+  const canView = canEdit || isGerencial || isHr || isGestor;
   const canEditDP = canEdit || isHr;
 
   if (!canView) {
@@ -344,6 +350,7 @@ export default async function SettingsPage({
       managerId: m.manager_id,
       unitIds: uIds,
       isTrainingManager: m.is_training_manager,
+      isHr: m.is_hr,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
       subdepartmentName: m.subdepartment_id ? subById.get(m.subdepartment_id)?.name ?? null : null,
       dismissedAt: m.dismissed_at ?? null,
@@ -1597,14 +1604,14 @@ export default async function SettingsPage({
   // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as duas
   // abas que SÃO o departamento pessoal.
   const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos", "ferias"]);
-  const tabsVisiveis = isHr ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
+  const tabsVisiveis = isHr && !isGerencial ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
 
   return (
     <div>
       <PageHeader title="Configurações" subtitle="Empresa, usuários, unidades e estrutura organizacional." />
       {/* Sem este aviso, a tela em consulta parece a tela normal com defeito:
           a pessoa procura o botão de adicionar, não acha, e conclui que quebrou. */}
-      {!canEdit && !isHr && (
+      {!canEdit && (!isHr || isGerencial) && (
         <div
           className="card"
           style={{
@@ -1615,11 +1622,13 @@ export default async function SettingsPage({
         >
           <Eye size={16} style={{ color: "var(--mh-primary-500)", flexShrink: 0 }} />
           <span>
-            <strong>Somente leitura.</strong>{" "}
+            <strong>{isHr ? "Consulta fora do departamento pessoal." : "Somente leitura."}</strong>{" "}
             <span className="muted">
               {isGestor
                 ? "Você enxerga as regras e os cadastros da empresa e, onde há dados de pessoas (colaboradores, ausências, punições e remuneração variável), só a sua equipe. Alterações são feitas pelo proprietário, por um administrador ou pelo RH."
-                : "Você enxerga toda a configuração da empresa, mas alterações são feitas pelo proprietário ou por um administrador."}
+                : isHr
+                  ? "Você altera as abas do departamento pessoal. O resto da configuração da empresa fica em consulta: alterações ali são feitas pelo proprietário ou por um administrador."
+                  : "Você enxerga toda a configuração da empresa, mas alterações são feitas pelo proprietário ou por um administrador."}
             </span>
           </span>
         </div>

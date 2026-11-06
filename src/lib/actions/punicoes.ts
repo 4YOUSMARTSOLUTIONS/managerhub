@@ -134,14 +134,9 @@ const BUCKET_DOC = "punicao-documentos";
 
 type Contexto = Awaited<ReturnType<typeof actionContext>>;
 
-/** RH, administrador e proprietário: a mão que aprova, e que também pode lançar. */
-function ehDp(role: Enums<"member_role">) {
-  return role === "owner" || role === "admin" || role === "hr";
-}
-
 /** Quem pode abrir um lançamento para esta pessoa. */
 async function podeLancarPara(ctx: Contexto, userId: string): Promise<boolean> {
-  if (ehDp(ctx.role)) return true;
+  if (ctx.isDp) return true;
   return souGestorDe(ctx.supabase, userId, ctx.tenantId);
 }
 

@@ -23,10 +23,10 @@ export default async function FeriasPage() {
   const gate = await moduleGate("ferias");
   if (gate) return gate;
 
-  const { tenant, user, role, unitScope } = await requireContext();
+  const { tenant, user, role, unitScope, isDp } = await requireContext();
   const supabase = await createClient();
 
-  const ehDp = role === "owner" || role === "admin" || role === "hr";
+  const ehDp = isDp;
   const podeLiderar = ehDp || role === "manager" || role === "team_lead";
 
   // "hoje" no fuso do Brasil: o servidor está em UTC e às 21h o dia já teria

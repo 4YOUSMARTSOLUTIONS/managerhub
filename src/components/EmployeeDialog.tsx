@@ -33,6 +33,8 @@ export type EmployeeData = {
   unitIds: string[];
   /** marca de gestão de treinamentos (capacidade, independente do papel) */
   isTrainingManager?: boolean;
+  /** marca de RH, o departamento pessoal (atribuição, independente do perfil) */
+  isHr?: boolean;
   /** data de desligamento (demissão); null = vínculo ativo */
   dismissedAt?: string | null;
 };
@@ -225,7 +227,12 @@ export function EmployeeDialog({
                 ) : (
                   <select name="role" className="select" required defaultValue={employee?.role ?? "member"}>
                     {canSetOwner && <option value="owner">{ROLE.owner}</option>}
-                    {Object.entries(USER_TYPE).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {/* "RH" saiu da lista: virou a marca logo abaixo. A opção só volta
+                        para quem ainda está com o perfil antigo, senão o seletor
+                        mostraria outro perfil e salvar trocaria o dele sem aviso. */}
+                    {Object.entries(USER_TYPE)
+                      .filter(([value]) => value !== "hr" || employee?.role === "hr")
+                      .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 )}
               </Field>
@@ -238,6 +245,19 @@ export function EmployeeDialog({
             {canSetRole && isEdit && (
               <>
                 <input type="hidden" name="gestao_treinamentos_presente" value="1" />
+                {/* RH: atribuição, não perfil. Combina com qualquer tipo de usuário:
+                    a pessoa do DP que também chefia gente fica Gestor e marca isto. */}
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                  <input type="checkbox" name="is_hr" value="1" defaultChecked={employee?.isHr ?? false} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>RH (departamento pessoal)</strong>
+                    <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                      Cuida do cadastro de colaboradores, férias, afastamentos, absenteísmos, punições e
+                      remuneração variável da empresa inteira. Não muda o tipo de usuário: quem chefia uma
+                      equipe continua vendo a equipe como Gestor.
+                    </span>
+                  </span>
+                </label>
                 <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
                   <input type="checkbox" name="is_training_manager" value="1" defaultChecked={employee?.isTrainingManager ?? false} style={{ marginTop: 3 }} />
                   <span>

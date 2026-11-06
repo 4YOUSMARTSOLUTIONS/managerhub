@@ -3,14 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
-import type { Enums } from "@/types/database";
 import { indiceDeAlvos, resolverAlvo, type IndiceDeAlvos, type Origem } from "@/lib/import-pessoa";
 import { normTexto } from "@/lib/absences-import";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
  *  recusa precisa virar mensagem na tela em vez de exceção. */
-const PODE_DP = new Set<Enums<"member_role">>(["owner", "admin", "hr"]);
 const SO_DP = "Apenas proprietário, administrador e RH configuram a remuneração variável.";
 
 const parseNum = (v: unknown): number | null => {
@@ -34,8 +32,8 @@ export type RvConfigInput = {
 /** Cria/atualiza uma vigência de RV (por função ou por colaborador). Owner/admin. */
 export async function upsertRvConfig(input: RvConfigInput): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { error: SO_DP };
+    const { supabase, tenantId, userId, isDp } = await actionContext();
+    if (!isDp) return { error: SO_DP };
 
     const m = (input.effective_from ?? "").trim().match(/^(\d{4})-(\d{2})$/);
     if (!m) return { error: "Informe a competência de início da vigência (MM/AAAA)." };
@@ -95,8 +93,8 @@ export async function importRvConfig(
   rows: RvConfigImportRow[],
 ): Promise<{ imported: number; invalid: number; notFound: number; mismatch: number; error?: string }> {
   try {
-    const { supabase, tenantId, userId, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { imported: 0, invalid: 0, notFound: 0, mismatch: 0, error: SO_DP };
+    const { supabase, tenantId, userId, isDp } = await actionContext();
+    if (!isDp) return { imported: 0, invalid: 0, notFound: 0, mismatch: 0, error: SO_DP };
 
     // função continua casando por NOME (item de catálogo, sem matrícula nem
     // unidade); colaborador casa por unidade + matrícula
@@ -228,8 +226,8 @@ export async function importRvConfig(
 /** Exclui uma vigência de RV. Owner/admin. */
 export async function deleteRvConfig(id: string): Promise<ActionState> {
   try {
-    const { supabase, role } = await actionContext();
-    if (!PODE_DP.has(role)) return { error: SO_DP };
+    const { supabase, isDp } = await actionContext();
+    if (!isDp) return { error: SO_DP };
     const { error } = await supabase.from("individual_rv_config").delete().eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/configuracoes");

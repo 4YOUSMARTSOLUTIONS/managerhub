@@ -15,9 +15,9 @@ export default async function ChatPage() {
   const gate = await moduleGate("chat");
   if (gate) return gate;
 
-  const { tenant, user, role } = await requireContext();
+  const { tenant, user, isDp } = await requireContext();
   // mesma régua de is_chat_admin no banco: owner/admin/hr administram o chat
-  const souAdminChat = role === "owner" || role === "admin" || role === "hr";
+  const souAdminChat = isDp;
 
   const membros = await getMembers(tenant.id);
   const pessoas = membros

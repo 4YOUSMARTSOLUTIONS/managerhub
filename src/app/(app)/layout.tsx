@@ -109,6 +109,7 @@ export default async function AppLayout({
   return (
     <AppShell
       role={ctx.role}
+      isHr={ctx.isHr}
       isSuperAdmin={ctx.isSuperAdmin}
       tenantName={ctx.tenant.name}
       userName={userName}

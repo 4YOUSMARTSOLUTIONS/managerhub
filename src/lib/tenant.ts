@@ -27,6 +27,10 @@ export type ActiveContext = {
   user: { id: string; email: string | null | undefined };
   tenant: Tables<"tenants">;
   role: Enums<"member_role">;
+  /** RH é atribuição (`memberships.is_hr`), não perfil: combina com qualquer `role` */
+  isHr: boolean;
+  /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
+  isDp: boolean;
   unitScope: UnitScope;
   isSuperAdmin: boolean;
   /** presente só p/ super admin: lista de empresas + a selecionada no topo */
@@ -58,6 +62,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
 
   let tenant: Tables<"tenants">;
   let role: Enums<"member_role">;
+  let isHr = false;
   let isAdmin: boolean;
   let membershipId: string | null = null;
   let companyScope: CompanyScope | null = null;
@@ -77,7 +82,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   } else {
     const { data: memberships } = await supabase
       .from("memberships")
-      .select("id, role, tenant_id, is_active, tenants(*)")
+      .select("id, role, tenant_id, is_active, is_hr, tenants(*)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1);
@@ -88,6 +93,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     if (t.status !== "active") redirect("/suspenso");
     tenant = t;
     role = membership.role;
+    isHr = membership.is_hr;
     isAdmin = role === "owner" || role === "admin";
     membershipId = membership.id;
   }
@@ -129,6 +135,8 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     user: { id: user.id, email: user.email },
     tenant,
     role,
+    isHr,
+    isDp: isAdmin || isHr,
     unitScope: { units: allowed, allowedUnitIds, unrestricted, activeUnitId, locked: allowed.length === 1 },
     isSuperAdmin,
     companyScope,
