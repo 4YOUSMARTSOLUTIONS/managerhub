@@ -666,7 +666,7 @@ function MinhasFerias({
                         </button>
                       )}
                       {(r.status === "solicitada" || r.status === "reprovada") && (
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onCancelar(r)}>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => onCancelar(r)}>
                           <Ban size={13} aria-hidden /> Cancelar
                         </button>
                       )}
@@ -797,7 +797,7 @@ function FilaGestor({
                       <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => aprovar(r)}>
                         <Check size={13} aria-hidden /> Aprovar
                       </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDevolver(r)}>
+                      <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
                         <Undo2 size={13} aria-hidden /> Devolver
                       </button>
                     </div>
@@ -928,7 +928,7 @@ function FilaDp({
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => onEfetivar(r)}>
                     <Send size={13} aria-hidden /> Efetivar
                   </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDevolver(r)}>
+                  <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
                     <Undo2 size={13} aria-hidden /> Devolver
                   </button>
                 </div>
@@ -1133,13 +1133,13 @@ function DetalheFerias({
               </button>
             )}
             {podeCancelar && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onCancelar(row)}>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => onCancelar(row)}>
                 <Ban size={13} aria-hidden /> Cancelar
               </button>
             )}
             {row.status === "aprovada" && ehDp && (
               <>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDevolver(row)}>
+                <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(row)}>
                   <Undo2 size={13} aria-hidden /> Devolver
                 </button>
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => onEfetivar(row)}>
@@ -1265,7 +1265,7 @@ function EfetivarDialog({
       }
       footer={
         <>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDevolver(row)}>
+          <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(row)}>
             <Undo2 size={13} aria-hidden /> Devolver
           </button>
           <div style={{ display: "flex", gap: "0.4rem" }}>
