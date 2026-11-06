@@ -968,7 +968,7 @@ function TabelaGeral({
         <span className="soft" style={{ fontSize: "0.8rem" }}>{filtradas.length} previsão(ões)</span>
         <div style={{ marginLeft: "auto" }}>
           <ExportButton
-            filename="ferias"
+            filename="previsoes_de_ferias.xlsx"
             sheetName="Férias"
             headers={["Colaborador", "Matrícula", "Setor", "Unidade", "Início", "Término", "Dias", "Abono", "Aquisitivo", "Situação", "Aberta por"]}
             rows={filtradas.map((r) => [
