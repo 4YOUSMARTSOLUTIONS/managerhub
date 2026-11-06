@@ -806,7 +806,7 @@ function FilaGestor({
 function PeriodoAnterior({ anterior }: { anterior: FeriasRow | null }) {
   if (!anterior) return null;
   return (
-    <div className="soft" style={{ fontSize: "0.75rem" }}>
+    <div className="soft" style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
       antes: {formatDate(anterior.startDate)} a {formatDate(anterior.endDate)}
     </div>
   );
