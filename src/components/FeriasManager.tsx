@@ -303,8 +303,9 @@ export function FeriasManager({
     const subabas: Tab[] = [];
     if (painelNoEscopo) {
       subabas.push({ id: "visao", label: "Visão geral", content: (
-        <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
-          onImportar={ehDp ? () => setImportando(true) : undefined} />
+        // importar períodos mora só no menu Ações (LUIZ, 06/11/2026): aqui
+        // fica a leitura, com a data da última importação
+        <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null} />
       ) });
     }
     subabas.push(
@@ -1276,13 +1277,12 @@ function EfetivarDialog({
 // ============================================================================
 
 function VisaoGeral({
-  painel, hoje, ultimaImportacao, onImportar,
+  painel, hoje, ultimaImportacao,
 }: {
   painel: FeriasPainel;
   hoje: string;
   /** só o DP recebe */
   ultimaImportacao: UltimaImportacaoFolha | null;
-  onImportar?: () => void;
 }) {
   const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer" || s.semFolha);
   const semFolhaQtd = painel.saldos.filter((s) => s.semFolha).length;
@@ -1364,11 +1364,6 @@ function VisaoGeral({
             )}
           </div>
           <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-            {onImportar && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={onImportar}>
-                <Upload size={13} aria-hidden /> Importar períodos
-              </button>
-            )}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMostrarTodos((v) => !v)}>
               {mostrarTodos ? "Ver só as pendências" : `Ver todos (${painel.saldos.length})`}
             </button>
