@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -242,6 +242,13 @@ export function FeriasManager({
     };
   }, [painel, soEquipe, equipeSet]);
 
+  // O reagendamento é uma previsão nova que aponta a original (`reagendadaDe`).
+  // A original continua efetivada até o DP efetivar a nova, e é ela que mostra
+  // ao gestor e ao DP o que está sendo trocado.
+  const porId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
+  const anteriorDe = useCallback(
+    (r: FeriasRow) => (r.reagendadaDe ? porId.get(r.reagendadaDe) ?? null : null), [porId]);
+
   // Quem decide a previsão é o gestor da pessoa ou o DP (`ferias_decidir`). O
   // Gerencial enxerga a empresa toda, mas só decide a própria cadeia: os
   // pedidos dos outros na fila dele virariam botão que só devolve erro.
@@ -281,13 +288,13 @@ export function FeriasManager({
     abas.push({ id: "fila", label: `Aprovações${fila.length ? ` (${fila.length})` : ""}`, content: (
       // o aviso de "as outras estão em Toda a empresa" só vale para o DP: o
       // Gerencial não decide as outras equipes, então elas nunca entram na fila dele
-      <FilaGestor fila={fila} soEquipe={soEquipe && ehDp}
+      <FilaGestor fila={fila} soEquipe={soEquipe && ehDp} anteriorDe={anteriorDe}
         onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
     ) });
   }
   if (ehDp) {
     abas.push({ id: "efetivacao", label: `Efetivação${filaDp.length ? ` (${filaDp.length})` : ""}`, content: (
-      <FilaDp fila={filaDp} soEquipe={soEquipe} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
+      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
         onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
     ) });
   }
@@ -498,7 +505,7 @@ export function FeriasManager({
       )}
       {detalhe && (
         <DetalheFerias
-          row={detalhe} meuId={meuId} ehDp={ehDp} ehOwner={ehOwner}
+          row={detalhe} anterior={anteriorDe(detalhe)} meuId={meuId} ehDp={ehDp} ehOwner={ehOwner}
           onFechar={() => setDetalhe(null)}
           onReenviar={(r) => { setDetalhe(null); setReenvio(r); }}
           onReagendar={(r) => { setDetalhe(null); setReagendando(r); }}
@@ -508,7 +515,7 @@ export function FeriasManager({
         />
       )}
       {efetivando && (
-        <EfetivarDialog row={efetivando} onFechar={() => setEfetivando(null)}
+        <EfetivarDialog row={efetivando} anterior={anteriorDe(efetivando)} onFechar={() => setEfetivando(null)}
           onDevolver={(r) => { setEfetivando(null); setNota({ row: r, acao: "devolver" }); }} />
       )}
       {nota && (
@@ -697,9 +704,11 @@ function SituacaoDoMeuPedido({ status }: { status: FeriasRow["status"] }) {
 // ============================================================================
 
 function FilaGestor({
-  fila, onDetalhe, onDevolver, soEquipe,
+  fila, onDetalhe, onDevolver, soEquipe, anteriorDe,
 }: {
   fila: FeriasRow[];
+  /** o período que um reagendamento troca (null se não for reagendamento) */
+  anteriorDe: (r: FeriasRow) => FeriasRow | null;
   onDetalhe: (r: FeriasRow) => void;
   onDevolver: (r: FeriasRow) => void;
   /** a tela está em "Minha equipe" e há outra fila em "Toda a empresa" */
@@ -710,9 +719,14 @@ function FilaGestor({
 
   const aprovar = async (r: FeriasRow) => {
     const fora = rotuloForaPrazo(r);
+    const antes = anteriorDe(r);
+    const novo = `${formatDate(r.startDate)} a ${formatDate(r.endDate)} (${r.dias} dias${r.abonoDias ? ` + ${r.abonoDias} de abono` : ""})`;
     if (!(await confirmDialog({
-      title: "Aprovar a previsão",
-      message: `${shortName(r.fullName)}: ${formatDate(r.startDate)} a ${formatDate(r.endDate)} (${r.dias} dias${r.abonoDias ? ` + ${r.abonoDias} de abono` : ""}). A previsão segue para a efetivação do departamento pessoal.`
+      title: r.reagendadaDe ? "Aprovar o reagendamento" : "Aprovar a previsão",
+      message: (r.reagendadaDe
+        ? `${shortName(r.fullName)}: ${antes ? `de ${formatDate(antes.startDate)} a ${formatDate(antes.endDate)} ` : ""}para ${novo}. `
+          + "Segue para o departamento pessoal. Quando ele efetivar, o período novo substitui o anterior, que até lá continua valendo."
+        : `${shortName(r.fullName)}: ${novo}. A previsão segue para a efetivação do departamento pessoal.`)
         + (fora ? ` Atenção: ${fora.toLowerCase()} legal, a empresa pode recusar. Aprovar é aceitar.` : ""),
       confirmLabel: "Aprovar",
     }))) return;
@@ -750,9 +764,17 @@ function FilaGestor({
             <tbody>
               {fila.map((r) => (
                 <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onDetalhe(r)}>
-                  <td style={{ fontWeight: 600 }}>{shortName(r.fullName)}</td>
+                  <td>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 600 }}>{shortName(r.fullName)}</span>
+                      {r.reagendadaDe && <Badge variant="quiet" tone="amber">Reagendamento</Badge>}
+                    </span>
+                  </td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
-                  <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
+                  <td>
+                    {formatDate(r.startDate)} a {formatDate(r.endDate)}
+                    <PeriodoAnterior anterior={anteriorDe(r)} />
+                  </td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
                   <td>
@@ -776,6 +798,16 @@ function FilaGestor({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/** "antes: ..." sob o período de um reagendamento, para quem decide ver a troca. */
+function PeriodoAnterior({ anterior }: { anterior: FeriasRow | null }) {
+  if (!anterior) return null;
+  return (
+    <div className="soft" style={{ fontSize: "0.75rem" }}>
+      antes: {formatDate(anterior.startDate)} a {formatDate(anterior.endDate)}
     </div>
   );
 }
@@ -820,9 +852,11 @@ function AlternadorDeEscopo({
 // ============================================================================
 
 function FilaDp({
-  fila, soEquipe, onDetalhe, onEfetivar, onDevolver,
+  fila, soEquipe, anteriorDe, onDetalhe, onEfetivar, onDevolver,
 }: {
   fila: FeriasRow[];
+  /** o período que um reagendamento troca (null se não for reagendamento) */
+  anteriorDe: (r: FeriasRow) => FeriasRow | null;
   /** a tela está em "Minha equipe": o vazio aqui não quer dizer que a empresa não tem nada */
   soEquipe?: boolean;
   onDetalhe: (r: FeriasRow) => void;
@@ -860,7 +894,10 @@ function FilaDp({
             <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onDetalhe(r)}>
               <td style={{ fontWeight: 600 }}>{shortName(r.fullName)}</td>
               <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
-              <td>{formatDate(r.startDate)} a {formatDate(r.endDate)}</td>
+              <td>
+                {formatDate(r.startDate)} a {formatDate(r.endDate)}
+                <PeriodoAnterior anterior={anteriorDe(r)} />
+              </td>
               <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
               <td>
                 {r.emDobro
@@ -984,10 +1021,33 @@ function TabelaGeral({
 // Detalhe
 // ============================================================================
 
+/**
+ * O que um reagendamento troca, dito por extenso. Aprovar ou efetivar não
+ * duplica: a efetivação marca a original como reagendada e tira o período
+ * antigo da folha e do calendário (`ferias_efetivar`).
+ */
+function NotaReagendamento({ row, anterior }: { row: FeriasRow; anterior: FeriasRow | null }) {
+  if (!row.reagendadaDe) return null;
+  const jaTrocou = row.status === "efetivada";
+  return (
+    <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-warning)" }}>
+      <strong>Reagendamento</strong>
+      {anterior
+        ? ` de ${formatDate(anterior.startDate)} a ${formatDate(anterior.endDate)} (${anterior.dias} dias)`
+        : ""}
+      {jaTrocou
+        ? ". O período anterior foi substituído por este."
+        : ". Quando o departamento pessoal efetivar, este período substitui o anterior, que até lá continua valendo."}
+    </p>
+  );
+}
+
 function DetalheFerias({
-  row, meuId, ehDp, ehOwner, onFechar, onReenviar, onReagendar, onEfetivar, onDevolver, onCancelar,
+  row, anterior, meuId, ehDp, ehOwner, onFechar, onReenviar, onReagendar, onEfetivar, onDevolver, onCancelar,
 }: {
   row: FeriasRow;
+  /** a previsão que este reagendamento troca */
+  anterior: FeriasRow | null;
   meuId: string;
   ehDp: boolean;
   ehOwner: boolean;
@@ -1099,6 +1159,7 @@ function DetalheFerias({
           <Field label="Abono pecuniário">{row.abonoDias ? `${row.abonoDias} dia(s)` : "Não"}</Field>
           <Field label="Aquisitivo">{`${formatDate(row.aquisitivoInicio)} a ${formatDate(row.aquisitivoFim)}`}</Field>
         </FieldGrid>
+        <NotaReagendamento row={row} anterior={anterior} />
         {row.emDobro && (
           <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-danger)" }}>
             <strong>Férias em dobro</strong> (gozo depois do prazo de concessão, art. 137).
@@ -1143,9 +1204,11 @@ function DetalheFerias({
 // ============================================================================
 
 function EfetivarDialog({
-  row, onFechar, onDevolver,
+  row, anterior, onFechar, onDevolver,
 }: {
   row: FeriasRow;
+  /** a previsão que este reagendamento troca */
+  anterior: FeriasRow | null;
   onFechar: () => void;
   onDevolver: (r: FeriasRow) => void;
 }) {
@@ -1211,6 +1274,7 @@ function EfetivarDialog({
         {c && <Field label="Saldo do aquisitivo">{`${c.saldo ?? "—"} dia(s)`}</Field>}
         {c?.concessivoFim && <Field label="Gozar até">{formatDate(c.concessivoFim)}</Field>}
       </FieldGrid>
+      <NotaReagendamento row={row} anterior={anterior} />
       {row.emDobro && (
         <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-danger)" }}>
           <strong>Férias em dobro</strong>: o gozo termina depois do prazo de concessão (art. 137).
