@@ -24,7 +24,7 @@ import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDia
 import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
-import { SituacaoBadge, type SituacaoColaborador } from "@/components/SituacaoColaborador";
+import { SituacaoBadge, rotuloSituacao, type SituacaoColaborador } from "@/components/SituacaoColaborador";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE, aquisitivoSemSaldo,
@@ -268,8 +268,16 @@ export function FeriasManager({
     ? painelNoEscopo.proximas.length
     : rowsNoEscopo.filter((r) =>
         (r.status === "efetivada" || r.status === "aprovada") && r.startDate > hoje && r.startDate <= somarDias(hoje, 60)).length;
-  const aVencerQtd = painelNoEscopo ? painelNoEscopo.saldos.filter((s) => s.situacao === "a_vencer").length : 0;
-  const vencidasQtd = painelNoEscopo ? painelNoEscopo.saldos.filter((s) => s.situacao === "vencida").length : 0;
+  // Quem está afastado (aposentadoria por invalidez, INSS, licença em vigor) não
+  // entra em "A vencer" nem em "Vencidas": o prazo dele não é atraso de ninguém,
+  // e contá-lo fazia o painel parecer um problema que não existe (LUIZ,
+  // 06/11/2026). Ele continua visível como observação na Visão geral.
+  const saldosNoEscopo = painelNoEscopo?.saldos ?? [];
+  const aVencerQtd = saldosNoEscopo.filter((s) => s.situacao === "a_vencer" && !s.statusColaborador).length;
+  const vencidasQtd = saldosNoEscopo.filter((s) => s.situacao === "vencida" && !s.statusColaborador).length;
+  const aVencerAfastados = saldosNoEscopo.filter((s) => s.situacao === "a_vencer" && s.statusColaborador).length;
+  const vencidasAfastados = saldosNoEscopo.filter((s) => s.situacao === "vencida" && s.statusColaborador).length;
+  const foraDaConta = (n: number) => `${n} afastado${n > 1 ? "s" : ""} fora da conta`;
 
   const podeGerir = ehGestor || ehDp;
 
@@ -420,11 +428,13 @@ export function FeriasManager({
             hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
           {painel && (
             <StatCard label="A vencer (90 dias)" value={aVencerQtd} tone={aVencerQtd > 0 ? "amber" : "gray"}
-              hint="período concessivo terminando" />
+              hint={aVencerAfastados > 0 ? foraDaConta(aVencerAfastados) : "período concessivo terminando"} />
           )}
           {painel && (
             <StatCard label="Vencidas" value={vencidasQtd} tone={vencidasQtd > 0 ? "red" : "green"}
-              hint={vencidasQtd > 0 ? "concessão em dobro (art. 137)" : "nenhum estouro"} />
+              hint={vencidasAfastados > 0
+                ? (vencidasQtd > 0 ? `em dobro (art. 137); ${foraDaConta(vencidasAfastados)}` : foraDaConta(vencidasAfastados))
+                : vencidasQtd > 0 ? "concessão em dobro (art. 137)" : "nenhum estouro"} />
           )}
         </div>
       )}
@@ -970,9 +980,10 @@ function TabelaGeral({
           <ExportButton
             filename="previsoes_de_ferias.xlsx"
             sheetName="Férias"
-            headers={["Colaborador", "Matrícula", "Setor", "Unidade", "Início", "Término", "Dias", "Abono", "Aquisitivo", "Situação", "Aberta por"]}
+            // matrícula primeiro: é a chave que o DP cruza com a folha
+            headers={["Matrícula", "Colaborador", "Setor", "Unidade", "Início", "Término", "Dias", "Abono", "Aquisitivo", "Situação", "Aberta por"]}
             rows={filtradas.map((r) => [
-              r.fullName, r.employeeCode, r.departmentName, r.unitName,
+              r.employeeCode, r.fullName, r.departmentName, r.unitName,
               formatDate(r.startDate), formatDate(r.endDate), r.dias, r.abonoDias,
               periodoAquisitivo(r.aquisitivoInicio, r.aquisitivoFim),
               FERIAS_STATUS[r.status], r.createdByName,
@@ -1349,7 +1360,10 @@ function VisaoGeral({
   /** só o DP recebe */
   ultimaImportacao: UltimaImportacaoFolha | null;
 }) {
-  const comPendencia = painel.saldos.filter((s) => s.situacao === "vencida" || s.situacao === "a_vencer" || s.semFolha);
+  const temPrazo = (s: FeriasPainel["saldos"][number]) => s.situacao === "vencida" || s.situacao === "a_vencer";
+  // o afastado com prazo vencido ou vencendo sai das pendências e vira observação
+  const comPendencia = painel.saldos.filter((s) => (temPrazo(s) && !s.statusColaborador) || s.semFolha);
+  const afastadosComPrazo = painel.saldos.filter((s) => temPrazo(s) && s.statusColaborador);
   const semFolhaQtd = painel.saldos.filter((s) => s.semFolha).length;
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const listaSaldos = mostrarTodos ? painel.saldos : comPendencia;
@@ -1468,7 +1482,9 @@ function VisaoGeral({
                         // não há saldo conferível (pedidos dela são recusados)
                         <Badge tone="amber">Sem período importado</Badge>
                       ) : s.situacao ? (
-                        <Badge tone={FERIAS_AQUISITIVO_TONE[s.situacao] ?? "gray"}>
+                        // afastado: o prazo fica registrado, mas sem o alarme da pílula tintada
+                        <Badge tone={FERIAS_AQUISITIVO_TONE[s.situacao] ?? "gray"}
+                          variant={s.statusColaborador && temPrazo(s) ? "quiet" : "tint"}>
                           {FERIAS_AQUISITIVO_SITUACAO[s.situacao] ?? s.situacao}
                         </Badge>
                       ) : (
@@ -1489,6 +1505,26 @@ function VisaoGeral({
                 Mostrando 60 de {listaSaldos.length}. Use a exportação de Todas as previsões para a lista completa.
               </p>
             )}
+          </div>
+        )}
+        {afastadosComPrazo.length > 0 && (
+          <div style={{ fontSize: "0.8rem", margin: "0.8rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-border-strong)" }}>
+            <strong>Fora da contagem, por estarem afastados:</strong>
+            <ul className="soft" style={{ margin: "0.3rem 0 0", paddingLeft: "1.1rem" }}>
+              {afastadosComPrazo.map((s) => (
+                <li key={s.userId}>
+                  {shortName(s.nome)}: {rotuloSituacao(s.statusColaborador)}
+                  {s.statusColaborador?.desde ? ` desde ${formatDate(s.statusColaborador.desde)}` : ""}
+                  {s.situacao === "vencida"
+                    ? `, aquisitivo vencido${s.gozarAte ? ` em ${formatDate(s.gozarAte)}` : ""}`
+                    : `, concessão vence${s.gozarAte ? ` em ${formatDate(s.gozarAte)}` : ""}`}
+                  {` (${s.saldo} dia${s.saldo === 1 ? "" : "s"} de saldo).`}
+                </li>
+              ))}
+            </ul>
+            <span className="soft">
+              O prazo de quem tem afastamento ou licença em vigor não entra em Vencidas nem em A vencer.
+            </span>
           </div>
         )}
       </div>
