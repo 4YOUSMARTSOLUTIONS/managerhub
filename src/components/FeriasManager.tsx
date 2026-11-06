@@ -435,7 +435,7 @@ export function FeriasManager({
         <FeriasImportarFolhaDialog ultima={ultimaImportacao} onFechar={() => setImportando(false)} />
       )}
       {loteAberto && (
-        <FeriasLancarPlanilhaDialog hoje={hoje} onFechar={() => setLoteAberto(false)} />
+        <FeriasLancarPlanilhaDialog hoje={hoje} soUsuarios={pessoasNoEscopo} onFechar={() => setLoteAberto(false)} />
       )}
       {dialogo && (
         <FeriasSolicitarDialog

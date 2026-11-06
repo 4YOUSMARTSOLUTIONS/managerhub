@@ -37,7 +37,18 @@ const resumoPeriodos = (ps: { inicio: string; fim: string; abono: number }[]) =>
  *
  * Fecha por X ou Cancelar, nunca por clique no fundo.
  */
-export function FeriasLancarPlanilhaDialog({ hoje, onFechar }: { hoje: string; onFechar: () => void }) {
+export function FeriasLancarPlanilhaDialog({
+  hoje, onFechar, soUsuarios = null,
+}: {
+  hoje: string;
+  onFechar: () => void;
+  /**
+   * "Minha equipe" no topo da tela: o modelo sai só com a cadeia de quem baixa.
+   * É recorte de visão sobre o que a RPC já devolveu (a alçada é dela); quem
+   * pode lançar para a empresa toda troca para "Toda a empresa" e baixa todos.
+   */
+  soUsuarios?: Set<string> | null;
+}) {
   const [arquivo, setArquivo] = useState("");
   const [pessoas, setPessoas] = useState<PessoaLote[]>([]);
   const [linhas, setLinhas] = useState<Linha[] | null>(null);
@@ -52,11 +63,12 @@ export function FeriasLancarPlanilhaDialog({ hoje, onFechar }: { hoje: string; o
     iniciarDownload(async () => {
       const r = await modeloDeLancamentoEmLote({ hoje });
       if (r.error) { toast.error(r.error); return; }
-      if (r.pessoas.length === 0) {
+      const pessoas = soUsuarios ? r.pessoas.filter((p) => p.userId && soUsuarios.has(p.userId)) : r.pessoas;
+      if (pessoas.length === 0) {
         toast.warning("Ninguém da sua equipe depende de você para lançar férias. O modelo sai vazio para você preencher.");
       }
       const XLSX = await loadXlsx();
-      const ws = XLSX.utils.aoa_to_sheet(linhasDoModeloLote(r.pessoas));
+      const ws = XLSX.utils.aoa_to_sheet(linhasDoModeloLote(pessoas));
       ws["!cols"] = [{ wch: 12 }, { wch: 11 }, { wch: 36 }, { wch: 18 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 17 }, { wch: 18 }, { wch: 13 }, { wch: 13 }];
       const wsI = XLSX.utils.aoa_to_sheet(LOTE_INSTRUCOES);
       wsI["!cols"] = [{ wch: 120 }];
@@ -162,6 +174,12 @@ export function FeriasLancarPlanilhaDialog({ hoje, onFechar }: { hoje: string; o
                 pessoa passa pelas mesmas regras do botão Lançar férias: a prévia mostra quem está
                 pronto e quem foi recusado, com o motivo, antes de gravar.
               </p>
+              {soUsuarios && (
+                <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
+                  O modelo sai só com a sua equipe, como o filtro <strong>Minha equipe</strong> do topo
+                  da tela. Para a empresa toda, troque para <strong>Toda a empresa</strong> antes de baixar.
+                </p>
+              )}
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button type="button" className="btn btn-ghost btn-sm" disabled={baixando} onClick={baixarModelo}>
                   <Download size={13} aria-hidden /> {baixando ? "Gerando…" : "Baixar modelo"}

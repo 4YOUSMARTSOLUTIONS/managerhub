@@ -43,6 +43,8 @@ export const LOTE_INSTRUCOES: string[][] = [
 ];
 
 export type ModeloLotePessoa = {
+  /** quem é (a RPC devolve): o recorte de "Minha equipe" do topo da tela usa */
+  userId?: string;
   unidade: string | null;
   matricula: string | null;
   nome: string | null;
