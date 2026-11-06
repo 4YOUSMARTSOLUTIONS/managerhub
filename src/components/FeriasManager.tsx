@@ -27,7 +27,7 @@ import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline"
 import { SituacaoBadge, type SituacaoColaborador } from "@/components/SituacaoColaborador";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
-  FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE,
+  FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE, aquisitivoSemSaldo,
 } from "@/lib/constants";
 import {
   rotuloAquisitivo, periodoAquisitivo, type AquisitivoInfo, type FeriadoCustom, type PrazosLegais, type QuemLanca,
@@ -568,7 +568,8 @@ function MinhasFerias({
   onReagendar: (r: FeriasRow) => void;
   hoje: string;
 }) {
-  const relevantes = aquisitivos.filter((a) => a.situacao !== "quitada" || a.diasUsados > 0);
+  // sem saldo e sem nada usado é aquisitivo sem direito (faltas, afastamento): não há o que mostrar
+  const relevantes = aquisitivos.filter((a) => !aquisitivoSemSaldo(a.situacao) || a.diasUsados > 0);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.9rem" }}>
       {avisoSolicitar && (

@@ -13,7 +13,7 @@ import {
   type AquisitivoInfo, type ContextoPrazos, type DecimoPedido, type FeriadoCustom, type PeriodoInput,
   type PrazosLegais, type QuemLanca,
 } from "@/lib/ferias";
-import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE } from "@/lib/constants";
+import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, aquisitivoSemSaldo } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import {
   getAquisitivosDe, lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias,
@@ -263,10 +263,10 @@ export function FeriasSolicitarDialog({
                 Saldo por período aquisitivo
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                {aqs.filter((a) => a.situacao !== "quitada" || a.diasUsados > 0).slice(-4).map((a) => (
+                {aqs.filter((a) => !aquisitivoSemSaldo(a.situacao) || a.diasUsados > 0).slice(-4).map((a) => (
                   <div key={a.aqInicio} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 600 }}>{rotuloAquisitivo(a)}</span>
-                    {a.situacao !== "em_curso" && a.situacao !== "quitada" && (
+                    {a.situacao !== "em_curso" && !aquisitivoSemSaldo(a.situacao) && (
                       <span className="soft">gozar até {formatDate(a.concessivoFim)}</span>
                     )}
                     <span style={{ marginLeft: "auto" }} className="tabular">{a.saldo} dia(s)</span>

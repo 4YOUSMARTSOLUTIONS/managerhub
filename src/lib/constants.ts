@@ -365,13 +365,24 @@ export const FERIAS_STATUS_TONE: Record<Enums<"ferias_status">, Tone> = {
   cancelada: "gray",
 };
 
-/** Situação do período aquisitivo (saída de `ferias_periodos_aquisitivos`). */
+/**
+ * Situação do período aquisitivo (saída de `ferias_periodos_aquisitivos`).
+ *
+ * Sem saldo, o aquisitivo diz em que pé está o que zerou o saldo: pedido no
+ * trâmite, efetivado por vir, em gozo ou terminado. Até 06/11/2026 era tudo
+ * "Quitada", que soava como férias já tiradas no instante do pedido.
+ */
 export const FERIAS_AQUISITIVO_SITUACAO: Record<string, string> = {
   em_curso: "Em curso",
   aberta: "Com saldo",
   a_vencer: "A vencer",
   vencida: "Vencida",
-  quitada: "Quitada",
+  solicitada: "Solicitada",
+  agendada: "Agendada",
+  em_gozo: "Em gozo",
+  concluida: "Concluída",
+  // valor antigo do banco, antes de 20261106120000
+  quitada: "Sem saldo",
 };
 
 export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
@@ -379,8 +390,17 @@ export const FERIAS_AQUISITIVO_TONE: Record<string, Tone> = {
   aberta: "blue",
   a_vencer: "amber",
   vencida: "red",
-  quitada: "green",
+  solicitada: "blue",
+  agendada: "green",
+  em_gozo: "green",
+  concluida: "gray",
+  quitada: "gray",
 };
+
+/** O aquisitivo não tem mais saldo: todo o direito já foi pedido, programado ou gozado. */
+export const aquisitivoSemSaldo = (situacao: string) =>
+  situacao === "solicitada" || situacao === "agendada" || situacao === "em_gozo"
+  || situacao === "concluida" || situacao === "quitada";
 
 // ---------- Motivo do afastamento / situação do colaborador ----------
 /**

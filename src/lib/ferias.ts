@@ -343,7 +343,7 @@ export function validarConjunto(
   for (const p of ordenados) {
     const alvo = aq.find((a) => a.saldo > 0);
     if (!alvo) {
-      return { erro: "Não há saldo de férias disponível: todos os períodos aquisitivos estão quitados ou reservados." };
+      return { erro: "Não há saldo de férias disponível: todos os períodos aquisitivos já estão pedidos, programados ou gozados." };
     }
     const dias = diasDoPeriodo(p.inicio, p.fim);
     if (alvo.aqFim >= p.inicio) {
