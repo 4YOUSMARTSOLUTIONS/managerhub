@@ -407,7 +407,7 @@ export function FeriasManager({
           <StatCard label="De férias agora" value={emGozoQtd} tone="green"
             hint={painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje"} />
           <StatCard label="Próximas saídas (60 dias)" value={proximasQtd} tone="blue" />
-          <StatCard label="Aguardando o gestor" value={rowsNoEscopo.filter((r) => r.status === "solicitada").length}
+          <StatCard label="Aguardando aprovação do gestor" value={rowsNoEscopo.filter((r) => r.status === "solicitada").length}
             tone={fila.length > 0 ? "amber" : "gray"} />
           <StatCard label="Aguardando efetivação" value={filaDp.length} tone={filaDp.length > 0 ? "amber" : "gray"}
             hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
@@ -624,7 +624,7 @@ function MinhasFerias({
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 80, textAlign: "right" }}>Abono</th>
                 <th style={{ width: 170 }}>Aquisitivo</th>
-                <th style={{ width: 330 }}>Situação</th>
+                <th style={{ width: 360 }}>Situação</th>
                 <th style={{ width: 210, textAlign: "right" }}>Ações</th>
               </tr>
             </thead>
@@ -676,17 +676,18 @@ function MinhasFerias({
  *
  * Para o DP, "aprovada" é trabalho a fazer, e a tela dele segue em âmbar
  * ("Aguardando efetivação"). Para o colaborador é uma notícia boa pela metade:
- * o gestor já aprovou (verde), e falta o DP efetivar. As duas coisas ficam
- * visíveis, numa pílula só, que é o limite por linha.
+ * o gestor já aprovou (verde), e falta o DP efetivar (âmbar, em andamento).
+ * São duas pílulas de propósito, exceção à regra de uma por linha do
+ * DESIGN.md: cada uma é uma etapa do trâmite (LUIZ, 06/11/2026).
  */
 function SituacaoDoMeuPedido({ status }: { status: FeriasRow["status"] }) {
   if (status !== "aprovada") {
     return <Badge tone={FERIAS_STATUS_TONE[status]}>{FERIAS_STATUS[status]}</Badge>;
   }
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
       <Badge tone="green">Aprovada pelo gestor</Badge>
-      <span className="soft" style={{ fontSize: "0.78rem" }}>aguardando efetivação do DP</span>
+      <Badge tone="amber">Aguardando efetivação do DP</Badge>
     </span>
   );
 }
@@ -956,7 +957,7 @@ function TabelaGeral({
                 <th style={{ width: 180 }}>Período</th>
                 <th style={{ width: 64, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 170 }}>Aquisitivo</th>
-                <th style={{ width: 165 }}>Situação</th>
+                <th style={{ width: 220 }}>Situação</th>
               </tr>
             </thead>
             <tbody>

@@ -348,7 +348,7 @@ export const ABSENTEISMO_STATUS_TONE: Record<Enums<"absenteismo_status">, Tone> 
 // Os rótulos dizem COM QUEM a bola está, não o nome interno do estado: é o que
 // a pessoa quer saber quando abre a tela.
 export const FERIAS_STATUS: Record<Enums<"ferias_status">, string> = {
-  solicitada: "Aguardando o gestor",
+  solicitada: "Aguardando aprovação do gestor",
   aprovada: "Aguardando efetivação",
   reprovada: "Devolvida",
   efetivada: "Efetivada",

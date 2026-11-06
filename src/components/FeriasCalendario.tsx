@@ -307,7 +307,7 @@ export function CalendarioDeFerias({
                     <th style={{ width: 170 }}>Setor</th>
                     <th style={{ width: 190 }}>Período</th>
                     <th style={{ width: 70, textAlign: "right" }}>Dias</th>
-                    <th style={{ width: 180 }}>Situação</th>
+                    <th style={{ width: 220 }}>Situação</th>
                   </tr>
                 </thead>
                 <tbody>

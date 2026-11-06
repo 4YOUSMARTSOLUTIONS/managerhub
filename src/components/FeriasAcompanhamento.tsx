@@ -55,7 +55,7 @@ export function FeriasAcompanhamento({
         <StatCard label="Pessoas de férias no período" value={carregando ? "…" : pessoas()} tone="blue" />
         <StatCard label="Efetivadas" value={carregando ? "…" : pessoas("efetivada")} tone="green" hint="confirmadas pelo DP" />
         <StatCard label="Aguardando efetivação" value={carregando ? "…" : pessoas("aprovada")} tone="amber" hint="aprovadas pelo gestor" />
-        <StatCard label="Aguardando o gestor" value={carregando ? "…" : pessoas("solicitada")} tone="gray" hint="solicitadas" />
+        <StatCard label="Aguardando aprovação do gestor" value={carregando ? "…" : pessoas("solicitada")} tone="gray" hint="solicitadas" />
       </div>
 
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
@@ -94,7 +94,7 @@ export function FeriasAcompanhamento({
                 <th style={{ width: 100 }}>Término</th>
                 <th style={{ width: 64, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 96, textAlign: "right" }}>No período</th>
-                <th style={{ width: 180 }}>Situação</th>
+                <th style={{ width: 220 }}>Situação</th>
               </tr>
             </thead>
             <tbody>
