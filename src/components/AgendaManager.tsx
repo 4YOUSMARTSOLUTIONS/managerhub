@@ -10,7 +10,6 @@ import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SearchSelect } from "./SearchSelect";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { AgendaDayView } from "./AgendaDayView";
 import { AgendaDayCalendar } from "./AgendaDayCalendar";
@@ -467,7 +466,19 @@ export function AgendaManager(props: {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.6rem" }}>
             <span className="soft" style={{ fontSize: "0.82rem" }}>Colaborador:</span>
-            <div style={{ minWidth: 220 }}><SearchSelect options={teamPeople} value={teamUser} onChange={setTeamUser} placeholder="Selecionar…" /></div>
+            {/* select nativo, como o "Diário de:": o SearchSelect só abre a lista
+                quando está vazio, e o "×" dele esvaziava a escolha, que o efeito
+                acima devolvia na hora para a primeira pessoa da equipe. Daqui não
+                havia como trocar de pessoa (LUIZ, 09/11/2026). */}
+            <select
+              className="select"
+              value={teamUser}
+              onChange={(e) => setTeamUser(e.target.value)}
+              style={{ width: "auto", minWidth: 220, maxWidth: 320 }}
+              aria-label="Colaborador"
+            >
+              {teamPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
           </div>
           <AgendaDayView
             subjectName={nameById[teamUser] ?? "Colaborador"}
