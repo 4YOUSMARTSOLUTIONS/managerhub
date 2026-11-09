@@ -114,7 +114,7 @@ export function FeriasProgramacao({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
       <BarraFiltrosFerias
-        filtros={filtros} onChange={mudar} setores={setores} hoje={hoje}
+        filtros={filtros} onChange={mudar} setores={setores} hoje={hoje} itens={itens}
         atalhos={["30d", "mes", "proximoMes", "12m", "ano"]}
       />
       {invalido && <p style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: 0 }}>{invalido}</p>}

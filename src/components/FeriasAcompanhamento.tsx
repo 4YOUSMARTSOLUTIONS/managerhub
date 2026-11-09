@@ -46,7 +46,7 @@ export function FeriasAcompanhamento({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
       <BarraFiltrosFerias
-        filtros={filtros} onChange={mudar} setores={setores} hoje={hoje}
+        filtros={filtros} onChange={mudar} setores={setores} hoje={hoje} itens={itens}
         atalhos={["hoje", "7d", "30d", "mes", "proximoMes"]}
       />
       {invalido && <p style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: 0 }}>{invalido}</p>}

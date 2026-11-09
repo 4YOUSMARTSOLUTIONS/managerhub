@@ -6,7 +6,7 @@
  * período sob demanda.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { getAgendaFerias } from "@/lib/actions/ferias";
 
 export type StatusAgenda = "solicitada" | "aprovada" | "efetivada";
@@ -43,6 +43,17 @@ export const STATUS_AGENDA_CURTO: Record<StatusAgenda, string> = {
 };
 
 export const COR_SEM_SETOR = "var(--mh-text-3)";
+
+/** o visual de cada situação: a cor é do setor; o preenchimento diz em que pé está */
+export function estiloDaSituacao(status: StatusAgenda, cor: string): CSSProperties {
+  if (status === "efetivada") {
+    return { background: `color-mix(in srgb, ${cor} 28%, var(--mh-surface-1))`, border: "1px solid transparent" };
+  }
+  if (status === "aprovada") {
+    return { background: `color-mix(in srgb, ${cor} 10%, var(--mh-surface-1))`, border: `1px solid color-mix(in srgb, ${cor} 60%, transparent)` };
+  }
+  return { background: "var(--mh-surface-1)", border: `1px dashed ${cor}` };
+}
 
 /**
  * Cor de cada setor: a posição dele no cadastro em ordem alfabética, e não na

@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/Badge";
 import { FERIAS_STATUS, FERIAS_STATUS_TONE, WEEKDAYS_PT } from "@/lib/constants";
 import { formatDate, shortName } from "@/lib/format";
 import {
-  corDe, coresDosSetores, STATUS_AGENDA, STATUS_AGENDA_CURTO, useAgendaFerias,
+  corDe, coresDosSetores, estiloDaSituacao, useAgendaFerias,
   type AgendaItem, type StatusAgenda,
 } from "@/lib/ferias-agenda";
+import { FiltroDeSituacoes } from "@/components/FeriasFiltros";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -16,17 +17,6 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** data local para AAAA-MM-DD (as datas daqui são sempre meio-dia local) */
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const diaLocal = (ano: number, mes: number, dia: number) => new Date(ano, mes, dia, 12);
-
-/** o visual de cada situação: a cor é do setor; o preenchimento diz em que pé está */
-function estiloDaSituacao(status: StatusAgenda, cor: string): React.CSSProperties {
-  if (status === "efetivada") {
-    return { background: `color-mix(in srgb, ${cor} 28%, var(--mh-surface-1))`, border: "1px solid transparent" };
-  }
-  if (status === "aprovada") {
-    return { background: `color-mix(in srgb, ${cor} 10%, var(--mh-surface-1))`, border: `1px solid color-mix(in srgb, ${cor} 60%, transparent)` };
-  }
-  return { background: "var(--mh-surface-1)", border: `1px dashed ${cor}` };
-}
 
 type Segmento = { item: AgendaItem; c0: number; c1: number; comeca: boolean; termina: boolean; faixa: number };
 
@@ -201,39 +191,7 @@ export function CalendarioDeFerias({
           Cada barra é uma pessoa fora nos dias que ela atravessa, na cor do setor. Clique num dia
           para ver quem está de férias nele, ou numa barra para ver o período.
         </p>
-        <div role="group" aria-label="Situações mostradas" style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap" }}>
-          {STATUS_AGENDA.map((s) => {
-            const ligado = statusOn[s];
-            return (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={ligado}
-                title={ligado ? "Clique para esconder" : "Clique para mostrar"}
-                onClick={() => setStatusOn({ ...statusOn, [s]: !ligado })}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "0.45rem",
-                  padding: "0.32rem 0.75rem", borderRadius: "var(--mh-radius-full)",
-                  border: `1px solid ${ligado ? "var(--mh-border-strong)" : "var(--mh-border)"}`,
-                  background: ligado ? "var(--mh-surface-2)" : "transparent",
-                  color: ligado ? "var(--mh-text-1)" : "var(--mh-text-3)",
-                  fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                  transition: "background var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease)",
-                }}
-              >
-                <span aria-hidden style={{
-                  display: "inline-block", width: 18, height: 11, borderRadius: 3,
-                  ...estiloDaSituacao(s, "var(--mh-primary-500)"),
-                  opacity: ligado ? 1 : 0.35,
-                }} />
-                {STATUS_AGENDA_CURTO[s]}
-                <span className="tabular" style={{ fontWeight: 700, color: ligado ? "var(--mh-text-2)" : "var(--mh-text-3)" }}>
-                  {porSituacao[s]}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <FiltroDeSituacoes ligadas={statusOn} onMudar={setStatusOn} contagem={porSituacao} />
       </div>
 
       {legenda.length > 0 && (
