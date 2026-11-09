@@ -438,3 +438,74 @@ const dataBr = (iso: string) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
+
+// ---------------------------------------------------------------------------
+// Escolha anual do adiantamento do 13º (colaborador operacional)
+// ---------------------------------------------------------------------------
+
+/**
+ * Quem está num nível que não solicita as próprias férias (o gestor lança)
+ * escolhe, por ano, se quer a 1ª parcela do 13º junto das férias. A escolha é
+ * DELE: o gestor não marca. Banco: `ferias_decimo_escolhas`,
+ * `ferias_escolher_decimo` e `ferias_decimo_pela_escolha`.
+ */
+export type EscolhaDecimo = { ano: number; quer: boolean; foraPrazo: boolean; escolhidoEm: string };
+export type DecimoPelaEscolha = { bloqueado: boolean; escolhas: EscolhaDecimo[] };
+
+/**
+ * O que a escolha faz com cada período, como o banco decide: o primeiro
+ * período de cada ano em que a pessoa quer adiantar leva o 13º, se nenhum
+ * outro daquele ano já leva. Só para mostrar no formulário do gestor; quem
+ * grava é `ferias_decimo_pela_escolha`.
+ */
+export function decimoPelaEscolha(
+  periodos: { inicio: string }[],
+  escolhas: EscolhaDecimo[],
+  existentes: DecimoPedido[],
+): { leva: boolean; texto: string }[] {
+  const ordem = periodos
+    .map((p, i) => ({ i, inicio: p.inicio }))
+    .filter((x) => x.inicio)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio) || a.i - b.i);
+  const primeiroDoAno = new Map<string, number>();
+  for (const x of ordem) {
+    const ano = x.inicio.slice(0, 4);
+    if (!primeiroDoAno.has(ano)) primeiroDoAno.set(ano, x.i);
+  }
+  return periodos.map((p, i) => {
+    if (!p.inicio) return { leva: false, texto: "" };
+    const ano = p.inicio.slice(0, 4);
+    const escolha = escolhas.find((e) => String(e.ano) === ano);
+    if (!escolha) {
+      return { leva: false, texto: `Sem 13º: o colaborador não escolheu o adiantamento de ${ano} em Minhas férias.` };
+    }
+    if (!escolha.quer) return { leva: false, texto: `Sem 13º: o colaborador escolheu não adiantar em ${ano}.` };
+    const ja = existentes.find((d) => d.inicio.slice(0, 4) === ano);
+    if (ja) {
+      return { leva: false, texto: `Sem 13º: o adiantamento de ${ano} já está nas férias de ${dataBr(ja.inicio)} a ${dataBr(ja.fim)}.` };
+    }
+    if (primeiroDoAno.get(ano) !== i) {
+      return { leva: false, texto: `Sem 13º: o adiantamento de ${ano} vai no primeiro período do ano.` };
+    }
+    return { leva: true, texto: `Leva o adiantamento do 13º: o colaborador escolheu adiantar em ${ano}.` };
+  });
+}
+
+/**
+ * Os anos que aparecem para o colaborador escolher: o atual (enquanto o prazo
+ * de 31/01 estiver aberto, ou se já houver escolha) e o seguinte. Com a
+ * empresa em "alerta", o prazo não fecha a escolha; em "bloquear", fecha.
+ */
+export function anosDaEscolhaDecimo(
+  hoje: string,
+  escolhas: EscolhaDecimo[],
+  modo: ModoPrazo,
+): { ano: number; prazo: string; aberto: boolean; escolha?: EscolhaDecimo }[] {
+  const atual = Number(hoje.slice(0, 4));
+  return [atual, atual + 1]
+    .map((ano) => {
+      const prazo = `${ano}-01-31`;
+      return { ano, prazo, aberto: hoje <= prazo || modo === "alerta", escolha: escolhas.find((e) => e.ano === ano) };
+    })
+    .filter((x) => x.aberto || x.escolha);
+}

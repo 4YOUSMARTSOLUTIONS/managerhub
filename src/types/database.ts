@@ -2084,6 +2084,8 @@ export type Database = {
       ferias_lancar_lote: { Args: { p_tenant: string; p_lancamentos: Json; p_hoje: string; p_somente_validar?: boolean }; Returns: Json }
       // modelo do lote: quem só o gestor lança, na alçada de quem baixa, com o saldo (ModeloLotePessoa[])
       ferias_modelo_lancamento: { Args: { p_tenant: string; p_hoje?: string }; Returns: Json }
+      ferias_escolher_decimo: { Args: { p_tenant: string; p_ano: number; p_quer: boolean }; Returns: undefined }
+      ferias_escolhas_decimo: { Args: { p_tenant: string; p_user: string }; Returns: Json }
       // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
       ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
       // Situação do colaborador, CALCULADA: o afastamento ou a licença em vigor

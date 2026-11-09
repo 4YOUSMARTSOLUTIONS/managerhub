@@ -5,7 +5,7 @@ import { moduleGate } from "@/lib/module-gate";
 import {
   FeriasManager, type FeriasPainel, type FeriasRow, type UltimaImportacaoFolha,
 } from "@/components/FeriasManager";
-import { aquisitivoDaLinha, type AquisitivoInfo } from "@/lib/ferias";
+import { aquisitivoDaLinha, type AquisitivoInfo, type DecimoPelaEscolha } from "@/lib/ferias";
 
 /**
  * Férias.
@@ -137,6 +137,13 @@ export default async function FeriasPage() {
   // conferível, e o banco recusaria o pedido de qualquer jeito.
   const semFolha = usaFolha && meusAquisitivos.length === 0;
   const podeSolicitar = !nivelBloqueado && !semAdmissao && !semFolha;
+  // quem não solicita as próprias férias escolhe, por ano, o adiantamento do 13º
+  const { data: minhaEscolha } = nivelBloqueado
+    ? await supabase.rpc("ferias_escolhas_decimo", { p_tenant: tenant.id, p_user: user.id })
+    : { data: null };
+  const escolhasDecimo = nivelBloqueado
+    ? ((minhaEscolha as unknown as DecimoPelaEscolha | null)?.escolhas ?? [])
+    : null;
   const avisoSolicitar = nivelBloqueado
     ? "As férias do seu nível são programadas pelo seu gestor. Você acompanha por aqui o saldo e as previsões lançadas para você."
     : semAdmissao
@@ -187,6 +194,7 @@ export default async function FeriasPage() {
           abono: config?.abono_fora_prazo === "bloquear" ? "bloquear" : "alerta",
           decimo: config?.decimo_fora_prazo === "bloquear" ? "bloquear" : "alerta",
         }}
+        escolhasDecimo={escolhasDecimo}
       />
     </div>
   );

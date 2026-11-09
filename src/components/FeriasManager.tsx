@@ -30,10 +30,11 @@ import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE, aquisitivoSemSaldo,
 } from "@/lib/constants";
 import {
-  rotuloAquisitivo, periodoAquisitivo, type AquisitivoInfo, type FeriadoCustom, type PrazosLegais, type QuemLanca,
+  anosDaEscolhaDecimo, rotuloAquisitivo, periodoAquisitivo,
+  type AquisitivoInfo, type EscolhaDecimo, type FeriadoCustom, type ModoPrazo, type PrazosLegais, type QuemLanca,
 } from "@/lib/ferias";
 import {
-  cancelarFerias, decidirFerias, efetivarFerias, excluirFerias, getContextoEfetivacao,
+  cancelarFerias, decidirFerias, efetivarFerias, escolherDecimo, excluirFerias, getContextoEfetivacao,
   type ContextoEfetivacao,
 } from "@/lib/actions/ferias";
 import type { Enums } from "@/types/database";
@@ -147,7 +148,7 @@ const dataDoPedido = (iso: string) =>
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, equipe, vejoEmpresa, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
-  antecedencia, prazos,
+  antecedencia, prazos, escolhasDecimo,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -178,6 +179,11 @@ export function FeriasManager({
   antecedencia: Record<QuemLanca, number>;
   /** abono e 13º pedidos fora do prazo legal: alerta ou bloqueio do colaborador */
   prazos: PrazosLegais;
+  /**
+   * Quem não solicita as próprias férias (o gestor lança) escolhe, por ano, o
+   * adiantamento do 13º. As escolhas dele; null = não é o caso (pede no pedido).
+   */
+  escolhasDecimo: EscolhaDecimo[] | null;
 }) {
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
@@ -289,6 +295,7 @@ export function FeriasManager({
         onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
         onReagendar={setReagendando}
         hoje={hoje}
+        escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo}
       />
     ) },
   ];
@@ -484,6 +491,7 @@ export function FeriasManager({
             decimo: reenvio.decimo ? dataDoPedido(reenvio.createdAt) : null,
           }}
           decimos={decimosDe(reenvio.userId, reenvio.id)}
+          alvoId={reenvio.userId}
           inicial={{
             id: reenvio.id, inicio: reenvio.startDate, fim: reenvio.endDate,
             abono: reenvio.abonoDias, decimo: reenvio.decimo,
@@ -506,6 +514,7 @@ export function FeriasManager({
             decimo: reagendando.decimo ? dataDoPedido(reagendando.createdAt) : null,
           }}
           decimos={decimosDe(reagendando.userId, reagendando.id)}
+          alvoId={reagendando.userId}
           inicial={{
             id: reagendando.id, inicio: reagendando.startDate, fim: reagendando.endDate,
             abono: reagendando.abonoDias, decimo: reagendando.decimo,
@@ -574,6 +583,7 @@ function composicaoDoSaldo(a: AquisitivoInfo): string {
 
 function MinhasFerias({
   minhas, aquisitivos, podeSolicitar, avisoSolicitar, onSolicitar, onReenviar, onDetalhe, onCancelar, onReagendar, hoje,
+  escolhasDecimo, modoDecimo,
 }: {
   minhas: FeriasRow[];
   aquisitivos: AquisitivoInfo[];
@@ -585,6 +595,8 @@ function MinhasFerias({
   onCancelar: (r: FeriasRow) => void;
   onReagendar: (r: FeriasRow) => void;
   hoje: string;
+  escolhasDecimo: EscolhaDecimo[] | null;
+  modoDecimo: ModoPrazo;
 }) {
   // sem saldo e sem nada usado é aquisitivo sem direito (faltas, afastamento): não há o que mostrar
   const relevantes = aquisitivos.filter((a) => !aquisitivoSemSaldo(a.situacao) || a.diasUsados > 0);
@@ -595,6 +607,8 @@ function MinhasFerias({
           {avisoSolicitar}
         </div>
       )}
+
+      {escolhasDecimo && <EscolhaDoDecimo escolhas={escolhasDecimo} modo={modoDecimo} hoje={hoje} />}
 
       {relevantes.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.8rem" }}>
@@ -684,6 +698,79 @@ function MinhasFerias({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+const DIA_SP = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+/**
+ * O adiantamento do 13º de quem não solicita as próprias férias (o gestor
+ * lança): a escolha é da pessoa, uma por ano, até 31/01 do ano das férias
+ * (Lei 4.749/65), e vai no primeiro período de férias daquele ano. O banco
+ * confere o prazo e refaz o 13º das férias ainda não efetivadas.
+ */
+function EscolhaDoDecimo({ escolhas, modo, hoje }: { escolhas: EscolhaDecimo[]; modo: ModoPrazo; hoje: string }) {
+  const [salvando, iniciar] = useTransition();
+  const router = useRouter();
+  const anos = anosDaEscolhaDecimo(hoje, escolhas, modo);
+
+  const escolher = (ano: number, quer: boolean) => iniciar(async () => {
+    const r = await escolherDecimo({ ano, quer });
+    if (r.error) { toast.error(r.error); return; }
+    toast.success(r.message ?? "Escolha salva.");
+    router.refresh();
+  });
+
+  return (
+    <div className="card card-pad">
+      <span style={{ fontWeight: 700, fontSize: "0.92rem" }}>Adiantamento do 13º salário</span>
+      <p className="soft" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.75rem" }}>
+        A 1ª parcela do 13º pode ser paga junto com as suas férias, uma vez por ano. Escolha até
+        31 de janeiro do ano das férias: ela vai no primeiro período de férias daquele ano.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        {anos.map(({ ano, prazo, aberto, escolha }) => (
+          <div
+            key={ano}
+            style={{
+              display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between",
+              gap: "0.5rem 1rem", padding: "0.6rem 0.75rem", border: "1px solid var(--border)", borderRadius: 9,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                Férias de {ano}
+                {aberto && !escolha && <Badge tone="amber">Escolha pendente</Badge>}
+              </div>
+              <div className="soft" style={{ fontSize: "0.76rem" }}>
+                {escolha
+                  ? `${escolha.quer ? "Você quer adiantar" : "Você não quer adiantar"} (escolhido em ${DIA_SP.format(new Date(escolha.escolhidoEm))}).`
+                  : "Você ainda não escolheu."}
+                {aberto ? ` Pode mudar até ${formatDate(prazo)}.` : ` Prazo encerrado em ${formatDate(prazo)}.`}
+              </div>
+            </div>
+            {aberto && (
+              <div style={{ display: "inline-flex", gap: "0.35rem" }} role="group" aria-label={`Adiantamento do 13º em ${ano}`}>
+                <button
+                  type="button" disabled={salvando} aria-pressed={escolha?.quer === true}
+                  className={`btn btn-sm ${escolha?.quer === true ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => escolher(ano, true)}
+                >
+                  Quero adiantar
+                </button>
+                <button
+                  type="button" disabled={salvando} aria-pressed={escolha?.quer === false}
+                  className={`btn btn-sm ${escolha?.quer === false ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => escolher(ano, false)}
+                >
+                  Não quero
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

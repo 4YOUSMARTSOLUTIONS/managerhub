@@ -38,6 +38,7 @@ const ENTITY_LABEL: Record<string, string> = {
   pnr_categories: "Categoria PNR", pnr_kpis: "KPI PNR", sustainability_kpis: "KPI de sustentabilidade",
   feedback_competencies: "Competência de feedback", feedback_cadence_rules: "Cadência de feedback",
   holidays: "Feriado", individual_rv_config: "Remuneração variável",
+  ferias_decimo_escolhas: "Férias: escolha do 13º",
 };
 
 const ACTION_LABEL: Record<string, { label: string; tone: Tone }> = {

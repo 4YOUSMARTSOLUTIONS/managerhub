@@ -3,8 +3,9 @@
  *
  * O modelo vem com quem só o gestor lança (níveis que não solicitam as
  * próprias férias) e o saldo de cada um, só para consulta. O gestor preenche
- * início, término, abono e 13º; quem tem dois ou três períodos ocupa duas ou
- * três linhas. As colunas de consulta são ignoradas na leitura.
+ * início, término e abono; quem tem dois ou três períodos ocupa duas ou três
+ * linhas. As colunas de consulta são ignoradas na leitura. O 13º desses
+ * colaboradores é escolha deles (Minhas férias), e a coluna só mostra a escolha.
  *
  * Sem IO e sem framework: o diálogo usa no navegador.
  */
@@ -25,7 +26,7 @@ export const LOTE_COLUNAS = [
   "Início das férias",
   "Término das férias",
   "Abono (dias)",
-  "Adiantar 13º",
+  "13º (escolha do colaborador)",
 ] as const;
 
 export const LOTE_INSTRUCOES: string[][] = [
@@ -36,7 +37,7 @@ export const LOTE_INSTRUCOES: string[][] = [
   [""],
   ["Início e Término das férias: datas no formato DD/MM/AAAA. O início precisa cair de segunda a quinta, fora de feriado e dos 2 dias antes de um feriado."],
   ["Abono (dias): dias vendidos, de 0 a 10 (até um terço do direito). Em branco vale 0."],
-  ["Adiantar 13º: Sim para adiantar a 1ª parcela do 13º junto destas férias. Em branco vale Não."],
+  ["13º (escolha do colaborador): só para consulta. O adiantamento do 13º é escolha de cada colaborador, em Minhas férias, até 31/01 do ano das férias; o sistema aplica no primeiro período do ano."],
   ["Férias divididas: repita a linha da pessoa (mesma unidade e matrícula), uma por período, até 3. Um dos períodos precisa ter ao menos 14 dias e nenhum menos de 5."],
   [""],
   ["Ao importar, cada pessoa passa pelas mesmas regras do botão Lançar férias. A prévia mostra quem está pronto e quem foi recusado, com o motivo; as aceitas entram aprovadas e seguem para a efetivação do DP."],
@@ -53,6 +54,8 @@ export type ModeloLotePessoa = {
   aqFim: string | null;
   saldo: number | null;
   gozarAte: string | null;
+  /** a escolha anual do 13º, já por extenso ("2027: quer adiantar"); null = não escolheu */
+  decimo?: string | null;
 };
 
 const br = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
@@ -63,7 +66,7 @@ export function linhasDoModeloLote(pessoas: ModeloLotePessoa[]): unknown[][] {
     ...pessoas.map((p) => [
       p.unidade ?? "", p.matricula ?? "", p.nome ?? "", p.setor ?? "",
       p.aqInicio && p.aqFim ? periodoAquisitivo(p.aqInicio, p.aqFim) : "",
-      p.saldo ?? "", br(p.gozarAte), "", "", "", "",
+      p.saldo ?? "", br(p.gozarAte), "", "", "", p.decimo || "Não escolheu",
     ]),
   ];
 }
@@ -96,7 +99,8 @@ function colunas(cab: unknown[]) {
     inicio: achar((s) => s.startsWith("inicio das ferias") || s === "inicio"),
     fim: achar((s) => s.startsWith("termino") || s.startsWith("fim das ferias") || s === "fim"),
     abono: achar((s) => s.startsWith("abono")),
-    decimo: achar((s) => s.includes("13")),
+    // só a coluna antiga "Adiantar 13º" é lida; "13º (escolha do colaborador)" é consulta
+    decimo: achar((s) => s.startsWith("adiantar 13")),
   };
 }
 

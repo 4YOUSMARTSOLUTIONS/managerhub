@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
@@ -8,15 +8,15 @@ import { Badge } from "@/components/ui/Badge";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import {
-  diasDoPeriodo, inicioMinimo, mensagemAntecedencia, motivoInicioInvalido, permissoesPorPeriodo,
-  rotuloAquisitivo, validarConjunto,
-  type AquisitivoInfo, type ContextoPrazos, type DecimoPedido, type FeriadoCustom, type PeriodoInput,
-  type PrazosLegais, type QuemLanca,
+  decimoPelaEscolha, diasDoPeriodo, inicioMinimo, mensagemAntecedencia, motivoInicioInvalido,
+  permissoesPorPeriodo, rotuloAquisitivo, validarConjunto,
+  type AquisitivoInfo, type ContextoPrazos, type DecimoPedido, type DecimoPelaEscolha, type FeriadoCustom,
+  type PeriodoInput, type PrazosLegais, type QuemLanca,
 } from "@/lib/ferias";
 import { FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, aquisitivoSemSaldo } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import {
-  getAquisitivosDe, lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias,
+  escolhasDecimoDe, getAquisitivosDe, lancarFerias, reagendarFerias, reenviarFerias, solicitarFerias,
 } from "@/lib/actions/ferias";
 
 /**
@@ -35,7 +35,7 @@ import {
  */
 export function FeriasSolicitarDialog({
   modo, pessoas, aquisitivos, feriados, hoje, inicial, ehDp = false, usaFolha = false,
-  antecedencia = 0, antecedenciaQuem = "colaborador", decimos, prazos, pedidoEm, onFechar,
+  antecedencia = 0, antecedenciaQuem = "colaborador", decimos, prazos, pedidoEm, alvoId, onFechar,
 }: {
   modo: "solicitar" | "lancar" | "reenviar" | "reagendar";
   /** só no modo lancar: quem o usuário pode programar */
@@ -68,12 +68,16 @@ export function FeriasSolicitarDialog({
   prazos?: PrazosLegais;
   /** correção e reagendamento: a data do pedido original do que já vinha pedido */
   pedidoEm?: { abono?: string | null; decimo?: string | null };
+  /** correção e reagendamento: de quem são as férias (o 13º do operacional segue a escolha dele) */
+  alvoId?: string;
   onFechar: () => void;
 }) {
   const [userId, setUserId] = useState<string[]>([]);
   // aquisitivos de quem está sendo lançado (modo lancar)
   const [doAlvo, setDoAlvo] = useState<AquisitivoInfo[] | null>(null);
   const [decimosAlvo, setDecimosAlvo] = useState<DecimoPedido[]>([]);
+  // operacional: o 13º não é do formulário, segue a escolha anual da pessoa
+  const [escolhaAlvo, setEscolhaAlvo] = useState<DecimoPelaEscolha | null>(null);
   const [carregandoAlvo, setCarregandoAlvo] = useState(false);
   const [erroAlvo, setErroAlvo] = useState("");
   const pedido = useRef(0);
@@ -122,6 +126,27 @@ export function FeriasSolicitarDialog({
       : undefined),
     [prazos, antecedenciaQuem, hoje, pedidoEm?.abono, pedidoEm?.decimo],
   );
+  // correção e reagendamento: a pessoa já é conhecida ao abrir
+  useEffect(() => {
+    if (!alvoId || (modo !== "reenviar" && modo !== "reagendar")) return;
+    let vivo = true;
+    escolhasDecimoDe(alvoId).then((r) => {
+      if (vivo && !("error" in r)) setEscolhaAlvo(r);
+    });
+    return () => { vivo = false; };
+  }, [alvoId, modo]);
+
+  // operacional: o que a escolha anual faz com cada período (o banco grava igual)
+  const pelaEscolha = useMemo(
+    () => (escolhaAlvo?.bloqueado ? decimoPelaEscolha(periodos, escolhaAlvo.escolhas, decs) : null),
+    [escolhaAlvo, periodos, decs],
+  );
+  // o que vai para a validação e para o banco: sem 13º do formulário quando é pela escolha
+  const periodosEnvio = useMemo(
+    () => (pelaEscolha ? periodos.map((p) => ({ ...p, decimo: false })) : periodos),
+    [pelaEscolha, periodos],
+  );
+
   // abono só no primeiro período do aquisitivo; 13º uma vez por ano; e os prazos
   const permissoes = useMemo(
     () => permissoesPorPeriodo(periodos, aqs, decs, ctxPrazos),
@@ -133,6 +158,7 @@ export function FeriasSolicitarDialog({
     setUserId(ids);
     setDoAlvo(null);
     setDecimosAlvo([]);
+    setEscolhaAlvo(null);
     setErroAlvo("");
     const n = ++pedido.current;
     if (ids.length === 0) { setCarregandoAlvo(false); return; }
@@ -143,6 +169,7 @@ export function FeriasSolicitarDialog({
       if (r.error !== undefined) { setErroAlvo(r.error); return; }
       setDoAlvo(r.aquisitivos);
       setDecimosAlvo(r.decimos);
+      setEscolhaAlvo(r.escolha);
     });
   };
 
@@ -158,7 +185,7 @@ export function FeriasSolicitarDialog({
     }
     // validação client: completa quando temos os aquisitivos, leve quando não
     if (aqs) {
-      const r = validarConjunto(periodos, aqs, hoje, feriados, {
+      const r = validarConjunto(periodosEnvio, aqs, hoje, feriados, {
         permiteDobro: modo === "lancar" && dobro,
         usaFolha,
         antecedencia,
@@ -168,8 +195,8 @@ export function FeriasSolicitarDialog({
       });
       if (r.erro) { setErro(r.erro); return; }
     } else {
-      for (let i = 0; i < periodos.length; i++) {
-        const p = periodos[i];
+      for (let i = 0; i < periodosEnvio.length; i++) {
+        const p = periodosEnvio[i];
         if (!p.inicio || !p.fim) { setErro("Informe o início e o término de cada período."); return; }
         if (avisos[i]) { setErro(avisos[i] as string); return; }
         const d = permissoes[i].decimo;
@@ -182,17 +209,17 @@ export function FeriasSolicitarDialog({
         ? await solicitarFerias({ periodos, hoje })
         : modo === "lancar"
           ? await lancarFerias({
-              userId: userId[0], periodos, hoje,
+              userId: userId[0], periodos: periodosEnvio, hoje,
               justificativaDobro: dobro ? justificativa : undefined,
             })
           : modo === "reagendar"
             ? await reagendarFerias({
                 id: inicial!.id, inicio: periodos[0].inicio, fim: periodos[0].fim,
-                abono: periodos[0].abono, decimo: periodos[0].decimo, hoje,
+                abono: periodos[0].abono, decimo: periodosEnvio[0].decimo, hoje,
               })
             : await reenviarFerias({
                 id: inicial!.id, inicio: periodos[0].inicio, fim: periodos[0].fim,
-                abono: periodos[0].abono, decimo: periodos[0].decimo, hoje,
+                abono: periodos[0].abono, decimo: periodosEnvio[0].decimo, hoje,
               });
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Salvo.");
@@ -247,6 +274,13 @@ export function FeriasSolicitarDialog({
               {antecedenciaQuem === "colaborador" ? "Peça" : "Lance"} com pelo menos {antecedencia} dias
               de antecedência, para o departamento pessoal calcular e pagar a tempo: o primeiro dia
               possível é <strong>{formatDate(minimo)}</strong>.
+            </p>
+          )}
+
+          {pelaEscolha && (
+            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
+              O adiantamento do 13º desta pessoa é escolha dela, em Minhas férias, até 31/01 do ano
+              das férias. O sistema aplica no primeiro período do ano.
             </p>
           )}
 
@@ -364,6 +398,17 @@ export function FeriasSolicitarDialog({
                   />
                 </div>
               </div>
+              {pelaEscolha ? (
+                pelaEscolha[i].texto && (
+                  <p
+                    className={pelaEscolha[i].leva ? undefined : "soft"}
+                    style={{ fontSize: "0.8rem", margin: "0.5rem 0 0", fontWeight: pelaEscolha[i].leva ? 600 : 400 }}
+                  >
+                    {pelaEscolha[i].texto}
+                  </p>
+                )
+              ) : (
+              <>
               <label
                 style={{
                   display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", marginTop: "0.5rem",
@@ -389,6 +434,8 @@ export function FeriasSolicitarDialog({
                   {permDecimo.motivo}
                 </p>
               )}
+              </>
+              )}
               {permAbono?.ok === false && (
                 <p
                   className={p.abono > 0 ? undefined : "soft"}
@@ -401,7 +448,7 @@ export function FeriasSolicitarDialog({
               {permAbono?.ok && permAbono.aviso && p.abono > 0 && (
                 <p style={{ fontSize: "0.76rem", margin: "0.3rem 0 0", color: "var(--mh-warning)" }}>{permAbono.aviso}</p>
               )}
-              {permDecimo.ok && permDecimo.aviso && p.decimo && (
+              {!pelaEscolha && permDecimo.ok && permDecimo.aviso && p.decimo && (
                 <p style={{ fontSize: "0.76rem", margin: "0.3rem 0 0", color: "var(--mh-warning)" }}>{permDecimo.aviso}</p>
               )}
               {avisos[i] && (

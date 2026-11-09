@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { actionContext, dpActionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Json } from "@/types/database";
-import { aquisitivoDaLinha, type AquisitivoInfo, type DecimoPedido, type PrazosLegais } from "@/lib/ferias";
+import {
+  aquisitivoDaLinha, type AquisitivoInfo, type DecimoPedido, type DecimoPelaEscolha, type PrazosLegais,
+} from "@/lib/ferias";
 import type { PeriodoFolha } from "@/lib/ferias-folha";
 import type { AgendaItem } from "@/lib/ferias-agenda";
 import type { ModeloLotePessoa } from "@/lib/ferias-lote";
@@ -319,11 +321,12 @@ export async function setNivelSolicitaFerias(
 export async function getAquisitivosDe(
   input: { userId: string; hoje: string },
 ): Promise<
-  { aquisitivos: AquisitivoInfo[]; decimos: DecimoPedido[]; error?: undefined } | { error: string }
+  | { aquisitivos: AquisitivoInfo[]; decimos: DecimoPedido[]; escolha: DecimoPelaEscolha | null; error?: undefined }
+  | { error: string }
 > {
   try {
     const { supabase, tenantId } = await actionContext();
-    const [{ data, error }, { data: comDecimo }] = await Promise.all([
+    const [{ data, error }, { data: comDecimo }, { data: escolha }] = await Promise.all([
       supabase.rpc("ferias_periodos_aquisitivos", {
         p_tenant: tenantId, p_user: input.userId, p_hoje: input.hoje,
       }),
@@ -336,11 +339,50 @@ export async function getAquisitivosDe(
         .eq("user_id", input.userId)
         .eq("adiantar_decimo_terceiro", true)
         .in("status", ["solicitada", "aprovada", "efetivada"]),
+      // operacional: o 13º segue a escolha anual dele, não o formulário
+      supabase.rpc("ferias_escolhas_decimo", { p_tenant: tenantId, p_user: input.userId }),
     ]);
     if (error) return { error: error.message };
     return {
       aquisitivos: (data ?? []).map(aquisitivoDaLinha),
       decimos: (comDecimo ?? []).map((d) => ({ inicio: d.start_date, fim: d.end_date })),
+      escolha: (escolha ?? null) as unknown as DecimoPelaEscolha | null,
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** A escolha anual do 13º de alguém (a própria pessoa, o gestor dela ou o DP). */
+export async function escolhasDecimoDe(userId: string): Promise<DecimoPelaEscolha | { error: string }> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { data, error } = await supabase.rpc("ferias_escolhas_decimo", { p_tenant: tenantId, p_user: userId });
+    if (error) return { error: error.message };
+    return data as unknown as DecimoPelaEscolha;
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * O colaborador operacional escolhe se quer o adiantamento do 13º nas férias
+ * de um ano. O banco confere o prazo (31/01 do ano) e refaz o 13º das férias
+ * daquele ano que o DP ainda não efetivou.
+ */
+export async function escolherDecimo(input: { ano: number; quer: boolean }): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await actionContext();
+    const { error } = await supabase.rpc("ferias_escolher_decimo", {
+      p_tenant: tenantId, p_ano: input.ano, p_quer: input.quer,
+    });
+    if (error) return { error: error.message };
+    revalidar();
+    return {
+      ok: true,
+      message: input.quer
+        ? `Pronto: você vai receber o adiantamento do 13º com as férias de ${input.ano}.`
+        : `Pronto: sem adiantamento do 13º nas férias de ${input.ano}.`,
     };
   } catch (e) {
     return { error: (e as Error).message };
