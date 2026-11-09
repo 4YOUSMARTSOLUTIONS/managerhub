@@ -105,6 +105,18 @@ export function CalendarioDeFerias({
   const noMes = useMemo(() => visiveis.filter((i) => i.inicio <= mesFim && i.fim >= mesIni), [visiveis, mesIni, mesFim]);
   const pessoasNoMes = new Set(noMes.map((i) => i.userId)).size;
 
+  // quantos períodos de cada situação caem no mês (com o setor escolhido): o
+  // número fica no próprio botão do filtro, ligado ou desligado
+  const porSituacao = useMemo(() => {
+    const conta: Record<StatusAgenda, number> = { efetivada: 0, aprovada: 0, solicitada: 0 };
+    for (const i of itens) {
+      if (i.inicio > mesFim || i.fim < mesIni) continue;
+      if (setorFiltro && (setorFiltro === "__sem__" ? i.setorId : i.setorId !== setorFiltro)) continue;
+      conta[i.status] += 1;
+    }
+    return conta;
+  }, [itens, mesIni, mesFim, setorFiltro]);
+
   // legenda: os setores com alguém de férias no mês, na ordem do cadastro
   const legenda = useMemo(() => {
     const porSetor = new Map<string, Set<string>>();
@@ -158,31 +170,69 @@ export function CalendarioDeFerias({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem", paddingTop: "0.9rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
           <button type="button" className="icon-btn" onClick={() => mudarMes(-1)} aria-label="Mês anterior"><ChevronLeft size={16} /></button>
-          <div style={{ minWidth: 150, textAlign: "center", fontWeight: 700 }}>{MESES[m]} {ano}</div>
+          <div style={{ minWidth: 150, textAlign: "center", fontWeight: 700, fontSize: "1.02rem" }}>{MESES[m]} {ano}</div>
           <button type="button" className="icon-btn" onClick={() => mudarMes(1)} aria-label="Próximo mês"><ChevronRight size={16} /></button>
           {naoEhEsteMes && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMes(`${hoje.slice(0, 7)}-01`); setSel(null); }}>Hoje</button>
           )}
         </div>
         <span className="soft" style={{ fontSize: "0.82rem" }}>
-          {carregando ? "Carregando…" : `${pessoasNoMes} pessoa(s) de férias no mês`}
+          {carregando
+            ? "Carregando…"
+            : pessoasNoMes === 0
+              ? "Ninguém de férias neste mês com estes filtros"
+              : `${pessoasNoMes} pessoa${pessoasNoMes > 1 ? "s" : ""} de férias no mês`}
         </span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-          {STATUS_AGENDA.map((s) => (
-            <label key={s} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.8rem", cursor: "pointer" }}>
-              <input type="checkbox" checked={statusOn[s]} onChange={(e) => setStatusOn({ ...statusOn, [s]: e.target.checked })} />
-              <span style={{ display: "inline-block", width: 18, height: 10, borderRadius: 3, ...estiloDaSituacao(s, "var(--mh-text-2)") }} />
-              {STATUS_AGENDA_CURTO[s]}
-            </label>
-          ))}
-          <select className="input" value={setorFiltro} onChange={(e) => setSetorFiltro(e.target.value)} style={{ maxWidth: 200, fontSize: "0.82rem" }}>
-            <option value="">Todos os setores</option>
-            {[...setores].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            <option value="__sem__">Sem setor</option>
-          </select>
+        <select className="input" value={setorFiltro} onChange={(e) => setSetorFiltro(e.target.value)}
+          aria-label="Setor" style={{ marginLeft: "auto", width: 220, fontSize: "0.82rem" }}>
+          <option value="">Todos os setores</option>
+          {[...setores].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <option value="__sem__">Sem setor</option>
+        </select>
+      </div>
+
+      {/* O que o calendário mostra, e a legenda das situações que também é o
+          filtro: cada botão liga e desliga a sua, com a contagem do mês. */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem 1rem", flexWrap: "wrap" }}>
+        <p className="soft" style={{ fontSize: "0.8rem", margin: 0, flex: "1 1 320px" }}>
+          Cada barra é uma pessoa fora nos dias que ela atravessa, na cor do setor. Clique num dia
+          para ver quem está de férias nele, ou numa barra para ver o período.
+        </p>
+        <div role="group" aria-label="Situações mostradas" style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap" }}>
+          {STATUS_AGENDA.map((s) => {
+            const ligado = statusOn[s];
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={ligado}
+                title={ligado ? "Clique para esconder" : "Clique para mostrar"}
+                onClick={() => setStatusOn({ ...statusOn, [s]: !ligado })}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "0.45rem",
+                  padding: "0.32rem 0.75rem", borderRadius: "var(--mh-radius-full)",
+                  border: `1px solid ${ligado ? "var(--mh-border-strong)" : "var(--mh-border)"}`,
+                  background: ligado ? "var(--mh-surface-2)" : "transparent",
+                  color: ligado ? "var(--mh-text-1)" : "var(--mh-text-3)",
+                  fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                  transition: "background var(--mh-dur-fast) var(--mh-ease), color var(--mh-dur-fast) var(--mh-ease)",
+                }}
+              >
+                <span aria-hidden style={{
+                  display: "inline-block", width: 18, height: 11, borderRadius: 3,
+                  ...estiloDaSituacao(s, "var(--mh-primary-500)"),
+                  opacity: ligado ? 1 : 0.35,
+                }} />
+                {STATUS_AGENDA_CURTO[s]}
+                <span className="tabular" style={{ fontWeight: 700, color: ligado ? "var(--mh-text-2)" : "var(--mh-text-3)" }}>
+                  {porSituacao[s]}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -205,7 +255,7 @@ export function CalendarioDeFerias({
         <div style={{ minWidth: 760 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", borderBottom: "1px solid var(--mh-border)" }}>
             {WEEKDAYS_PT.map((w) => (
-              <div key={w} className="soft" style={{ textAlign: "center", padding: "0.4rem 0", fontSize: "0.7rem", fontWeight: 600 }}>{w.slice(0, 3)}</div>
+              <div key={w} className="soft" style={{ textAlign: "center", padding: "0.55rem 0", fontSize: "0.74rem", fontWeight: 600 }}>{w.slice(0, 3)}</div>
             ))}
           </div>
 
@@ -215,7 +265,10 @@ export function CalendarioDeFerias({
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                gridTemplateRows: `26px repeat(${faixas}, 23px) ${faixas ? 6 : 34}px`,
+                // altura mínima de semana de calendário: sem ninguém de férias,
+                // a grade ficava com 60px por semana e parecia uma régua
+                gridTemplateRows: `30px repeat(${faixas}, 24px) minmax(8px, 1fr)`,
+                minHeight: 104,
                 borderBottom: w < grade.length - 1 ? "1px solid var(--mh-border)" : undefined,
               }}
             >
@@ -245,10 +298,10 @@ export function CalendarioDeFerias({
                 const doMes = d.getMonth() === m;
                 const ehHoje = ds === hoje;
                 return (
-                  <div key={`num-${ds}`} style={{ gridColumn: c + 1, gridRow: 1, display: "flex", justifyContent: "flex-end", padding: "0.2rem 0.3rem", pointerEvents: "none", zIndex: 1 }}>
+                  <div key={`num-${ds}`} style={{ gridColumn: c + 1, gridRow: 1, display: "flex", justifyContent: "flex-end", padding: "0.3rem 0.4rem", pointerEvents: "none", zIndex: 1 }}>
                     <span style={{
-                      display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 20, height: 20,
-                      borderRadius: 999, fontSize: "0.72rem", fontWeight: 700,
+                      display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 22, height: 22,
+                      borderRadius: 999, fontSize: "0.78rem", fontWeight: 700,
                       background: ehHoje ? "var(--mh-primary-500)" : "transparent",
                       color: ehHoje ? "#fff" : doMes ? "var(--mh-text-1)" : "var(--mh-text-3)",
                     }}>
@@ -274,7 +327,7 @@ export function CalendarioDeFerias({
                       margin: `1px ${s.termina ? 3 : 0}px 1px ${s.comeca ? 3 : 0}px`,
                       borderRadius: raio, zIndex: 2, minWidth: 0,
                       display: "block", textAlign: "left", cursor: "pointer",
-                      fontSize: "0.68rem", lineHeight: "19px", padding: "0 0.3rem",
+                      fontSize: "0.72rem", lineHeight: "20px", padding: "0 0.35rem",
                       color: "var(--mh-text-1)", fontWeight: 600,
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}
