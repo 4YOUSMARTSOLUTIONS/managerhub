@@ -2276,7 +2276,7 @@ export type Database = {
       save_occurrence_draft: { Args: { p_id: string; p_draft: Json }; Returns: undefined }
       admin_create_employee: { Args: { p_data: Json; p_password: string }; Returns: string }
       admin_update_employee: { Args: { p_user: string; p_data: Json }; Returns: undefined }
-      admin_import_employees: { Args: { p_rows: Json; p_password: string }; Returns: Json }
+      admin_import_employees: { Args: { p_rows: Json; p_password: string; p_simular?: boolean }; Returns: Json }
       platform_companies: {
         Args: Record<PropertyKey, never>
         Returns: {

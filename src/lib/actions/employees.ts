@@ -86,13 +86,73 @@ export type ImportSummary = {
   /** colaboradores já cadastrados em que a planilha mudou o nível do cargo ("Perfil Função") */
   levels: number;
   levelsList: { nome: string; cpf: string; motivo: string }[];
+  /**
+   * trocas de valor que já existia (função, nível, setor, subsetor, gestor,
+   * hierarquia): cada uma abre uma vigência no histórico na data informada
+   */
+  movimentacoes: number;
+  movimentacoesList: { nome: string; cpf: string; motivo: string }[];
+  /** cadastros em que a planilha só completou campo vazio (sem data, sem vigência nova) */
+  preenchimentos: number;
+  /** só na prévia: quem tem movimentação e precisa de data antes de importar */
+  pendentes: PendenteImportacao[];
+  /** admissões corrigidas (as marcadas na prévia, ou vazias preenchidas) */
+  admissoes: number;
+  admissoesList: { nome: string; cpf: string; motivo: string }[];
+  /** só na prévia: admissão da planilha diferente da cadastrada */
+  admissoesDivergentes: AdmissaoDivergente[];
   errors: { nome?: string; cpf?: string; erro: string }[];
+};
+
+export type AdmissaoDivergente = {
+  cpf: string;
+  nome: string;
+  matricula: string | null;
+  /** AAAA-MM-DD */
+  atual: string;
+  /** AAAA-MM-DD */
+  planilha: string;
+};
+
+export type MudancaImportacao = { campo: string; de: string | null; para: string | null };
+
+export type PendenteImportacao = {
+  /** só dígitos, a chave para devolver a data à linha da planilha */
+  cpf: string;
+  nome: string;
+  matricula: string | null;
+  unidade: string;
+  /** início da situação atual (AAAA-MM-DD): a data da mudança não pode ser anterior */
+  desde: string | null;
+  mudancas: MudancaImportacao[];
 };
 
 const EMPTY_SUMMARY: ImportSummary = {
   created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0, levels: 0,
-  skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], levelsList: [], errors: [],
+  movimentacoes: 0, preenchimentos: 0, admissoes: 0,
+  skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], levelsList: [],
+  movimentacoesList: [], pendentes: [], admissoesList: [], admissoesDivergentes: [], errors: [],
 };
+
+/**
+ * Prévia da importação: o banco roda a planilha inteira e desfaz tudo no fim.
+ * Serve para saber, ANTES de gravar, quem muda de função, nível, setor,
+ * subsetor, gestor ou hierarquia, e pedir a data de cada mudança.
+ */
+export async function simularImportacao(rows: Record<string, string>[]): Promise<ImportSummary> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("admin_import_employees", {
+      p_rows: rows as unknown as never,
+      p_password: "",
+      p_simular: true,
+    });
+    if (error) return { ...EMPTY_SUMMARY, errors: [{ erro: error.message }] };
+    return { ...EMPTY_SUMMARY, ...(data as unknown as ImportSummary) };
+  } catch (e) {
+    return { ...EMPTY_SUMMARY, errors: [{ erro: (e as Error).message }] };
+  }
+}
 
 export async function importEmployees(
   rows: Record<string, string>[],
