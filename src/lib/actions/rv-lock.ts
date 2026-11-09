@@ -5,6 +5,7 @@ import { adminActionContext } from "./context";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { verifyOwnPassword } from "./verify-password";
 import { fatorRv } from "@/lib/rv-proporcional";
+import { poteDoMes, trechosDeFuncao, type HistoricoFuncaoRow } from "@/lib/rv-funcao";
 import { redutoresDoMes, kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
 import type { ActionState } from "./types";
 import { fetchAll } from "@/lib/supabase/fetch-all";
@@ -67,6 +68,19 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   // de serviço, que enxerga todas as empresas, então o recorte por vínculo
   // precisa continuar: o lote mantém o recorte e cabe na URL.
   const idsDosVinculos = (mems ?? []).map((m) => m.id);
+
+  // a função de cada dia do mês sai do histórico com data: quem trocou de
+  // função no meio do mês tem o valor cheio pesado pelos dias (rv-funcao.ts)
+  const { data: historico } = await fetchAll(() =>
+    admin.from("membership_history").select("membership_id, effective_from, effective_to, position_id")
+      .eq("tenant_id", tenantId).order("id"));
+  const historicoDe = new Map<string, HistoricoFuncaoRow[]>();
+  for (const h of historico ?? []) {
+    const arr = historicoDe.get(h.membership_id) ?? [];
+    arr.push(h);
+    historicoDe.set(h.membership_id, arr);
+  }
+
   const vinculoUnidades: { membership_id: string; unit_id: string }[] = [];
   for (let i = 0; i < idsDosVinculos.length; i += 200) {
     const { data: lote } = await admin
@@ -96,24 +110,10 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
     .filter((r) => r.faixas.length > 0);
   const kindsPorFaixa = kindsComRedutor(regras);
 
-  // pote vigente na competência: a última vigência <= o mês, com o valor do
-  // colaborador ganhando do valor da função. É a mesma resolução da tela.
+  // pote da competência: a última vigência <= o mês, com o valor do
+  // colaborador ganhando do valor da função, e cada função pesada pelos dias em
+  // que valeu no mês. É a mesma resolução da tela (rv-funcao.ts).
   const lista = cfgs ?? [];
-  const poteDe = (userId: string, positionId: string | null): number => {
-    const ultimo = (escopo: "user" | "position") => {
-      let best: (typeof lista)[number] | null = null;
-      for (const c of lista) {
-        if (c.scope !== escopo) continue;
-        if (escopo === "user" ? c.user_id !== userId : c.position_id !== positionId) continue;
-        if (c.effective_from <= period && (!best || c.effective_from > best.effective_from)) best = c;
-      }
-      return best;
-    };
-    const u = ultimo("user");
-    if (u) return Number(u.value);
-    const p = positionId ? ultimo("position") : null;
-    return p ? Number(p.value) : 0;
-  };
 
   const linhas: {
     tenant_id: string; period: string; user_id: string;
@@ -123,7 +123,10 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   }[] = [];
 
   for (const m of mems ?? []) {
-    const cheio = poteDe(m.user_id, m.position_id);
+    const cheio = poteDoMes(
+      period, m.user_id, trechosDeFuncao(historicoDe.get(m.id) ?? []), lista,
+      { admissao: m.admission_date, desligamento: m.dismissed_at }, m.position_id,
+    );
     // sem pote não há o que congelar: uma linha com zero sugeriria que houve RV
     // e ela foi cortada, que é uma história diferente
     if (!(cheio > 0)) continue;

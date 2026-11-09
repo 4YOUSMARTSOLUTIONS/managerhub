@@ -2,6 +2,7 @@ import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { kindsComRedutor, type RegraRedutor } from "@/lib/rv-redutores";
+import { linhaDoTempoRv, trechosDeFuncao, type HistoricoFuncaoRow } from "@/lib/rv-funcao";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type RvCongeladoRow } from "@/components/IndividualGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
@@ -134,8 +135,8 @@ export default async function GoalsPage() {
     // admissao/desligamento entram junto: quem trabalhou meio mês recebe meio mês,
     // e a data do vínculo é o mesmo tipo de recorte que as férias
     admin
-      ? admin.from("memberships").select("user_id, position_id, admission_date, dismissed_at").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { user_id: string; position_id: string | null; admission_date: string | null; dismissed_at: string | null }[] }),
+      ? admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      : Promise.resolve({ data: [] as { id: string; user_id: string; position_id: string | null; admission_date: string | null; dismissed_at: string | null }[] }),
     // Férias e afastamentos que descontam. Pelo service client, como a RV: a RLS
     // da tabela é owner/admin, mas o GESTOR precisa do fator para entender o valor
     // da equipe dele. O que chega aqui é só o intervalo, já recortado aos donos
@@ -193,29 +194,37 @@ export default async function GoalsPage() {
     entriesByGoal.set(e.goal_id, arr);
   }
 
+  // A função de cada dia vem do histórico com data: quem trocou de função no
+  // meio do mês tem o valor cheio pesado pelos dias de cada uma (rv-funcao.ts,
+  // o mesmo cálculo do fechamento da competência). Em lotes, pelo teto de 1000
+  // linhas e pelo tamanho da URL.
+  const historicoDe = new Map<string, HistoricoFuncaoRow[]>();
+  if (admin) {
+    const idsDosVinculos = (ownerMems ?? []).map((m) => m.id);
+    for (let i = 0; i < idsDosVinculos.length; i += 200) {
+      const lote = idsDosVinculos.slice(i, i + 200);
+      const { data: hist } = await fetchAll(() =>
+        admin.from("membership_history").select("id, membership_id, effective_from, effective_to, position_id")
+          .in("membership_id", lote).order("id"));
+      for (const h of hist ?? []) {
+        const arr = historicoDe.get(h.membership_id) ?? [];
+        arr.push(h);
+        historicoDe.set(h.membership_id, arr);
+      }
+    }
+  }
+
+  // Linha do tempo do valor cheio por dono: um ponto em cada mês em que o valor
+  // pode mudar; a tela pega o último ponto <= competência
   const rvTimelines: { ownerId: string; from: string; value: number }[] = [];
   {
-    const posByOwner = new Map((ownerMems ?? []).map((m) => [m.user_id, m.position_id]));
     const cfgs = rvCfgs ?? [];
-    for (const ownerId of ownerIds) {
-      const posId = posByOwner.get(ownerId) ?? null;
-      const userCfgs = cfgs.filter((c) => c.scope === "user" && c.user_id === ownerId);
-      const posCfgs = posId ? cfgs.filter((c) => c.scope === "position" && c.position_id === posId) : [];
-      if (userCfgs.length === 0 && posCfgs.length === 0) continue;
-      // resolve a linha do tempo: em cada breakpoint vale o override do colaborador
-      // (ultima vigencia <= ponto); sem override, vale o da funcao
-      const latest = (list: typeof cfgs, at: string) => {
-        let best: (typeof cfgs)[number] | null = null;
-        for (const c of list) if (c.effective_from <= at && (!best || c.effective_from > best.effective_from)) best = c;
-        return best;
-      };
-      const breakpoints = [...new Set([...userCfgs, ...posCfgs].map((c) => c.effective_from))].sort();
-      for (const bp of breakpoints) {
-        const u = latest(userCfgs, bp);
-        const pcfg = latest(posCfgs, bp);
-        const value = u ? u.value : pcfg ? pcfg.value : 0;
-        rvTimelines.push({ ownerId, from: bp, value });
-      }
+    for (const m of ownerMems ?? []) {
+      const linha = linhaDoTempoRv(
+        m.user_id, trechosDeFuncao(historicoDe.get(m.id) ?? []), cfgs,
+        { admissao: m.admission_date, desligamento: m.dismissed_at }, m.position_id,
+      );
+      for (const t of linha) rvTimelines.push({ ownerId: m.user_id, ...t });
     }
   }
 
