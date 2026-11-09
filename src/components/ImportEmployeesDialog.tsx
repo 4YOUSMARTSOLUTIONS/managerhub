@@ -105,7 +105,7 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
       ["Nome Completo", "Sim", "Nome completo"],
       ["Admissão", "Sim", "Data no formato dd/mm/aaaa"],
       ["Função", "Sim", "Cargo (criado automaticamente se não existir)"],
-      ["Perfil Função", "Não", "Ex.: Júnior, Pleno, Sênior"],
+      ["Perfil Função", "Não", "Nível do cargo (ex.: JUNIOR, PLENO, SENIOR). Atualiza também quem já está cadastrado; vazio mantém o atual"],
       ["Setor", "Sim", "Criado automaticamente se não existir"],
       ["Sub Setor", "Não", "Subsetor dentro do setor (opcional)"],
       ["Data de Nascimento", "Sim", "Formato dd/mm/aaaa"],
@@ -165,7 +165,7 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
   async function doImport() {
     setImporting(true); setSummary(null); setProgress("");
     const CHUNK = 150;
-    const agg: ImportSummary = { created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0, skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], errors: [] };
+    const agg: ImportSummary = { created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0, levels: 0, skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], levelsList: [], errors: [] };
     for (let i = 0; i < rows.length; i += CHUNK) {
       const part = rows.slice(i, i + CHUNK);
       setProgress(`Importando ${Math.min(i + part.length, rows.length)} de ${rows.length}…`);
@@ -176,11 +176,13 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
       agg.managers += res.managers ?? 0;
       agg.roles += res.roles ?? 0;
       agg.hierarchies += res.hierarchies ?? 0;
+      agg.levels += res.levels ?? 0;
       agg.skippedList.push(...(res.skippedList ?? []));
       agg.updatedList.push(...(res.updatedList ?? []));
       agg.managersList.push(...(res.managersList ?? []));
       agg.rolesList.push(...(res.rolesList ?? []));
       agg.hierarchiesList.push(...(res.hierarchiesList ?? []));
+      agg.levelsList.push(...(res.levelsList ?? []));
       agg.errors.push(...res.errors);
     }
     setImporting(false); setProgress("");
@@ -191,10 +193,11 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
     if (agg.managers > 0) parts.push(`${agg.managers} gestor(es) definido(s)`);
     if (agg.roles > 0) parts.push(`${agg.roles} perfil(is) alterado(s)`);
     if (agg.hierarchies > 0) parts.push(`${agg.hierarchies} hierarquia(s) definida(s)`);
+    if (agg.levels > 0) parts.push(`${agg.levels} nível(is) alterado(s)`);
     if (agg.skipped > 0) parts.push(`${agg.skipped} já existiam`);
     // só fecha sozinho quando tudo foi criado; havendo ignorados, recontratados ou
     // erros, mantém aberto para o usuário ver de quem se trata
-    if (agg.errors.length === 0 && agg.skipped === 0 && agg.updated === 0 && agg.managers === 0 && agg.roles === 0 && agg.hierarchies === 0) {
+    if (agg.errors.length === 0 && agg.skipped === 0 && agg.updated === 0 && agg.managers === 0 && agg.roles === 0 && agg.hierarchies === 0 && agg.levels === 0) {
       toast.success(`Importação concluída: ${parts.join(", ")}.`);
       onClose();
     } else {
@@ -293,6 +296,7 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
                 {summary.managers > 0 && <span className="badge badge-blue">{summary.managers} gestores definidos</span>}
                 {summary.roles > 0 && <span className="badge badge-blue">{summary.roles} perfis alterados</span>}
                 {summary.hierarchies > 0 && <span className="badge badge-blue">{summary.hierarchies} hierarquias definidas</span>}
+                {summary.levels > 0 && <span className="badge badge-blue">{summary.levels} níveis alterados</span>}
                 {summary.skipped > 0 && <span className="badge badge-amber">{summary.skipped} já existiam</span>}
                 {summary.errors.length > 0 && <span className="badge badge-red">{summary.errors.length} erros</span>}
               </div>
@@ -311,6 +315,15 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
                   <summary style={{ cursor: "pointer" }} className="muted">Hierarquias definidas ({summary.hierarchiesList.length})</summary>
                   <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 200, overflow: "auto" }}>
                     {summary.hierarchiesList.map((g, i) => <li key={i}>{g.nome} — {g.motivo}</li>)}
+                  </ul>
+                </details>
+              )}
+
+              {summary.levelsList.length > 0 && (
+                <details open style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
+                  <summary style={{ cursor: "pointer" }} className="muted">Níveis alterados ({summary.levelsList.length})</summary>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 200, overflow: "auto" }}>
+                    {summary.levelsList.map((g, i) => <li key={i}>{g.nome}: {g.motivo}</li>)}
                   </ul>
                 </details>
               )}

@@ -83,12 +83,15 @@ export type ImportSummary = {
   /** colaboradores em que a planilha mudou SÓ a hierarquia */
   hierarchies: number;
   hierarchiesList: { nome: string; cpf: string; motivo: string }[];
+  /** colaboradores já cadastrados em que a planilha mudou o nível do cargo ("Perfil Função") */
+  levels: number;
+  levelsList: { nome: string; cpf: string; motivo: string }[];
   errors: { nome?: string; cpf?: string; erro: string }[];
 };
 
 const EMPTY_SUMMARY: ImportSummary = {
-  created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0,
-  skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], errors: [],
+  created: 0, updated: 0, skipped: 0, managers: 0, roles: 0, hierarchies: 0, levels: 0,
+  skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], levelsList: [], errors: [],
 };
 
 export async function importEmployees(
