@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createEmployee, updateEmployee } from "@/lib/actions/employees";
 import { initialActionState } from "@/lib/actions/types";
@@ -48,6 +48,34 @@ const sectionTitle: React.CSSProperties = {
   margin: "0.4rem 0 0",
 };
 const grid2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" };
+
+/**
+ * O que a ficha está mudando e que é MOVIMENTAÇÃO: pede a data em que passou a
+ * valer, porque a RV pesa cada função pelos dias do mês. Campo que estava vazio
+ * e ganha valor é preenchimento, não movimentação (a mesma regra do banco, em
+ * `admin_update_employee`, que é quem trava de verdade).
+ */
+function movimentacoesDaFicha(form: HTMLFormElement, e: EmployeeData, gestor: string): string[] {
+  const fd = new FormData(form);
+  const v = (k: string) => String(fd.get(k) ?? "") || null;
+  const out: string[] = [];
+  const mudou = (label: string, novo: string | null, atual: string | null) => {
+    if (atual && novo !== atual) out.push(label);
+  };
+  const setor = v("department_id");
+  if (e.departmentId && setor !== e.departmentId) out.push("Setor");
+  // trocar o setor já é a movimentação; o subsetor vazio que ganha valor junto
+  // vai nela, e sozinho é preenchimento
+  mudou("Subsetor", v("subdepartment_id"), e.subdepartmentId);
+  mudou("Função", v("position_id"), e.positionId);
+  mudou("Nível", v("position_level_id"), e.positionLevelId);
+  mudou("Hierarquia", v("hierarchy_level_id"), e.hierarchyLevelId);
+  mudou("Gestor", gestor === SEM_GESTOR ? null : gestor || null, e.managerId);
+  const unidades = fd.getAll("unit_ids").map(String).filter(Boolean).sort().join(",");
+  const atuais = [...e.unitIds].sort().join(",");
+  if (atuais && unidades !== atuais) out.push("Unidade");
+  return out;
+}
 
 function Field({ label, children, req }: { label: string; children: React.ReactNode; req?: boolean }) {
   return (
@@ -126,6 +154,21 @@ export function EmployeeDialog({
   const [gestorEstado, setGestorEstado] = useState({ chave: chaveGestor, valor: gestorInicial });
   const gestor = gestorEstado.chave === chaveGestor ? gestorEstado.valor : gestorInicial;
   const setGestor = (valor: string) => setGestorEstado({ chave: chaveGestor, valor });
+  // movimentações que esta edição faz (pede a data); mesma técnica de chave
+  const formRef = useRef<HTMLFormElement>(null);
+  const chaveMov = `${open}|${employee?.userId ?? ""}`;
+  const [movEstado, setMovEstado] = useState<{ chave: string; valor: string[] }>({ chave: chaveMov, valor: [] });
+  const movimentacoes = movEstado.chave === chaveMov ? movEstado.valor : [];
+  // lido DEPOIS de o React pintar a mudança: trocar o setor recria o select de
+  // subsetor, e é o valor novo dele que conta
+  const recalcularMovimentacoes = (gestorAgora = gestor) => {
+    if (!employee) return;
+    setTimeout(() => {
+      if (!formRef.current) return;
+      const lista = movimentacoesDaFicha(formRef.current, employee, gestorAgora);
+      setMovEstado((s) => (s.chave === chaveMov && s.valor.join("|") === lista.join("|") ? s : { chave: chaveMov, valor: lista }));
+    }, 0);
+  };
   const router = useRouter();
 
   useEffect(() => {
@@ -166,7 +209,7 @@ export function EmployeeDialog({
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
         </div>
 
-        <form action={formAction}>
+        <form action={formAction} ref={formRef} onChange={() => recalcularMovimentacoes()}>
           {isEdit && <input type="hidden" name="user_id" value={employee!.userId} />}
           <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.9rem", maxHeight: "72vh", overflowY: "auto" }}>
 
@@ -325,7 +368,7 @@ export function EmployeeDialog({
                   <SearchSelect
                     options={gestorOpcoes}
                     value={gestor}
-                    onChange={setGestor}
+                    onChange={(v) => { setGestor(v); recalcularMovimentacoes(v); }}
                     placeholder="Digite para buscar o gestor…"
                     maxVisible={gestorOpcoes.length}
                   />
@@ -340,15 +383,19 @@ export function EmployeeDialog({
               </Field>
             </div>
 
-            {isEdit && (
-              <div style={grid2}>
-                <Field label="Movimentação vigente a partir de">
-                  <input name="effective_date" type="date" className="input" />
-                  <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>
-                    Se esta edição mudar setor, função, gestor ou unidade, a linha do tempo
-                    registra a mudança valendo desta data. Em branco, vale hoje.
+            {/* Só aparece quando a edição muda algo que é movimentação, e aí é
+                obrigatória: a RV do mês é pesada pelos dias de cada função. */}
+            {isEdit && movimentacoes.length > 0 && (
+              <div style={{ padding: "0.75rem 0.85rem", borderRadius: 9, background: "var(--surface-2)" }}>
+                <div style={grid2}>
+                  <Field label="Data da mudança" req>
+                    <input name="effective_date" type="date" className="input" required max={hojeSP} />
+                  </Field>
+                  <p className="soft" style={{ fontSize: "0.76rem", margin: "1.4rem 0 0" }}>
+                    Esta edição muda <strong>{movimentacoes.join(", ")}</strong>. Informe o primeiro dia
+                    na situação nova: o histórico e a variável do mês contam a partir dele.
                   </p>
-                </Field>
+                </div>
               </div>
             )}
 
