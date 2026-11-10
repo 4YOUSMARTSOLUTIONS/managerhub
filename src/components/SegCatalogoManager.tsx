@@ -335,7 +335,7 @@ export function SegCatalogoManager({
                 <span style={{ fontSize: "0.82rem" }}>
                   Tem veículo
                   <span className="soft" style={{ display: "block", fontSize: "0.72rem" }}>
-                    Liga placa, tipo e propriedade no formulário da blitz.
+                    Pede placa, modelo, propriedade e cor no formulário da blitz.
                   </span>
                 </span>
               </label>
