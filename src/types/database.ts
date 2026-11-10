@@ -890,9 +890,9 @@ export type Database = {
       ferias_config: {
         // `abono_fora_prazo`/`decimo_fora_prazo`: 'alerta' | 'bloquear' (o pedido do
         // colaborador fora do prazo legal; ferias_aplicar_prazos_legais)
-        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; antecedencia_gestor_dias: number; antecedencia_dp_dias: number; abono_fora_prazo: string; decimo_fora_prazo: string; updated_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; updated_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; updated_by?: string | null; updated_at?: string }
+        Row: { id: string; tenant_id: string; antecedencia_minima_dias: number; antecedencia_gestor_dias: number; antecedencia_dp_dias: number; abono_fora_prazo: string; decimo_fora_prazo: string; decimo_prazo: string; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; decimo_prazo?: string; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; decimo_prazo?: string; updated_by?: string | null; updated_at?: string }
         Relationships: []
       }
       // Dedup do varredor semanal de vencimento (cron): cada (pessoa,
@@ -2086,6 +2086,8 @@ export type Database = {
       ferias_modelo_lancamento: { Args: { p_tenant: string; p_hoje?: string }; Returns: Json }
       ferias_escolher_decimo: { Args: { p_tenant: string; p_ano: number; p_quer: boolean }; Returns: undefined }
       ferias_escolhas_decimo: { Args: { p_tenant: string; p_user: string }; Returns: Json }
+      ferias_reabrir_decimo: { Args: { p_tenant: string; p_user: string; p_ano: number }; Returns: undefined }
+      ferias_painel_decimo: { Args: { p_tenant: string; p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
       // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
       ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
       // Situação do colaborador, CALCULADA: o afastamento ou a licença em vigor

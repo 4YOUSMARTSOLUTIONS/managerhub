@@ -119,7 +119,7 @@ export function FeriasSolicitarDialog({
     [modo, decimosAlvo, decimos],
   );
   // prazos legais do pedido (abono até 15 dias antes do fim do aquisitivo; 13º
-  // até janeiro do ano das férias): só o colaborador é bloqueado
+  // até o prazo da empresa, a partir de 31/01): só o colaborador é bloqueado
   const ctxPrazos = useMemo<ContextoPrazos | undefined>(
     () => (prazos
       ? { modos: prazos, quem: antecedenciaQuem, hoje, pedidoAbono: pedidoEm?.abono, pedidoDecimo: pedidoEm?.decimo }
@@ -279,8 +279,8 @@ export function FeriasSolicitarDialog({
 
           {pelaEscolha && (
             <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
-              O adiantamento do 13º desta pessoa é escolha dela, em Minhas férias, até 31/01 do ano
-              das férias. O sistema aplica no primeiro período do ano.
+              O adiantamento do 13º desta pessoa é escolha dela, em Minhas férias, até o prazo da
+              empresa. O sistema aplica no primeiro período do ano.
             </p>
           )}
 
@@ -422,7 +422,7 @@ export function FeriasSolicitarDialog({
                 Adiantar a 1ª parcela do 13º junto destas férias
                 <InfoHint label="Sobre o adiantamento do 13º">
                   A 1ª parcela do 13º pode ser paga junto das férias, uma vez por ano. O pedido
-                  precisa ser feito até janeiro do ano das férias (Lei 4.749/65). Depois disso, a
+                  precisa ser feito até 31 de janeiro do ano das férias (Lei 4.749/65), ou até o prazo que a empresa definir. Depois disso, a
                   empresa pode recusar.
                 </InfoHint>
               </label>

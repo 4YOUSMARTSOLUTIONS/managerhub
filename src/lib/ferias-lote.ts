@@ -37,7 +37,7 @@ export const LOTE_INSTRUCOES: string[][] = [
   [""],
   ["Início e Término das férias: datas no formato DD/MM/AAAA. O início precisa cair de segunda a quinta, fora de feriado e dos 2 dias antes de um feriado."],
   ["Abono (dias): dias vendidos, de 0 a 10 (até um terço do direito). Em branco vale 0."],
-  ["13º (escolha do colaborador): só para consulta. O adiantamento do 13º é escolha de cada colaborador, em Minhas férias, até 31/01 do ano das férias; o sistema aplica no primeiro período do ano."],
+  ["13º (escolha do colaborador): só para consulta. O adiantamento do 13º é escolha de cada colaborador, em Minhas férias, até o prazo da empresa (a lei garante até 31/01 do ano das férias); o sistema aplica no primeiro período do ano."],
   ["Férias divididas: repita a linha da pessoa (mesma unidade e matrícula), uma por período, até 3. Um dos períodos precisa ter ao menos 14 dias e nenhum menos de 5."],
   [""],
   ["Ao importar, cada pessoa passa pelas mesmas regras do botão Lançar férias. A prévia mostra quem está pronto e quem foi recusado, com o motivo; as aceitas entram aprovadas e seguem para a efetivação do DP."],

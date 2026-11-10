@@ -5,7 +5,10 @@ import { moduleGate } from "@/lib/module-gate";
 import {
   FeriasManager, type FeriasPainel, type FeriasRow, type UltimaImportacaoFolha,
 } from "@/components/FeriasManager";
-import { aquisitivoDaLinha, type AquisitivoInfo, type DecimoPelaEscolha } from "@/lib/ferias";
+import {
+  anoDaEscolhaDecimo, aquisitivoDaLinha,
+  type AquisitivoInfo, type DecimoPelaEscolha, type EscolhaDecimoDaEquipe,
+} from "@/lib/ferias";
 
 /**
  * Férias.
@@ -75,7 +78,7 @@ export default async function FeriasPage() {
     // antecedência mínima por quem lança (Configurações > Férias)
     supabase
       .from("ferias_config")
-      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo")
+      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo, decimo_prazo")
       .eq("tenant_id", tenant.id)
       .maybeSingle(),
   ]);
@@ -144,6 +147,14 @@ export default async function FeriasPage() {
   const escolhasDecimo = nivelBloqueado
     ? ((minhaEscolha as unknown as DecimoPelaEscolha | null)?.escolhas ?? [])
     : null;
+  // quem acompanha equipe vê se os operacionais já escolheram o 13º do ano
+  const anoDecimo = anoDaEscolhaDecimo(hoje, config?.decimo_prazo ?? "01-31");
+  const { data: escolhasDaEquipe } = (ehDp || role === "manager" || podeLiderar)
+    ? await supabase.rpc("ferias_painel_decimo", { p_tenant: tenant.id, p_ano: anoDecimo, p_unit_ids: unidades })
+    : { data: null };
+  const painelDecimo = escolhasDaEquipe
+    ? { ano: anoDecimo, pessoas: escolhasDaEquipe as unknown as EscolhaDecimoDaEquipe[] }
+    : null;
   const avisoSolicitar = nivelBloqueado
     ? "As férias do seu nível são programadas pelo seu gestor. Você acompanha por aqui o saldo e as previsões lançadas para você."
     : semAdmissao
@@ -193,8 +204,10 @@ export default async function FeriasPage() {
         prazos={{
           abono: config?.abono_fora_prazo === "bloquear" ? "bloquear" : "alerta",
           decimo: config?.decimo_fora_prazo === "bloquear" ? "bloquear" : "alerta",
+          decimoAte: config?.decimo_prazo ?? "01-31",
         }}
         escolhasDecimo={escolhasDecimo}
+        painelDecimo={painelDecimo}
       />
     </div>
   );

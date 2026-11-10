@@ -30,11 +30,12 @@ import {
   FERIAS_AQUISITIVO_SITUACAO, FERIAS_AQUISITIVO_TONE, FERIAS_STATUS, FERIAS_STATUS_TONE, aquisitivoSemSaldo,
 } from "@/lib/constants";
 import {
-  anosDaEscolhaDecimo, rotuloAquisitivo, periodoAquisitivo,
-  type AquisitivoInfo, type EscolhaDecimo, type FeriadoCustom, type ModoPrazo, type PrazosLegais, type QuemLanca,
+  anosDaEscolhaDecimo, dataDoPrazoDecimo, rotuloAquisitivo, periodoAquisitivo,
+  type AquisitivoInfo, type EscolhaDecimo, type EscolhaDecimoDaEquipe, type FeriadoCustom, type ModoPrazo,
+  type PrazosLegais, type QuemLanca,
 } from "@/lib/ferias";
 import {
-  cancelarFerias, decidirFerias, efetivarFerias, escolherDecimo, excluirFerias, getContextoEfetivacao,
+  cancelarFerias, decidirFerias, efetivarFerias, escolherDecimo, excluirFerias, getContextoEfetivacao, reabrirDecimo,
   type ContextoEfetivacao,
 } from "@/lib/actions/ferias";
 import type { Enums } from "@/types/database";
@@ -104,7 +105,7 @@ export type FeriasRow = {
   justificativaDobro: string | null;
   /** abono pedido depois de 15 dias antes do fim do aquisitivo (art. 143 §1º) */
   abonoForaPrazo: boolean;
-  /** adiantamento do 13º pedido depois de janeiro do ano das férias (Lei 4.749/65) */
+  /** adiantamento do 13º pedido depois do prazo da empresa (a lei garante até 31/01) */
   decimoForaPrazo: boolean;
   createdAt: string;
 };
@@ -122,7 +123,7 @@ function NotaForaPrazo({ row }: { row: FeriasRow }) {
   if (!row.abonoForaPrazo && !row.decimoForaPrazo) return null;
   const partes = [
     row.abonoForaPrazo ? "o abono foi pedido depois de 15 dias antes do fim do período aquisitivo (art. 143 §1º)" : null,
-    row.decimoForaPrazo ? "o adiantamento do 13º foi pedido depois de janeiro do ano das férias (Lei 4.749/65)" : null,
+    row.decimoForaPrazo ? "o adiantamento do 13º foi pedido depois do prazo da empresa para o 13º" : null,
   ].filter(Boolean).join(", e ");
   return (
     <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-warning)" }}>
@@ -148,7 +149,7 @@ const dataDoPedido = (iso: string) =>
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, equipe, vejoEmpresa, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
-  antecedencia, prazos, escolhasDecimo,
+  antecedencia, prazos, escolhasDecimo, painelDecimo,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -184,7 +185,10 @@ export function FeriasManager({
    * adiantamento do 13º. As escolhas dele; null = não é o caso (pede no pedido).
    */
   escolhasDecimo: EscolhaDecimo[] | null;
+  /** quem acompanha equipe: os operacionais e a escolha do 13º de cada um no ano */
+  painelDecimo: { ano: number; pessoas: EscolhaDecimoDaEquipe[] } | null;
 }) {
+  const [vendoDecimo, setVendoDecimo] = useState(false);
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
   const [loteAberto, setLoteAberto] = useState(false);
@@ -286,6 +290,12 @@ export function FeriasManager({
   const foraDaConta = (n: number) => `${n} afastado${n > 1 ? "s" : ""} fora da conta`;
 
   const podeGerir = ehGestor || ehDp;
+  // a escolha do 13º dos operacionais, no mesmo recorte do resto da tela
+  const decimoNoEscopo = useMemo(
+    () => (painelDecimo?.pessoas ?? []).filter((p) => !pessoasNoEscopo || pessoasNoEscopo.has(p.userId)),
+    [painelDecimo, pessoasNoEscopo],
+  );
+  const decimoPendentes = decimoNoEscopo.filter((p) => p.quer === null).length;
 
   const abas: Tab[] = [
     { id: "minhas", label: "Minhas férias", content: (
@@ -295,7 +305,7 @@ export function FeriasManager({
         onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
         onReagendar={setReagendando}
         hoje={hoje}
-        escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo}
+        escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo} prazoDecimo={prazos.decimoAte}
       />
     ) },
   ];
@@ -433,6 +443,19 @@ export function FeriasManager({
             tone={fila.length > 0 ? "amber" : "gray"} />
           <StatCard label="Aguardando efetivação" value={filaDp.length} tone={filaDp.length > 0 ? "amber" : "gray"}
             hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
+          {painelDecimo && decimoNoEscopo.length > 0 && (
+            <button
+              type="button" onClick={() => setVendoDecimo(true)} title="Ver quem já escolheu"
+              style={{ background: "none", border: 0, padding: 0, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit" }}
+            >
+              <StatCard
+                label={`Escolha do 13º de ${painelDecimo.ano}`}
+                value={`${decimoNoEscopo.length - decimoPendentes}/${decimoNoEscopo.length}`}
+                tone={decimoPendentes > 0 ? "amber" : "green"}
+                hint={decimoPendentes > 0 ? `${decimoPendentes} operacional(is) sem escolher · ver lista` : "todos já escolheram · ver lista"}
+              />
+            </button>
+          )}
           {painel && (
             <StatCard label="A vencer (90 dias)" value={aVencerQtd} tone={aVencerQtd > 0 ? "amber" : "gray"}
               hint={aVencerAfastados > 0 ? foraDaConta(aVencerAfastados) : "período concessivo terminando"} />
@@ -522,6 +545,12 @@ export function FeriasManager({
           onFechar={() => setReagendando(null)}
         />
       )}
+      {vendoDecimo && painelDecimo && (
+        <EscolhasDoDecimo
+          ano={painelDecimo.ano} prazo={dataDoPrazoDecimo(painelDecimo.ano, prazos.decimoAte)}
+          pessoas={decimoNoEscopo} ehDp={ehDp} onFechar={() => setVendoDecimo(false)}
+        />
+      )}
       {detalhe && (
         <DetalheFerias
           row={detalhe} anterior={anteriorDe(detalhe)} meuId={meuId} ehDp={ehDp} ehOwner={ehOwner}
@@ -583,7 +612,7 @@ function composicaoDoSaldo(a: AquisitivoInfo): string {
 
 function MinhasFerias({
   minhas, aquisitivos, podeSolicitar, avisoSolicitar, onSolicitar, onReenviar, onDetalhe, onCancelar, onReagendar, hoje,
-  escolhasDecimo, modoDecimo,
+  escolhasDecimo, modoDecimo, prazoDecimo,
 }: {
   minhas: FeriasRow[];
   aquisitivos: AquisitivoInfo[];
@@ -597,6 +626,7 @@ function MinhasFerias({
   hoje: string;
   escolhasDecimo: EscolhaDecimo[] | null;
   modoDecimo: ModoPrazo;
+  prazoDecimo: string;
 }) {
   // sem saldo e sem nada usado é aquisitivo sem direito (faltas, afastamento): não há o que mostrar
   const relevantes = aquisitivos.filter((a) => !aquisitivoSemSaldo(a.situacao) || a.diasUsados > 0);
@@ -608,7 +638,7 @@ function MinhasFerias({
         </div>
       )}
 
-      {escolhasDecimo && <EscolhaDoDecimo escolhas={escolhasDecimo} modo={modoDecimo} hoje={hoje} />}
+      {escolhasDecimo && <EscolhaDoDecimo escolhas={escolhasDecimo} modo={modoDecimo} ate={prazoDecimo} hoje={hoje} />}
 
       {relevantes.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.8rem" }}>
@@ -706,28 +736,52 @@ const DIA_SP = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" 
 
 /**
  * O adiantamento do 13º de quem não solicita as próprias férias (o gestor
- * lança): a escolha é da pessoa, uma por ano, até 31/01 do ano das férias
- * (Lei 4.749/65), e vai no primeiro período de férias daquele ano. O banco
- * confere o prazo e refaz o 13º das férias ainda não efetivadas.
+ * lança): a escolha é da pessoa, uma por ano, até o prazo que a empresa
+ * definiu (a lei garante até 31/01 do ano das férias), e vai no primeiro
+ * período de férias daquele ano.
+ *
+ * É coisa séria (LUIZ, 10/11/2026): o colaborador confirma, a escolha vai na
+ * hora ao DP e não muda mais por aqui. Quem libera uma nova escolha é o DP.
  */
-function EscolhaDoDecimo({ escolhas, modo, hoje }: { escolhas: EscolhaDecimo[]; modo: ModoPrazo; hoje: string }) {
+function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
+  escolhas: EscolhaDecimo[];
+  modo: ModoPrazo;
+  /** prazo da empresa, "MM-DD" do ano das férias */
+  ate: string;
+  hoje: string;
+}) {
   const [salvando, iniciar] = useTransition();
   const router = useRouter();
-  const anos = anosDaEscolhaDecimo(hoje, escolhas, modo);
+  const anos = anosDaEscolhaDecimo(hoje, escolhas, modo, ate);
 
-  const escolher = (ano: number, quer: boolean) => iniciar(async () => {
-    const r = await escolherDecimo({ ano, quer });
-    if (r.error) { toast.error(r.error); return; }
-    toast.success(r.message ?? "Escolha salva.");
-    router.refresh();
-  });
+  const escolher = async (ano: number, quer: boolean) => {
+    const ok = await confirmDialog({
+      title: quer ? `Adiantar o 13º nas férias de ${ano}?` : `Não adiantar o 13º nas férias de ${ano}?`,
+      message: (
+        <>
+          Você está escolhendo <strong>{quer ? "receber" : "não receber"}</strong> a 1ª parcela do 13º
+          junto com as férias de {ano}. A escolha vai agora para o departamento pessoal e não pode ser
+          mudada por aqui depois. Confirma?
+        </>
+      ),
+      confirmLabel: "Confirmar e enviar ao DP",
+    });
+    if (!ok) return;
+    iniciar(async () => {
+      const r = await escolherDecimo({ ano, quer });
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Escolha enviada ao departamento pessoal.");
+      router.refresh();
+    });
+  };
 
   return (
     <div className="card card-pad">
       <span style={{ fontWeight: 700, fontSize: "0.92rem" }}>Adiantamento do 13º salário</span>
       <p className="soft" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.75rem" }}>
-        A 1ª parcela do 13º pode ser paga junto com as suas férias, uma vez por ano. Escolha até
-        31 de janeiro do ano das férias: ela vai no primeiro período de férias daquele ano.
+        A 1ª parcela do 13º pode ser paga junto com as suas férias, uma vez por ano. Ela vai no primeiro
+        período de férias do ano. A escolha é enviada ao departamento pessoal e não pode ser mudada por
+        aqui depois de confirmada.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
         {anos.map(({ ano, prazo, aberto, escolha }) => (
@@ -741,30 +795,25 @@ function EscolhaDoDecimo({ escolhas, modo, hoje }: { escolhas: EscolhaDecimo[]; 
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 Férias de {ano}
-                {aberto && !escolha && <Badge tone="amber">Escolha pendente</Badge>}
+                {escolha
+                  ? <Badge variant="quiet" tone={escolha.quer ? "green" : "gray"}>{escolha.quer ? "Quero adiantar" : "Não quero adiantar"}</Badge>
+                  : aberto && <Badge tone="amber">Escolha pendente</Badge>}
               </div>
               <div className="soft" style={{ fontSize: "0.76rem" }}>
                 {escolha
-                  ? `${escolha.quer ? "Você quer adiantar" : "Você não quer adiantar"} (escolhido em ${DIA_SP.format(new Date(escolha.escolhidoEm))}).`
-                  : "Você ainda não escolheu."}
-                {aberto ? ` Pode mudar até ${formatDate(prazo)}.` : ` Prazo encerrado em ${formatDate(prazo)}.`}
+                  ? `Enviada ao departamento pessoal em ${DIA_SP.format(new Date(escolha.escolhidoEm))}. Para mudar, fale com o DP.`
+                  : aberto
+                    ? `Escolha até ${formatDate(prazo)}.`
+                    : `Prazo encerrado em ${formatDate(prazo)}.`}
               </div>
             </div>
-            {aberto && (
-              <div style={{ display: "inline-flex", gap: "0.35rem" }} role="group" aria-label={`Adiantamento do 13º em ${ano}`}>
-                <button
-                  type="button" disabled={salvando} aria-pressed={escolha?.quer === true}
-                  className={`btn btn-sm ${escolha?.quer === true ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => escolher(ano, true)}
-                >
+            {!escolha && aberto && (
+              <div style={{ display: "inline-flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-primary btn-sm" disabled={salvando} onClick={() => escolher(ano, true)}>
                   Quero adiantar
                 </button>
-                <button
-                  type="button" disabled={salvando} aria-pressed={escolha?.quer === false}
-                  className={`btn btn-sm ${escolha?.quer === false ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => escolher(ano, false)}
-                >
-                  Não quero
+                <button type="button" className="btn btn-ghost btn-sm" disabled={salvando} onClick={() => escolher(ano, false)}>
+                  Não quero adiantar
                 </button>
               </div>
             )}
@@ -774,6 +823,139 @@ function EscolhaDoDecimo({ escolhas, modo, hoje }: { escolhas: EscolhaDecimo[]; 
     </div>
   );
 }
+
+/**
+ * Quem já escolheu o adiantamento do 13º do ano, entre os operacionais que o
+ * gestor acompanha (o DP e o Gerencial, a empresa). O DP libera uma nova
+ * escolha de quem errou; a do colaborador é definitiva.
+ */
+function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp, onFechar }: {
+  ano: number;
+  /** AAAA-MM-DD */
+  prazo: string;
+  pessoas: EscolhaDecimoDaEquipe[];
+  ehDp: boolean;
+  onFechar: () => void;
+}) {
+  const pendentes = pessoas.filter((p) => p.quer === null);
+  const escolheram = pessoas.filter((p) => p.quer !== null);
+  const [filtro, setFiltro] = useState<"pendentes" | "escolheram" | "todos">(pendentes.length > 0 ? "pendentes" : "todos");
+  const [salvando, iniciar] = useTransition();
+  const router = useRouter();
+  const lista = filtro === "pendentes" ? pendentes : filtro === "escolheram" ? escolheram : pessoas;
+  const enviadoEm = (p: EscolhaDecimoDaEquipe) => (p.escolhidoEm ? DIA_SP.format(new Date(p.escolhidoEm)) : "");
+  const rotulo = (p: EscolhaDecimoDaEquipe) => (p.quer === null ? "Pendente" : p.quer ? "Quer adiantar" : "Não quer adiantar");
+
+  const liberar = async (p: EscolhaDecimoDaEquipe) => {
+    const ok = await confirmDialog({
+      title: "Liberar nova escolha do 13º",
+      message: (
+        <>
+          {p.nome} escolheu <strong>{p.quer ? "adiantar" : "não adiantar"}</strong> o 13º das férias de {ano}.
+          Liberar apaga essa escolha, tira o 13º das férias de {ano} ainda não efetivadas e avisa a pessoa
+          para escolher de novo.
+          {hojeSP() > prazo && " O prazo já passou: ela só consegue escolher de novo se a empresa aceitar fora do prazo."}
+        </>
+      ),
+      confirmLabel: "Liberar",
+      tone: "danger",
+    });
+    if (!ok) return;
+    iniciar(async () => {
+      const r = await reabrirDecimo({ userId: p.userId, ano });
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(r.message ?? "Escolha liberada.");
+      router.refresh();
+    });
+  };
+
+  const filtros: { id: typeof filtro; rotulo: string }[] = [
+    { id: "pendentes", rotulo: `Pendentes (${pendentes.length})` },
+    { id: "escolheram", rotulo: `Já escolheram (${escolheram.length})` },
+    { id: "todos", rotulo: `Todos (${pessoas.length})` },
+  ];
+
+  return (
+    <DetailModal
+      open
+      onClose={onFechar}
+      width="lg"
+      title={`Escolha do adiantamento do 13º de ${ano}`}
+      footer={(
+        <ExportButton
+          filename={`escolha-13-${ano}`}
+          sheetName={`13º ${ano}`}
+          headers={["Matrícula", "Nome", "Unidade", "Setor", "Escolha", "Enviada em"]}
+          rows={pessoas.map((p) => [p.matricula ?? "", p.nome, p.unidade ?? "", p.setor ?? "", rotulo(p), enviadoEm(p)])}
+        />
+      )}
+    >
+      <p className="soft" style={{ fontSize: "0.82rem", margin: "0 0 0.75rem" }}>
+        Os colaboradores operacionais escolhem em Minhas férias até {formatDate(prazo)}. A escolha vai ao
+        departamento pessoal e vale para o primeiro período de férias de {ano}.
+      </p>
+      <div style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+        {filtros.map((f) => (
+          <button
+            key={f.id} type="button" aria-pressed={filtro === f.id}
+            className={`btn btn-xs ${filtro === f.id ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => setFiltro(f.id)}
+          >
+            {f.rotulo}
+          </button>
+        ))}
+      </div>
+      {lista.length === 0 ? (
+        <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>
+          {filtro === "pendentes" ? "Todos já escolheram." : "Ninguém por aqui."}
+        </p>
+      ) : (
+        <div style={{ maxHeight: "55vh", overflowY: "auto", border: "1px solid var(--border)", borderRadius: 9 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th style={{ width: 90 }}>Matrícula</th>
+                <th>Setor</th>
+                <th style={{ width: 160 }}>Escolha</th>
+                <th style={{ width: 110 }}>Enviada em</th>
+                {ehDp && <th style={{ width: 90 }} />}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((p) => (
+                <tr key={p.userId}>
+                  <td style={{ fontWeight: 600 }} title={p.nome}>{shortName(p.nome)}</td>
+                  <td className="tabular">{p.matricula ?? ""}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>{p.setor ?? ""}</td>
+                  <td>
+                    {p.quer === null
+                      ? <Badge tone="amber">Pendente</Badge>
+                      : <Badge variant="quiet" tone={p.quer ? "green" : "gray"}>{rotulo(p)}</Badge>}
+                  </td>
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>
+                    {enviadoEm(p)}{p.foraPrazo ? " · fora do prazo" : ""}
+                  </td>
+                  {ehDp && (
+                    <td style={{ textAlign: "right" }}>
+                      {p.quer !== null && (
+                        <button type="button" className="btn btn-ghost btn-xs" disabled={salvando} onClick={() => liberar(p)}>
+                          Liberar
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </DetailModal>
+  );
+}
+
+const hojeSP = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
 
 /**
  * A situação do pedido pelos olhos de quem tirará as férias.

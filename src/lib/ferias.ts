@@ -172,7 +172,16 @@ export type PermissaoCampo = { ok: true; aviso?: string } | { ok: false; motivo:
 
 /** O que a empresa faz com o pedido do colaborador fora do prazo (Configurações > Férias). */
 export type ModoPrazo = "alerta" | "bloquear";
-export type PrazosLegais = { abono: ModoPrazo; decimo: ModoPrazo };
+export type PrazosLegais = {
+  abono: ModoPrazo;
+  decimo: ModoPrazo;
+  /**
+   * Até quando a empresa aceita o pedido do adiantamento do 13º, "MM-DD" do ano
+   * das férias. A lei garante até 31/01 (Lei 4.749/65); a empresa pode aceitar
+   * até mais tarde, nunca antes. Banco: `ferias_config.decimo_prazo`.
+   */
+  decimoAte: string;
+};
 
 export type ContextoPrazos = {
   modos: PrazosLegais;
@@ -186,8 +195,19 @@ export type ContextoPrazos = {
 
 /** art. 143 §1º: até 15 dias antes do fim do aquisitivo (fim 01/02 → até 18/01). */
 export const prazoDoAbono = (aqFim: string) => somarDias(aqFim, -14);
-/** Lei 4.749/65: até janeiro do ano das férias. */
-export const prazoDoDecimo = (inicio: string) => `${inicio.slice(0, 4)}-01-31`;
+/**
+ * O dia "MM-DD" do prazo do 13º num ano, como o banco (`ferias_prazo_decimo`):
+ * 29/02 em ano que não é bissexto vira o último dia do mês.
+ */
+export function dataDoPrazoDecimo(ano: string | number, ate = "01-31"): string {
+  const a = Number(ano);
+  const mes = Number(ate.slice(0, 2)) || 1;
+  const dia = Number(ate.slice(3, 5)) || 31;
+  const ultimo = new Date(Date.UTC(a, mes, 0)).getUTCDate();
+  return `${a}-${String(mes).padStart(2, "0")}-${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
+}
+/** Até quando a empresa aceita o 13º das férias que começam em `inicio` (lei: 31/01). */
+export const prazoDoDecimo = (inicio: string, ate = "01-31") => dataDoPrazoDecimo(inicio.slice(0, 4), ate);
 
 /** As mesmas mensagens de `ferias_aplicar_prazos_legais`. */
 function avaliarAbonoNoPrazo(aqInicio: string, aqFim: string, ctx: ContextoPrazos): PermissaoCampo {
@@ -206,15 +226,16 @@ function avaliarAbonoNoPrazo(aqInicio: string, aqFim: string, ctx: ContextoPrazo
 
 function avaliarDecimoNoPrazo(inicio: string, ctx: ContextoPrazos): PermissaoCampo {
   const ano = anoDe(inicio);
-  if ((ctx.pedidoDecimo ?? ctx.hoje) <= prazoDoDecimo(inicio)) return { ok: true };
+  const prazo = prazoDoDecimo(inicio, ctx.modos.decimoAte);
+  if ((ctx.pedidoDecimo ?? ctx.hoje) <= prazo) return { ok: true };
   if (ctx.quem === "colaborador" && ctx.modos.decimo === "bloquear") {
-    return { ok: false, motivo: `O adiantamento da 1ª parcela do 13º com férias em ${ano} precisava ser pedido até 31/01/${ano} (Lei 4.749/65). Fora desse prazo, só o gestor ou o departamento pessoal podem lançar.` };
+    return { ok: false, motivo: `O adiantamento da 1ª parcela do 13º com férias em ${ano} precisava ser pedido até ${dataBr(prazo)}. Fora desse prazo, só o gestor ou o departamento pessoal podem lançar.` };
   }
   return {
     ok: true,
     aviso: ctx.quem === "colaborador"
-      ? `Pedido fora do prazo (até 31/01/${ano}): a empresa pode recusar o adiantamento do 13º.`
-      : `Fora do prazo legal (até 31/01/${ano}): lançando, a empresa aceita o adiantamento do 13º.`,
+      ? `Pedido fora do prazo (até ${dataBr(prazo)}): a empresa pode recusar o adiantamento do 13º.`
+      : `Fora do prazo (até ${dataBr(prazo)}): lançando, a empresa aceita o adiantamento do 13º.`,
   };
 }
 
@@ -225,7 +246,7 @@ function avaliarDecimoNoPrazo(inicio: string, ctx: ContextoPrazos): PermissaoCam
  *    `prazos`, pedido até 15 dias antes do fim dele. Usa o mesmo FIFO do banco;
  *    `null` quando ainda faltam datas para saber.
  *  - 13º: uma vez por ano (o do início do período) e, com `prazos`, pedido até
- *    janeiro desse ano.
+ *    o prazo da empresa naquele ano (a partir de 31/01, o da lei).
  */
 export function permissoesPorPeriodo(
   periodos: PeriodoInput[],
@@ -493,19 +514,42 @@ export function decimoPelaEscolha(
 
 /**
  * Os anos que aparecem para o colaborador escolher: o atual (enquanto o prazo
- * de 31/01 estiver aberto, ou se já houver escolha) e o seguinte. Com a
+ * da empresa estiver aberto, ou se já houver escolha) e o seguinte. Com a
  * empresa em "alerta", o prazo não fecha a escolha; em "bloquear", fecha.
  */
 export function anosDaEscolhaDecimo(
   hoje: string,
   escolhas: EscolhaDecimo[],
   modo: ModoPrazo,
+  ate = "01-31",
 ): { ano: number; prazo: string; aberto: boolean; escolha?: EscolhaDecimo }[] {
   const atual = Number(hoje.slice(0, 4));
   return [atual, atual + 1]
     .map((ano) => {
-      const prazo = `${ano}-01-31`;
+      const prazo = dataDoPrazoDecimo(ano, ate);
       return { ano, prazo, aberto: hoje <= prazo || modo === "alerta", escolha: escolhas.find((e) => e.ano === ano) };
     })
     .filter((x) => x.aberto || x.escolha);
 }
+
+/**
+ * O ano cujas escolhas do 13º o gestor acompanha: o deste ano enquanto o prazo
+ * dele não passou, e o do ano seguinte depois disso.
+ */
+export function anoDaEscolhaDecimo(hoje: string, ate = "01-31"): number {
+  const atual = Number(hoje.slice(0, 4));
+  return hoje <= dataDoPrazoDecimo(atual, ate) ? atual : atual + 1;
+}
+
+/** Um operacional e a escolha dele no ano (`ferias_painel_decimo`). */
+export type EscolhaDecimoDaEquipe = {
+  userId: string;
+  nome: string;
+  matricula: string | null;
+  unidade: string | null;
+  setor: string | null;
+  /** null = ainda não escolheu */
+  quer: boolean | null;
+  foraPrazo: boolean | null;
+  escolhidoEm: string | null;
+};

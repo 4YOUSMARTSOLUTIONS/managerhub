@@ -254,13 +254,21 @@ export async function setAntecedenciaFerias(
  * férias) fora do prazo legal: 'alerta' deixa pedir e marca o pedido; 'bloquear'
  * recusa. O lançamento do gestor/DP nunca é bloqueado (é o aceite da empresa).
  */
-export async function setPrazosLegaisFerias(
-  input: { abono: PrazosLegais["abono"]; decimo: PrazosLegais["decimo"] },
-): Promise<ActionState> {
+export async function setPrazosLegaisFerias(input: PrazosLegais): Promise<ActionState> {
   try {
     const { supabase, tenantId, userId } = await dpActionContext();
     const valido = (v: string) => v === "alerta" || v === "bloquear";
     if (!valido(input.abono) || !valido(input.decimo)) return { error: "Opção inválida." };
+    // o prazo do 13º: um dia que exista (29/02 vale) e nunca antes de 31/01, o prazo da lei
+    const m = /^(\d{2})-(\d{2})$/.exec(input.decimoAte ?? "");
+    const mes = m ? Number(m[1]) : 0;
+    const dia = m ? Number(m[2]) : 0;
+    if (!m || mes < 1 || mes > 12 || dia < 1 || dia > new Date(Date.UTC(2000, mes, 0)).getUTCDate()) {
+      return { error: "Data do prazo do 13º inválida." };
+    }
+    if (input.decimoAte < "01-31") {
+      return { error: "O prazo do 13º não pode ser antes de 31/01: a lei garante o pedido feito em janeiro." };
+    }
     const { error } = await supabase
       .from("ferias_config")
       .upsert(
@@ -268,6 +276,7 @@ export async function setPrazosLegaisFerias(
           tenant_id: tenantId,
           abono_fora_prazo: input.abono,
           decimo_fora_prazo: input.decimo,
+          decimo_prazo: input.decimoAte,
           updated_by: userId,
           updated_at: new Date().toISOString(),
         },
@@ -365,9 +374,24 @@ export async function escolhasDecimoDe(userId: string): Promise<DecimoPelaEscolh
   }
 }
 
+/** O DP libera uma nova escolha do 13º (a do colaborador é definitiva). */
+export async function reabrirDecimo(input: { userId: string; ano: number }): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await dpActionContext();
+    const { error } = await supabase.rpc("ferias_reabrir_decimo", {
+      p_tenant: tenantId, p_user: input.userId, p_ano: input.ano,
+    });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Escolha liberada. A pessoa foi avisada para escolher de novo." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 /**
  * O colaborador operacional escolhe se quer o adiantamento do 13º nas férias
- * de um ano. O banco confere o prazo (31/01 do ano) e refaz o 13º das férias
+ * de um ano. O banco confere o prazo da empresa, faz a escolha definitiva, avisa o DP e refaz o 13º das férias
  * daquele ano que o DP ainda não efetivou.
  */
 export async function escolherDecimo(input: { ano: number; quer: boolean }): Promise<ActionState> {
@@ -381,8 +405,8 @@ export async function escolherDecimo(input: { ano: number; quer: boolean }): Pro
     return {
       ok: true,
       message: input.quer
-        ? `Pronto: você vai receber o adiantamento do 13º com as férias de ${input.ano}.`
-        : `Pronto: sem adiantamento do 13º nas férias de ${input.ano}.`,
+        ? `Escolha enviada ao departamento pessoal: adiantamento do 13º com as férias de ${input.ano}.`
+        : `Escolha enviada ao departamento pessoal: sem adiantamento do 13º nas férias de ${input.ano}.`,
     };
   } catch (e) {
     return { error: (e as Error).message };
