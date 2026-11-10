@@ -188,7 +188,8 @@ export function FeriasManager({
   /** quem acompanha equipe: os operacionais e a escolha do 13º de cada um no ano */
   painelDecimo: { ano: number; pessoas: EscolhaDecimoDaEquipe[] } | null;
 }) {
-  const [vendoDecimo, setVendoDecimo] = useState(false);
+  // aba aberta (o cartão do 13º leva à aba dele)
+  const [aba, setAba] = useState<string | undefined>(undefined);
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
   const [loteAberto, setLoteAberto] = useState(false);
@@ -357,6 +358,14 @@ export function FeriasManager({
       </div>
     ) });
   }
+  if (podeGerir && painelDecimo && decimoNoEscopo.length > 0) {
+    abas.push({ id: "decimo", label: `Escolha do 13º${decimoPendentes ? ` (${decimoPendentes})` : ""}`, content: (
+      <EscolhasDoDecimo
+        ano={painelDecimo.ano} prazo={dataDoPrazoDecimo(painelDecimo.ano, prazos.decimoAte)}
+        pessoas={decimoNoEscopo} ehDp={ehDp}
+      />
+    ) });
+  }
 
   // As ações da tela num menu só, no espaço de ação do cabeçalho: quatro botões
   // soltos disputavam a linha com o subtítulo e passavam por cima dele. Quem
@@ -445,14 +454,14 @@ export function FeriasManager({
             hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
           {painelDecimo && decimoNoEscopo.length > 0 && (
             <button
-              type="button" onClick={() => setVendoDecimo(true)} title="Ver quem já escolheu"
+              type="button" onClick={() => setAba("decimo")} title="Ver na aba Escolha do 13º"
               style={{ background: "none", border: 0, padding: 0, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit" }}
             >
               <StatCard
                 label={`Escolha do 13º de ${painelDecimo.ano}`}
                 value={`${decimoNoEscopo.length - decimoPendentes}/${decimoNoEscopo.length}`}
                 tone={decimoPendentes > 0 ? "amber" : "green"}
-                hint={decimoPendentes > 0 ? `${decimoPendentes} operacional(is) sem escolher · ver lista` : "todos já escolheram · ver lista"}
+                hint={decimoPendentes > 0 ? `${decimoPendentes} operacional(is) sem escolher` : "todos já escolheram"}
               />
             </button>
           )}
@@ -469,7 +478,7 @@ export function FeriasManager({
         </div>
       )}
 
-      <Tabs tabs={abas} />
+      <Tabs tabs={abas} active={aba} onActiveChange={setAba} />
 
       {importando && (
         <FeriasImportarFolhaDialog ultima={ultimaImportacao} onFechar={() => setImportando(false)} />
@@ -543,12 +552,6 @@ export function FeriasManager({
             abono: reagendando.abonoDias, decimo: reagendando.decimo,
           }}
           onFechar={() => setReagendando(null)}
-        />
-      )}
-      {vendoDecimo && painelDecimo && (
-        <EscolhasDoDecimo
-          ano={painelDecimo.ano} prazo={dataDoPrazoDecimo(painelDecimo.ano, prazos.decimoAte)}
-          pessoas={decimoNoEscopo} ehDp={ehDp} onFechar={() => setVendoDecimo(false)}
         />
       )}
       {detalhe && (
@@ -826,16 +829,16 @@ function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
 
 /**
  * Quem já escolheu o adiantamento do 13º do ano, entre os operacionais que o
- * gestor acompanha (o DP e o Gerencial, a empresa). O DP libera uma nova
- * escolha de quem errou; a do colaborador é definitiva.
+ * gestor acompanha (o DP e o Gerencial, a empresa). Aba própria (LUIZ,
+ * 10/11/2026); o cartão do topo leva até ela. O DP libera uma nova escolha de
+ * quem errou; a do colaborador é definitiva.
  */
-function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp, onFechar }: {
+function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp }: {
   ano: number;
   /** AAAA-MM-DD */
   prazo: string;
   pessoas: EscolhaDecimoDaEquipe[];
   ehDp: boolean;
-  onFechar: () => void;
 }) {
   const pendentes = pessoas.filter((p) => p.quer === null);
   const escolheram = pessoas.filter((p) => p.quer !== null);
@@ -876,25 +879,23 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp, onFechar }: {
   ];
 
   return (
-    <DetailModal
-      open
-      onClose={onFechar}
-      width="lg"
-      title={`Escolha do adiantamento do 13º de ${ano}`}
-      footer={(
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", paddingTop: "0.9rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>Adiantamento do 13º nas férias de {ano}</div>
+          <p className="soft" style={{ fontSize: "0.82rem", margin: "0.2rem 0 0" }}>
+            Os colaboradores operacionais escolhem em Minhas férias até {formatDate(prazo)}. A escolha vai
+            ao departamento pessoal e vale para o primeiro período de férias de {ano}.
+          </p>
+        </div>
         <ExportButton
           filename={`escolha-13-${ano}`}
           sheetName={`13º ${ano}`}
           headers={["Matrícula", "Nome", "Unidade", "Setor", "Escolha", "Enviada em"]}
           rows={pessoas.map((p) => [p.matricula ?? "", p.nome, p.unidade ?? "", p.setor ?? "", rotulo(p), enviadoEm(p)])}
         />
-      )}
-    >
-      <p className="soft" style={{ fontSize: "0.82rem", margin: "0 0 0.75rem" }}>
-        Os colaboradores operacionais escolhem em Minhas férias até {formatDate(prazo)}. A escolha vai ao
-        departamento pessoal e vale para o primeiro período de férias de {ano}.
-      </p>
-      <div style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+      </div>
+      <div style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap" }}>
         {filtros.map((f) => (
           <button
             key={f.id} type="button" aria-pressed={filtro === f.id}
@@ -906,19 +907,21 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp, onFechar }: {
         ))}
       </div>
       {lista.length === 0 ? (
-        <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>
-          {filtro === "pendentes" ? "Todos já escolheram." : "Ninguém por aqui."}
-        </p>
+        <EmptyState
+          title={filtro === "pendentes" ? "Todos já escolheram" : "Ninguém por aqui"}
+          description={filtro === "pendentes" ? `Todos os operacionais já escolheram o 13º de ${ano}.` : "Nenhum operacional neste recorte."}
+        />
       ) : (
-        <div style={{ maxHeight: "55vh", overflowY: "auto", border: "1px solid var(--border)", borderRadius: 9 }}>
+        <div className="card" style={{ overflowX: "auto" }}>
           <table className="table">
             <thead>
               <tr>
                 <th>Colaborador</th>
                 <th style={{ width: 90 }}>Matrícula</th>
+                <th style={{ width: 110 }}>Unidade</th>
                 <th>Setor</th>
-                <th style={{ width: 160 }}>Escolha</th>
-                <th style={{ width: 110 }}>Enviada em</th>
+                <th style={{ width: 170 }}>Escolha</th>
+                <th style={{ width: 150 }}>Enviada em</th>
                 {ehDp && <th style={{ width: 90 }} />}
               </tr>
             </thead>
@@ -927,6 +930,7 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp, onFechar }: {
                 <tr key={p.userId}>
                   <td style={{ fontWeight: 600 }} title={p.nome}>{shortName(p.nome)}</td>
                   <td className="tabular">{p.matricula ?? ""}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>{p.unidade ?? ""}</td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{p.setor ?? ""}</td>
                   <td>
                     {p.quer === null
@@ -951,7 +955,7 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp, onFechar }: {
           </table>
         </div>
       )}
-    </DetailModal>
+    </div>
   );
 }
 
