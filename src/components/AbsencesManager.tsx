@@ -111,7 +111,21 @@ export function AbsencesManager({
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
 
-  const nomePorId = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
+  // O nome vem também de `alvos`, que inclui desligados e contratos anteriores:
+  // o histórico guarda períodos de quem já saiu, e só com `members` (o quadro
+  // ativo) a linha dessas pessoas aparecia sem nome, sumia da busca e saía
+  // em branco na exportação.
+  const nomePorId = useMemo(
+    () => new Map([...alvos.map((a) => [a.id, a.name] as const), ...members.map((m) => [m.id, m.name] as const)]),
+    [alvos, members],
+  );
+  // editar o período de um desligado: o seletor só oferece o quadro ativo, então
+  // a pessoa da linha entra na lista para continuar aparecendo como escolhida
+  const pessoasDoFormulario = useMemo(() => {
+    const id = rascunho?.userId;
+    if (!id || members.some((m) => m.id === id)) return members;
+    return [...members, { id, name: nomePorId.get(id) ?? "—" }];
+  }, [rascunho?.userId, members, nomePorId]);
 
   // anos com lançamento: um período de dezembro a janeiro aparece nos dois
   const anos = useMemo(() => {
@@ -244,7 +258,7 @@ export function AbsencesManager({
             <div style={{ gridColumn: "1 / -1", maxWidth: 380 }}>
               <label className="label">Colaborador</label>
               <PeoplePicker
-                people={members}
+                people={pessoasDoFormulario}
                 selected={rascunho.userId ? [rascunho.userId] : []}
                 onChange={(ids) => setRascunho((r) => (r ? { ...r, userId: ids[0] ?? "" } : r))}
                 single
