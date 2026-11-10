@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck, Plus } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
@@ -38,6 +38,18 @@ export type VeiculoSugestao = {
 /** Onde está o que falta: o erro rola a tela até lá. */
 type Secao = "colaborador" | "meio" | "veiculo" | "perguntas" | "decisao";
 
+/** O bloco de cada etapa, na ordem em que aparecem no celular. */
+const BLOCO_DA_ETAPA: Record<number, Secao> = { 1: "meio", 2: "veiculo", 3: "perguntas", 4: "decisao" };
+
+// celular = a mesma quebra dos utilitários de globals.css (abaixo de 720px)
+const TELA_DE_CELULAR = "(max-width: 719px)";
+function assinarTela(avisar: () => void) {
+  const mq = window.matchMedia(TELA_DE_CELULAR);
+  mq.addEventListener("change", avisar);
+  return () => mq.removeEventListener("change", avisar);
+}
+const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
+
 const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
 
 /**
@@ -50,7 +62,12 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  *    opcional, também fica fechada;
  *  - escolher o meio filtra as perguntas (sem vínculo = vale para todos);
  *  - o que falta aparece no rodapé, e a tela rola até o campo;
- *  - ao registrar, a tela confirma e oferece a próxima blitz na hora.
+ *  - ao registrar, a tela confirma e oferece a próxima blitz na hora;
+ *  - no celular os blocos aparecem um depois do outro (colaborador, meio,
+ *    veículo, perguntas, decisão), conforme o anterior fica completo. Bloco
+ *    que apareceu não some mais, a tela desce até o novo, e quem já tem
+ *    veículo da última blitz cai direto nas perguntas. No computador, tudo
+ *    à vista como antes (LUIZ, 10/11/2026).
  *
  * As respostas começam VAZIAS de propósito: pré-marcar "sim" (ou um "marcar
  * todas") transformaria a blitz em carimbo. O avaliador toca cada resposta.
@@ -89,6 +106,9 @@ export function SegBlitzDialog({
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
   const secoes = useRef<Partial<Record<Secao, HTMLDivElement | null>>>({});
+  const celular = useSyncExternalStore(assinarTela, ehCelular, () => false);
+  // até onde o formulário já se mostrou (no celular); só cresce, nada some
+  const [revelado, setRevelado] = useState(0);
 
   const meiosAtivos = useMemo(() => meios.filter((m) => m.active), [meios]);
   const meio = useMemo(() => meios.find((m) => m.id === meioId) ?? null, [meios, meioId]);
@@ -100,10 +120,37 @@ export function SegBlitzDialog({
   );
   const respondidas = perguntasDoMeio.filter((q) => respostas[q.id]).length;
 
+  /**
+   * A etapa que os dados de agora alcançam: 0 colaborador, 1 meio, 2 veículo,
+   * 3 perguntas, 4 decisão. Meio sem veículo pula o 2; sem perguntas, o 3.
+   */
+  const veiculoCompleto = !meio?.temVeiculo || (!!placa.trim() && !!tipo.trim() && !!propriedade && !!cor);
+  const atingivel = !userId ? 0
+    : !meioId ? 1
+      : !veiculoCompleto ? 2
+        : respondidas < perguntasDoMeio.length ? 3 : 4;
+  // guardar o máximo durante o desenho é o jeito do React de lembrar o
+  // passado sem efeito: o bloco que já apareceu continua, mesmo se a pessoa
+  // apagar a placa para redigitar ou trocar o meio
+  if (celular && atingivel > revelado) setRevelado(atingivel);
+  const mostra = (etapa: number) => !celular || revelado >= etapa;
+
+  // a tela desce até o bloco que acabou de aparecer (abaixo da dobra, ele passaria batido)
+  const reveladoAntes = useRef(0);
+  useEffect(() => {
+    const anterior = reveladoAntes.current;
+    reveladoAntes.current = revelado;
+    if (!celular || revelado <= anterior || revelado < 1) return;
+    const alvo = secoes.current[BLOCO_DA_ETAPA[revelado]];
+    const id = window.setTimeout(() => alvo?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+    return () => window.clearTimeout(id);
+  }, [revelado, celular]);
+
   const limpar = () => {
     setUserId(""); setData(hoje); setEditarData(false); setMeioId(""); setPlaca(""); setTipo("");
     setPropriedade(""); setCor(""); setSugerido(false); setRespostas({}); setLiberado(null);
     setMotivoId(""); setObservacao(""); setVerObservacao(false); setErro("");
+    setRevelado(0);
   };
   const fechar = () => { limpar(); setRegistrada(null); onClose(); };
 
@@ -253,7 +300,8 @@ export function SegBlitzDialog({
               </div>
             </div>
 
-            <div ref={(el) => { secoes.current.meio = el; }}>
+            {mostra(1) && (
+            <div ref={(el) => { secoes.current.meio = el; }} className="surgir-no-celular">
               <label className="label">Meio de transporte {obrigatorio}</label>
               {/* no celular, grade de 2 colunas (LUIZ preferiu a um dropdown: um toque e à vista) */}
               <div className="grade-2-no-celular" style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
@@ -283,9 +331,10 @@ export function SegBlitzDialog({
                 })}
               </div>
             </div>
+            )}
 
-            {meio?.temVeiculo && (
-              <div ref={(el) => { secoes.current.veiculo = el; }} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {mostra(2) && meio?.temVeiculo && (
+              <div ref={(el) => { secoes.current.veiculo = el; }} className="surgir-no-celular" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 {sugerido && (
                   <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
                     Veículo da última blitz desta pessoa. Confira e corrija se mudou.
@@ -334,8 +383,8 @@ export function SegBlitzDialog({
               </div>
             )}
 
-            {meioId && perguntasDoMeio.length > 0 && (
-              <div ref={(el) => { secoes.current.perguntas = el; }} style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+            {mostra(3) && meioId && perguntasDoMeio.length > 0 && (
+              <div ref={(el) => { secoes.current.perguntas = el; }} className="surgir-no-celular" style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.5rem" }}>
                   <label className="label" style={{ marginBottom: 0 }}>Verificação {obrigatorio}</label>
                   <span className="soft" style={{ fontSize: "0.76rem" }}>
@@ -386,7 +435,9 @@ export function SegBlitzDialog({
               </div>
             )}
 
-            <div ref={(el) => { secoes.current.decisao = el; }} style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+            {mostra(4) && (
+            <>
+            <div ref={(el) => { secoes.current.decisao = el; }} className="surgir-no-celular" style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
               <label className="label" style={{ marginBottom: 0 }}>Decisão {obrigatorio}</label>
               <div className="grade-2-no-celular" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                 {([true, false] as const).map((op) => {
@@ -443,6 +494,8 @@ export function SegBlitzDialog({
                 O gestor de {shortName(pessoas.find((p) => p.id === userId)?.name)} é avisado
                 automaticamente se a blitz sair não conforme.
               </p>
+            )}
+            </>
             )}
           </div>
         )}

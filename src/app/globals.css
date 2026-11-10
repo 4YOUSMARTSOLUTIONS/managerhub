@@ -569,6 +569,13 @@ a {
 @media (min-width: 720px) {
   .so-celular { display: none !important; }
 }
+@keyframes mh-surgir {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .surgir-no-celular { animation: none !important; }
+}
 @media (max-width: 719px) {
   .so-desktop { display: none !important; }
   /* a ação principal da tela ocupa a largura toda: alvo fácil para o polegar */
@@ -583,6 +590,10 @@ a {
   /* botões do rodapé de folha e opções de busca de pessoa: altura de polegar */
   .mh-folha-rodape .btn { min-height: 48px; }
   .people-picker-opcao { min-height: 46px; }
+  /* bloco que acabou de aparecer (formulário em etapas): entra suave, e a
+     rolagem automática para fora do cabeçalho e do rodapé fixos */
+  .surgir-no-celular { animation: mh-surgir 0.22s var(--mh-ease) both; }
+  .mh-folha-corpo > * { scroll-margin-top: 80px; scroll-margin-bottom: 170px; }
   .reg-chip button { width: 30px !important; height: 30px !important; }
   .input, .select { font-size: 16px; }
   .mh-folha-fundo { padding: 0 !important; }
