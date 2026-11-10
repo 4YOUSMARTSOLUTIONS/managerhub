@@ -11,8 +11,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    // o nome embaixo do ícone e na lista de apps (LUIZ, 10/11/2026); o resto
-    // do portal segue como MANAGERHUB
+    // o nome embaixo do ícone e na lista de apps (LUIZ, 10/11/2026), o mesmo
+    // do título da aba (layout raiz)
     name: "Manager HUB",
     short_name: "Manager HUB",
     description: "Portal de gestão: reuniões, ações, chamados, metas, férias e equipe.",

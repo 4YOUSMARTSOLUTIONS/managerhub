@@ -10,7 +10,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "MANAGERHUB",
+  // título da aba e da janela do app instalado no computador
+  title: "Manager HUB",
   description: "Portal de gestão: reuniões, salas, ações, chamados e metas.",
   // nome do aplicativo instalado (o mesmo do manifesto)
   applicationName: "Manager HUB",
