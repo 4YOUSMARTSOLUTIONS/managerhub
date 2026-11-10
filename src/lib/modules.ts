@@ -182,6 +182,34 @@ export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; k
   ];
 })();
 
+/**
+ * O papel permite ver a tela? É o primeiro filtro do menu; a venda da unidade
+ * e o acesso por nível (getModuleAccess) vêm depois e só tiram mais telas.
+ * O menu (Sidebar) e a escolha da tela inicial usam a mesma regra.
+ */
+export function permitidoPeloPapel(m: ModuleDef, p: { role: string; isHr: boolean; isSuperAdmin: boolean }): boolean {
+  // `team_lead` (Gestor) fica FORA de "canManage" de propósito. Gestor tem alçada
+  // da própria equipe, não da empresa: nada de Logs do sistema nem de triagem de
+  // chamados. O RH (marca `isHr`, não perfil) entra porque Configurações é a única
+  // porta do departamento pessoal; o recorte das abas é feito na própria página.
+  const canManage = p.role === "owner" || p.role === "admin" || p.role === "manager" || p.isHr;
+  const canAdmin = p.role === "owner" || p.role === "admin";
+  // "Gestor ou acima": quem tem alçada sobre uma equipe. A marca de RH não entra:
+  // a alçada dela é sobre o cadastro de todo mundo, não sobre uma equipe.
+  const canLeadTeam = canAdmin || p.role === "manager" || p.role === "team_lead";
+  switch (m.minRole) {
+    case "team_lead": return canLeadTeam;
+    // Punições e Absenteísmos: o gestor lança e o RH aprova, nenhum dos dois fica de fora
+    case "team_lead_hr": return canLeadTeam || p.isHr;
+    case "manager": return canManage;
+    case "admin": return canAdmin;
+    // super admin de plataforma entra na empresa já como "owner" (requireContext)
+    case "owner": return p.role === "owner";
+    case "super": return p.isSuperAdmin;
+    default: return true;
+  }
+}
+
 export const MODULE_BY_KEY = Object.fromEntries(MODULES.map((m) => [m.key, m])) as Record<ModuleKey, ModuleDef>;
 export const modulesInGroup = (g: GroupKey) =>
   MODULES.filter((m) => m.group === g).sort((a, b) => porNome(a.label, b.label));

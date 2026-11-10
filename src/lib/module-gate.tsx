@@ -22,6 +22,16 @@ import { ModuleLocked } from "@/components/ModuleLocked";
  * Índice de um grupo do menu: manda para o primeiro submódulo não escondido.
  * O destino tem o próprio `moduleGate`, então "locked" continua caindo na vitrine.
  */
+/**
+ * Telas base (Configurações, Minha equipe) não têm venda nem `moduleGate`, mas
+ * obedecem ao acesso por nível: quem não as tem liberadas vai para o início,
+ * que o leva à primeira tela dele.
+ */
+export async function exigirTelaBase(key: ModuleKey): Promise<void> {
+  const { state } = await getModuleAccess();
+  if (state[key] === "hidden") redirect("/dashboard");
+}
+
 export async function redirectToFirstVisible(group: GroupKey): Promise<never> {
   const { state } = await getModuleAccess();
   const first = modulesInGroup(group).find((m) => state[m.key] !== "hidden");

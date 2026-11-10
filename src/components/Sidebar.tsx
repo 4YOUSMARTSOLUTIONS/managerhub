@@ -13,7 +13,7 @@ import { BrandLogo, BrandWordmark, BrandOwnerSignature, SHOW_BRAND_OWNER } from 
 import { UserMenu } from "./UserMenu";
 import { NavPending } from "./ui/NavPending";
 import {
-  MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup,
+  MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup, permitidoPeloPapel,
   type GroupKey, type ModuleDef, type ModuleKey, type ModuleState,
 } from "@/lib/modules";
 import type { Enums } from "@/types/database";
@@ -82,36 +82,14 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const underWork = new Set(construction);
-  // `team_lead` (Gestor) fica FORA desta lista de propósito. Gestor tem alçada da
-  // própria equipe, não da empresa: nada de Logs do sistema nem de triagem de
-  // chamados. Para efeito de menu ele se comporta como Funcionário; o que ele
-  // enxerga a mais vem da RLS, pelo vínculo de chefia, não do papel na tela.
-  // O RH (marca `isHr`, não perfil) entra junto porque Configurações é a única
-  // porta do departamento pessoal: é lá que moram Colaboradores, Férias e
-  // Remuneração variável. O recorte das abas é feito na própria página.
-  const canManage = role === "owner" || role === "admin" || role === "manager" || isHr;
-  const canAdmin = role === "owner" || role === "admin";
-  // super admin de plataforma entra na empresa já como "owner" (requireContext),
-  // então não precisa de exceção aqui
-  const isOwner = role === "owner";
-  // "Gestor ou acima": quem tem alçada sobre uma equipe. Some do menu de quem
-  // não lidera ninguém, para "Minha equipe" não virar item morto para ~880 pessoas.
-  // A marca de RH não entra: a alçada dela é sobre o cadastro de todo mundo, não
-  // sobre uma equipe. Quem é do RH e chefia alguém tem o perfil Gestor.
-  const canLeadTeam = role === "owner" || role === "admin" || role === "manager" || role === "team_lead";
-
-  /** papel primeiro (como antes), depois o entitlement da unidade. */
+  /**
+   * Papel primeiro (regra comum em `permitidoPeloPapel`), depois o estado do
+   * módulo, que já traz a venda da unidade e o acesso por nível da pessoa.
+   */
   const visible = (m: ModuleDef) => {
     // owner de plataforma sem empresa: só o Painel ADM
     if (platformOnly) return m.key === "admin";
-    if (m.minRole === "team_lead" && !canLeadTeam) return false;
-    // "quem lidera equipe, mais o RH": Punições é lançada pelo gestor e aprovada
-    // pelo RH, então nenhum dos dois pode ficar sem o item de menu.
-    if (m.minRole === "team_lead_hr" && !canLeadTeam && !isHr) return false;
-    if (m.minRole === "manager" && !canManage) return false;
-    if (m.minRole === "admin" && !canAdmin) return false;
-    if (m.minRole === "owner" && !isOwner) return false;
-    if (m.minRole === "super" && !isSuperAdmin) return false;
+    if (!permitidoPeloPapel(m, { role, isHr, isSuperAdmin })) return false;
     return moduleState[m.key] !== "hidden";
   };
 

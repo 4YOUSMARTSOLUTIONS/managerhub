@@ -1,4 +1,5 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
+import { exigirTelaBase } from "@/lib/module-gate";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -23,6 +24,9 @@ import { FeedbackCadenceEditor } from "@/components/FeedbackCadenceEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
+import { AcessoTelasManager } from "@/components/acesso/AcessoTelasManager";
+import { lerRegrasDeAcesso, isentoDoAcesso } from "@/lib/acesso-telas-servidor";
+import { opcoesDeTelas } from "@/lib/acesso-telas";
 import { FeriasConfigManager } from "@/components/FeriasConfigManager";
 import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManager";
 import { InfractionTypesManager, type InfracaoRow } from "@/components/InfractionTypesManager";
@@ -75,6 +79,8 @@ export default async function SettingsPage({
 }) {
   const { aba } = await searchParams;
   const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh } = await requireContext();
+  // acesso por nível: quem não tem Configurações liberada vai para a tela dele
+  await exigirTelaBase("configuracoes");
 
   // Duas perguntas separadas, e é a separação que sustenta a tela inteira.
   //
@@ -124,6 +130,11 @@ export default async function SettingsPage({
   // dizer que nenhum comunicado sairá em vez de deixar o silêncio parecer falha.
   // Sai junto com o resto, sem onda própria.
   const flagsP = getPlatformIntegrationFlags();
+  // acesso às telas (Colaboradores > Acesso às telas); falha não derruba a página
+  const acessoP = lerRegrasDeAcesso(supabase, tenant.id).catch((e: unknown) => {
+    console.error("[acesso] regras", e instanceof Error ? e.message : e);
+    return null;
+  });
   // Tudo o que a tela precisa numa rodada só. Antes eram 6 ondas em sequência, e
   // como nenhuma dependia da anterior, a espera era pura soma de latência: com o
   // banco em São Paulo, cada onda custava um ida e volta que não precisava existir.
@@ -556,6 +567,36 @@ export default async function SettingsPage({
     </div>
   );
 
+  // Acesso às telas: nível a nível, mais as exceções por pessoa. Os nomes saem da
+  // empresa inteira (não do recorte da unidade): a regra vale para todo o nível.
+  const regrasDeAcesso = await acessoP;
+  const ativosPorNivel = new Map<string, number>();
+  for (const m of mems) {
+    if (m.is_active && m.hierarchy_level_id) ativosPorNivel.set(m.hierarchy_level_id, (ativosPorNivel.get(m.hierarchy_level_id) ?? 0) + 1);
+  }
+  const pessoaPorId = new Map(employeesTodos.map((e) => [e.userId, e]));
+  const acessoTab = regrasDeAcesso ? (
+    <AcessoTelasManager
+      niveis={hierarchyOpts
+        .filter((h) => h.active !== false || ativosPorNivel.has(h.id) || regrasDeAcesso.niveis.has(h.id))
+        .map((h) => ({ id: h.id, nome: h.name, ativos: ativosPorNivel.get(h.id) ?? 0, telas: regrasDeAcesso.niveis.get(h.id) ?? null }))}
+      excecoes={[...regrasDeAcesso.pessoas.entries()]
+        .map(([userId, x]) => {
+          const p = pessoaPorId.get(userId);
+          return { userId, nome: p?.fullName ?? "Colaborador", nivel: p?.hierarchyName ?? null, livre: x.livre, telas: x.telas, em: x.em };
+        })
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))}
+      pessoas={employeesTodos
+        .filter((e) => e.active && !e.dismissedAt && !isentoDoAcesso(e.role, e.isHr ?? false))
+        .map((e) => ({ id: e.userId, nome: e.fullName ?? "Sem nome", nivel: e.hierarchyName ?? null }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))}
+      opcoes={opcoesDeTelas(regrasDeAcesso.contratadas)}
+      canEdit={canEdit}
+    />
+  ) : (
+    <EmptyState title="Não foi possível carregar o acesso às telas" description="Recarregue a página. Se continuar, fale com o suporte." />
+  );
+
   // Férias moram DENTRO de Colaboradores, e não numa aba de topo: é dado por
   // pessoa, e a barra de cima já tem nove itens. Quem procura "férias" procura no
   // cadastro de gente.
@@ -603,6 +644,8 @@ export default async function SettingsPage({
             />
           ),
         },
+        // quem vê quais telas: por nível, com exceção por pessoa (só owner/admin grava)
+        { id: "acesso", label: "Acesso às telas", content: acessoTab },
       ]}
     />
   );

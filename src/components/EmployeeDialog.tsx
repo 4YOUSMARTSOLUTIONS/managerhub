@@ -9,6 +9,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { SearchSelect } from "@/components/SearchSelect";
 import { GENDER, ROLE, UNIT_KIND, USER_TYPE, SEM_GESTOR, options } from "@/lib/constants";
 import { formatCpf } from "@/lib/cpf";
+import { AcessoTelasDaFicha } from "@/components/acesso/AcessoTelasDaFicha";
 
 export type Option = { id: string; name: string; active?: boolean };
 export type SubdeptOption = { id: string; name: string; department_id: string; active?: boolean };
@@ -311,6 +312,8 @@ export function EmployeeDialog({
                     </span>
                   </span>
                 </label>
+                {/* telas liberadas: regra do nível ou exceção, gravada na hora */}
+                {employee && <AcessoTelasDaFicha userId={employee.userId} nome={employee.fullName ?? "colaborador"} />}
               </>
             )}
             <div style={grid2}>

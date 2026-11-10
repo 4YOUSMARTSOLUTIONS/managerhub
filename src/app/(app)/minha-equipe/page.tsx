@@ -1,4 +1,5 @@
 import { requireContext } from "@/lib/tenant";
+import { exigirTelaBase } from "@/lib/module-gate";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { createClient } from "@/lib/supabase/server";
 import { minhaEquipe } from "@/lib/team";
@@ -27,6 +28,7 @@ import { ExportarEquipeButton } from "@/components/ExportarEquipeButton";
  */
 export default async function MinhaEquipePage() {
   const { tenant, role, user } = await requireContext();
+  await exigirTelaBase("minha_equipe");
   const podeVer = role === "owner" || role === "admin" || role === "manager" || role === "team_lead";
 
   if (!podeVer) {

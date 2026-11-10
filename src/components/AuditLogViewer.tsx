@@ -39,6 +39,8 @@ const ENTITY_LABEL: Record<string, string> = {
   feedback_competencies: "Competência de feedback", feedback_cadence_rules: "Cadência de feedback",
   holidays: "Feriado", individual_rv_config: "Remuneração variável",
   ferias_decimo_escolhas: "Férias: escolha do 13º",
+  acesso_telas_nivel: "Acesso às telas: regra do nível",
+  acesso_telas_pessoa: "Acesso às telas: exceção da pessoa",
 };
 
 const ACTION_LABEL: Record<string, { label: string; tone: Tone }> = {

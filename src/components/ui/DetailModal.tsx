@@ -19,7 +19,7 @@ import { X } from "lucide-react";
 const LARGURAS = { sm: 480, md: 620, lg: 760 } as const;
 
 export function DetailModal({
-  open, onClose, title, badges, footer, width = "md", children,
+  open, onClose, title, badges, footer, width = "md", zIndex = 60, children,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +28,8 @@ export function DetailModal({
   badges?: React.ReactNode;
   footer?: React.ReactNode;
   width?: keyof typeof LARGURAS;
+  /** 60 por padrão; aberto de dentro de outro modal (a ficha é 70), vai acima */
+  zIndex?: number;
   children: React.ReactNode;
 }) {
   if (!open) return null;
@@ -38,7 +40,7 @@ export function DetailModal({
         position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
         backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-start", justifyContent: "center",
-        padding: "5vh 1rem", zIndex: 60, overflowY: "auto",
+        padding: "5vh 1rem", zIndex, overflowY: "auto",
       }}
     >
       <div className="card" style={{ width: "100%", maxWidth: LARGURAS[width], boxShadow: "var(--mh-shadow-e3)" }}>

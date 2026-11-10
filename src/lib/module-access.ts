@@ -2,12 +2,15 @@ import { cache } from "react";
 import { requireContext } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { MODULE_BY_KEY, MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
+import { FORA_DA_REGRA } from "@/lib/acesso-telas";
 
 export type ModuleAccess = {
   /** Estado resolvido de cada módulo para o escopo de unidade atual. */
   state: Record<ModuleKey, ModuleState>;
   /** Módulos marcados como "em construção" (global, definido pelo super admin). */
   construction: Set<ModuleKey>;
+  /** A pessoa tem acesso restrito por nível ou por exceção (Configurações > Colaboradores). */
+  restrito: boolean;
 };
 
 /** "melhor" estado vence na união entre unidades. */
@@ -26,7 +29,7 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
   if (isSuperAdmin && companyScope?.viewAll) {
     const state = {} as Record<ModuleKey, ModuleState>;
     for (const m of MODULES) state[m.key] = "on";
-    return { state, construction: new Set<ModuleKey>() };
+    return { state, construction: new Set<ModuleKey>(), restrito: false };
   }
 
   const supabase = await createClient();
@@ -34,7 +37,7 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
   const unitIds = unitScope.activeUnitId ? [unitScope.activeUnitId] : unitScope.allowedUnitIds;
 
   // tenant sem unidades: nada vendável liberado (não há operação sem unidade)
-  const [{ data: rows }, { data: flags }] = await Promise.all([
+  const [{ data: rows }, { data: flags }, { data: restricao, error: erroRestricao }] = await Promise.all([
     unitIds.length
       ? supabase.from("unit_modules").select("module_key, state").eq("tenant_id", tenant.id).in("unit_id", unitIds)
       : Promise.resolve({ data: [] as { module_key: string; state: ModuleState }[] }),
@@ -43,6 +46,8 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
     // apenas a lista de chaves em obra, que é o que a interface já mostra ao
     // usuário no selo "Em construção".
     supabase.rpc("modulos_em_construcao"),
+    // telas liberadas para esta pessoa (null = sem restrição); ver acesso-telas.ts
+    supabase.rpc("minhas_telas", { p_tenant: tenant.id }),
   ]);
 
   const best: Partial<Record<ModuleKey, ModuleState>> = {};
@@ -56,9 +61,21 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
   const state = {} as Record<ModuleKey, ModuleState>;
   for (const m of MODULES) state[m.key] = m.core ? "on" : (best[m.key] ?? "hidden");
 
+  // Acesso por nível ou exceção da pessoa: só TIRA telas. O que a unidade não
+  // contratou continua de fora mesmo estando na lista. Erro na leitura deixa
+  // passar (o menu de sempre) em vez de esconder tudo de todos: a restrição é
+  // de tela, e a RLS continua decidindo os dados.
+  if (erroRestricao) console.error("[acesso] minhas_telas", erroRestricao.message);
+  const liberadas = Array.isArray(restricao) ? new Set<string>(restricao) : null;
+  if (liberadas) {
+    for (const m of MODULES) {
+      if (!FORA_DA_REGRA.has(m.key) && !liberadas.has(m.key)) state[m.key] = "hidden";
+    }
+  }
+
   const construction = new Set(
     (flags ?? []).map((k) => k as ModuleKey).filter((k) => k in MODULE_BY_KEY),
   );
 
-  return { state, construction };
+  return { state, construction, restrito: liberadas !== null };
 });

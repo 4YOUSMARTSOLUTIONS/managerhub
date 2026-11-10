@@ -2010,6 +2010,11 @@ export type Database = {
       push_resultado: { Args: { p_segredo: string; p_ok: string[]; p_expiradas: string[] }; Returns: undefined }
       push_vapid: { Args: Record<PropertyKey, never>; Returns: { publica: string | null; privada: string | null }[] }
       push_vapid_definir: { Args: { p_publica: string; p_privada: string }; Returns: string }
+      // acesso às telas por nível e por pessoa (null = sem restrição)
+      minhas_telas: { Args: { p_tenant: string }; Returns: string[] | null }
+      acesso_telas_listar: { Args: { p_tenant: string }; Returns: Json }
+      acesso_telas_definir_nivel: { Args: { p_tenant: string; p_nivel: string; p_modulos: string[] | null }; Returns: undefined }
+      acesso_telas_definir_pessoa: { Args: { p_tenant: string; p_user: string; p_modo: string; p_modulos: string[] | null }; Returns: undefined }
       // Troca obrigatória da senha definida por terceiro. `marcar_troca_pendente`
       // NÃO entra de propósito: ela é revogada de `authenticated` (quem marca são
       // as RPCs de criação e o reset por admin, por dentro), e este arquivo
