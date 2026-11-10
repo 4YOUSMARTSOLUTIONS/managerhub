@@ -5,8 +5,8 @@ import { InstalarApp } from "@/components/pwa/InstalarApp";
 import { appUrl } from "@/lib/app-url";
 
 export const metadata: Metadata = {
-  title: "Instalar o aplicativo · MANAGERHUB",
-  description: "Instale o MANAGERHUB no celular ou no computador.",
+  title: "Instalar o aplicativo · Manager HUB",
+  description: "Instale o Manager HUB no celular ou no computador.",
 };
 
 /**
@@ -20,7 +20,7 @@ export default function InstalarPage() {
   return (
     <AuthShell
       title="Instalar o aplicativo"
-      subtitle="Use o MANAGERHUB como um aplicativo: ícone na tela inicial e tela cheia, sem baixar nada da loja."
+      subtitle="Use o Manager HUB como um aplicativo: ícone na tela inicial e tela cheia, sem baixar nada da loja."
       footer={<Link href="/">Ir para o portal</Link>}
     >
       <InstalarApp link={`${appUrl()}/instalar`} />

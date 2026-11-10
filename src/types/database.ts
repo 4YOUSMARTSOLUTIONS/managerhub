@@ -1994,6 +1994,22 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      // notificações no celular: as do app (sessão) e as da rota /api/push (service role)
+      push_inscrever: { Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_aparelho: string }; Returns: undefined }
+      push_cancelar: { Args: { p_endpoint: string }; Returns: undefined }
+      push_status: { Args: { p_endpoint: string }; Returns: boolean }
+      push_teste: { Args: { p_tenant: string }; Returns: boolean }
+      push_para_enviar: {
+        Args: { p_segredo: string; p_ids: string[] }
+        Returns: {
+          notification_id: string; type: string; title: string; body: string | null
+          demanda_id: string | null; planner_board_id: string | null
+          endpoint: string; p256dh: string; chave_auth: string
+        }[]
+      }
+      push_resultado: { Args: { p_segredo: string; p_ok: string[]; p_expiradas: string[] }; Returns: undefined }
+      push_vapid: { Args: Record<PropertyKey, never>; Returns: { publica: string | null; privada: string | null }[] }
+      push_vapid_definir: { Args: { p_publica: string; p_privada: string }; Returns: string }
       // Troca obrigatória da senha definida por terceiro. `marcar_troca_pendente`
       // NÃO entra de propósito: ela é revogada de `authenticated` (quem marca são
       // as RPCs de criação e o reset por admin, por dentro), e este arquivo

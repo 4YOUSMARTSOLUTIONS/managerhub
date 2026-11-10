@@ -12,9 +12,10 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrai
 export const metadata: Metadata = {
   title: "MANAGERHUB",
   description: "Portal de gestão: reuniões, salas, ações, chamados e metas.",
-  applicationName: "MANAGERHUB",
+  // nome do aplicativo instalado (o mesmo do manifesto)
+  applicationName: "Manager HUB",
   // iPhone: abre em tela cheia pelo ícone da tela inicial, com o nome certo
-  appleWebApp: { capable: true, title: "MANAGERHUB", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Manager HUB", statusBarStyle: "default" },
   formatDetection: { telephone: false },
 };
 

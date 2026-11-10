@@ -40,7 +40,7 @@ function guiaDe(p: Plataforma): Guia {
         passos: [
           <>Toque em <strong>Compartilhar</strong> <Ic><Share size={15} /></Ic>, na barra do Safari.</>,
           <>Role a lista e toque em <strong>Adicionar à Tela de Início</strong> <Ic><SquarePlus size={15} /></Ic>.</>,
-          <>Toque em <strong>Adicionar</strong>. O ícone do MANAGERHUB aparece na tela inicial.</>,
+          <>Toque em <strong>Adicionar</strong>. O ícone do Manager HUB aparece na tela inicial.</>,
         ],
         nota: (
           <>
@@ -55,7 +55,7 @@ function guiaDe(p: Plataforma): Guia {
         passos: [
           <>Toque em <strong>Compartilhar</strong> <Ic><Share size={15} /></Ic>, na barra de endereço.</>,
           <>Toque em <strong>Adicionar à Tela de Início</strong> <Ic><SquarePlus size={15} /></Ic>. Se não aparecer, toque em <strong>Mais</strong>.</>,
-          <>Toque em <strong>Adicionar</strong>. O ícone do MANAGERHUB aparece na tela inicial.</>,
+          <>Toque em <strong>Adicionar</strong>. O ícone do Manager HUB aparece na tela inicial.</>,
         ],
         nota: <>Não encontrou a opção? Copie o link abaixo e abra no Safari, onde a instalação sempre funciona.</>,
       };
@@ -76,7 +76,7 @@ function guiaDe(p: Plataforma): Guia {
         passos: [
           <>Toque no menu <Ic><EllipsisVertical size={15} /></Ic>, no canto superior direito do Chrome.</>,
           <>Toque em <strong>Instalar app</strong> ou <strong>Adicionar à tela inicial</strong>.</>,
-          <>Confirme em <strong>Instalar</strong>. O ícone do MANAGERHUB aparece na tela inicial.</>,
+          <>Confirme em <strong>Instalar</strong>. O ícone do Manager HUB aparece na tela inicial.</>,
         ],
         nota: (
           <>
@@ -90,7 +90,7 @@ function guiaDe(p: Plataforma): Guia {
         titulo: "No Mac, pelo Safari",
         passos: [
           <>No menu <strong>Arquivo</strong> do Safari, clique em <strong>Adicionar ao Dock</strong>.</>,
-          <>Clique em <strong>Adicionar</strong>. O MANAGERHUB fica no Dock como um aplicativo.</>,
+          <>Clique em <strong>Adicionar</strong>. O Manager HUB fica no Dock como um aplicativo.</>,
         ],
         nota: <>Precisa do macOS Sonoma ou mais novo. Pelo Chrome ou pelo Edge também dá para instalar.</>,
       };
@@ -109,14 +109,14 @@ function guiaDe(p: Plataforma): Guia {
         titulo: "No computador",
         passos: [
           <>Na barra de endereço, clique no ícone de instalar <Ic><MonitorDown size={15} /></Ic>, no canto direito.</>,
-          <>Clique em <strong>Instalar</strong>. O MANAGERHUB abre numa janela própria e fica no menu Iniciar.</>,
+          <>Clique em <strong>Instalar</strong>. O Manager HUB abre numa janela própria e fica no menu Iniciar.</>,
         ],
         nota: (
           <>
             Não aparece o ícone? No Chrome, abra o menu <Ic><EllipsisVertical size={14} /></Ic> e vá em{" "}
             <strong>Transmitir, salvar e compartilhar</strong> &gt; <strong>Instalar página como app</strong>.
             No Edge, menu <Ic><Ellipsis size={14} /></Ic> &gt; <strong>Aplicativos</strong> &gt;{" "}
-            <strong>Instalar este site como um aplicativo</strong>. Se já instalou, procure o MANAGERHUB
+            <strong>Instalar este site como um aplicativo</strong>. Se já instalou, procure o Manager HUB
             no menu Iniciar.
           </>
         ),
@@ -198,7 +198,7 @@ function EnviarLink({ link }: { link: string }) {
   };
   const compartilhar = () => {
     navigator
-      .share({ title: "MANAGERHUB", text: "Instale o aplicativo do MANAGERHUB:", url: link })
+      .share({ title: "Manager HUB", text: "Instale o aplicativo do Manager HUB:", url: link })
       .catch(() => {
         // a pessoa fechou a caixa de compartilhar: nada a fazer
       });
@@ -246,15 +246,15 @@ export function InstalarApp({ link }: { link: string }) {
   }
 
   if (instalado) {
-    return <Pronto titulo="Você já está no aplicativo." texto="Daqui em diante, abra o MANAGERHUB pelo ícone." />;
+    return <Pronto titulo="Você já está no aplicativo." texto="Daqui em diante, abra o Manager HUB pelo ícone." />;
   }
   if (recemInstalado || aceitou) {
     return (
       <Pronto
         titulo="Aplicativo instalado."
         texto={movel
-          ? "O ícone do MANAGERHUB já está na tela inicial. Abra por ele daqui em diante."
-          : "O MANAGERHUB abre numa janela própria e fica no menu Iniciar."}
+          ? "O ícone do Manager HUB já está na tela inicial. Abra por ele daqui em diante."
+          : "O Manager HUB abre numa janela própria e fica no menu Iniciar."}
       />
     );
   }

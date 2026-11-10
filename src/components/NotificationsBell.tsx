@@ -4,12 +4,37 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getNotifications, markNotificationsRead, type NotificationRow } from "@/lib/actions/notifications";
 import { formatDateTime } from "@/lib/format";
+import { destinoDaNotificacao } from "@/lib/notificacao-destino";
+import { usePush } from "@/components/pwa/usePush";
+import { useInstalacao } from "@/components/pwa/useInstalacao";
+import { toast } from "sonner";
+
+/** "Agora não" no convite do sino vale para este aparelho. */
+const DISPENSA = "mh_push_convite_dispensado";
 
 export function NotificationsBell() {
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  // convite para ligar as notificações no celular: só no app instalado, que é
+  // onde a pessoa espera recebê-las, e some com o "Agora não"
+  const push = usePush();
+  const { instalado } = useInstalacao();
+  const [dispensado, setDispensado] = useState(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(DISPENSA) === "1"; } catch { return false; }
+  });
+  const convidar = instalado && push.estado === "desligado" && !dispensado;
+  const dispensar = () => {
+    setDispensado(true);
+    try { localStorage.setItem(DISPENSA, "1"); } catch { /* sem armazenamento: some só nesta visita */ }
+  };
+  const ativarPush = async () => {
+    const r = await push.ativar();
+    if (r.ok) toast.success("Notificações ligadas. Um aviso de teste chega em instantes.");
+    else if (r.motivo === "bloqueado") { toast.info("As notificações não foram liberadas. Dá para ligar depois pelo menu do seu nome."); dispensar(); }
+    else toast.error(r.motivo);
+  };
 
   const load = () => getNotifications().then((r) => { setItems(r.items); setUnread(r.unread); });
 
@@ -18,7 +43,7 @@ export function NotificationsBell() {
   const toggle = () => {
     const next = !open;
     setOpen(next);
-    if (next) load();
+    if (next) { load(); void push.preparar(); }
   };
 
   const markAll = async () => {
@@ -30,20 +55,8 @@ export function NotificationsBell() {
   const onItem = async (n: NotificationRow) => {
     if (!n.isRead) { await markNotificationsRead([n.id]); setUnread((u) => Math.max(0, u - 1)); setItems((xs) => xs.map((x) => (x.id === n.id ? { ...x, isRead: true } : x))); }
     setOpen(false);
-    // a notificação sabe para onde aponta: quadro do Planner ou lista de Ações
-    if (n.plannerBoardId) router.push(`/planner?quadro=${n.plannerBoardId}`);
-    else if (n.demandaId) router.push("/acoes");
-    // treinamento não tem destino próprio na tabela: o tipo já diz para onde ir,
-    // e uma coluna a mais em `notifications` custaria uma migração por módulo
-    else if (n.type.startsWith("training_")) router.push("/treinamentos");
-    else if (n.type.startsWith("punicao_")) router.push("/punicoes");
-    else if (n.type.startsWith("absenteismo_")) router.push("/absenteismos");
-    else if (n.type.startsWith("ferias_")) router.push("/ferias");
-    // quem não tem e-mail cadastrado é o RH que resolve, na ficha do colaborador
-    else if (n.type === "senha_sem_email") router.push("/configuracoes?tab=usuarios");
-    else if (n.type.startsWith("seg_relato_")) router.push("/seguranca/relatos");
-    else if (n.type.startsWith("seg_acidente_")) router.push("/seguranca/acidentes");
-    else if (n.type.startsWith("seg_blitz_")) router.push("/seguranca/blitz");
+    const destino = destinoDaNotificacao(n);
+    if (destino) router.push(destino);
   };
 
   return (
@@ -63,6 +76,15 @@ export function NotificationsBell() {
             <strong style={{ fontSize: "0.9rem" }}>Notificações</strong>
             {unread > 0 && <button type="button" className="btn btn-ghost btn-sm" onMouseDown={(e) => e.preventDefault()} onClick={markAll}>Marcar todas como lidas</button>}
           </div>
+          {convidar && (
+            <div style={{ padding: "0.65rem 0.9rem", borderBottom: "1px solid var(--border)", background: "var(--mh-surface-2)", display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+              <span style={{ fontSize: "0.8rem", lineHeight: 1.45 }}>Receba estes avisos no celular, mesmo com o app fechado.</span>
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <button type="button" className="btn btn-primary btn-xs" onMouseDown={(e) => e.preventDefault()} onClick={ativarPush}>Ativar</button>
+                <button type="button" className="btn btn-ghost btn-xs" onMouseDown={(e) => e.preventDefault()} onClick={dispensar}>Agora não</button>
+              </div>
+            </div>
+          )}
           {items.length === 0 ? (
             <p className="soft" style={{ padding: "1rem 0.9rem", fontSize: "0.85rem", margin: 0 }}>Sem notificações.</p>
           ) : (

@@ -204,13 +204,23 @@ export function ChatLiveProvider({
     // aba em segundo plano: aviso do navegador, que aparece fora da janela
     if (typeof document !== "undefined" && document.hidden
       && typeof Notification !== "undefined" && Notification.permission === "granted") {
-      const n = new Notification(quem, { body: texto, tag: m.channelId });
-      n.onclick = () => {
-        window.focus();
-        setBalaoAberto(true);
-        abrirCanal(m.channelId);
-        n.close();
-      };
+      try {
+        const n = new Notification(quem, { body: texto, tag: m.channelId });
+        n.onclick = () => {
+          window.focus();
+          setBalaoAberto(true);
+          abrirCanal(m.channelId);
+          n.close();
+        };
+      } catch {
+        // Android (e o app instalado) não aceitam `new Notification`: lá o
+        // aviso sai pelo service worker, e o toque abre o chat
+        void navigator.serviceWorker?.ready
+          .then((reg) => reg.showNotification(quem, {
+            body: texto, tag: m.channelId, icon: "/icons/icon-192.png", badge: "/icons/badge-96.png", data: { url: "/chat" },
+          }))
+          .catch(() => undefined);
+      }
       return;
     }
 

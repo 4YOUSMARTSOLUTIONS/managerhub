@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronDown, Download, LogOut, Moon, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellOff, ChevronDown, Download, LogOut, Moon, Smartphone, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAvatars } from "@/components/AvatarProvider";
@@ -11,6 +11,7 @@ import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "@/components/chat/Chat
 import { useChatVivo } from "@/components/chat/ChatLiveProvider";
 import { StatusDropdown } from "@/components/chat/StatusDropdown";
 import { useInstalacao } from "@/components/pwa/useInstalacao";
+import { desligarPushAoSair, usePush, type EstadoPush } from "@/components/pwa/usePush";
 import { setTheme } from "@/lib/actions/theme";
 import { signOut } from "@/lib/actions/auth";
 import { ROLE } from "@/lib/constants";
@@ -49,6 +50,33 @@ export function UserMenu({
    * Onde o navegador instala direto (Chrome e Edge), um clique basta. Nos
    * outros (iPhone, Safari), a página /instalar mostra o passo a passo.
    */
+  // notificações no celular deste aparelho (com o app fechado)
+  const push = usePush();
+  const rotuloPush: Partial<Record<EstadoPush, string>> = {
+    ligado: "Ligadas", desligado: "Desligadas", bloqueado: "Bloqueadas", instalar: "Instale o app",
+  };
+  const alternarPush = async () => {
+    if (push.estado === "instalar") { setOpen(false); router.push("/instalar"); return; }
+    if (push.estado === "bloqueado") {
+      toast.info("As notificações estão bloqueadas neste aparelho. Libere nas configurações do navegador (no iPhone, em Ajustes > Notificações) e tente de novo.");
+      return;
+    }
+    if (push.estado === "ligado") {
+      await push.desativar();
+      toast.success("Notificações desligadas neste aparelho.");
+      return;
+    }
+    const r = await push.ativar();
+    if (r.ok) toast.success("Notificações ligadas. Um aviso de teste chega em instantes.");
+    else if (r.motivo === "bloqueado") toast.info("As notificações não foram liberadas. Para ligar depois, libere nas configurações do navegador.");
+    else toast.error(r.motivo);
+  };
+  const sair = () => start(async () => {
+    // o aparelho deixa de receber os avisos de quem saiu
+    await desligarPushAoSair();
+    await signOut();
+  });
+
   const instalarApp = async () => {
     setOpen(false);
     if (!app.podeInstalar) { router.push("/instalar"); return; }
@@ -56,6 +84,10 @@ export function UserMenu({
     if (r === "aceito") toast.success("Aplicativo instalado.");
     else if (r === "indisponivel") router.push("/instalar");
   };
+
+  // a chave do push vem antes do toque: no iPhone o pedido precisa sair do próprio toque
+  const prepararPush = push.preparar;
+  useEffect(() => { if (open) void prepararPush(); }, [open, prepararPush]);
 
   useEffect(() => {
     if (!open) return;
@@ -241,10 +273,28 @@ export function UserMenu({
             </button>
           )}
 
-          <form action={signOut}>
+          {rotuloPush[push.estado] && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={push.estado === "ligado"}
+              style={itemStyle}
+              disabled={pending}
+              onClick={() => start(alternarPush)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              <Smartphone size={14} style={push.estado === "ligado" ? undefined : { color: "var(--mh-text-3)" }} />
+              <span style={{ flex: 1 }}>Notificações no aparelho</span>
+              <span className="soft" style={{ fontSize: "0.68rem" }}>{rotuloPush[push.estado]}</span>
+            </button>
+          )}
+
+          <form action={signOut} onSubmit={(e) => { e.preventDefault(); sair(); }}>
             <button
               type="submit"
               role="menuitem"
+              disabled={pending}
               style={{ ...itemStyle, color: "var(--mh-danger)" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
