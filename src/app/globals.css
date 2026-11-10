@@ -577,6 +577,13 @@ a {
      em vez de pílulas soltas quebrando em linhas tortas */
   .grade-2-no-celular { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grade-2-no-celular > * { justify-content: center; min-height: 44px; }
+  /* respostas Sim / Não / Não se aplica: três colunas iguais, na linha de baixo da pergunta */
+  .grade-3-no-celular { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); flex-basis: 100% !important; }
+  .grade-3-no-celular > * { min-height: 44px !important; padding-left: 0.3rem !important; padding-right: 0.3rem !important; white-space: nowrap; }
+  /* botões do rodapé de folha e opções de busca de pessoa: altura de polegar */
+  .mh-folha-rodape .btn { min-height: 48px; }
+  .people-picker-opcao { min-height: 46px; }
+  .reg-chip button { width: 30px !important; height: 30px !important; }
   .input, .select { font-size: 16px; }
   .mh-folha-fundo { padding: 0 !important; }
   .mh-folha {

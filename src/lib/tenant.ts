@@ -150,12 +150,14 @@ export const getMembers = cache(async function getMembers(tenantId: string) {
   // telas, e o corte em 1000 do PostgREST não avisa quando chega
   const { data } = await fetchAll(() => supabase
     .from("memberships")
-    .select("role, user_id, profiles!memberships_user_id_fkey(id, full_name, email)")
+    .select("role, user_id, employee_code, profiles!memberships_user_id_fkey(id, full_name, email)")
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
     .order("id"));
   return (data ?? []).map((m) => ({
     role: m.role,
     profile: m.profiles as Tables<"profiles"> | null,
+    /** matrícula: a busca de pessoa acha por ela (ex.: a blitz da portaria) */
+    code: m.employee_code as string | null,
   }));
 });

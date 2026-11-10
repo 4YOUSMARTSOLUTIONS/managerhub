@@ -80,10 +80,10 @@ export default async function SegurancaBlitzPage() {
     respostasPorBlitz.set(r.avaliacao_id, atual);
   }
 
+  // com a matrícula: na portaria, o crachá é mais rápido que o nome
   const pessoas = membros
-    .map((m) => m.profile)
-    .filter((p): p is NonNullable<typeof p> => !!p)
-    .map((p) => ({ id: p.id, name: p.full_name ?? p.email ?? "—" }));
+    .filter((m): m is typeof m & { profile: NonNullable<typeof m.profile> } => !!m.profile)
+    .map((m) => ({ id: m.profile.id, name: m.profile.full_name ?? m.profile.email ?? "—", code: m.code }));
   const nomeDoUser = new Map(pessoas.map((p) => [p.id, p.name]));
   const nomeMotivo = new Map((motivos ?? []).map((m) => [m.id, m.name]));
 
