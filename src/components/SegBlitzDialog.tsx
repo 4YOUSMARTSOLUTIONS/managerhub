@@ -192,7 +192,8 @@ export function SegBlitzDialog({
 
           <div>
             <label className="label">Meio de transporte <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+            {/* no celular, grade de 2 colunas (LUIZ preferiu a um dropdown: um toque e à vista) */}
+            <div className="grade-2-no-celular" style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
               {meiosAtivos.map((m) => {
                 const on = meioId === m.id;
                 const src = segIconeSrc(m.imagePath);
