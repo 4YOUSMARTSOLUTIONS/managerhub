@@ -227,6 +227,8 @@ export async function updateEmployee(
         .update({
           is_training_manager: formData.get("is_training_manager") === "1",
           is_hr: formData.get("is_hr") === "1",
+          // mesma trava no banco: só owner/admin concede (so_administracao_concede_avaliador_blitz)
+          is_avaliador_blitz: formData.get("is_avaliador_blitz") === "1",
         })
         .eq("tenant_id", tenantId)
         .eq("user_id", userId);

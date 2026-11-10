@@ -34,6 +34,8 @@ export type EmployeeData = {
   unitIds: string[];
   /** marca de gestão de treinamentos (capacidade, independente do papel) */
   isTrainingManager?: boolean;
+  /** marca de avaliador da blitz de trajeto (lança a blitz sem ser gestor) */
+  isAvaliadorBlitz?: boolean;
   /** marca de RH, o departamento pessoal (atribuição, independente do perfil) */
   isHr?: boolean;
   /** data de desligamento (demissão); null = vínculo ativo */
@@ -309,6 +311,19 @@ export function EmployeeDialog({
                     <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
                       Cria e edita treinamentos, trilhas, turmas e provas, convoca pessoas e acompanha o
                       progresso de todos. Não muda o tipo de usuário nem dá acesso a outros módulos.
+                    </span>
+                  </span>
+                </label>
+                {/* Avaliador da blitz: quem faz a blitz na portaria sem ser gestor.
+                    Libera só a blitz (no banco, `pode_avaliar_blitz`), sem
+                    relatos nem acidentes, que são da Equipe de segurança. */}
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                  <input type="checkbox" name="is_avaliador_blitz" value="1" defaultChecked={employee?.isAvaliadorBlitz ?? false} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>Avaliador da blitz de trajeto</strong>
+                    <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                      Lança a blitz e vê as que registrou. A tela da blitz entra mesmo para quem tem acesso
+                      restrito. Não dá acesso a relatos nem a acidentes, que são da Equipe de segurança.
                     </span>
                   </span>
                 </label>

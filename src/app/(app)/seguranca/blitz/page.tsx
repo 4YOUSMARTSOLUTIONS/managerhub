@@ -34,7 +34,7 @@ export default async function SegurancaBlitzPage() {
     { data: blitzes }, { data: podeAvaliar }, membros,
     { data: meios }, { data: perguntas }, { data: perguntaMeios },
     { data: motivos }, { data: veiculos },
-    { data: painel }, alertas,
+    { data: painel }, alertas, { data: daSeguranca },
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_avaliar_blitz", { p_tenant: tenant.id }),
@@ -56,7 +56,14 @@ export default async function SegurancaBlitzPage() {
     }),
     // os alertas do usuário logado como gestor
     getBlitzAlertas(),
+    supabase.rpc("is_safety_member", { p_tenant: tenant.id }),
   ]);
+  /**
+   * A aba Análises (indicadores e recorrência) é de quem tem alçada: gestor,
+   * gerência, administração e equipe de segurança. O avaliador da blitz (e o
+   * colaborador comum) fica só com a lista: decisão do LUIZ, 10/11/2026.
+   */
+  const temAlcada = role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || daSeguranca === true;
 
   const ids = (blitzes ?? []).map((b) => b.id);
   const { data: respostas } = ids.length
@@ -126,7 +133,7 @@ export default async function SegurancaBlitzPage() {
           userId: v.user_id, meioId: v.meio_id, placa: v.placa,
           tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor,
         }))}
-        painel={(painel ?? null) as BlitzPainel | null}
+        painel={temAlcada ? ((painel ?? null) as BlitzPainel | null) : null}
         alertas={alertas}
       />
     </div>

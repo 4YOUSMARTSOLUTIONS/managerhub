@@ -398,6 +398,7 @@ export type Database = {
           is_hr: boolean
           is_ticket_manager: boolean
           is_training_manager: boolean
+          is_avaliador_blitz: boolean
           manager_id: string | null
           position_id: string | null
           position_level_id: string | null
@@ -418,6 +419,7 @@ export type Database = {
           is_hr?: boolean
           is_ticket_manager?: boolean
           is_training_manager?: boolean
+          is_avaliador_blitz?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
@@ -438,6 +440,7 @@ export type Database = {
           is_hr?: boolean
           is_ticket_manager?: boolean
           is_training_manager?: boolean
+          is_avaliador_blitz?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
