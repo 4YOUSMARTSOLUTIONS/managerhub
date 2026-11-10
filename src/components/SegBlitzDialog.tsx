@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck, Plus } from "lucide-react";
+import { CircleCheck, CloudOff, Plus } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, type SegVeiculoCor } from "@/lib/constants";
 import { formatDate, hojeYmd, shortName } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
-import { criarBlitz } from "@/lib/actions/seguranca";
+import { criarBlitz, type BlitzInput } from "@/lib/actions/seguranca";
+import {
+  comLimite, guardarBlitz, novoCodigoDeBlitz, removerBlitzGuardada, useConectado, type BlitzGuardada,
+} from "@/lib/blitz-fila";
 import type { Enums } from "@/types/database";
 
 export type BlitzMeioOpt = {
@@ -67,16 +70,22 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  *    veículo, perguntas, decisão), conforme o anterior fica completo. Bloco
  *    que apareceu não some mais, a tela desce até o novo, e quem já tem
  *    veículo da última blitz cai direto nas perguntas. No computador, tudo
- *    à vista como antes (LUIZ, 10/11/2026).
+ *    à vista como antes (LUIZ, 10/11/2026);
+ *  - sem sinal (ou sem resposta em 15 segundos), a blitz fica guardada no
+ *    aparelho e vai sozinha quando a conexão voltar (`lib/blitz-fila.ts`).
+ *    Cada blitz tem um código criado aqui, e reenviar nunca duplica.
  *
  * As respostas começam VAZIAS de propósito: pré-marcar "sim" (ou um "marcar
  * todas") transformaria a blitz em carimbo. O avaliador toca cada resposta.
  */
 export function SegBlitzDialog({
-  open, onClose, pessoas, meios, perguntas, motivos, veiculos,
+  open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId,
 }: {
   open: boolean;
   onClose: () => void;
+  /** quem está avaliando: a blitz guardada sem sinal só sai em nome dele */
+  dono: string;
+  tenantId: string;
   pessoas: Person[];
   meios: BlitzMeioOpt[];
   perguntas: BlitzPerguntaOpt[];
@@ -101,8 +110,12 @@ export function SegBlitzDialog({
   const [observacao, setObservacao] = useState("");
   const [verObservacao, setVerObservacao] = useState(false);
   const [erro, setErro] = useState("");
-  /** a blitz acabou de ser registrada: a tela confirma e oferece a próxima */
-  const [registrada, setRegistrada] = useState<{ nome: string; situacao: string } | null>(null);
+  /** a blitz acabou de ser registrada (ou guardada sem sinal): a tela confirma e oferece a próxima */
+  const [registrada, setRegistrada] = useState<{ nome: string; situacao: string; guardada: boolean } | null>(null);
+  // o código desta blitz: nasce com o formulário e só troca quando ele limpa,
+  // então tentar de novo depois de um erro reaproveita o mesmo
+  const [clientId, setClientId] = useState(novoCodigoDeBlitz);
+  const conectado = useConectado();
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
   const secoes = useRef<Partial<Record<Secao, HTMLDivElement | null>>>({});
@@ -151,6 +164,7 @@ export function SegBlitzDialog({
     setPropriedade(""); setCor(""); setSugerido(false); setRespostas({}); setLiberado(null);
     setMotivoId(""); setObservacao(""); setVerObservacao(false); setErro("");
     setRevelado(0);
+    setClientId(novoCodigoDeBlitz());
   };
   const fechar = () => { limpar(); setRegistrada(null); onClose(); };
 
@@ -205,23 +219,54 @@ export function SegBlitzDialog({
       ? "Bloqueado"
       : perguntasDoMeio.some((q) => respostas[q.id] === "nao") ? "Liberado com desvio" : "Conforme";
 
+    const input: BlitzInput = {
+      userId,
+      occurredOn: data,
+      meioId,
+      placa: meio?.temVeiculo ? placa : null,
+      veiculoTipo: meio?.temVeiculo ? tipo : null,
+      propriedade: meio?.temVeiculo && propriedade ? propriedade : null,
+      cor: meio?.temVeiculo && cor ? cor : null,
+      liberado,
+      motivoBloqueioId: liberado ? null : motivoId,
+      observacao,
+      respostas: perguntasDoMeio.map((q) => ({ perguntaId: q.id, resposta: respostas[q.id] })),
+      clientId,
+    };
+    const item: BlitzGuardada = { clientId, dono, tenantId, input, nome, situacao, guardadaEm: new Date().toISOString() };
+
+    /** Sem sinal: guarda no aparelho. Se nem isso der, o formulário continua preenchido. */
+    const guardar = () => {
+      if (!guardarBlitz(item)) {
+        setErro("Sem conexão, e este aparelho não deixou guardar a blitz. O que foi preenchido continua aqui: toque em Registrar de novo quando o sinal voltar.");
+        return;
+      }
+      limpar();
+      setRegistrada({ nome, situacao, guardada: true });
+    };
+
+    // o navegador já sabe que está sem rede: nem tenta, guarda direto
+    if (typeof navigator !== "undefined" && navigator.onLine === false) { guardar(); return; }
+
     iniciar(async () => {
-      const r = await criarBlitz({
-        userId,
-        occurredOn: data,
-        meioId,
-        placa: meio?.temVeiculo ? placa : null,
-        veiculoTipo: meio?.temVeiculo ? tipo : null,
-        propriedade: meio?.temVeiculo && propriedade ? propriedade : null,
-        cor: meio?.temVeiculo && cor ? cor : null,
-        liberado,
-        motivoBloqueioId: liberado ? null : motivoId,
-        observacao,
-        respostas: perguntasDoMeio.map((q) => ({ perguntaId: q.id, resposta: respostas[q.id] })),
-      });
+      const envio = criarBlitz(input);
+      let r: Awaited<typeof envio> | "demorou";
+      try {
+        r = await comLimite(envio);
+      } catch {
+        // a chamada nem chegou (sem rede): guarda e a fila envia depois
+        guardar();
+        return;
+      }
+      if (r === "demorou") {
+        guardar();
+        // a resposta ainda pode chegar: se gravou, sai da fila na hora
+        envio.then((x) => { if (!x.error) removerBlitzGuardada(item.clientId); }).catch(() => {});
+        return;
+      }
       if (r.error) { setErro(r.error); return; }
       limpar();
-      setRegistrada({ nome, situacao });
+      setRegistrada({ nome, situacao, guardada: false });
       router.refresh();
     });
   };
@@ -246,7 +291,9 @@ export function SegBlitzDialog({
     >
       <div className="card mh-folha" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--mh-shadow-e3)" }}>
         <div className="mh-folha-topo" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.9rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-          <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>{registrada ? "Blitz registrada" : "Nova blitz"}</h2>
+          <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>
+            {registrada ? (registrada.guardada ? "Blitz guardada" : "Blitz registrada") : "Nova blitz"}
+          </h2>
           <button
             type="button" onClick={fechar} className="icon-btn" aria-label="Fechar"
             style={{ fontSize: "1.3rem", lineHeight: 1, minWidth: 40, minHeight: 40 }}
@@ -258,12 +305,22 @@ export function SegBlitzDialog({
         {registrada ? (
           // confirmação: quem está na fila não espera a tela fechar e abrir de novo
           <div className="mh-folha-corpo" style={{ padding: "2rem 1.25rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.6rem", textAlign: "center" }}>
-            <CircleCheck size={44} style={{ color: "var(--mh-success)" }} aria-hidden />
+            {registrada.guardada
+              ? <CloudOff size={44} style={{ color: "var(--mh-warning)" }} aria-hidden />
+              : <CircleCheck size={44} style={{ color: "var(--mh-success)" }} aria-hidden />}
             <div style={{ fontSize: "1.05rem", fontWeight: 700 }}>{registrada.nome}</div>
             <div style={{ fontSize: "0.9rem", fontWeight: 600, color: tomDaSituacao(registrada.situacao) }}>{registrada.situacao}</div>
+            {registrada.guardada && (
+              <p style={{ fontSize: "0.85rem", margin: 0, maxWidth: 380, background: "var(--mh-warning-soft)", padding: "0.55rem 0.75rem", borderRadius: 8 }}>
+                Sem conexão agora. A blitz ficou guardada neste aparelho e vai para o sistema sozinha
+                quando o sinal voltar. Não precisa registrar de novo.
+              </p>
+            )}
             {registrada.situacao !== "Conforme" && (
               <p className="soft" style={{ fontSize: "0.8rem", margin: 0, maxWidth: 360 }}>
-                O gestor da pessoa já foi avisado para conversar e registrar a tratativa.
+                {registrada.guardada
+                  ? "O gestor da pessoa é avisado assim que a blitz for enviada."
+                  : "O gestor da pessoa já foi avisado para conversar e registrar a tratativa."}
               </p>
             )}
           </div>
@@ -275,6 +332,12 @@ export function SegBlitzDialog({
             onChangeCapture={() => { if (erro) setErro(""); }}
             style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}
           >
+            {!conectado && (
+              <p role="status" style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: "0.8rem", margin: 0, background: "var(--mh-warning-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
+                <CloudOff size={15} style={{ color: "var(--mh-warning)", flexShrink: 0 }} aria-hidden />
+                Sem conexão. Pode seguir: a blitz fica guardada no aparelho e vai sozinha quando o sinal voltar.
+              </p>
+            )}
             <div ref={(el) => { secoes.current.colaborador = el; }}>
               <label className="label">Colaborador {obrigatorio}</label>
               <PeoplePicker

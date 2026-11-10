@@ -17,7 +17,7 @@ export default async function SegurancaBlitzPage() {
   const gate = await moduleGate("seg_blitz");
   if (gate) return gate;
 
-  const { tenant, unitScope, role } = await requireContext();
+  const { tenant, unitScope, role, user } = await requireContext();
   const supabase = await createClient();
 
   const unidades = effectiveUnitFilter(unitScope);
@@ -117,6 +117,8 @@ export default async function SegurancaBlitzPage() {
   return (
     <div>
       <SegBlitzManager
+        dono={user.id}
+        tenantId={tenant.id}
         rows={rows}
         podeAvaliar={podeAvaliar === true}
         ehProprietario={role === "owner"}

@@ -14,6 +14,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
+import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
   SegBlitzDialog, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
 } from "@/components/SegBlitzDialog";
@@ -75,7 +76,7 @@ function situacao(r: BlitzRow): { label: string; tone: "green" | "amber" | "red"
 }
 
 export function SegBlitzManager({
-  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, painel, alertas,
+  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, painel, alertas, dono, tenantId,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -88,6 +89,9 @@ export function SegBlitzManager({
   painel: BlitzPainel | null;
   /** os alertas do usuário logado como gestor */
   alertas: BlitzAlerta[];
+  /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
+  dono: string;
+  tenantId: string;
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -145,6 +149,7 @@ export function SegBlitzManager({
           <Plus size={15} /> Nova blitz
         </button>
       )}
+      <AvisoBlitzGuardadas dono={dono} tenantId={tenantId} />
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input
           className="input" placeholder="Buscar por pessoa, placa, setor ou avaliador…"
@@ -433,6 +438,7 @@ export function SegBlitzManager({
       <SegBlitzDialog
         open={novo} onClose={() => setNovo(false)}
         pessoas={pessoas} meios={meios} perguntas={perguntas} motivos={motivos} veiculos={veiculos}
+        dono={dono} tenantId={tenantId}
       />
     </div>
   );

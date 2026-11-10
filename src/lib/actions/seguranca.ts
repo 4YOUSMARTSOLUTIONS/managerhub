@@ -1308,6 +1308,12 @@ export type BlitzInput = {
   motivoBloqueioId?: string | null;
   observacao?: string | null;
   respostas: { perguntaId: string; resposta: Enums<"seg_blitz_resposta"> }[];
+  /**
+   * Código criado no aparelho para esta blitz. O mesmo envio pode chegar duas
+   * vezes (a fila do aparelho reenvia sem sinal, ou a resposta se perde), e o
+   * banco devolve a blitz já gravada em vez de gravar outra.
+   */
+  clientId?: string | null;
 };
 
 /**
@@ -1331,6 +1337,7 @@ export async function criarBlitz(input: BlitzInput): Promise<ActionState> {
         motivo_bloqueio_id: input.motivoBloqueioId ?? null,
         observacao: input.observacao ?? null,
         respostas: input.respostas.map((r) => ({ pergunta_id: r.perguntaId, resposta: r.resposta })),
+        client_id: input.clientId ?? null,
       },
     });
     if (error) return { error: error.message };

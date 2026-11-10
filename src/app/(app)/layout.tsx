@@ -9,6 +9,7 @@ import { getAuthUser, getOwnIdentity, trocaDeSenhaPendente } from "@/lib/auth-ca
 import { getConversas, getPreferencias } from "@/lib/actions/chat";
 import { AppShell } from "@/components/AppShell";
 import { SessaoInatividade } from "@/components/SessaoInatividade";
+import { EnvioDasBlitzGuardadas } from "@/components/BlitzGuardadas";
 import { getMinhaInatividade } from "@/lib/sessao-servidor";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
@@ -133,6 +134,8 @@ export default async function AppLayout({
       chatSom={prefsChat.som}
     >
       <SessaoInatividade minutos={inatividade.minutos} agoraServidor={inatividade.agoraServidor} entrouEm={user.entrouEm} />
+      {/* blitz registrada sem sinal sai sozinha quando a conexão volta, em qualquer tela */}
+      <EnvioDasBlitzGuardadas dono={user.id} tenantId={ctx.tenant.id} />
       {children}
     </AppShell>
   );
