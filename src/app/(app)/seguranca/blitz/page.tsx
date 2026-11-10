@@ -47,7 +47,7 @@ export default async function SegurancaBlitzPage() {
     supabase.from("seg_blitz_motivos").select("id, name, active")
       .eq("tenant_id", tenant.id).order("sort").order("name"),
     // o veículo mais recente de cada colaborador vira a sugestão do formulário
-    supabase.from("seg_veiculos").select("user_id, meio_id, placa, tipo_descricao, propriedade, updated_at")
+    supabase.from("seg_veiculos").select("user_id, meio_id, placa, tipo_descricao, propriedade, cor, updated_at")
       .eq("tenant_id", tenant.id).eq("active", true).order("updated_at", { ascending: false }),
     // painel do ano corrente, com a recorrência já recortada pela alçada
     supabase.rpc("seg_blitz_painel", {
@@ -98,6 +98,7 @@ export default async function SegurancaBlitzPage() {
     placa: b.placa,
     veiculoTipo: b.veiculo_tipo,
     propriedade: b.propriedade,
+    cor: b.cor,
     liberado: b.liberado,
     motivoNome: b.motivo_bloqueio_id ? nomeMotivo.get(b.motivo_bloqueio_id) ?? null : null,
     observacao: b.observacao,
@@ -123,7 +124,7 @@ export default async function SegurancaBlitzPage() {
         motivos={(motivos ?? []).map((m) => ({ id: m.id, name: m.name, active: m.active }))}
         veiculos={[...veiculoPorUser.values()].map((v) => ({
           userId: v.user_id, meioId: v.meio_id, placa: v.placa,
-          tipoDescricao: v.tipo_descricao, propriedade: v.propriedade,
+          tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor,
         }))}
         painel={(painel ?? null) as BlitzPainel | null}
         alertas={alertas}

@@ -1814,15 +1814,15 @@ export type Database = {
       // O cadastro se alimenta pela blitz (upsert por placa) e Configurações
       // corrige. Placa normalizada por trigger: maiúscula, sem separador.
       seg_veiculos: {
-        Row: { id: string; tenant_id: string; user_id: string; meio_id: string | null; placa: string; tipo_descricao: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active: boolean; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; user_id: string; meio_id?: string | null; placa: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active?: boolean }
-        Update: { meio_id?: string | null; placa?: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; active?: boolean }
+        Row: { id: string; tenant_id: string; user_id: string; meio_id: string | null; placa: string; tipo_descricao: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"]; cor: string | null; active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; user_id: string; meio_id?: string | null; placa: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; cor?: string | null; active?: boolean }
+        Update: { meio_id?: string | null; placa?: string; tipo_descricao?: string | null; propriedade?: Database["public"]["Enums"]["seg_veiculo_propriedade"]; cor?: string | null; active?: boolean }
         Relationships: []
       }
       // A blitz de um colaborador. Escrita só pela RPC seg_criar_blitz
       // (conforme é carimbado lá: liberado E nenhuma resposta 'nao').
       seg_blitz_avaliacoes: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; user_id: string; snap_full_name: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; meio_id: string; veiculo_id: string | null; placa: string | null; veiculo_tipo: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"] | null; liberado: boolean; motivo_bloqueio_id: string | null; observacao: string | null; conforme: boolean; created_by: string; created_at: string }
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; user_id: string; snap_full_name: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; meio_id: string; veiculo_id: string | null; placa: string | null; veiculo_tipo: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"] | null; cor: string | null; liberado: boolean; motivo_bloqueio_id: string | null; observacao: string | null; conforme: boolean; created_by: string; created_at: string }
         Insert: never
         Update: never
         Relationships: []

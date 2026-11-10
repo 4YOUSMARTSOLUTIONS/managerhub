@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
-import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_PROPRIEDADE } from "@/lib/constants";
+import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, type SegVeiculoCor } from "@/lib/constants";
 import { hojeYmd, shortName } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
 import { criarBlitz } from "@/lib/actions/seguranca";
@@ -32,11 +32,13 @@ export type VeiculoSugestao = {
   placa: string;
   tipoDescricao: string | null;
   propriedade: Enums<"seg_veiculo_propriedade">;
+  cor: string | null;
 };
 
 /**
  * O formulário da portaria. A fila anda, então tudo aqui existe para reduzir
- * digitação: escolher o colaborador sugere o veículo da última blitz dele;
+ * digitação: escolher o colaborador sugere o veículo da última blitz dele
+ * (placa, modelo, propriedade e cor, todos obrigatórios quando há veículo);
  * escolher o meio filtra as perguntas (sem vínculo = vale para todos); e o
  * bloqueio só abre o campo de motivo quando é bloqueio.
  *
@@ -61,7 +63,9 @@ export function SegBlitzDialog({
   const [meioId, setMeioId] = useState("");
   const [placa, setPlaca] = useState("");
   const [tipo, setTipo] = useState("");
-  const [propriedade, setPropriedade] = useState<Enums<"seg_veiculo_propriedade">>("proprio");
+  // sem valor inicial: propriedade e cor são escolha de quem avalia (ou vêm da última blitz)
+  const [propriedade, setPropriedade] = useState<Enums<"seg_veiculo_propriedade"> | "">("");
+  const [cor, setCor] = useState<SegVeiculoCor | "">("");
   const [respostas, setRespostas] = useState<Record<string, Enums<"seg_blitz_resposta">>>({});
   const [liberado, setLiberado] = useState<boolean | null>(null);
   const [motivoId, setMotivoId] = useState("");
@@ -81,7 +85,7 @@ export function SegBlitzDialog({
 
   const limpar = () => {
     setUserId(""); setData(hoje); setMeioId(""); setPlaca(""); setTipo("");
-    setPropriedade("proprio"); setRespostas({}); setLiberado(null);
+    setPropriedade(""); setCor(""); setRespostas({}); setLiberado(null);
     setMotivoId(""); setObservacao(""); setErro("");
   };
 
@@ -95,6 +99,7 @@ export function SegBlitzDialog({
       setPlaca(v.placa);
       setTipo(v.tipoDescricao ?? "");
       setPropriedade(v.propriedade);
+      setCor(v.cor && v.cor in SEG_VEICULO_COR ? (v.cor as SegVeiculoCor) : "");
     }
   };
 
@@ -105,6 +110,12 @@ export function SegBlitzDialog({
     setErro("");
     if (!userId) { setErro("Escolha o colaborador."); return; }
     if (!meioId) { setErro("Escolha o meio de transporte."); return; }
+    if (meio?.temVeiculo) {
+      if (!placa.trim()) { setErro("Informe a placa do veículo."); return; }
+      if (!tipo.trim()) { setErro("Informe o modelo do veículo."); return; }
+      if (!propriedade) { setErro("Informe a propriedade do veículo."); return; }
+      if (!cor) { setErro("Informe a cor do veículo."); return; }
+    }
     // toda pergunta visível precisa de resposta: pular pergunta é o mesmo
     // que não fazer a blitz
     const semResposta = perguntasDoMeio.filter((q) => !respostas[q.id]);
@@ -122,7 +133,8 @@ export function SegBlitzDialog({
         meioId,
         placa: meio?.temVeiculo ? placa : null,
         veiculoTipo: meio?.temVeiculo ? tipo : null,
-        propriedade: meio?.temVeiculo ? propriedade : null,
+        propriedade: meio?.temVeiculo && propriedade ? propriedade : null,
+        cor: meio?.temVeiculo && cor ? cor : null,
         liberado,
         motivoBloqueioId: liberado ? null : motivoId,
         observacao,
@@ -206,7 +218,7 @@ export function SegBlitzDialog({
           {meio?.temVeiculo && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.8rem" }}>
               <div>
-                <label className="label">Placa</label>
+                <label className="label">Placa <span style={{ color: "var(--mh-danger)" }}>*</span></label>
                 <input
                   className="input" value={placa} maxLength={10}
                   placeholder="ABC1D23" style={{ textTransform: "uppercase" }}
@@ -214,20 +226,30 @@ export function SegBlitzDialog({
                 />
               </div>
               <div>
-                <label className="label">Tipo de veículo</label>
+                <label className="label">Modelo do veículo <span style={{ color: "var(--mh-danger)" }}>*</span></label>
                 <input
-                  className="input" value={tipo} placeholder="Honda CG 160"
+                  className="input" value={tipo} placeholder="Exemplo: Gol, Strada"
                   onChange={(e) => setTipo(e.target.value)}
                 />
               </div>
               <div>
-                <label className="label">Propriedade</label>
+                <label className="label">Propriedade <span style={{ color: "var(--mh-danger)" }}>*</span></label>
                 <select
                   className="select" value={propriedade}
-                  onChange={(e) => setPropriedade(e.target.value as Enums<"seg_veiculo_propriedade">)}
+                  onChange={(e) => setPropriedade(e.target.value as Enums<"seg_veiculo_propriedade"> | "")}
                 >
+                  <option value="">Selecione…</option>
                   {(Object.keys(SEG_VEICULO_PROPRIEDADE) as Enums<"seg_veiculo_propriedade">[]).map((p) => (
                     <option key={p} value={p}>{SEG_VEICULO_PROPRIEDADE[p]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Cor <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                <select className="select" value={cor} onChange={(e) => setCor(e.target.value as SegVeiculoCor | "")}>
+                  <option value="">Selecione…</option>
+                  {(Object.keys(SEG_VEICULO_COR) as SegVeiculoCor[]).map((c) => (
+                    <option key={c} value={c}>{SEG_VEICULO_COR[c]}</option>
                   ))}
                 </select>
               </div>
@@ -252,7 +274,7 @@ export function SegBlitzDialog({
                   <span style={{ display: "inline-flex", gap: "0.3rem" }}>
                     {(["sim", "nao", "na"] as Enums<"seg_blitz_resposta">[]).map((r) => {
                       const on = respostas[q.id] === r;
-                      const cor = r === "sim" ? "var(--mh-success)" : r === "nao" ? "var(--mh-danger)" : "var(--mh-text-3)";
+                      const tom = r === "sim" ? "var(--mh-success)" : r === "nao" ? "var(--mh-danger)" : "var(--mh-text-3)";
                       return (
                         <button
                           key={r} type="button" aria-pressed={on}
@@ -260,9 +282,9 @@ export function SegBlitzDialog({
                           style={{
                             padding: "0.25rem 0.65rem", cursor: "pointer", fontSize: "0.76rem",
                             fontWeight: on ? 700 : 500, borderRadius: 999,
-                            background: on ? `color-mix(in srgb, ${cor} 14%, transparent)` : "var(--surface-1)",
-                            border: "1px solid " + (on ? cor : "var(--border)"),
-                            color: on ? cor : "var(--mh-text-2)",
+                            background: on ? `color-mix(in srgb, ${tom} 14%, transparent)` : "var(--surface-1)",
+                            border: "1px solid " + (on ? tom : "var(--border)"),
+                            color: on ? tom : "var(--mh-text-2)",
                           }}
                         >
                           {SEG_BLITZ_RESPOSTA[r]}

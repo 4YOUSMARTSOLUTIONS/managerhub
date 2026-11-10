@@ -6,6 +6,7 @@ import { wantsActive } from "@/lib/catalogGuard";
 import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import { hojeYmd, normalizar } from "@/lib/format";
+import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
 import type { Enums, Json } from "@/types/database";
 
@@ -1245,7 +1246,8 @@ export type VeiculoInput = {
   meioId?: string | null;
   placa: string;
   tipoDescricao?: string | null;
-  propriedade: Enums<"seg_veiculo_propriedade">;
+  propriedade: Enums<"seg_veiculo_propriedade"> | "";
+  cor?: string | null;
 };
 
 /**
@@ -1258,12 +1260,17 @@ export async function salvarVeiculo(input: VeiculoInput): Promise<ActionState> {
     const { supabase, tenantId } = await actionContext();
     if (!input.userId) return { error: "Informe o colaborador." };
     if (!input.placa.trim()) return { error: "Informe a placa." };
+    // os mesmos obrigatórios da blitz: este cadastro é a sugestão da próxima
+    if (!input.tipoDescricao?.trim()) return { error: "Informe o modelo do veículo." };
+    if (!input.propriedade) return { error: "Informe a propriedade do veículo." };
+    if (!input.cor || !(input.cor in SEG_VEICULO_COR)) return { error: "Informe a cor do veículo." };
 
     const campos = {
       meio_id: input.meioId || null,
       placa: input.placa,
-      tipo_descricao: input.tipoDescricao?.trim() || null,
+      tipo_descricao: input.tipoDescricao.trim(),
       propriedade: input.propriedade,
+      cor: input.cor,
     };
     const { error } = input.id
       ? await supabase.from("seg_veiculos").update(campos).eq("id", input.id)
@@ -1296,6 +1303,7 @@ export type BlitzInput = {
   placa?: string | null;
   veiculoTipo?: string | null;
   propriedade?: Enums<"seg_veiculo_propriedade"> | null;
+  cor?: string | null;
   liberado: boolean;
   motivoBloqueioId?: string | null;
   observacao?: string | null;
@@ -1318,6 +1326,7 @@ export async function criarBlitz(input: BlitzInput): Promise<ActionState> {
         placa: input.placa ?? null,
         veiculo_tipo: input.veiculoTipo ?? null,
         propriedade: input.propriedade ?? null,
+        cor: input.cor ?? null,
         liberado: input.liberado,
         motivo_bloqueio_id: input.motivoBloqueioId ?? null,
         observacao: input.observacao ?? null,

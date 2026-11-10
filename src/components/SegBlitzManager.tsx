@@ -18,7 +18,7 @@ import {
 } from "@/components/SegBlitzDialog";
 import { SegBlitzTratativas } from "@/components/SegBlitzTratativas";
 import type { BlitzAlerta } from "@/lib/actions/seguranca";
-import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_PROPRIEDADE } from "@/lib/constants";
+import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_PROPRIEDADE, nomeDaCor } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
 import { excluirBlitz } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
@@ -35,6 +35,7 @@ export type BlitzRow = {
   placa: string | null;
   veiculoTipo: string | null;
   propriedade: Enums<"seg_veiculo_propriedade"> | null;
+  cor: string | null;
   liberado: boolean;
   motivoNome: string | null;
   observacao: string | null;
@@ -231,13 +232,14 @@ export function SegBlitzManager({
             filename="blitz-de-trajeto.xlsx"
             sheetName="Blitz"
             headers={[
-              "Data", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Tipo",
-              "Propriedade", "Situação", "Motivo do bloqueio", "Observação", "Avaliador",
+              "Data", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Modelo",
+              "Propriedade", "Cor", "Situação", "Motivo do bloqueio", "Observação", "Avaliador",
             ]}
             rows={lista.map((r) => [
               dataBr(r.occurredOn), r.pessoa ?? "", r.setor ?? "", r.gestor ?? "", r.unidade ?? "",
               nomeMeio.get(r.meioId) ?? "", r.placa ?? "", r.veiculoTipo ?? "",
               r.propriedade ? SEG_VEICULO_PROPRIEDADE[r.propriedade] : "",
+              nomeDaCor(r.cor),
               situacao(r).label, r.motivoNome ?? "", r.observacao ?? "", r.avaliador ?? "",
             ])}
           />
@@ -335,8 +337,9 @@ export function SegBlitzManager({
             <DetailSection title="Veículo">
               <FieldGrid>
                 <Field label="Placa">{detalhe.placa}</Field>
-                <Field label="Tipo">{detalhe.veiculoTipo}</Field>
+                <Field label="Modelo">{detalhe.veiculoTipo}</Field>
                 <Field label="Propriedade">{detalhe.propriedade ? SEG_VEICULO_PROPRIEDADE[detalhe.propriedade] : null}</Field>
+                <Field label="Cor">{nomeDaCor(detalhe.cor) || null}</Field>
               </FieldGrid>
             </DetailSection>
           )}

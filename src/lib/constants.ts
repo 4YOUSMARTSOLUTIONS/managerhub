@@ -823,6 +823,25 @@ export const SEG_VEICULO_PROPRIEDADE: Record<Enums<"seg_veiculo_propriedade">, s
   empresa: "Da empresa",
 };
 
+/**
+ * Cor do veículo na blitz (LUIZ, 10/11/2026): as principais, mais "Outra" para
+ * a fila da portaria nunca travar num carro verde. A mesma lista é CHECK no
+ * banco (seg_veiculos.cor e seg_blitz_avaliacoes.cor).
+ */
+export const SEG_VEICULO_COR = {
+  branco: "Branco",
+  preto: "Preto",
+  prata: "Prata",
+  cinza: "Cinza",
+  vermelho: "Vermelho",
+  azul: "Azul",
+  outra: "Outra",
+} as const;
+export type SegVeiculoCor = keyof typeof SEG_VEICULO_COR;
+/** Rótulo da cor gravada; vazio quando não há (blitz antiga, meio sem veículo). */
+export const nomeDaCor = (c: string | null | undefined): string =>
+  c && c in SEG_VEICULO_COR ? SEG_VEICULO_COR[c as SegVeiculoCor] : "";
+
 export const SEG_ACIDENTE_STATUS: Record<Enums<"seg_acidente_status">, string> = {
   aberto: "Em apuração",
   encerrado: "Encerrado",

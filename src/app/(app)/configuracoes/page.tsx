@@ -276,7 +276,7 @@ export default async function SettingsPage({
     supabase.from("seg_blitz_pergunta_meios").select("pergunta_id, meio_id").eq("tenant_id", tenant.id),
     supabase.from("seg_blitz_motivos").select("id, name, active")
       .eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, active")
+    supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, cor, active")
       .eq("tenant_id", tenant.id).order("placa"),
     // níveis de hierarquia que não solicitam as próprias férias
     supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id),
@@ -1613,7 +1613,7 @@ export default async function SettingsPage({
                     id: v.id, userId: v.user_id,
                     pessoa: nomePorUser.get(v.user_id) ?? null,
                     meioId: v.meio_id, placa: v.placa,
-                    tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, active: v.active,
+                    tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor, active: v.active,
                   }))}
                   meios={(blitzMeiosData ?? []).filter((m) => m.active && m.tem_veiculo).map((m) => ({ id: m.id, name: m.name }))}
                   pessoas={rvMembers.map((m) => ({ id: m.userId, name: m.name }))}

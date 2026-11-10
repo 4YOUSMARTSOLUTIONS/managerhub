@@ -7,7 +7,7 @@ import { Pencil, Power, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
-import { SEG_VEICULO_PROPRIEDADE } from "@/lib/constants";
+import { SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, nomeDaCor, type SegVeiculoCor } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
 import { salvarVeiculo, setVeiculoAtivo } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
@@ -20,6 +20,7 @@ export type VeiculoRow = {
   placa: string;
   tipoDescricao: string | null;
   propriedade: Enums<"seg_veiculo_propriedade">;
+  cor: string | null;
   active: boolean;
 };
 
@@ -31,7 +32,8 @@ type Rascunho = {
   meioId: string;
   placa: string;
   tipoDescricao: string;
-  propriedade: Enums<"seg_veiculo_propriedade">;
+  propriedade: Enums<"seg_veiculo_propriedade"> | "";
+  cor: string;
 };
 
 /**
@@ -61,7 +63,7 @@ export function SegVeiculosManager({
     const q = normalizar(busca.trim());
     if (!q) return rows;
     return rows.filter((r) =>
-      [r.pessoa, r.placa, r.tipoDescricao].some((v) => v && normalizar(v).includes(q)),
+      [r.pessoa, r.placa, r.tipoDescricao, nomeDaCor(r.cor)].some((v) => v && normalizar(v).includes(q)),
     );
   }, [rows, busca]);
 
@@ -76,6 +78,7 @@ export function SegVeiculosManager({
         placa: rascunho.placa,
         tipoDescricao: rascunho.tipoDescricao,
         propriedade: rascunho.propriedade,
+        cor: rascunho.cor || null,
       });
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Veículo salvo.");
@@ -104,24 +107,24 @@ export function SegVeiculosManager({
 
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input
-          className="input" placeholder="Buscar por pessoa, placa ou tipo…" value={busca}
+          className="input" placeholder="Buscar por pessoa, placa, modelo ou cor…" value={busca}
           onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 300 }}
         />
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
           <ExportButton
             filename="veiculos.xlsx"
             sheetName="Veículos"
-            headers={["Colaborador", "Placa", "Meio", "Tipo", "Propriedade", "Situação"]}
+            headers={["Colaborador", "Placa", "Meio", "Modelo", "Propriedade", "Cor", "Situação"]}
             rows={lista.map((v) => [
               v.pessoa ?? "", v.placa, (v.meioId && nomeMeio.get(v.meioId)) || "",
-              v.tipoDescricao ?? "", SEG_VEICULO_PROPRIEDADE[v.propriedade],
+              v.tipoDescricao ?? "", SEG_VEICULO_PROPRIEDADE[v.propriedade], nomeDaCor(v.cor),
               v.active ? "Ativo" : "Inativo",
             ])}
           />
           {canEdit && (
             <button
               type="button" className="btn btn-primary btn-sm"
-              onClick={() => { setErro(""); setRascunho({ userId: "", meioId: "", placa: "", tipoDescricao: "", propriedade: "proprio" }); }}
+              onClick={() => { setErro(""); setRascunho({ userId: "", meioId: "", placa: "", tipoDescricao: "", propriedade: "", cor: "" }); }}
             >
               + Novo veículo
             </button>
@@ -166,21 +169,34 @@ export function SegVeiculosManager({
               </select>
             </div>
             <div>
-              <label className="label">Tipo</label>
+              <label className="label">Modelo do veículo <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input
                 className="input" value={rascunho.tipoDescricao}
-                placeholder="Honda CG 160"
+                placeholder="Exemplo: Gol, Strada"
                 onChange={(e) => setRascunho((r) => (r ? { ...r, tipoDescricao: e.target.value } : r))}
               />
             </div>
             <div>
-              <label className="label">Propriedade</label>
+              <label className="label">Propriedade <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <select
                 className="select" value={rascunho.propriedade}
-                onChange={(e) => setRascunho((r) => (r ? { ...r, propriedade: e.target.value as Enums<"seg_veiculo_propriedade"> } : r))}
+                onChange={(e) => setRascunho((r) => (r ? { ...r, propriedade: e.target.value as Enums<"seg_veiculo_propriedade"> | "" } : r))}
               >
+                <option value="">Selecione…</option>
                 {(Object.keys(SEG_VEICULO_PROPRIEDADE) as Enums<"seg_veiculo_propriedade">[]).map((p) => (
                   <option key={p} value={p}>{SEG_VEICULO_PROPRIEDADE[p]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Cor <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <select
+                className="select" value={rascunho.cor}
+                onChange={(e) => setRascunho((r) => (r ? { ...r, cor: e.target.value } : r))}
+              >
+                <option value="">Selecione…</option>
+                {(Object.keys(SEG_VEICULO_COR) as SegVeiculoCor[]).map((c) => (
+                  <option key={c} value={c}>{SEG_VEICULO_COR[c]}</option>
                 ))}
               </select>
             </div>
@@ -208,8 +224,9 @@ export function SegVeiculosManager({
               <th>Colaborador</th>
               <th style={{ width: 110 }}>Placa</th>
               <th style={{ width: 150 }}>Meio</th>
-              <th>Tipo</th>
+              <th>Modelo</th>
               <th style={{ width: 120 }}>Propriedade</th>
+              <th style={{ width: 100 }}>Cor</th>
               <th style={{ width: 100 }}>Situação</th>
               {canEdit && <th style={{ textAlign: "right" }}></th>}
             </tr>
@@ -222,6 +239,7 @@ export function SegVeiculosManager({
                 <td className="soft" style={{ fontSize: "0.82rem" }}>{(v.meioId && nomeMeio.get(v.meioId)) || "—"}</td>
                 <td className="soft" style={{ fontSize: "0.82rem" }}>{v.tipoDescricao ?? "—"}</td>
                 <td className="soft" style={{ fontSize: "0.82rem" }}>{SEG_VEICULO_PROPRIEDADE[v.propriedade]}</td>
+                <td className="soft" style={{ fontSize: "0.82rem" }}>{nomeDaCor(v.cor) || "—"}</td>
                 <td><Badge variant="quiet" tone={v.active ? "green" : "gray"}>{v.active ? "Ativo" : "Inativo"}</Badge></td>
                 {canEdit && (
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
@@ -233,7 +251,7 @@ export function SegVeiculosManager({
                           setRascunho({
                             id: v.id, userId: v.userId, meioId: v.meioId ?? "",
                             placa: v.placa, tipoDescricao: v.tipoDescricao ?? "",
-                            propriedade: v.propriedade,
+                            propriedade: v.propriedade, cor: v.cor ?? "",
                           });
                         }}
                       >
