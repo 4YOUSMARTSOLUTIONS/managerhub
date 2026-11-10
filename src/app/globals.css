@@ -557,6 +557,40 @@ a {
   }
 }
 
+/* ── celular: abaixo de 720px ──
+   Utilitários para telas que mudam de forma no telefone (a primeira foi a
+   Blitz de trajeto, usada na portaria pelo app instalado):
+   - .so-desktop some no celular; .so-celular só aparece nele (o display
+     inline de quem usa a classe continua valendo no celular).
+   - .mh-folha*: formulário longo vira folha de tela cheia, com o rodapé
+     (o botão de salvar) sempre à vista.
+   - campo com fonte menor que 16px faz o iPhone dar zoom ao tocar, e no app
+     instalado a tela fica desalinhada depois; no celular os campos vão a 16px. */
+@media (min-width: 720px) {
+  .so-celular { display: none !important; }
+}
+@media (max-width: 719px) {
+  .so-desktop { display: none !important; }
+  /* a ação principal da tela ocupa a largura toda: alvo fácil para o polegar */
+  .largo-no-celular { width: 100%; align-self: stretch !important; }
+  .input, .select { font-size: 16px; }
+  .mh-folha-fundo { padding: 0 !important; }
+  .mh-folha {
+    max-width: none !important;
+    min-height: 100dvh;
+    border-radius: 0 !important;
+    border: none !important;
+    display: flex;
+    flex-direction: column;
+  }
+  .mh-folha-topo { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+  .mh-folha-corpo { flex: 1; }
+  .mh-folha-rodape {
+    position: sticky; bottom: 0; z-index: 2; background: var(--surface);
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 /* ---------- Cartões ---------- */
 .card {
   background: var(--surface);

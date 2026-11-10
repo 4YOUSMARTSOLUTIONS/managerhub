@@ -151,7 +151,11 @@ export function SegBlitzDialog({
   if (!open) return null;
 
   return (
+    // no celular (mh-folha*) o formulário ocupa a tela toda, com o cabeçalho e o
+    // "Registrar blitz" fixos: a fila da portaria não pode depender de rolar
+    // até o fim para achar o botão
     <div
+      className="mh-folha-fundo"
       style={{
         position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)",
         backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
@@ -159,8 +163,8 @@ export function SegBlitzDialog({
         padding: "5vh 1rem", zIndex: 60, overflowY: "auto",
       }}
     >
-      <div className="card" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--mh-shadow-e3)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
+      <div className="card mh-folha" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--mh-shadow-e3)" }}>
+        <div className="mh-folha-topo" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Blitz de trajeto</h2>
           <button
             type="button" onClick={() => { limpar(); onClose(); }} className="muted" aria-label="Fechar"
@@ -170,16 +174,17 @@ export function SegBlitzDialog({
           </button>
         </div>
 
-        <div style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.95rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 150px", gap: "0.8rem" }}>
-            <div>
+        <div className="mh-folha-corpo" style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.95rem" }}>
+          {/* lado a lado no computador; no celular a data desce para a linha de baixo */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem" }}>
+            <div style={{ flex: "999 1 240px", minWidth: 0 }}>
               <label className="label">Colaborador <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <PeoplePicker
                 people={pessoas} selected={userId ? [userId] : []}
                 onChange={escolherPessoa} single placeholder="Buscar colaborador…"
               />
             </div>
-            <div>
+            <div style={{ flex: "1 1 140px" }}>
               <label className="label">Data <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input className="input" type="date" value={data} max={hoje} onChange={(e) => setData(e.target.value)} />
             </div>
@@ -280,7 +285,9 @@ export function SegBlitzDialog({
                           key={r} type="button" aria-pressed={on}
                           onClick={() => responder(q.id, r)}
                           style={{
-                            padding: "0.25rem 0.65rem", cursor: "pointer", fontSize: "0.76rem",
+                            // altura de dedo: na portaria se responde com o polegar
+                            minHeight: 34, minWidth: 52,
+                            padding: "0.3rem 0.75rem", cursor: "pointer", fontSize: "0.8rem",
                             fontWeight: on ? 700 : 500, borderRadius: 999,
                             background: on ? `color-mix(in srgb, ${tom} 14%, transparent)` : "var(--surface-1)",
                             border: "1px solid " + (on ? tom : "var(--border)"),
@@ -364,7 +371,7 @@ export function SegBlitzDialog({
           )}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
+        <div className="mh-folha-rodape" style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", padding: "1rem 1.25rem", borderTop: "1px solid var(--border)" }}>
           <button type="button" className="btn btn-ghost" disabled={pendente} onClick={() => { limpar(); onClose(); }}>Cancelar</button>
           <button type="button" className="btn btn-primary" disabled={pendente} onClick={salvar}>
             {pendente ? "Registrando…" : "Registrar blitz"}
