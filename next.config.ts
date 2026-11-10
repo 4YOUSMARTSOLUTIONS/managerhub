@@ -63,6 +63,15 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy-Report-Only", value: csp },
         ],
       },
+      {
+        // o navegador confere o worker a cada abertura; sem cache, a versão
+        // nova chega no mesmo dia em vez de ficar presa no cache HTTP
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
     ];
   },
 };

@@ -7,14 +7,18 @@ import { initialActionState } from "@/lib/actions/types";
 import { AuthShell } from "@/components/AuthShell";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { useInstalacao } from "@/components/pwa/useInstalacao";
 
 export default function LoginPage() {
   const [state, action] = useActionState(signIn, initialActionState);
+  // quem já abriu pelo ícone instalado não precisa do convite
+  const app = useInstalacao();
 
   return (
     <AuthShell
       title="Entrar"
       subtitle="Acesse o portal de gestão da sua empresa."
+      footer={app.pronto && !app.instalado ? <Link href="/instalar">Instalar o aplicativo no celular ou no computador</Link> : undefined}
     >
       <form action={action} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div>

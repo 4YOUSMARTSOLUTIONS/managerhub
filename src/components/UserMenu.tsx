@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronDown, LogOut, Moon, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellOff, ChevronDown, Download, LogOut, Moon, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
+import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAvatars } from "@/components/AvatarProvider";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { STATUS_COR, STATUS_ROTULO, useChatStatus } from "@/components/chat/ChatPresenceProvider";
 import { useChatVivo } from "@/components/chat/ChatLiveProvider";
 import { StatusDropdown } from "@/components/chat/StatusDropdown";
+import { useInstalacao } from "@/components/pwa/useInstalacao";
 import { setTheme } from "@/lib/actions/theme";
 import { signOut } from "@/lib/actions/auth";
 import { ROLE } from "@/lib/constants";
@@ -40,6 +42,20 @@ export function UserMenu({
   // liga/desliga de som e prévia valem em qualquer tela, não só no /chat
   const { meuStatus, mudarStatus, ativo: chatAtivo } = useChatStatus();
   const { som, alternarSom, notificacoes, alternarNotificacoes } = useChatVivo();
+  // aberto pelo ícone instalado, o atalho de instalar some
+  const app = useInstalacao();
+
+  /**
+   * Onde o navegador instala direto (Chrome e Edge), um clique basta. Nos
+   * outros (iPhone, Safari), a página /instalar mostra o passo a passo.
+   */
+  const instalarApp = async () => {
+    setOpen(false);
+    if (!app.podeInstalar) { router.push("/instalar"); return; }
+    const r = await app.instalar();
+    if (r === "aceito") toast.success("Aplicativo instalado.");
+    else if (r === "indisponivel") router.push("/instalar");
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -210,6 +226,20 @@ export function UserMenu({
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
             {next === "dark" ? "Tema escuro" : "Tema claro"}
           </button>
+
+          {app.pronto && !app.instalado && (
+            <button
+              type="button"
+              role="menuitem"
+              style={itemStyle}
+              onClick={instalarApp}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              <Download size={14} />
+              Instalar aplicativo
+            </button>
+          )}
 
           <form action={signOut}>
             <button

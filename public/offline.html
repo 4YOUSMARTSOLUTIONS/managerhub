@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sem conexão · MANAGERHUB</title>
+  <!--
+    Página que o service worker mostra quando não há internet. Fica de pé
+    sozinha: sem CSS, fonte ou script do app, que não carregam offline. As
+    cores repetem os tokens --mh-* de globals.css, e o tema segue o cookie
+    mh_theme, o mesmo que o app usa.
+  -->
+  <script>
+    try {
+      if (/(?:^|;\s*)mh_theme=light/.test(document.cookie)) document.documentElement.dataset.theme = "light";
+    } catch (e) {}
+  </script>
+  <style>
+    :root, [data-theme="dark"] {
+      --bg: #0a0d14; --surface: #111621; --border: #232b3b;
+      --text-1: #e6eaf2; --text-2: #9aa5b8; --primary: #7c5cff; --primary-600: #6a46f0;
+    }
+    [data-theme="light"] {
+      --bg: #f7f8fb; --surface: #ffffff; --border: #e4e8f0;
+      --text-1: #0f1420; --text-2: #566178; --primary: #6d4aef; --primary-600: #5b37e0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg); color: var(--text-1);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+    }
+    .card {
+      width: 100%; max-width: 380px; text-align: center;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem 1.5rem;
+    }
+    svg { display: block; margin: 0 auto 1.1rem; }
+    h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+    p { color: var(--text-2); font-size: 0.9rem; line-height: 1.45; margin: 0 0 1.4rem; }
+    button {
+      font: inherit; font-weight: 600; font-size: 0.9rem; cursor: pointer;
+      background: var(--primary); color: #fff; border: 0; border-radius: 8px;
+      padding: 0.65rem 1.2rem; width: 100%;
+    }
+    button:hover { background: var(--primary-600); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <svg width="52" height="52" viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="mh" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#22d3ee" />
+          <stop offset="1" stop-color="#7c5cff" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill="url(#mh)" />
+      <g transform="translate(14 14) scale(1.5)" fill="#fff">
+        <rect x="3" y="3" width="7" height="9" rx="1.4" />
+        <rect x="14" y="3" width="7" height="5" rx="1.4" />
+        <rect x="14" y="12" width="7" height="9" rx="1.4" />
+        <rect x="3" y="16" width="7" height="5" rx="1.4" />
+      </g>
+    </svg>
+    <h1>Sem conexão</h1>
+    <p>O MANAGERHUB precisa de internet para abrir. Confira o Wi-Fi ou os dados móveis e tente de novo.</p>
+    <button type="button" onclick="location.reload()">Tentar de novo</button>
+  </main>
+</body>
+</html>
