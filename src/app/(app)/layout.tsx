@@ -8,6 +8,8 @@ import { getAvatarMap } from "@/lib/avatars";
 import { getAuthUser, getOwnIdentity, trocaDeSenhaPendente } from "@/lib/auth-cache";
 import { getConversas, getPreferencias } from "@/lib/actions/chat";
 import { AppShell } from "@/components/AppShell";
+import { SessaoInatividade } from "@/components/SessaoInatividade";
+import { getMinhaInatividade } from "@/lib/sessao-servidor";
 import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 
 // moduleState só-core (usado apenas no shell reduzido, quando não há empresa)
@@ -85,11 +87,13 @@ export default async function AppLayout({
   const ctx = await requireContext();
 
   // 3º estágio: o que depende só do tenant/usuário, tudo junto.
-  const [{ state: moduleState, construction }, avatars, perfil, prefsChat] = await Promise.all([
+  const [{ state: moduleState, construction }, avatars, perfil, prefsChat, inatividade] = await Promise.all([
     getModuleAccess(),
     getAvatarMap(ctx.tenant.id),
     getOwnIdentity(user.id),
     getPreferencias(),
+    // minutos sem uso que encerram a sessão (celular compartilhado)
+    getMinhaInatividade(ctx.tenant.id),
   ]);
 
   /**
@@ -128,6 +132,7 @@ export default async function AppLayout({
       chatNotificacoes={prefsChat.notificacoes}
       chatSom={prefsChat.som}
     >
+      <SessaoInatividade minutos={inatividade.minutos} agoraServidor={inatividade.agoraServidor} entrouEm={user.entrouEm} />
       {children}
     </AppShell>
   );

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { horaDoLogin } from "@/lib/sessao";
 
 /**
  * Identidade do request, resolvida UMA vez.
@@ -24,6 +25,12 @@ export type AuthUser = {
    * desconhecido e vai ao banco só nesse caso.
    */
   trocaPendente: boolean | null;
+  /**
+   * Hora do login (segundos, das claims `amr`); 0 quando desconhecida. A
+   * contagem de tempo sem uso parte daqui, para o cookie de uma sessão antiga
+   * no mesmo aparelho não derrubar quem acabou de entrar.
+   */
+  entrouEm: number;
 };
 
 /** Lê a pendência de troca de dentro do JWT, sem ida ao banco. */
@@ -43,6 +50,7 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
       id: sub,
       email: (data.claims.email as string | undefined) ?? null,
       trocaPendente: pendenciaDaClaim(data.claims.app_metadata),
+      entrouEm: horaDoLogin(data.claims as Record<string, unknown>),
     };
   }
 
@@ -50,7 +58,7 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
   // confirma no servidor antes de tratar como deslogado
   const { data: { user } } = await supabase.auth.getUser();
   return user
-    ? { id: user.id, email: user.email ?? null, trocaPendente: pendenciaDaClaim(user.app_metadata) }
+    ? { id: user.id, email: user.email ?? null, trocaPendente: pendenciaDaClaim(user.app_metadata), entrouEm: 0 }
     : null;
 });
 

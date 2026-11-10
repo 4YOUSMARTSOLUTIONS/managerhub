@@ -80,3 +80,14 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+/**
+ * Saída por falta de uso, disparada pelo app aberto (SessaoInatividade). O
+ * login mostra o motivo, para a pessoa entender por que precisa entrar de novo.
+ */
+export async function sairPorInatividade(minutos: number): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  const min = Number.isInteger(minutos) && minutos > 0 && minutos <= 1440 ? minutos : 0;
+  redirect(min ? `/login?motivo=inatividade&min=${min}` : "/login?motivo=inatividade");
+}

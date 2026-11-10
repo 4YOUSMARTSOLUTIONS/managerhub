@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { cancelarPush, prepararPush, registrarPush, statusPush } from "@/lib/actions/push";
+import { cancelarPush, pushEmUso, prepararPush, registrarPush, statusPush } from "@/lib/actions/push";
 import { detectarPlataforma, rodandoComoApp } from "@/lib/pwa";
 
 /**
@@ -140,6 +140,25 @@ export async function desligarPushAoSair(): Promise<void> {
     })().catch(() => undefined),
     new Promise((r) => setTimeout(r, 2500)),
   ]);
+}
+
+/**
+ * O aparelho está em uso (chamado pelo controle de inatividade, a cada toque).
+ * No máximo uma ida ao servidor a cada 5 minutos. Serve à rota do push: aviso
+ * para aparelho parado além do tempo da pessoa sai sem conteúdo.
+ */
+let ultimoAvisoDeUso = 0;
+export async function avisarUsoDoAparelho(): Promise<void> {
+  if (estado !== "ligado" || Date.now() - ultimoAvisoDeUso < 5 * 60_000) return;
+  ultimoAvisoDeUso = Date.now();
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) await pushEmUso(sub.endpoint);
+  } catch {
+    // sem rede agora: o próximo toque tenta de novo
+    ultimoAvisoDeUso = 0;
+  }
 }
 
 export function usePush() {

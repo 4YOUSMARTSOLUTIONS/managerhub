@@ -52,6 +52,36 @@ export async function definirTelasDaPessoa(input: {
   }
 }
 
+const tempoValido = (m: number | null) => m === null || (Number.isInteger(m) && m >= 5 && m <= 1440);
+
+/** Padrão da empresa para encerrar a sessão sem uso (null = sem limite). */
+export async function definirTempoPadrao(minutos: number | null): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    if (!tempoValido(minutos)) return { error: "Escolha entre 5 minutos e 24 horas." };
+    const { error } = await supabase.rpc("sessao_definir_padrao", { p_tenant: tenantId, p_minutos: minutos });
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    return { ok: true, message: "Padrão da empresa salvo." };
+  } catch (e) {
+    return { error: msg(e) };
+  }
+}
+
+/** Tempo de um nível (null = volta ao padrão da empresa). */
+export async function definirTempoDoNivel(nivelId: string, minutos: number | null): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    if (!tempoValido(minutos)) return { error: "Escolha entre 5 minutos e 24 horas." };
+    const { error } = await supabase.rpc("sessao_definir_nivel", { p_tenant: tenantId, p_nivel: nivelId, p_minutos: minutos });
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    return { ok: true, message: minutos === null ? "O nível volta ao padrão da empresa." : "Tempo do nível salvo." };
+  } catch (e) {
+    return { error: msg(e) };
+  }
+}
+
 export type AcessoDaPessoa = {
   /** "Proprietário" / "Administrador" / "RH": vê tudo, a regra não se aplica */
   isento: string | null;

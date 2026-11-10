@@ -54,12 +54,13 @@ export async function POST(req: NextRequest) {
     const expiradas: string[] = [];
     for (let i = 0; i < linhas.length; i += LOTE) {
       await Promise.all(linhas.slice(i, i + LOTE).map(async (l) => {
-        const conteudo = JSON.stringify({
-          title: cortar(l.title, 120),
-          body: cortar(l.body, 300),
-          url: destinoDaNotificacao({ type: l.type, demandaId: l.demanda_id, plannerBoardId: l.planner_board_id }) ?? "/dashboard",
-          tag: l.notification_id,
-        });
+        const url = destinoDaNotificacao({ type: l.type, demandaId: l.demanda_id, plannerBoardId: l.planner_board_id }) ?? "/dashboard";
+        // aparelho parado além do tempo da pessoa (celular compartilhado): a
+        // sessão dela venceu e quem está com o celular pode ser outra pessoa.
+        // O aviso chega, mas sem dizer do que se trata.
+        const conteudo = JSON.stringify(l.sessao_viva
+          ? { title: cortar(l.title, 120), body: cortar(l.body, 300), url, tag: l.notification_id }
+          : { title: "Manager HUB", body: "Você tem um novo aviso. Entre no app para ver.", url, tag: l.notification_id });
         const r = await enviarPush(
           { endpoint: l.endpoint, p256dh: l.p256dh, auth: l.chave_auth },
           conteudo, vapid, APP_URL, { urgencia: "high" },

@@ -58,6 +58,16 @@ export async function cancelarPush(endpoint: string): Promise<ActionState> {
   }
 }
 
+/** Marca o aparelho como em uso (ver avisarUsoDoAparelho). */
+export async function pushEmUso(endpoint: string): Promise<void> {
+  try {
+    const { supabase } = await actionContext();
+    await supabase.rpc("push_em_uso", { p_endpoint: endpoint });
+  } catch {
+    // sessão expirada: o controle de inatividade cuida da saída
+  }
+}
+
 /** O aparelho está ligado para a pessoa logada (e não para quem usou antes)? */
 export async function statusPush(endpoint: string): Promise<boolean> {
   try {

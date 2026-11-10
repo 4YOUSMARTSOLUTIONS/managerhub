@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { use, useActionState } from "react";
 import Link from "next/link";
 import { signIn } from "@/lib/actions/auth";
 import { initialActionState } from "@/lib/actions/types";
@@ -8,9 +8,14 @@ import { AuthShell } from "@/components/AuthShell";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useInstalacao } from "@/components/pwa/useInstalacao";
+import { rotuloDoTempo } from "@/lib/sessao";
 
-export default function LoginPage() {
+export default function LoginPage({ searchParams }: { searchParams: Promise<{ motivo?: string; min?: string }> }) {
   const [state, action] = useActionState(signIn, initialActionState);
+  // sessão encerrada por falta de uso (pelo app aberto ou pelo servidor)
+  const { motivo, min } = use(searchParams);
+  const minutos = Number(min);
+  const porInatividade = motivo === "inatividade";
   // quem já abriu pelo ícone instalado não precisa do convite
   const app = useInstalacao();
 
@@ -21,6 +26,19 @@ export default function LoginPage() {
       footer={app.pronto && !app.instalado ? <Link href="/instalar">Instalar o aplicativo no celular ou no computador</Link> : undefined}
     >
       <form action={action} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {porInatividade && !state.error && (
+          <p
+            role="status"
+            style={{
+              margin: 0, padding: "0.6rem 0.75rem", borderRadius: "var(--mh-radius-sm)",
+              background: "var(--mh-info-soft)", color: "var(--mh-info)", fontSize: "0.85rem", lineHeight: 1.5,
+            }}
+          >
+            {Number.isInteger(minutos) && minutos > 0
+              ? `Sua sessão foi encerrada depois de ${rotuloDoTempo(minutos)} sem uso. Entre de novo para continuar.`
+              : "Sua sessão foi encerrada por falta de uso. Entre de novo para continuar."}
+          </p>
+        )}
         <div>
           <label className="label" htmlFor="identifier">E-mail ou CPF</label>
           <input id="identifier" name="identifier" type="text" className="input" required autoComplete="username" placeholder="seu@email.com ou CPF" />

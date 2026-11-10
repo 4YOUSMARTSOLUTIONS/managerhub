@@ -25,7 +25,8 @@ import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
 import { AcessoTelasManager } from "@/components/acesso/AcessoTelasManager";
-import { lerRegrasDeAcesso, isentoDoAcesso } from "@/lib/acesso-telas-servidor";
+import { SessaoManager } from "@/components/acesso/SessaoManager";
+import { lerRegrasDeAcesso, lerRegrasDeSessao, isentoDoAcesso } from "@/lib/acesso-telas-servidor";
 import { opcoesDeTelas } from "@/lib/acesso-telas";
 import { FeriasConfigManager } from "@/components/FeriasConfigManager";
 import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManager";
@@ -133,6 +134,10 @@ export default async function SettingsPage({
   // acesso às telas (Colaboradores > Acesso às telas); falha não derruba a página
   const acessoP = lerRegrasDeAcesso(supabase, tenant.id).catch((e: unknown) => {
     console.error("[acesso] regras", e instanceof Error ? e.message : e);
+    return null;
+  });
+  const sessaoP = lerRegrasDeSessao(supabase, tenant.id).catch((e: unknown) => {
+    console.error("[sessao] regras", e instanceof Error ? e.message : e);
     return null;
   });
   // Tudo o que a tela precisa numa rodada só. Antes eram 6 ondas em sequência, e
@@ -569,13 +574,24 @@ export default async function SettingsPage({
 
   // Acesso às telas: nível a nível, mais as exceções por pessoa. Os nomes saem da
   // empresa inteira (não do recorte da unidade): a regra vale para todo o nível.
-  const regrasDeAcesso = await acessoP;
+  const [regrasDeAcesso, regrasDeSessao] = await Promise.all([acessoP, sessaoP]);
   const ativosPorNivel = new Map<string, number>();
   for (const m of mems) {
     if (m.is_active && m.hierarchy_level_id) ativosPorNivel.set(m.hierarchy_level_id, (ativosPorNivel.get(m.hierarchy_level_id) ?? 0) + 1);
   }
   const pessoaPorId = new Map(employeesTodos.map((e) => [e.userId, e]));
+  const niveisVisiveis = hierarchyOpts.filter(
+    (h) => h.active !== false || ativosPorNivel.has(h.id) || !!regrasDeAcesso?.niveis.has(h.id) || !!regrasDeSessao?.niveis.has(h.id),
+  );
+  const sessaoTab = regrasDeSessao ? (
+    <SessaoManager
+      padrao={regrasDeSessao.padrao}
+      niveis={niveisVisiveis.map((h) => ({ id: h.id, nome: h.name, ativos: ativosPorNivel.get(h.id) ?? 0, minutos: regrasDeSessao.niveis.get(h.id) ?? null }))}
+      canEdit={canEdit}
+    />
+  ) : null;
   const acessoTab = regrasDeAcesso ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
     <AcessoTelasManager
       niveis={hierarchyOpts
         .filter((h) => h.active !== false || ativosPorNivel.has(h.id) || regrasDeAcesso.niveis.has(h.id))
@@ -593,6 +609,8 @@ export default async function SettingsPage({
       opcoes={opcoesDeTelas(regrasDeAcesso.contratadas)}
       canEdit={canEdit}
     />
+    {sessaoTab}
+    </div>
   ) : (
     <EmptyState title="Não foi possível carregar o acesso às telas" description="Recarregue a página. Se continuar, fale com o suporte." />
   );
@@ -644,8 +662,9 @@ export default async function SettingsPage({
             />
           ),
         },
-        // quem vê quais telas: por nível, com exceção por pessoa (só owner/admin grava)
-        { id: "acesso", label: "Acesso às telas", content: acessoTab },
+        // quem vê quais telas (por nível, com exceção por pessoa) e quanto tempo
+        // sem uso encerra a sessão; só owner/admin grava
+        { id: "acesso", label: "Acesso e sessão", content: acessoTab },
       ]}
     />
   );

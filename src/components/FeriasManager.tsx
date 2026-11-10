@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DetailModal } from "@/components/ui/DetailModal";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -745,6 +746,10 @@ const DIA_SP = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" 
  *
  * É coisa séria (LUIZ, 10/11/2026): o colaborador confirma, a escolha vai na
  * hora ao DP e não muda mais por aqui. Quem libera uma nova escolha é o DP.
+ *
+ * A confirmação pede a senha (o mesmo celular passa de um motorista para
+ * outro): quem pegou uma sessão esquecida aberta não escolhe pelo colega. Quem
+ * confere é o banco, dentro de `ferias_escolher_decimo`.
  */
 function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
   escolhas: EscolhaDecimo[];
@@ -756,23 +761,20 @@ function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
   const [salvando, iniciar] = useTransition();
   const router = useRouter();
   const anos = anosDaEscolhaDecimo(hoje, escolhas, modo, ate);
+  const [pedido, setPedido] = useState<{ ano: number; quer: boolean } | null>(null);
+  const [erroSenha, setErroSenha] = useState<string | null>(null);
 
-  const escolher = async (ano: number, quer: boolean) => {
-    const ok = await confirmDialog({
-      title: quer ? `Adiantar o 13º nas férias de ${ano}?` : `Não adiantar o 13º nas férias de ${ano}?`,
-      message: (
-        <>
-          Você está escolhendo <strong>{quer ? "receber" : "não receber"}</strong> a 1ª parcela do 13º
-          junto com as férias de {ano}. A escolha vai agora para o departamento pessoal e não pode ser
-          mudada por aqui depois. Confirma?
-        </>
-      ),
-      confirmLabel: "Confirmar e enviar ao DP",
-    });
-    if (!ok) return;
+  const escolher = (ano: number, quer: boolean) => { setErroSenha(null); setPedido({ ano, quer }); };
+
+  const confirmar = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!pedido) return;
+    const senha = String(new FormData(e.currentTarget).get("senha_13") ?? "");
+    if (!senha) { setErroSenha("Digite a sua senha."); return; }
     iniciar(async () => {
-      const r = await escolherDecimo({ ano, quer });
-      if (r.error) { toast.error(r.error); return; }
+      const r = await escolherDecimo({ ano: pedido.ano, quer: pedido.quer, senha });
+      if (r.error) { setErroSenha(r.error); return; }
+      setPedido(null);
       toast.success(r.message ?? "Escolha enviada ao departamento pessoal.");
       router.refresh();
     });
@@ -823,6 +825,41 @@ function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
           </div>
         ))}
       </div>
+
+      <DetailModal
+        open={!!pedido}
+        onClose={() => { if (!salvando) setPedido(null); }}
+        title={pedido ? (pedido.quer ? `Adiantar o 13º nas férias de ${pedido.ano}?` : `Não adiantar o 13º nas férias de ${pedido.ano}?`) : ""}
+        width="sm"
+        footer={
+          <>
+            <span />
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button type="button" className="btn btn-ghost" disabled={salvando} onClick={() => setPedido(null)}>Cancelar</button>
+              <button type="submit" form="confirmar-13" className="btn btn-primary" disabled={salvando}>
+                {salvando ? "Enviando…" : "Confirmar e enviar ao DP"}
+              </button>
+            </div>
+          </>
+        }
+      >
+        {pedido && (
+          <form id="confirmar-13" onSubmit={confirmar} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+            <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.55 }}>
+              Você está escolhendo <strong>{pedido.quer ? "receber" : "não receber"}</strong> a 1ª parcela do 13º
+              junto com as férias de {pedido.ano}. A escolha vai agora para o departamento pessoal e não pode ser
+              mudada por aqui depois.
+            </p>
+            <div>
+              <label className="label" htmlFor="senha_13">Sua senha, para confirmar que é você</label>
+              <PasswordInput id="senha_13" name="senha_13" autoComplete="current-password" />
+              {erroSenha && (
+                <p role="alert" style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: "0.4rem 0 0" }}>{erroSenha}</p>
+              )}
+            </div>
+          </form>
+        )}
+      </DetailModal>
     </div>
   );
 }

@@ -394,13 +394,15 @@ export async function reabrirDecimo(input: { userId: string; ano: number }): Pro
  * de um ano. O banco confere o prazo da empresa, faz a escolha definitiva, avisa o DP e refaz o 13º das férias
  * daquele ano que o DP ainda não efetivou.
  */
-export async function escolherDecimo(input: { ano: number; quer: boolean }): Promise<ActionState> {
+export async function escolherDecimo(input: { ano: number; quer: boolean; senha: string }): Promise<ActionState> {
   try {
     const { supabase, tenantId } = await actionContext();
-    const { error } = await supabase.rpc("ferias_escolher_decimo", {
-      p_tenant: tenantId, p_ano: input.ano, p_quer: input.quer,
+    // a senha é conferida no banco; errar 5 vezes em 15 minutos trava a escolha
+    const { data, error } = await supabase.rpc("ferias_escolher_decimo", {
+      p_tenant: tenantId, p_ano: input.ano, p_quer: input.quer, p_senha: input.senha,
     });
     if (error) return { error: error.message };
+    if (data === "senha_incorreta") return { error: "Senha incorreta. Confira e tente de novo." };
     revalidar();
     return {
       ok: true,

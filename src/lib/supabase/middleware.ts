@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
+import { COOKIE_LIMITE, COOKIE_USO, FOLGA_DO_SERVIDOR_S, horaDoLogin } from "@/lib/sessao";
 
 // `/esqueci-senha` e `/redefinir-senha` entram aqui porque quem chega nelas,
 // por definição, não consegue entrar no sistema. `/instalar` é o link que o RH
@@ -62,6 +63,30 @@ export async function updateSession(request: NextRequest) {
     autenticado = Boolean(doServidor);
   }
 
+  /**
+   * Sessão parada além do tempo da pessoa (celular compartilhado; ver
+   * src/lib/sessao.ts). O app aberto encerra sozinho; aqui se pega quem
+   * reabre o app depois do prazo, antes de qualquer tela carregar dado.
+   *
+   * O último uso é o maior entre o cookie e a hora do login: um cookie velho de
+   * outra sessão no mesmo aparelho não derruba quem acabou de entrar.
+   */
+  let expirou = false;
+  if (autenticado && claims?.claims) {
+    const limite = Number(request.cookies.get(COOKIE_LIMITE)?.value ?? "");
+    if (Number.isFinite(limite) && limite > 0) {
+      const uso = Number(request.cookies.get(COOKIE_USO)?.value ?? "") || 0;
+      const ultimo = Math.max(uso, horaDoLogin(claims.claims as Record<string, unknown>));
+      if (ultimo > 0 && Date.now() / 1000 - ultimo > limite * 60 + FOLGA_DO_SERVIDOR_S) {
+        // limpa os cookies da sessão na resposta (setAll acima) e no request
+        await supabase.auth.signOut({ scope: "local" });
+        response.cookies.delete(COOKIE_USO);
+        expirou = true;
+        autenticado = false;
+      }
+    }
+  }
+
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
@@ -70,7 +95,12 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
+    if (!expirou) return NextResponse.redirect(url);
+    // sessão vencida: o login explica, e o redirect leva junto a limpeza dos cookies
+    url.searchParams.set("motivo", "inatividade");
+    const r = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((c) => r.cookies.set(c));
+    return r;
   }
 
   /**

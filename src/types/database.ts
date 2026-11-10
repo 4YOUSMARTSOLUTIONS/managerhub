@@ -2005,6 +2005,8 @@ export type Database = {
           notification_id: string; type: string; title: string; body: string | null
           demanda_id: string | null; planner_board_id: string | null
           endpoint: string; p256dh: string; chave_auth: string
+          /** false: o aparelho ficou parado além do tempo da pessoa (aviso sai sem conteúdo) */
+          sessao_viva: boolean
         }[]
       }
       push_resultado: { Args: { p_segredo: string; p_ok: string[]; p_expiradas: string[] }; Returns: undefined }
@@ -2015,6 +2017,12 @@ export type Database = {
       acesso_telas_listar: { Args: { p_tenant: string }; Returns: Json }
       acesso_telas_definir_nivel: { Args: { p_tenant: string; p_nivel: string; p_modulos: string[] | null }; Returns: undefined }
       acesso_telas_definir_pessoa: { Args: { p_tenant: string; p_user: string; p_modo: string; p_modulos: string[] | null }; Returns: undefined }
+      // sessão encerrada por falta de uso (minutos; null = sem limite)
+      minha_inatividade: { Args: { p_tenant: string }; Returns: number | null }
+      sessao_listar: { Args: { p_tenant: string }; Returns: Json }
+      sessao_definir_padrao: { Args: { p_tenant: string; p_minutos: number | null }; Returns: undefined }
+      sessao_definir_nivel: { Args: { p_tenant: string; p_nivel: string; p_minutos: number | null }; Returns: undefined }
+      push_em_uso: { Args: { p_endpoint: string }; Returns: undefined }
       // Troca obrigatória da senha definida por terceiro. `marcar_troca_pendente`
       // NÃO entra de propósito: ela é revogada de `authenticated` (quem marca são
       // as RPCs de criação e o reset por admin, por dentro), e este arquivo
@@ -2105,7 +2113,8 @@ export type Database = {
       ferias_lancar_lote: { Args: { p_tenant: string; p_lancamentos: Json; p_hoje: string; p_somente_validar?: boolean }; Returns: Json }
       // modelo do lote: quem só o gestor lança, na alçada de quem baixa, com o saldo (ModeloLotePessoa[])
       ferias_modelo_lancamento: { Args: { p_tenant: string; p_hoje?: string }; Returns: Json }
-      ferias_escolher_decimo: { Args: { p_tenant: string; p_ano: number; p_quer: boolean }; Returns: undefined }
+      // "ok" ou "senha_incorreta" (a senha de quem escolhe é conferida no banco)
+      ferias_escolher_decimo: { Args: { p_tenant: string; p_ano: number; p_quer: boolean; p_senha: string }; Returns: string }
       ferias_escolhas_decimo: { Args: { p_tenant: string; p_user: string }; Returns: Json }
       ferias_reabrir_decimo: { Args: { p_tenant: string; p_user: string; p_ano: number }; Returns: undefined }
       ferias_painel_decimo: { Args: { p_tenant: string; p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
