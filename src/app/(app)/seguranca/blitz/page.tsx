@@ -102,9 +102,15 @@ export default async function SegurancaBlitzPage() {
     if (!veiculoPorUser.has(v.user_id)) veiculoPorUser.set(v.user_id, v);
   }
 
+  // hora e dia do registro no fuso de São Paulo (o servidor roda em UTC)
+  const diaSp = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
+  const horaSp = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+
   const rows: BlitzRow[] = (blitzes ?? []).map((b) => ({
     id: b.id,
     occurredOn: b.occurred_on,
+    registroDia: diaSp.format(new Date(b.registrada_em)),
+    registroHora: horaSp.format(new Date(b.registrada_em)),
     userId: b.user_id,
     pessoa: b.snap_full_name,
     setor: b.snap_department_name,

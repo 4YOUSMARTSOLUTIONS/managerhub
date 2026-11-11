@@ -169,7 +169,7 @@ export function enviarBlitzGuardadas(
     for (const item of fila) {
       let resp: Awaited<ReturnType<typeof criarBlitz>> | "demorou";
       try {
-        resp = await comLimite(criarBlitz({ ...item.input, clientId: item.clientId }));
+        resp = await comLimite(criarBlitz({ ...item.input, clientId: item.clientId, registradaEm: item.input.registradaEm ?? item.guardadaEm }));
       } catch {
         r.semConexao = true;
         break;

@@ -29,6 +29,9 @@ import type { Enums } from "@/types/database";
 export type BlitzRow = {
   id: string;
   occurredOn: string;
+  /** dia (YYYY-MM-DD) e hora (HH:MM) do registro, no fuso de São Paulo */
+  registroDia: string;
+  registroHora: string;
   userId: string;
   pessoa: string | null;
   setor: string | null;
@@ -50,6 +53,19 @@ export type BlitzRow = {
 function dataBr(iso: string) {
   const [a, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
+}
+
+/**
+ * A hora do registro (LUIZ, 11/11/2026). Quando a data da blitz foi alterada,
+ * o registro aconteceu noutro dia, e o dia aparece junto: "11/11 10:52" numa
+ * blitz de 05/11 mostra que a data foi mudada na hora de lançar.
+ */
+function horaDoRegistro(r: BlitzRow): string {
+  return r.registroDia === r.occurredOn ? r.registroHora : `${dataBr(r.registroDia).slice(0, 5)} ${r.registroHora}`;
+}
+
+function tituloDaHora(r: BlitzRow): string | undefined {
+  return r.registroDia === r.occurredOn ? undefined : `Registrada em ${dataBr(r.registroDia)} às ${r.registroHora}, com a data da blitz alterada`;
 }
 
 /**
@@ -178,11 +194,11 @@ export function SegBlitzManager({
             filename="blitz-de-trajeto.xlsx"
             sheetName="Blitz"
             headers={[
-              "Data", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Modelo",
+              "Data", "Hora do registro", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Modelo",
               "Propriedade", "Cor", "Situação", "Motivo do bloqueio", "Observação", "Avaliador",
             ]}
             rows={lista.map((r) => [
-              dataBr(r.occurredOn), r.pessoa ?? "", r.setor ?? "", r.gestor ?? "", r.unidade ?? "",
+              dataBr(r.occurredOn), horaDoRegistro(r), r.pessoa ?? "", r.setor ?? "", r.gestor ?? "", r.unidade ?? "",
               nomeMeio.get(r.meioId) ?? "", r.placa ?? "", r.veiculoTipo ?? "",
               r.propriedade ? SEG_VEICULO_PROPRIEDADE[r.propriedade] : "",
               nomeDaCor(r.cor),
@@ -223,7 +239,7 @@ export function SegBlitzManager({
                   <Badge tone={s.tone}>{s.label}</Badge>
                 </span>
                 <span className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem 0.6rem", fontSize: "0.8rem" }}>
-                  <span>{dataBr(r.occurredOn)}</span>
+                  <span title={tituloDaHora(r)}>{dataBr(r.occurredOn)} · {horaDoRegistro(r)}</span>
                   <Badge variant="quiet" tone="blue">{nomeMeio.get(r.meioId) ?? "—"}</Badge>
                   {r.placa && <span className="mono">{r.placa}</span>}
                 </span>
@@ -237,6 +253,7 @@ export function SegBlitzManager({
           <thead>
             <tr>
               <th style={{ width: 100 }}>Data</th>
+              <th style={{ width: 100 }}>Hora</th>
               <th>Colaborador</th>
               <th style={{ width: 140 }}>Setor</th>
               <th style={{ width: 150 }}>Meio</th>
@@ -251,6 +268,7 @@ export function SegBlitzManager({
               return (
                 <tr key={r.id} onClick={() => setAberto(r.id)} style={{ cursor: "pointer" }} title="Abrir a blitz">
                   <td>{dataBr(r.occurredOn)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title={tituloDaHora(r)}>{horaDoRegistro(r)}</td>
                   <td style={{ fontWeight: 600 }}>{shortName(r.pessoa)}</td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
                   <td>
@@ -327,7 +345,7 @@ export function SegBlitzManager({
       {detalhe && (
         <DetailModal
           open onClose={() => setAberto(null)} width="md"
-          title={`${shortName(detalhe.pessoa)} · ${dataBr(detalhe.occurredOn)}`}
+          title={`${shortName(detalhe.pessoa)} · ${dataBr(detalhe.occurredOn)} · ${horaDoRegistro(detalhe)}`}
           badges={
             <>
               <Badge tone={situacao(detalhe).tone}>{situacao(detalhe).label}</Badge>

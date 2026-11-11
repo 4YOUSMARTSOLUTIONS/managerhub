@@ -61,7 +61,9 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  *  - a busca abre com o cursor, acha sem acento e pela matrícula;
  *  - escolher o colaborador sugere o meio e o veículo da última blitz dele
  *    (placa, modelo, propriedade e cor, obrigatórios quando há veículo);
- *  - a data já é hoje e só abre se alguém tocar em "Alterar"; a observação,
+ *  - a data já é hoje e só abre se alguém tocar em "Alterar", e aceita só
+ *    dias deste mês até hoje (LUIZ, 11/11/2026: data de outro mês mexeria na
+ *    aderência de um mês fechado; o banco trava também); a observação,
  *    opcional, também fica fechada;
  *  - escolher o meio filtra as perguntas (sem vínculo = vale para todos);
  *  - o que falta aparece no rodapé, e a tela rola até o campo;
@@ -94,6 +96,7 @@ export function SegBlitzDialog({
   veiculos: VeiculoSugestao[];
 }) {
   const hoje = hojeYmd();
+  const inicioDoMes = `${hoje.slice(0, 7)}-01`;
   const [userId, setUserId] = useState("");
   const [data, setData] = useState(hoje);
   const [editarData, setEditarData] = useState(false);
@@ -196,6 +199,9 @@ export function SegBlitzDialog({
   const salvar = () => {
     setErro("");
     if (!userId) return falta("Escolha o colaborador.", "colaborador");
+    if (data < inicioDoMes || data > hoje) {
+      return falta(`A data da blitz precisa ser deste mês, de ${formatDate(inicioDoMes)} até hoje.`, "colaborador");
+    }
     if (!meioId) return falta("Escolha o meio de transporte.", "meio");
     if (meio?.temVeiculo) {
       if (!placa.trim()) return falta("Informe a placa do veículo.", "veiculo");
@@ -232,6 +238,7 @@ export function SegBlitzDialog({
       observacao,
       respostas: perguntasDoMeio.map((q) => ({ perguntaId: q.id, resposta: respostas[q.id] })),
       clientId,
+      registradaEm: new Date().toISOString(),
     };
     const item: BlitzGuardada = { clientId, dono, tenantId, input, nome, situacao, guardadaEm: new Date().toISOString() };
 
@@ -350,9 +357,10 @@ export function SegBlitzDialog({
                   <>
                     <label htmlFor="blitz-data">Data da blitz</label>
                     <input
-                      id="blitz-data" className="input" type="date" value={data} max={hoje}
+                      id="blitz-data" className="input" type="date" value={data} min={inicioDoMes} max={hoje}
                       onChange={(e) => setData(e.target.value || hoje)} style={{ width: "auto" }}
                     />
+                    <span>só datas deste mês, até hoje</span>
                   </>
                 ) : (
                   <>

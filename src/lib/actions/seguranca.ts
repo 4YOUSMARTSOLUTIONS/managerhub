@@ -1315,6 +1315,12 @@ export type BlitzInput = {
    * banco devolve a blitz já gravada em vez de gravar outra.
    */
   clientId?: string | null;
+  /**
+   * O momento em que tocaram "Registrar" (ISO). Vale para a blitz guardada no
+   * aparelho sem sinal: a hora e o mês do registro são os do toque, não os do
+   * envio. O banco só aceita até 3 dias para trás; fora disso usa a hora dele.
+   */
+  registradaEm?: string | null;
 };
 
 /**
@@ -1339,6 +1345,7 @@ export async function criarBlitz(input: BlitzInput): Promise<ActionState> {
         observacao: input.observacao ?? null,
         respostas: input.respostas.map((r) => ({ pergunta_id: r.perguntaId, resposta: r.resposta })),
         client_id: input.clientId ?? null,
+        registrada_em: input.registradaEm ?? null,
       },
     });
     if (error) return { error: error.message };
