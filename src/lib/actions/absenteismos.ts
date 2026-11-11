@@ -10,6 +10,7 @@ import {
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { wantsActive } from "@/lib/catalogGuard";
+import { lerAtestadoNaOpenAI, MIMES_LEITURA_IA, type AtestadoLidoPorIA } from "@/lib/atestado-ia";
 
 /**
  * Absenteísmos: o catálogo de tipos, a lista de quem recebe o comunicado e,
@@ -620,6 +621,60 @@ export type AtestadoLido = {
   diasAfastamento: number | null;
   acompanhado: string | null;
 };
+
+/**
+ * Lê o atestado com IA e devolve os "Dados do atestado" que der para preencher
+ * (LUIZ, 11/11/2026). O gestor usa se quiser; a tela avisa, em amarelo, que a
+ * leitura pode errar e que a responsabilidade do preenchimento é dele.
+ *
+ * A imagem vem do arquivo escolhido agora (`file`) ou do anexo já guardado no
+ * lançamento (`id`, lido com a RLS de quem pede). Vai à OpenAI pela chave da
+ * plataforma, só para a leitura, e nada do que volta é gravado aqui: quem grava
+ * é o "Salvar"/"Enviar" de sempre, depois da revisão.
+ */
+export type { AtestadoLidoPorIA };
+
+export async function lerAtestadoComIA(formData: FormData): Promise<{ data?: AtestadoLidoPorIA; error?: string }> {
+  try {
+    const { supabase } = await actionContext();
+
+    let bytes: ArrayBuffer;
+    let tipo: string;
+    let nome: string;
+    const file = formData.get("file");
+    const id = String(formData.get("id") ?? "");
+    if (file instanceof File && file.size > 0) {
+      if (file.size > TAMANHO_ANEXO) return { error: "O arquivo passa de 10 MB." };
+      bytes = await file.arrayBuffer();
+      tipo = file.type;
+      nome = file.name;
+    } else if (id) {
+      const { data: l } = await supabase
+        .from("absenteismo_lancamentos")
+        .select("doc_path, doc_content_type, doc_filename")
+        .eq("id", id)
+        .maybeSingle();
+      if (!l?.doc_path) return { error: "Anexe o atestado primeiro." };
+      const { data: blob, error } = await supabase.storage.from(BUCKET_DOC).download(l.doc_path);
+      if (error || !blob) return { error: "Não foi possível abrir o anexo para a leitura." };
+      bytes = await blob.arrayBuffer();
+      tipo = l.doc_content_type ?? blob.type;
+      nome = l.doc_filename ?? "atestado";
+    } else {
+      return { error: "Escolha a foto ou o PDF do atestado." };
+    }
+    if (!MIMES_LEITURA_IA.includes(tipo)) {
+      return { error: "A leitura com IA aceita foto (JPG, PNG ou WEBP) ou PDF. Foto do iPhone em HEIC: envie um print da foto." };
+    }
+
+    return await lerAtestadoNaOpenAI({ bytes, tipo, nome }, async (codigo) => {
+      const { data } = await supabase.from("cid10").select("code, description").eq("code", codigo).maybeSingle();
+      return data ?? null;
+    });
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
 
 export async function getAtestado(id: string): Promise<AtestadoLido | null> {
   const { supabase } = await actionContext();

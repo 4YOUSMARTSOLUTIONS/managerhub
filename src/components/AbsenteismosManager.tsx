@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Ban, Check, FileText, Mail, Paperclip, Pencil, Send, Stethoscope, X,
+  AlertTriangle, Ban, Check, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
@@ -23,7 +23,8 @@ import {
   decidirAbsenteismo, getAlertaInss, getAtestado, getDocumentoAbsenteismoUrl,
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
-  type AlertaInss, type AtestadoLido, type ConfirmacaoInput,
+  lerAtestadoComIA,
+  type AlertaInss, type AtestadoLido, type AtestadoLidoPorIA, type ConfirmacaoInput,
 } from "@/lib/actions/absenteismos";
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
 import type { Enums } from "@/types/database";
@@ -725,10 +726,12 @@ function Dialogo({ titulo, children, onFechar }: { titulo: string; children: Rea
  * errada ao RH.
  */
 function BuscaCid({
-  code, onEscolha,
+  code, onEscolha, destaque,
 }: {
   code: string;
   onEscolha: (code: string, descricao: string) => void;
+  /** veio da leitura com IA: borda amarela até o gestor mexer */
+  destaque?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [opcoes, setOpcoes] = useState<{ code: string; description: string }[]>([]);
@@ -753,7 +756,10 @@ function BuscaCid({
   return (
     <div onBlur={handleBlur} style={{ position: "relative" }}>
       {code ? (
-        <div className="input" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", overflow: "hidden" }}>
+        <div className="input" style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", overflow: "hidden",
+          ...(destaque ? { borderColor: "var(--mh-warning)", boxShadow: "0 0 0 1px var(--mh-warning)" } : {}),
+        }}>
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{code}</span>
           <button
             type="button" onClick={() => onEscolha("", "")} aria-label="Limpar"
@@ -836,6 +842,13 @@ function PainelConfirmacao({
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [arquivoSubiu, setArquivoSubiu] = useState(false);
   const [criadoId, setCriadoId] = useState<string | null>(null);
+  // leitura do atestado com IA (LUIZ, 11/11/2026): opcional; os campos que vieram
+  // dela ficam marcados até o gestor mexer, e o aviso amarelo fica até o fim
+  const [camposIA, setCamposIA] = useState<Set<string>>(new Set());
+  const [usouIA, setUsouIA] = useState(false);
+  const [lendoIA, setLendoIA] = useState(false);
+  const [avisoIA, setAvisoIA] = useState("");
+  const seletorIA = useRef<HTMLInputElement>(null);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
   const ehNovo = !linha;
@@ -956,6 +969,80 @@ function PainelConfirmacao({
   };
 
   const docOk = ehNovo ? Boolean(arquivo) : temDoc;
+
+  const doIA = (campo: string) => camposIA.has(campo);
+  /** o gestor mexeu no campo: a marca de "veio da IA" sai dele (o aviso geral fica) */
+  const revisado = (campo: string) => setCamposIA((atual) => {
+    if (!atual.has(campo)) return atual;
+    const n = new Set(atual);
+    n.delete(campo);
+    return n;
+  });
+  const bordaIA = (campo: string): React.CSSProperties | undefined =>
+    doIA(campo) ? { borderColor: "var(--mh-warning)", boxShadow: "0 0 0 1px var(--mh-warning)" } : undefined;
+  const marcaIA = (campo: string) => doIA(campo)
+    ? <span title="Preenchido pela leitura com IA: confira" style={{ color: "var(--mh-warning)", fontWeight: 800, fontSize: "0.66rem", marginLeft: 5, letterSpacing: "0.04em" }}>IA</span>
+    : null;
+
+  const aplicarLeitura = (d: AtestadoLidoPorIA) => {
+    const campos: Partial<Confirmacao> = {};
+    const lidos = new Set<string>();
+    if (d.tipoAtestado) { campos.tipoAtestado = d.tipoAtestado; lidos.add("tipoAtestado"); }
+    if (d.cid) { campos.cid = d.cid; campos.cidDescricao = d.cidDescricao ?? ""; lidos.add("cid"); }
+    if (d.medico) { campos.medico = d.medico; lidos.add("medico"); }
+    if (d.crm) { campos.crm = d.crm; lidos.add("crm"); }
+    if (d.local) { campos.local = d.local; lidos.add("local"); }
+    if (d.emitidoEm) { campos.emitidoEm = d.emitidoEm; lidos.add("emitidoEm"); }
+    if (d.acompanhado && tipo?.requiresCompanion) { campos.acompanhado = d.acompanhado; lidos.add("acompanhado"); }
+    setC((x) => ({ ...x, ...campos }));
+    setCamposIA(lidos);
+    setAvisoIA(d.cidNaoEncontrado
+      ? `A IA leu o CID "${d.cidNaoEncontrado}", que não existe na tabela oficial, e o campo ficou vazio. Busque o CID certo.`
+      : "");
+    if (lidos.size === 0) {
+      toast.warning("A IA não conseguiu ler os dados deste documento. Preencha manualmente.");
+      return;
+    }
+    setUsouIA(true);
+  };
+
+  /**
+   * Lê o atestado com IA: o arquivo que acabou de ser escolhido, o anexo do
+   * lançamento novo (ainda na tela) ou o anexo já guardado. Sem nenhum, abre a
+   * escolha da foto, que vira também o documento comprobatório.
+   */
+  const lerComIA = (escolhido?: File) => {
+    onErro("");
+    const fd = new FormData();
+    if (escolhido) fd.set("file", escolhido);
+    else if (ehNovo && arquivo) fd.set("file", arquivo);
+    else if (!ehNovo && temDoc && linha) fd.set("id", linha.id);
+    else { seletorIA.current?.click(); return; }
+    setLendoIA(true);
+    void lerAtestadoComIA(fd).then((r) => {
+      setLendoIA(false);
+      if (r.error || !r.data) { onErro(r.error ?? "A leitura falhou. Preencha manualmente."); return; }
+      aplicarLeitura(r.data);
+    });
+  };
+
+  const escolherParaIA = (f: File) => {
+    if (ehNovo) { setArquivo(f); lerComIA(f); return; }
+    if (!linha) return;
+    // no Efetivar, a foto escolhida para a leitura já sobe como o anexo
+    const fd = new FormData();
+    fd.set("id", linha.id);
+    fd.set("file", f);
+    setLendoIA(true);
+    void anexarDocumentoAbsenteismo(fd).then((a) => {
+      setLendoIA(false);
+      if (a.error) { onErro(a.error); return; }
+      setTemDoc(true);
+      router.refresh();
+      lerComIA(f);
+    });
+  };
+  const temArquivoParaIA = ehNovo ? Boolean(arquivo) : temDoc;
 
   return (
     <>
@@ -1119,24 +1206,61 @@ function PainelConfirmacao({
 
       {tipo?.requiresMedical && (
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", background: "var(--surface-2)", padding: "0.9rem" }}>
-          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", marginBottom: "0.3rem" }}>
+          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", marginBottom: "0.3rem", flexWrap: "wrap" }}>
             <Stethoscope size={15} />
             <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Dados do atestado</span>
+            {/* leitura com IA: opcional, quem quiser preenche à mão (LUIZ, 11/11/2026) */}
+            <button
+              type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}
+              disabled={lendoIA || pendente || arquivoSubiu}
+              title="Lê a foto ou o PDF do atestado e preenche o que conseguir. Confira tudo depois."
+              onClick={() => lerComIA()}
+            >
+              <Sparkles size={14} aria-hidden />
+              {lendoIA ? "Lendo o atestado…" : temArquivoParaIA ? "Preencher com IA" : "Preencher com IA pela foto"}
+            </button>
+            <input
+              ref={seletorIA} type="file" hidden accept="application/pdf,image/jpeg,image/png,image/webp"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) escolherParaIA(f); e.target.value = ""; }}
+            />
           </div>
           <p className="soft" style={{ fontSize: "0.74rem", margin: "0 0 0.7rem" }}>
             Ficam guardados à parte, com acesso restrito a você e ao RH. Não saem em e-mail, não
-            entram na planilha exportada e não aparecem em Logs do sistema.
+            entram na planilha exportada e não aparecem em Logs do sistema. O &quot;Preencher com IA&quot;
+            é opcional: ele envia a foto ou o PDF do atestado à OpenAI só para a leitura e completa o
+            que conseguir ler{temArquivoParaIA ? "" : "; a foto escolhida vira também o documento comprobatório"}.
           </p>
+
+          {usouIA && (
+            <div role="alert" style={{
+              display: "flex", gap: "0.65rem", alignItems: "flex-start", margin: "0 0 0.8rem", padding: "0.75rem 0.9rem",
+              borderRadius: 10, border: "2px solid var(--mh-warning)",
+              background: "color-mix(in srgb, var(--mh-warning) 22%, var(--surface))", color: "var(--mh-text-1)",
+            }}>
+              <AlertTriangle size={22} aria-hidden style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: "0.82rem", lineHeight: 1.45 }}>
+                <strong style={{ display: "block", fontSize: "0.9rem" }}>Revise os dados antes de enviar</strong>
+                Os campos marcados com IA foram preenchidos por leitura com inteligência artificial, que
+                pode errar. Confira cada um com o atestado e corrija o que estiver diferente.
+                <strong style={{ display: "block", marginTop: "0.3rem" }}>
+                  A responsabilidade pelo preenchimento continua sendo sua.
+                </strong>
+              </div>
+            </div>
+          )}
+          {avisoIA && (
+            <p style={{ fontSize: "0.8rem", margin: "0 0 0.8rem", color: "var(--mh-warning)", fontWeight: 600 }}>{avisoIA}</p>
+          )}
           <div style={{ display: "flex", gap: "1.2rem", flexWrap: "wrap", marginBottom: "0.8rem" }}>
             <div>
-              <label className="label">Tipo de atestado <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <label className="label">Tipo de atestado <span style={{ color: "var(--mh-danger)" }}>*</span>{marcaIA("tipoAtestado")}</label>
               <div style={{ display: "flex", gap: "1rem", alignItems: "center", height: 34 }}>
                 {[["medico", "Médico"], ["odontologico", "Odontológico"]].map(([v, r]) => (
                   <label key={v} style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem", cursor: "pointer" }}>
                     <input
                       type="radio" name={`tipo-atestado-${linha?.id ?? "novo"}`} value={v}
                       checked={c.tipoAtestado === v}
-                      onChange={() => setC((x) => ({ ...x, tipoAtestado: v }))}
+                      onChange={() => { setC((x) => ({ ...x, tipoAtestado: v })); revisado("tipoAtestado"); }}
                     />
                     {r}
                   </label>
@@ -1155,10 +1279,11 @@ function PainelConfirmacao({
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
             <div>
-              <label className="label">CID</label>
+              <label className="label">CID{marcaIA("cid")}</label>
               <BuscaCid
                 code={c.cid}
-                onEscolha={(code, descricao) => setC((x) => ({ ...x, cid: code, cidDescricao: descricao }))}
+                destaque={doIA("cid")}
+                onEscolha={(code, descricao) => { setC((x) => ({ ...x, cid: code, cidDescricao: descricao })); revisado("cid"); }}
               />
             </div>
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
@@ -1171,39 +1296,39 @@ function PainelConfirmacao({
             </div>
             {tipo?.requiresCompanion && (
               <div style={{ gridColumn: "span 2", minWidth: 0 }}>
-                <label className="label">Acompanhado (quem foi acompanhado) <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                <label className="label">Acompanhado (quem foi acompanhado) <span style={{ color: "var(--mh-danger)" }}>*</span>{marcaIA("acompanhado")}</label>
                 <input
-                  className="input" value={c.acompanhado} placeholder="Ex.: filho, Pedro, 4 anos"
-                  onChange={(e) => setC((x) => ({ ...x, acompanhado: e.target.value }))}
+                  className="input" value={c.acompanhado} placeholder="Ex.: filho, Pedro, 4 anos" style={bordaIA("acompanhado")}
+                  onChange={(e) => { setC((x) => ({ ...x, acompanhado: e.target.value })); revisado("acompanhado"); }}
                 />
               </div>
             )}
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
-              <label className="label">Profissional <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <label className="label">Profissional <span style={{ color: "var(--mh-danger)" }}>*</span>{marcaIA("medico")}</label>
               <input
-                className="input" value={c.medico} placeholder="Dra. Marina Alves"
-                onChange={(e) => setC((x) => ({ ...x, medico: e.target.value }))}
+                className="input" value={c.medico} placeholder="Dra. Marina Alves" style={bordaIA("medico")}
+                onChange={(e) => { setC((x) => ({ ...x, medico: e.target.value })); revisado("medico"); }}
               />
             </div>
             <div>
-              <label className="label">CRM ou registro</label>
+              <label className="label">CRM ou registro{marcaIA("crm")}</label>
               <input
-                className="input" value={c.crm} placeholder="CRM-BA 12345"
-                onChange={(e) => setC((x) => ({ ...x, crm: e.target.value }))}
+                className="input" value={c.crm} placeholder="CRM-BA 12345" style={bordaIA("crm")}
+                onChange={(e) => { setC((x) => ({ ...x, crm: e.target.value })); revisado("crm"); }}
               />
             </div>
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
-              <label className="label">Hospital, clínica ou local</label>
+              <label className="label">Hospital, clínica ou local{marcaIA("local")}</label>
               <input
-                className="input" value={c.local} placeholder="Hospital Santa Izabel"
-                onChange={(e) => setC((x) => ({ ...x, local: e.target.value }))}
+                className="input" value={c.local} placeholder="Hospital Santa Izabel" style={bordaIA("local")}
+                onChange={(e) => { setC((x) => ({ ...x, local: e.target.value })); revisado("local"); }}
               />
             </div>
             <div>
-              <label className="label">Emitido em <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <label className="label">Emitido em <span style={{ color: "var(--mh-danger)" }}>*</span>{marcaIA("emitidoEm")}</label>
               <input
-                type="date" className="input" value={c.emitidoEm}
-                onChange={(e) => setC((x) => ({ ...x, emitidoEm: e.target.value }))}
+                type="date" className="input" value={c.emitidoEm} style={bordaIA("emitidoEm")}
+                onChange={(e) => { setC((x) => ({ ...x, emitidoEm: e.target.value })); revisado("emitidoEm"); }}
               />
             </div>
           </div>
