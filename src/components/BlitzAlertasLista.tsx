@@ -73,7 +73,7 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
         <ExportButton
           filename={`blitz-alertas-${chaveArquivo}.xlsx`}
           sheetName="Alertas"
-          headers={["Data da blitz", "Matrícula", "Colaborador", "Setor", "Unidade", "Gestor", "Ocorrência", "Itens não", "Situação", "Data da conversa", "O que foi tratado", "O que ficou combinado"]}
+          headers={["Data da blitz", "Matrícula", "Colaborador", "Setor", "Unidade", "Gestor", "Ocorrência", "Itens não conformes", "Situação", "Data da conversa", "O que foi tratado", "O que ficou combinado"]}
           rows={lista.map((a) => [
             formatDate(a.occurred_on), a.matricula ?? "", a.colaborador ?? "", a.setor ?? "", a.unidade ?? "", a.gestor ?? "",
             ocorrencia(a), a.respostas_nao.join("; "),
