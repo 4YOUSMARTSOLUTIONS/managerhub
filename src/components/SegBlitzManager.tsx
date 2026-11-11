@@ -14,6 +14,8 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
+import { BlitzAderencia } from "@/components/BlitzAderencia";
+import type { BlitzAderencia as BlitzAderenciaDados, BlitzPublicoConfig } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
   SegBlitzDialog, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
@@ -76,7 +78,7 @@ function situacao(r: BlitzRow): { label: string; tone: "green" | "amber" | "red"
 }
 
 export function SegBlitzManager({
-  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, painel, alertas, dono, tenantId,
+  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, painel, alertas, dono, tenantId, aderencia = null,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -89,6 +91,14 @@ export function SegBlitzManager({
   painel: BlitzPainel | null;
   /** os alertas do usuário logado como gestor */
   alertas: BlitzAlerta[];
+  /** aderência do mês (só para quem tem alçada) e o cadastro do público (owner/admin) */
+  aderencia?: {
+    inicial: BlitzAderenciaDados;
+    unitIds: string[] | null;
+    mesAtual: string;
+    podeConfigurar: boolean;
+    config: BlitzPublicoConfig | null;
+  } | null;
   /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
   dono: string;
   tenantId: string;
@@ -140,7 +150,7 @@ export function SegBlitzManager({
 
   // tratativas que o gestor logado ainda deve: aparecem no título da aba
   const tratativasPendentes = alertas.filter((a) => !a.tratativa_em).length;
-  const temAnalises = alertas.length > 0 || (!!painel && (painel.total > 0 || painel.recorrencia.length > 0));
+  const temAnalises = alertas.length > 0 || !!aderencia || (!!painel && (painel.total > 0 || painel.recorrencia.length > 0));
 
   const registros = (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
@@ -265,6 +275,16 @@ export function SegBlitzManager({
   const analises = (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", paddingTop: "0.9rem" }}>
       <SegBlitzTratativas alertas={alertas} />
+      {aderencia && (
+        <BlitzAderencia
+          inicial={aderencia.inicial}
+          unitIds={aderencia.unitIds}
+          mesAtual={aderencia.mesAtual}
+          podeConfigurar={aderencia.podeConfigurar}
+          config={aderencia.config}
+          pessoas={pessoas}
+        />
+      )}
       {painel && painel.total > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.8rem" }}>
           <StatCard label="Blitzes no ano" value={painel.total} hint={`${painel.colaboradores} colaborador(es) abordado(s)`} />

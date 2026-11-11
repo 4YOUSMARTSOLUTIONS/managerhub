@@ -8,6 +8,7 @@ import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import { hojeYmd, normalizar } from "@/lib/format";
 import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
+import type { BlitzAderencia } from "@/lib/blitz-aderencia";
 import type { Enums, Json } from "@/types/database";
 
 /**
@@ -1375,6 +1376,73 @@ export type BlitzAlerta = {
   tratativa_resumo: string | null;
   tratativa_acordo: string | null;
 };
+
+/**
+ * Aderência à blitz de um mês ("YYYY-MM"). As unidades vêm do seletor do topo
+ * (são só recorte: a RPC confere empresa e alçada).
+ */
+export async function getBlitzAderencia(input: { mes: string; unitIds: string[] | null }): Promise<{ data?: BlitzAderencia; error?: string }> {
+  try {
+    if (!/^\d{4}-\d{2}$/.test(input.mes)) return { error: "Mês inválido." };
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("seg_blitz_aderencia", {
+      p_mes: `${input.mes}-01`, p_unit_ids: input.unitIds,
+    });
+    if (error) return { error: error.message };
+    return { data: data as unknown as BlitzAderencia };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Grava o público da blitz: as funções que ficam de fora e as exceções por
+ * pessoa. Substitui o cadastro inteiro pelo que veio da tela (o que saiu da
+ * lista é removido). A RLS só deixa owner/admin escrever.
+ */
+export async function salvarPublicoBlitz(input: {
+  funcoesFora: string[];
+  excecoes: { userId: string; participa: boolean }[];
+}): Promise<ActionState> {
+  try {
+    const { supabase, tenantId, userId } = await actionContext();
+    const funcoes = [...new Set(input.funcoesFora)];
+    const excecoes = [...new Map(input.excecoes.map((x) => [x.userId, x])).values()];
+
+    const { data: atuaisF } = await supabase.from("seg_blitz_publico_funcoes").select("position_id").eq("tenant_id", tenantId);
+    const tirarF = (atuaisF ?? []).map((f) => f.position_id).filter((id) => !funcoes.includes(id));
+    if (tirarF.length) {
+      const { error } = await supabase.from("seg_blitz_publico_funcoes").delete().eq("tenant_id", tenantId).in("position_id", tirarF);
+      if (error) return { error: error.message };
+    }
+    const novasF = funcoes.filter((id) => !(atuaisF ?? []).some((f) => f.position_id === id));
+    if (novasF.length) {
+      const { error } = await supabase.from("seg_blitz_publico_funcoes")
+        .insert(novasF.map((position_id) => ({ tenant_id: tenantId, position_id, created_by: userId })));
+      if (error) return { error: error.message };
+    }
+
+    const { data: atuaisP } = await supabase.from("seg_blitz_publico_pessoas").select("user_id, participa").eq("tenant_id", tenantId);
+    const tirarP = (atuaisP ?? []).map((p) => p.user_id).filter((id) => !excecoes.some((x) => x.userId === id));
+    if (tirarP.length) {
+      const { error } = await supabase.from("seg_blitz_publico_pessoas").delete().eq("tenant_id", tenantId).in("user_id", tirarP);
+      if (error) return { error: error.message };
+    }
+    const mudar = excecoes.filter((x) => (atuaisP ?? []).find((p) => p.user_id === x.userId)?.participa !== x.participa);
+    if (mudar.length) {
+      const { error } = await supabase.from("seg_blitz_publico_pessoas").upsert(
+        mudar.map((x) => ({ tenant_id: tenantId, user_id: x.userId, participa: x.participa, created_by: userId })),
+        { onConflict: "tenant_id,user_id" },
+      );
+      if (error) return { error: error.message };
+    }
+
+    revalidatePath("/seguranca/blitz");
+    return { ok: true, message: "Público da blitz atualizado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
 
 /** Os alertas de blitz do gestor logado, projetados coluna a coluna pela RPC. */
 export async function getBlitzAlertas(): Promise<BlitzAlerta[]> {

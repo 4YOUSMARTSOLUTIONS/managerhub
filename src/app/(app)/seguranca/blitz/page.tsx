@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { SegBlitzManager, type BlitzPainel, type BlitzRow } from "@/components/SegBlitzManager";
 import { getBlitzAlertas } from "@/lib/actions/seguranca";
+import type { BlitzAderencia, BlitzPublicoConfig } from "@/lib/blitz-aderencia";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Blitz de trajeto.
@@ -65,6 +67,24 @@ export default async function SegurancaBlitzPage() {
    */
   const temAlcada = role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || daSeguranca === true;
 
+  // Aderência do mês corrente (o seletor da tela troca o mês) e, para quem
+  // cuida do cadastro da blitz (owner/admin, como meios e perguntas), o público
+  const hojeSp = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const mesAtual = hojeSp.slice(0, 7);
+  const podeConfigurarPublico = role === "owner" || role === "admin";
+  const [aderenciaRes, configRes] = await Promise.all([
+    temAlcada ? supabase.rpc("seg_blitz_aderencia", { p_mes: `${mesAtual}-01`, p_unit_ids: unidades }) : Promise.resolve({ data: null }),
+    podeConfigurarPublico
+      ? Promise.all([
+          supabase.from("positions").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
+          fetchAll(() => supabase.from("memberships").select("position_id").eq("tenant_id", tenant.id).eq("is_active", true).order("id")),
+          supabase.from("seg_blitz_publico_funcoes").select("position_id").eq("tenant_id", tenant.id),
+          supabase.from("seg_blitz_publico_pessoas").select("user_id, participa").eq("tenant_id", tenant.id),
+        ])
+      : Promise.resolve(null),
+  ]);
+  const aderencia = (aderenciaRes.data ?? null) as unknown as BlitzAderencia | null;
+
   const ids = (blitzes ?? []).map((b) => b.id);
   const { data: respostas } = ids.length
     ? await supabase
@@ -85,6 +105,20 @@ export default async function SegurancaBlitzPage() {
     .filter((m): m is typeof m & { profile: NonNullable<typeof m.profile> } => !!m.profile)
     .map((m) => ({ id: m.profile.id, name: m.profile.full_name ?? m.profile.email ?? "—", code: m.code }));
   const nomeDoUser = new Map(pessoas.map((p) => [p.id, p.name]));
+
+  let configPublico: BlitzPublicoConfig | null = null;
+  if (configRes) {
+    const [posRes, memb, foraRes, excRes] = configRes;
+    const porFuncao = new Map<string, number>();
+    for (const m of memb.data ?? []) if (m.position_id) porFuncao.set(m.position_id, (porFuncao.get(m.position_id) ?? 0) + 1);
+    configPublico = {
+      funcoes: (posRes.data ?? []).map((p) => ({ id: p.id, name: p.name, pessoas: porFuncao.get(p.id) ?? 0 })),
+      funcoesFora: (foraRes.data ?? []).map((f) => f.position_id),
+      excecoes: (excRes.data ?? [])
+        .map((x) => ({ userId: x.user_id, nome: nomeDoUser.get(x.user_id) ?? "—", participa: x.participa }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    };
+  }
   const nomeMotivo = new Map((motivos ?? []).map((m) => [m.id, m.name]));
 
   // um veículo por colaborador: o mais recente (a query já vem ordenada)
@@ -136,6 +170,10 @@ export default async function SegurancaBlitzPage() {
           tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor,
         }))}
         painel={temAlcada ? ((painel ?? null) as BlitzPainel | null) : null}
+        aderencia={aderencia ? {
+          inicial: aderencia, unitIds: unidades, mesAtual,
+          podeConfigurar: podeConfigurarPublico, config: configPublico,
+        } : null}
         alertas={alertas}
       />
     </div>
