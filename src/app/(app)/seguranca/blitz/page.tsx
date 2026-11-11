@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { SegBlitzManager, type BlitzRow } from "@/components/SegBlitzManager";
 import { getBlitzAlertas } from "@/lib/actions/seguranca";
-import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
+import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 
 /**
  * Blitz de trajeto.
@@ -66,10 +66,19 @@ export default async function SegurancaBlitzPage() {
   const hojeSp = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const [anoAtual, mesNum] = hojeSp.split("-").map(Number);
   const fimDoMes = `${hojeSp.slice(0, 7)}-${String(new Date(anoAtual, mesNum, 0).getDate()).padStart(2, "0")}`;
-  const analiseRes = temAlcada
-    ? await supabase.rpc("seg_blitz_analise", { p_de: `${hojeSp.slice(0, 7)}-01`, p_ate: fimDoMes, p_unit_ids: unidades })
-    : { data: null };
-  const analise = (analiseRes.data ?? null) as unknown as BlitzAnaliseDados | null;
+  const argsDoMes = { p_de: `${hojeSp.slice(0, 7)}-01`, p_ate: fimDoMes, p_unit_ids: unidades };
+  const [analiseRes, alertasRes] = temAlcada
+    ? await Promise.all([
+        supabase.rpc("seg_blitz_analise", argsDoMes),
+        supabase.rpc("seg_blitz_alertas_do_periodo", argsDoMes),
+      ])
+    : [{ data: null }, { data: null }];
+  const analise = analiseRes.data
+    ? {
+        ...(analiseRes.data as unknown as BlitzAnaliseDados),
+        alertas: (alertasRes.data ?? []) as unknown as BlitzAlertaAnalise[],
+      }
+    : null;
   // a blitz começou em 2026: o filtro oferece de lá até o ano corrente
   const anos = Array.from({ length: Math.max(1, anoAtual - 2026 + 1) }, (_, i) => anoAtual - i);
 

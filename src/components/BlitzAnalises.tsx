@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
-import { BlitzAderenciaDetalhe, BlitzFaltamPassar, BlitzRecorrenciaLista } from "./BlitzAderencia";
+import { BlitzAderenciaDetalhe, BlitzFaltamPassar, BlitzRecorrenciaLista, type FiltroPessoa } from "./BlitzAderencia";
+import { BlitzAlertasLista } from "./BlitzAlertasLista";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
@@ -55,6 +56,23 @@ export function BlitzAnalises({
   const [ate, setAte] = useState(inicial.ate > hoje ? hoje : inicial.ate);
   const [dados, setDados] = useState(inicial);
   const [modoDosDados, setModoDosDados] = useState<Modo>("mes");
+  const [subaba, setSubaba] = useState("aderencia");
+  // o clique no gráfico de aderência leva para "Faltam passar" já filtrada
+  // (LUIZ, 11/11/2026); a versão remonta a lista com o filtro novo a cada clique
+  const [filtroFaltam, setFiltroFaltam] = useState<FiltroPessoa>({});
+  const [versaoFaltam, setVersaoFaltam] = useState(0);
+  const topoDasSubabas = useRef<HTMLDivElement>(null);
+
+  const verFaltam = (f: FiltroPessoa) => {
+    setFiltroFaltam(f);
+    setVersaoFaltam((v) => v + 1);
+    setSubaba("faltam");
+    // a lista é mais curta que o painel: sobe até as subabas para ela não abrir fora da tela
+    requestAnimationFrame(() => {
+      const el = topoDasSubabas.current;
+      if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const carregar = (m: Modo, d: string, a: string) => {
     if (!d || !a || a < d) { toast.error("Escolha um período válido."); return; }
@@ -148,20 +166,32 @@ export function BlitzAnalises({
 
         {tratativas}
 
+        <div ref={topoDasSubabas} style={{ scrollMarginTop: 72 }}>
         <Tabs
           variant="sub"
+          active={subaba}
+          onActiveChange={setSubaba}
           tabs={[
-            { id: "aderencia", label: "Aderência", content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} /> },
+            { id: "aderencia", label: "Aderência", content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} onVerFaltam={verFaltam} /> },
             {
               id: "faltam", label: `Faltam passar (${ad.faltam.length})`,
-              content: <BlitzFaltamPassar dados={ad} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
+              content: (
+                <BlitzFaltamPassar key={versaoFaltam} dados={ad} rotuloPeriodo={periodo}
+                  chaveArquivo={`${dados.de}_${dados.ate}`} filtroInicial={filtroFaltam} />
+              ),
             },
             {
               id: "recorrencia", label: `Recorrência (${dados.recorrencia.length})`,
               content: <BlitzRecorrenciaLista recorrencia={dados.recorrencia} rotuloPeriodo={periodo} />,
             },
+            {
+              // a lista dos alertas: quem tratou e quem está devendo (LUIZ, 11/11/2026)
+              id: "alertas", label: `Alertas (${(dados.alertas ?? []).length})`,
+              content: <BlitzAlertasLista alertas={dados.alertas ?? []} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
+            },
           ]}
         />
+        </div>
       </div>
     </div>
   );

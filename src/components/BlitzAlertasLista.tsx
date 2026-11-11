@@ -1,0 +1,219 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { DetailModal } from "@/components/ui/DetailModal";
+import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ExportButton } from "@/components/ui/ExportButton";
+import { formatDate, formatDateTime, normalizar, shortName } from "@/lib/format";
+import type { BlitzAlertaAnalise } from "@/lib/blitz-aderencia";
+
+type Situacao = "" | "aguardando" | "tratado";
+type Campo = "gestor" | "setor" | "unidade";
+
+const CAMPOS: { campo: Campo; rotulo: string; vazio: string }[] = [
+  { campo: "gestor", rotulo: "Gestor", vazio: "Sem gestor" },
+  { campo: "setor", rotulo: "Setor", vazio: "Sem setor" },
+  { campo: "unidade", rotulo: "Unidade", vazio: "Sem unidade" },
+];
+
+const valor = (a: BlitzAlertaAnalise, c: (typeof CAMPOS)[number]) => a[c.campo] ?? c.vazio;
+
+/** O que deu errado na blitz, numa linha. */
+function ocorrencia(a: BlitzAlertaAnalise): string {
+  if (!a.liberado) return `Bloqueado${a.motivo ? `: ${a.motivo}` : ""}`;
+  const n = a.respostas_nao.length;
+  return `Liberado com desvio${n ? ` (${n} ${n === 1 ? "item" : "itens"} "não")` : ""}`;
+}
+
+/**
+ * Os alertas da blitz no período, um a um (LUIZ, 11/11/2026). Toda blitz
+ * liberada com desvio ou bloqueada avisa o gestor do colaborador, e só ele
+ * registra a tratativa. Aqui quem acompanha (owner, admin, Gerencial,
+ * segurança; o Gestor, a cadeia dele) vê quem já tratou e quem está devendo,
+ * com o resumo por gestor para cobrar. Só leitura.
+ */
+export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo }: {
+  alertas: BlitzAlertaAnalise[];
+  rotuloPeriodo: string;
+  chaveArquivo: string;
+}) {
+  const [situacao, setSituacao] = useState<Situacao>("");
+  const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>({});
+  const [busca, setBusca] = useState("");
+  const [aberto, setAberto] = useState<string | null>(null);
+
+  const opcoes = useMemo(
+    () => Object.fromEntries(CAMPOS.map((c) => [c.campo, [...new Set(alertas.map((a) => valor(a, c)))].sort((x, y) => x.localeCompare(y, "pt-BR"))])),
+    [alertas],
+  );
+  // quem está devendo, do que mais deve para o que menos deve
+  const devendo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of alertas) if (!a.registrada_em) m.set(valor(a, CAMPOS[0]), (m.get(valor(a, CAMPOS[0])) ?? 0) + 1);
+    return [...m.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "pt-BR"));
+  }, [alertas]);
+
+  const termo = normalizar(busca.trim());
+  const lista = alertas.filter((a) =>
+    (!situacao || (situacao === "tratado") === !!a.registrada_em)
+    && CAMPOS.every((c) => !filtro[c.campo] || valor(a, c) === filtro[c.campo])
+    && (!termo || normalizar([a.colaborador, a.gestor, a.setor].filter(Boolean).join(" ")).includes(termo)));
+  const tratados = alertas.filter((a) => a.registrada_em).length;
+  const algumFiltro = !!situacao || !!busca || CAMPOS.some((c) => filtro[c.campo]);
+  const detalhe = alertas.find((a) => a.id === aberto) ?? null;
+
+  return (
+    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+        <div>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Alertas de {rotuloPeriodo}</h3>
+          <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0", maxWidth: 720 }}>
+            Toda blitz liberada com desvio ou bloqueada avisa o gestor do colaborador, que conversa com a pessoa e registra a
+            tratativa. Só o gestor alertado registra. {tratados} de {alertas.length} com tratativa.
+          </p>
+        </div>
+        <ExportButton
+          filename={`blitz-alertas-${chaveArquivo}.xlsx`}
+          sheetName="Alertas"
+          headers={["Data da blitz", "Colaborador", "Setor", "Unidade", "Gestor", "Ocorrência", "Itens não", "Situação", "Data da conversa", "O que foi tratado", "O que ficou combinado"]}
+          rows={lista.map((a) => [
+            formatDate(a.occurred_on), a.colaborador ?? "", a.setor ?? "", a.unidade ?? "", a.gestor ?? "",
+            ocorrencia(a), a.respostas_nao.join("; "),
+            a.registrada_em ? "Tratado" : "Aguardando tratativa",
+            a.tratativa_em ? formatDate(a.tratativa_em) : "", a.tratativa_resumo ?? "", a.tratativa_acordo ?? "",
+          ])}
+        />
+      </div>
+
+      {/* quem está devendo: clicar filtra a lista por aquele gestor */}
+      {devendo.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem" }}>
+          <span className="soft" style={{ fontSize: "0.78rem" }}>Aguardando tratativa:</span>
+          {devendo.map(([g, n]) => {
+            const escolhido = filtro.gestor === g && situacao === "aguardando";
+            return (
+              <button key={g} type="button" aria-pressed={escolhido}
+                className={`btn btn-xs ${escolhido ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => {
+                  if (escolhido) { setFiltro((f) => ({ ...f, gestor: "" })); setSituacao(""); return; }
+                  setFiltro((f) => ({ ...f, gestor: g })); setSituacao("aguardando");
+                }}>
+                {shortName(g)} <strong>{n}</strong>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <input className="input" placeholder="Buscar colaborador ou gestor…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} style={{ width: 220, maxWidth: "100%" }} />
+        <select className="select" value={situacao} aria-label="Situação" style={{ width: "auto" }}
+          onChange={(e) => setSituacao(e.target.value as Situacao)}>
+          <option value="">Situação: todas</option>
+          <option value="aguardando">Aguardando tratativa</option>
+          <option value="tratado">Tratados</option>
+        </select>
+        {CAMPOS.map((c) => (
+          <select key={c.campo} className="select" value={filtro[c.campo] ?? ""} aria-label={c.rotulo}
+            onChange={(e) => setFiltro((f) => ({ ...f, [c.campo]: e.target.value }))} style={{ width: "auto", maxWidth: 220 }}>
+            <option value="">{c.rotulo}: todos</option>
+            {(opcoes[c.campo] ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        ))}
+        {algumFiltro && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSituacao(""); setFiltro({}); setBusca(""); }}>
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
+      {alertas.length === 0 ? (
+        <EmptyState title="Nenhum alerta no período" description="Nenhuma blitz saiu com desvio ou bloqueio nas datas escolhidas." />
+      ) : lista.length === 0 ? (
+        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhum alerta com esses filtros.</p>
+      ) : (
+        <div style={{ overflowX: "auto", maxHeight: 560, overflowY: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ width: 100 }}>Blitz</th>
+                <th>Colaborador</th>
+                <th className="so-desktop">Gestor</th>
+                <th className="so-desktop">Ocorrência</th>
+                <th style={{ width: 190 }}>Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((a) => (
+                <tr key={a.id} onClick={() => setAberto(a.id)} style={{ cursor: "pointer" }} title="Abrir o alerta">
+                  <td className="muted" style={{ fontSize: "0.82rem" }}>{formatDate(a.occurred_on)}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {shortName(a.colaborador)}
+                    {a.setor && <span className="soft" style={{ fontWeight: 400, fontSize: "0.76rem" }}> · {a.setor}</span>}
+                  </td>
+                  <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{shortName(a.gestor)}</td>
+                  <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{ocorrencia(a)}</td>
+                  <td>
+                    {a.registrada_em
+                      ? <Badge tone="green">Tratado em {formatDate(a.tratativa_em)}</Badge>
+                      : <Badge tone="amber">Aguardando tratativa</Badge>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {detalhe && (
+        <DetailModal
+          open onClose={() => setAberto(null)} width="md"
+          title={`${shortName(detalhe.colaborador)} · ${formatDate(detalhe.occurred_on)}`}
+          badges={detalhe.registrada_em
+            ? <Badge tone="green">Tratado em {formatDate(detalhe.tratativa_em)}</Badge>
+            : <Badge tone="amber">Aguardando tratativa</Badge>}
+          footer={<><span /><button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button></>}
+        >
+          <DetailSection title="A blitz">
+            <FieldGrid>
+              <Field label="Ocorrência">{ocorrencia(detalhe)}</Field>
+              <Field label="Meio">{detalhe.meio ?? "—"}</Field>
+              <Field label="Setor">{detalhe.setor ?? "—"}</Field>
+              <Field label="Unidade">{detalhe.unidade ?? "—"}</Field>
+            </FieldGrid>
+            {detalhe.respostas_nao.length > 0 && (
+              <ul style={{ margin: "0.6rem 0 0", paddingLeft: "1.1rem", fontSize: "0.84rem" }}>
+                {detalhe.respostas_nao.map((q) => <li key={q}>{q}</li>)}
+              </ul>
+            )}
+            {detalhe.observacao && (
+              <p className="soft" style={{ margin: "0.6rem 0 0", fontSize: "0.83rem", whiteSpace: "pre-wrap" }}>{detalhe.observacao}</p>
+            )}
+          </DetailSection>
+          <DetailSection title="Tratativa">
+            <FieldGrid>
+              <Field label="Gestor alertado">{detalhe.gestor ?? "—"}</Field>
+              <Field label="Alerta enviado">{formatDateTime(detalhe.enviado_em)}</Field>
+              {detalhe.tratativa_em && <Field label="Data da conversa">{formatDate(detalhe.tratativa_em)}</Field>}
+            </FieldGrid>
+            {detalhe.registrada_em ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.6rem", fontSize: "0.85rem" }}>
+                <div><span className="soft">O que foi tratado: </span><span style={{ whiteSpace: "pre-wrap" }}>{detalhe.tratativa_resumo}</span></div>
+                {detalhe.tratativa_acordo && (
+                  <div><span className="soft">O que ficou combinado: </span><span style={{ whiteSpace: "pre-wrap" }}>{detalhe.tratativa_acordo}</span></div>
+                )}
+              </div>
+            ) : (
+              <p className="soft" style={{ margin: "0.6rem 0 0", fontSize: "0.83rem" }}>
+                O gestor ainda não registrou a conversa. O registro é feito por ele, na aba Análises da blitz.
+              </p>
+            )}
+          </DetailSection>
+        </DetailModal>
+      )}
+    </div>
+  );
+}

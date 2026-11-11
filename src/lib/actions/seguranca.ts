@@ -8,7 +8,7 @@ import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import { hojeYmd, normalizar } from "@/lib/format";
 import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
-import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
+import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import type { Enums, Json } from "@/types/database";
 
 /**
@@ -1393,11 +1393,18 @@ export async function getBlitzAnalise(input: { de: string; ate: string; unitIds:
     const data_ = /^\d{4}-\d{2}-\d{2}$/;
     if (!data_.test(input.de) || !data_.test(input.ate) || input.ate < input.de) return { error: "Período inválido." };
     const { supabase } = await actionContext();
-    const { data, error } = await supabase.rpc("seg_blitz_analise", {
-      p_de: input.de, p_ate: input.ate, p_unit_ids: input.unitIds,
-    });
-    if (error) return { error: error.message };
-    return { data: data as unknown as BlitzAnaliseDados };
+    const args = { p_de: input.de, p_ate: input.ate, p_unit_ids: input.unitIds };
+    const [analise, alertas] = await Promise.all([
+      supabase.rpc("seg_blitz_analise", args),
+      supabase.rpc("seg_blitz_alertas_do_periodo", args),
+    ]);
+    if (analise.error) return { error: analise.error.message };
+    return {
+      data: {
+        ...(analise.data as unknown as BlitzAnaliseDados),
+        alertas: (alertas.data ?? []) as unknown as BlitzAlertaAnalise[],
+      },
+    };
   } catch (e) {
     return { error: (e as Error).message };
   }

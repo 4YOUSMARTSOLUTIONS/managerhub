@@ -70,12 +70,36 @@ export type BlitzRecorrencia = {
   total: number;
 };
 
+/** Um alerta da blitz no período (`seg_blitz_alertas_do_periodo`), só leitura. */
+export type BlitzAlertaAnalise = {
+  id: string;
+  enviado_em: string;
+  occurred_on: string;
+  colaborador: string | null;
+  setor: string | null;
+  unidade: string | null;
+  /** o gestor alertado (o do colaborador no dia da blitz) */
+  gestor: string | null;
+  meio: string | null;
+  liberado: boolean;
+  motivo: string | null;
+  observacao: string | null;
+  respostas_nao: string[];
+  tratativa_em: string | null;
+  tratativa_resumo: string | null;
+  tratativa_acordo: string | null;
+  /** preenchido quando o gestor registrou a tratativa */
+  registrada_em: string | null;
+};
+
 export type BlitzAnaliseDados = {
   de: string;
   ate: string;
   indicadores: BlitzIndicadores;
   aderencia: AderenciaDados;
   recorrencia: BlitzRecorrencia[];
+  /** vem de uma segunda função, no mesmo recorte */
+  alertas?: BlitzAlertaAnalise[];
 };
 
 /** O cadastro do público, para Configurações > Segurança. */

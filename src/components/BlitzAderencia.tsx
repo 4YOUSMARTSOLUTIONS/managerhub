@@ -13,6 +13,8 @@ import {
 // ---------------------------------------------------------------- base
 
 type Campo = "unidade" | "setor" | "gestor" | "funcao";
+/** Filtro das listas por pessoa; também é o que um clique no gráfico leva para "Faltam passar". */
+export type FiltroPessoa = Partial<Record<Campo, string>>;
 // Quem não tem gestor no cadastro hoje são os sucessores (JAIME e MARIANA): a
 // observação deixa claro de quem é a barra (LUIZ, 11/11/2026)
 const VAZIO: Record<Campo, string> = { unidade: "Sem unidade", setor: "Sem setor", gestor: "Sem gestor (sucessores)", funcao: "Sem função" };
@@ -110,8 +112,26 @@ function Filtros({ campos, valores, opcoes, onChange }: {
 
 // ---------------------------------------------------------------- gráficos
 
+/**
+ * Barra ou linha clicável (LUIZ, 11/11/2026: o clique leva para "Faltam
+ * passar" já filtrada). Também abre pelo teclado, com Enter ou espaço.
+ */
+function clicavel(fazer: (() => void) | null, rotulo: string): React.HTMLAttributes<HTMLElement> {
+  if (!fazer) return {};
+  return {
+    role: "button", tabIndex: 0, "aria-label": rotulo, onClick: fazer,
+    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fazer(); } },
+  };
+}
+
+/** Só quem tem gente faltando leva à lista: 100% não tem o que mostrar. */
+const acaoDoGrupo = (g: AderenciaGrupo, onEscolher?: (nome: string) => void) =>
+  onEscolher && g.publico - g.passaram > 0 ? () => onEscolher(g.nome) : null;
+
+const DICA_DO_CLIQUE = "Clique para ver quem falta";
+
 /** Barras em pé (setores): valor no topo, nome embaixo, detalhe no hover. */
-function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
+function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolher?: (nome: string) => void }) {
   const [sobre, setSobre] = useState<string | null>(null);
   const ALTURA = 260; // área das barras, sem o rótulo de valor
   const { teto, cor } = escalaDe(grupos);
@@ -126,7 +146,7 @@ function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
             </span>
           ))}
         </div>
-        <div role="img" aria-label="Aderência por setor, da maior para a menor" style={{ position: "relative", height: ALTURA + 22 }}>
+        <div role="group" aria-label="Aderência por setor, da maior para a menor" style={{ position: "relative", height: ALTURA + 22 }}>
           {[0.5, 1].map((f) => (
             <div key={f} aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: f * ALTURA, borderTop: "1px dashed var(--border)" }} />
           ))}
@@ -135,9 +155,11 @@ function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
             {grupos.map((g) => {
               const p = pct(g.passaram, g.publico) ?? 0;
               const ativo = sobre === g.nome;
+              const fazer = acaoDoGrupo(g, onEscolher);
               return (
                 <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
-                  style={{ position: "relative", flex: "1 1 0", minWidth: 56, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+                  {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. Ver quem falta`)}
+                  style={{ position: "relative", flex: "1 1 0", minWidth: 56, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", cursor: fazer ? "pointer" : "default" }}>
                   <span style={{ fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>{p}%</span>
                   <div style={{
                     width: "78%", maxWidth: 110, height: Math.max((p / teto) * ALTURA, p > 0 ? 3 : 0), borderRadius: "4px 4px 0 0",
@@ -150,6 +172,7 @@ function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
                       fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
                     }}>
                       <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
+                      {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{DICA_DO_CLIQUE}</div>}
                     </div>
                   )}
                 </div>
@@ -173,17 +196,19 @@ function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
 }
 
 /** Barras deitadas (gestores, que são muitos e têm nomes longos). */
-function BarrasDeitadas({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: string }) {
+function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: (nome: string) => void }) {
   const [sobre, setSobre] = useState<string | null>(null);
   const { teto, cor } = escalaDe(grupos);
   return (
-    <div role="img" aria-label={`Aderência por ${rotulo.toLowerCase()}, da maior para a menor`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <div role="group" aria-label={`Aderência por ${rotulo.toLowerCase()}, da maior para a menor`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {grupos.map((g) => {
         const p = pct(g.passaram, g.publico) ?? 0;
         const ativo = sobre === g.nome;
+        const fazer = acaoDoGrupo(g, onEscolher);
         return (
           <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
-            style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(110px, 30%) 1fr 44px", alignItems: "center", gap: "0.6rem", padding: "3px 0" }}>
+            {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. Ver quem falta`)}
+            style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(110px, 30%) 1fr 44px", alignItems: "center", gap: "0.6rem", padding: "3px 0", cursor: fazer ? "pointer" : "default" }}>
             <span className="soft" title={g.nome} style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nome}</span>
             <div style={{ height: 16, borderLeft: "1px solid var(--border)" }}>
               <div style={{
@@ -199,6 +224,7 @@ function BarrasDeitadas({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: 
                 fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
               }}>
                 <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
+                {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{DICA_DO_CLIQUE}</div>}
               </div>
             )}
           </div>
@@ -208,7 +234,7 @@ function BarrasDeitadas({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: 
   );
 }
 
-function TabelaGrupos({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: string }) {
+function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: (nome: string) => void }) {
   return (
     <div style={{ overflowX: "auto" }}>
       <table className="table">
@@ -222,15 +248,19 @@ function TabelaGrupos({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: st
           </tr>
         </thead>
         <tbody>
-          {grupos.map((g) => (
-            <tr key={g.nome}>
+          {grupos.map((g) => {
+            const fazer = acaoDoGrupo(g, onEscolher);
+            return (
+            <tr key={g.nome} {...clicavel(fazer, `${g.nome}: ver quem falta`)} title={fazer ? DICA_DO_CLIQUE : undefined}
+              style={{ cursor: fazer ? "pointer" : "default" }}>
               <td style={{ fontWeight: 600 }}>{g.nome}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.publico}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.passaram}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.publico - g.passaram}</td>
               <td style={{ textAlign: "right", fontWeight: 700 }}>{pct(g.passaram, g.publico) ?? 0}%</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -238,9 +268,11 @@ function TabelaGrupos({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: st
 }
 
 /** Uma seção do painel: o gráfico é a visão principal, a tabela é a alternativa. */
-function Secao({ numero, titulo, sufixo, grafico, tabela, grupos }: {
+function Secao({ numero, titulo, sufixo, grafico, tabela, grupos, dica }: {
   numero: number; titulo: string; sufixo?: React.ReactNode;
   grafico: React.ReactNode; tabela: React.ReactNode; grupos: AderenciaGrupo[];
+  /** uma linha sob o título (ex.: o que o clique faz) */
+  dica?: string;
 }) {
   const vazio = grupos.length === 0;
   const { min, max } = escalaDe(grupos);
@@ -248,9 +280,12 @@ function Secao({ numero, titulo, sufixo, grafico, tabela, grupos }: {
   return (
     <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          <span className="soft" style={{ fontWeight: 600 }}>{numero}.</span> {titulo} {sufixo}
-        </h4>
+        <div>
+          <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <span className="soft" style={{ fontWeight: 600 }}>{numero}.</span> {titulo} {sufixo}
+          </h4>
+          {dica && !vazio && <p className="soft" style={{ fontSize: "0.74rem", margin: "0.2rem 0 0" }}>{dica}</p>}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.7rem", flexWrap: "wrap" }}>
           {visao === "grafico" && !vazio && <LegendaEscala min={min} max={max} />}
           <div role="group" aria-label="Visão" style={{ display: "inline-flex", gap: "0.25rem" }}>
@@ -282,12 +317,17 @@ function Secao({ numero, titulo, sufixo, grafico, tabela, grupos }: {
  * Gráfico é a visão principal; a tabela fica a um clique. Tudo calculado aqui a
  * partir do público pessoa a pessoa, sem voltar ao banco.
  */
-export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo }: {
+export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
   dados: AderenciaDados;
   /** "novembro de 2026", "2026", "01/11/2026 a 11/11/2026" */
   rotuloPeriodo: string;
+  /** clique numa barra ou linha: abre "Faltam passar" com este filtro (e a unidade escolhida, se houver) */
+  onVerFaltam?: (filtro: FiltroPessoa) => void;
 }) {
   const [unidade, setUnidade] = useState("");
+  const escolher = (campo: "setor" | "gestor") =>
+    onVerFaltam ? (nome: string) => onVerFaltam({ ...(unidade ? { unidade } : {}), [campo]: nome }) : undefined;
+  const dica = onVerFaltam ? "Clique numa barra para ver quem falta passar." : undefined;
   const pessoas = useMemo(() => dados.pessoas ?? [], [dados.pessoas]);
   const unidades = useMemo(() => agrupar(pessoas, "unidade"), [pessoas]);
   const daUnidade = useMemo(() => pessoas.filter((p) => !unidade || (p.unidade ?? VAZIO.unidade) === unidade), [pessoas, unidade]);
@@ -348,10 +388,12 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo }: {
 
       {/* setor e gestor lado a lado (LUIZ, 11/11/2026); empilham em tela estreita */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 480px), 1fr))", gap: "1rem", alignItems: "start" }}>
-        <Secao numero={2} titulo="Aderência por setor" sufixo={sufixo} grupos={setores}
-          grafico={<BarrasEmPe grupos={setores} />} tabela={<TabelaGrupos grupos={setores} rotulo="Setor" />} />
-        <Secao numero={3} titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores}
-          grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" />} tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" />} />
+        <Secao numero={2} titulo="Aderência por setor" sufixo={sufixo} grupos={setores} dica={dica}
+          grafico={<BarrasEmPe grupos={setores} onEscolher={escolher("setor")} />}
+          tabela={<TabelaGrupos grupos={setores} rotulo="Setor" onEscolher={escolher("setor")} />} />
+        <Secao numero={3} titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores} dica={dica}
+          grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />}
+          tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />} />
       </div>
     </div>
   );
@@ -370,18 +412,20 @@ const FILTROS_PESSOA: { campo: Campo; rotulo: string }[] = [
  * Quem do público ainda não passou no período: a lista que a portaria usa no
  * dia a dia, com filtros (unidade, setor, gestor, função), busca e exportação.
  */
-export function BlitzFaltamPassar({ dados, rotuloPeriodo, chaveArquivo }: {
+export function BlitzFaltamPassar({ dados, rotuloPeriodo, chaveArquivo, filtroInicial }: {
   dados: AderenciaDados;
   rotuloPeriodo: string;
   /** pedaço do nome do arquivo exportado (ex.: 2026-11-01_2026-11-30) */
   chaveArquivo: string;
+  /** o filtro que o clique no gráfico trouxe (quem usa remonta a lista com `key` a cada clique) */
+  filtroInicial?: FiltroPessoa;
 }) {
   const faltam = useMemo(
     () => (dados.pessoas ? dados.pessoas.filter((p) => !p.passou) : dados.faltam.map((f) => ({ ...f, passou: false }))),
     [dados],
   );
   const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>({});
+  const [filtro, setFiltro] = useState<FiltroPessoa>(filtroInicial ?? {});
   const opcoes = useMemo(() => Object.fromEntries(FILTROS_PESSOA.map((c) => [c.campo, valoresDe(faltam.map((f) => f[c.campo]), VAZIO[c.campo])])), [faltam]);
   const termo = normalizar(busca.trim());
   const lista = useMemo(() => faltam.filter((f) =>
