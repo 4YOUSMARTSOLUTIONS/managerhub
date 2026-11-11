@@ -124,14 +124,21 @@ function clicavel(fazer: (() => void) | null, rotulo: string): React.HTMLAttribu
   };
 }
 
-/** Só quem tem gente faltando leva à lista: 100% não tem o que mostrar. */
-const acaoDoGrupo = (g: AderenciaGrupo, onEscolher?: (nome: string) => void) =>
-  onEscolher && g.publico - g.passaram > 0 ? () => onEscolher(g.nome) : null;
+/** Clique num grupo: o nome e a situação em que a lista do público deve abrir. */
+type OnEscolher = (nome: string, situacao: SituacaoPessoa) => void;
 
-const DICA_DO_CLIQUE = "Clique para ver quem falta";
+/**
+ * Com gente faltando, o clique abre a lista em "Faltam passar"; com todos ok
+ * (100%), em "Passaram" (LUIZ, 11/11/2026).
+ */
+const acaoDoGrupo = (g: AderenciaGrupo, onEscolher?: OnEscolher) =>
+  onEscolher && g.publico > 0 ? () => onEscolher(g.nome, g.publico - g.passaram > 0 ? "faltam" : "passaram") : null;
+
+const verQuem = (g: AderenciaGrupo) => (g.publico - g.passaram > 0 ? "Ver quem falta" : "Ver quem passou");
+const dicaDoGrupo = (g: AderenciaGrupo) => `Clique para ${verQuem(g).toLowerCase()}`;
 
 /** Barras em pé (setores): valor no topo, nome embaixo, detalhe no hover. */
-function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolher?: (nome: string) => void }) {
+function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolher?: OnEscolher }) {
   const [sobre, setSobre] = useState<string | null>(null);
   const ALTURA = 260; // área das barras, sem o rótulo de valor
   const { teto, cor } = escalaDe(grupos);
@@ -158,7 +165,7 @@ function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolh
               const fazer = acaoDoGrupo(g, onEscolher);
               return (
                 <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
-                  {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. Ver quem falta`)}
+                  {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. ${verQuem(g)}`)}
                   style={{ position: "relative", flex: "1 1 0", minWidth: 56, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", cursor: fazer ? "pointer" : "default" }}>
                   <span style={{ fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>{p}%</span>
                   <div style={{
@@ -172,7 +179,7 @@ function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolh
                       fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
                     }}>
                       <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
-                      {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{DICA_DO_CLIQUE}</div>}
+                      {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{dicaDoGrupo(g)}</div>}
                     </div>
                   )}
                 </div>
@@ -196,7 +203,7 @@ function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolh
 }
 
 /** Barras deitadas (gestores, que são muitos e têm nomes longos). */
-function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: (nome: string) => void }) {
+function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: OnEscolher }) {
   const [sobre, setSobre] = useState<string | null>(null);
   const { teto, cor } = escalaDe(grupos);
   return (
@@ -207,7 +214,7 @@ function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo
         const fazer = acaoDoGrupo(g, onEscolher);
         return (
           <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
-            {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. Ver quem falta`)}
+            {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. ${verQuem(g)}`)}
             style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(110px, 30%) 1fr 44px", alignItems: "center", gap: "0.6rem", padding: "3px 0", cursor: fazer ? "pointer" : "default" }}>
             <span className="soft" title={g.nome} style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nome}</span>
             <div style={{ height: 16, borderLeft: "1px solid var(--border)" }}>
@@ -224,7 +231,7 @@ function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo
                 fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
               }}>
                 <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
-                {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{DICA_DO_CLIQUE}</div>}
+                {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{dicaDoGrupo(g)}</div>}
               </div>
             )}
           </div>
@@ -234,7 +241,7 @@ function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo
   );
 }
 
-function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: (nome: string) => void }) {
+function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: OnEscolher }) {
   return (
     <div style={{ overflowX: "auto" }}>
       <table className="table">
@@ -251,7 +258,7 @@ function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]
           {grupos.map((g) => {
             const fazer = acaoDoGrupo(g, onEscolher);
             return (
-            <tr key={g.nome} {...clicavel(fazer, `${g.nome}: ver quem falta`)} title={fazer ? DICA_DO_CLIQUE : undefined}
+            <tr key={g.nome} {...clicavel(fazer, `${g.nome}: ${verQuem(g).toLowerCase()}`)} title={fazer ? dicaDoGrupo(g) : undefined}
               style={{ cursor: fazer ? "pointer" : "default" }}>
               <td style={{ fontWeight: 600 }}>{g.nome}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.publico}</td>
@@ -321,13 +328,13 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
   dados: AderenciaDados;
   /** "novembro de 2026", "2026", "01/11/2026 a 11/11/2026" */
   rotuloPeriodo: string;
-  /** clique numa barra ou linha: abre "Faltam passar" com este filtro (e a unidade escolhida, se houver) */
-  onVerFaltam?: (filtro: FiltroPessoa) => void;
+  /** clique numa barra ou linha: abre a lista do público com este filtro (e a unidade escolhida, se houver) */
+  onVerFaltam?: (filtro: FiltroPessoa, situacao: SituacaoPessoa) => void;
 }) {
   const [unidade, setUnidade] = useState("");
   const escolher = (campo: "setor" | "gestor") =>
-    onVerFaltam ? (nome: string) => onVerFaltam({ ...(unidade ? { unidade } : {}), [campo]: nome }) : undefined;
-  const dica = onVerFaltam ? "Clique numa barra para ver quem falta passar." : undefined;
+    onVerFaltam ? (nome: string, situacao: SituacaoPessoa) => onVerFaltam({ ...(unidade ? { unidade } : {}), [campo]: nome }, situacao) : undefined;
+  const dica = onVerFaltam ? "Clique numa barra para ver os colaboradores: quem falta ou, com 100%, quem passou." : undefined;
   const pessoas = useMemo(() => dados.pessoas ?? [], [dados.pessoas]);
   const unidades = useMemo(() => agrupar(pessoas, "unidade"), [pessoas]);
   const daUnidade = useMemo(() => pessoas.filter((p) => !unidade || (p.unidade ?? VAZIO.unidade) === unidade), [pessoas, unidade]);

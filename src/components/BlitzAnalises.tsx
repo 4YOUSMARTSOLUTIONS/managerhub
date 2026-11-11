@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
-import { BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, type FiltroPessoa } from "./BlitzAderencia";
+import { BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, type FiltroPessoa, type SituacaoPessoa } from "./BlitzAderencia";
 import { BlitzAlertasLista } from "./BlitzAlertasLista";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate } from "@/lib/format";
@@ -60,11 +60,14 @@ export function BlitzAnalises({
   // o clique no gráfico de aderência leva para a lista do público, em "Faltam passar" e já filtrada
   // (LUIZ, 11/11/2026); a versão remonta a lista com o filtro novo a cada clique
   const [filtroFaltam, setFiltroFaltam] = useState<FiltroPessoa>({});
+  // com 100% o clique abre em "Passaram" (LUIZ, 11/11/2026)
+  const [situacaoLista, setSituacaoLista] = useState<SituacaoPessoa>("faltam");
   const [versaoFaltam, setVersaoFaltam] = useState(0);
   const topoDasSubabas = useRef<HTMLDivElement>(null);
 
-  const verFaltam = (f: FiltroPessoa) => {
+  const verFaltam = (f: FiltroPessoa, situacao: SituacaoPessoa) => {
     setFiltroFaltam(f);
+    setSituacaoLista(situacao);
     setVersaoFaltam((v) => v + 1);
     setSubaba("colaboradores");
     // a lista é mais curta que o painel: sobe até as subabas para ela não abrir fora da tela
@@ -154,22 +157,16 @@ export function BlitzAnalises({
             hint={`${ad.passaram} de ${ad.publico} do público passaram`}
           />
           <StatCard label="Faltam passar" value={ad.publico - ad.passaram} hint="do público do período" />
-          <StatCard label="Liberadas com desvio" value={ind.com_desvio} tone={ind.com_desvio > 0 ? "amber" : "green"} />
-          <StatCard label="Bloqueios" value={ind.bloqueios} tone={ind.bloqueios > 0 ? "red" : "green"} />
-          {/* % tratado e sem tratativa em destaque, o total pequeno embaixo (LUIZ, 11/11/2026) */}
+          {/* desvio e bloqueio pintados para chamar atenção (LUIZ, 11/11/2026); sem ocorrência, cartão neutro */}
+          <StatCard label="Liberadas com desvio" value={ind.com_desvio} tone={ind.com_desvio > 0 ? "amber" : "green"}
+            destaque={ind.com_desvio > 0 ? "amber" : undefined} />
+          <StatCard label="Bloqueios" value={ind.bloqueios} tone={ind.bloqueios > 0 ? "red" : "green"}
+            destaque={ind.bloqueios > 0 ? "red" : undefined} />
+          {/* o % tratado em destaque; o total de alertas já se lê nos dois cartões ao lado (LUIZ, 11/11/2026) */}
           <StatCard
-            label="Alertas"
-            value={
-              <span style={{ display: "inline-flex", alignItems: "flex-start", gap: "0.6rem 2rem", flexWrap: "wrap" }}>
-                {([[tratou === null ? "—" : `${tratou}%`, "tratado"], [ind.alertas.enviados - ind.alertas.com_tratativa, "sem tratativa"]] as const).map(([n, r]) => (
-                  <span key={r} style={{ display: "inline-flex", flexDirection: "column", gap: "0.3rem" }}>
-                    {n}
-                    <span className="soft" style={{ fontSize: "0.72rem", fontWeight: 500, letterSpacing: 0, whiteSpace: "nowrap" }}>{r}</span>
-                  </span>
-                ))}
-              </span>
-            }
-            hint={ind.alertas.enviados ? `${ind.alertas.enviados} ${ind.alertas.enviados === 1 ? "alerta" : "alertas"} no total` : "Nenhum alerta no período"}
+            label="Alertas com tratativa"
+            value={tratou === null ? "—" : `${tratou}%`}
+            hint={ind.alertas.enviados ? `${ind.alertas.com_tratativa} de ${ind.alertas.enviados} ${ind.alertas.enviados === 1 ? "alerta tratado" : "alertas tratados"}` : "Nenhum alerta no período"}
           />
         </div>
 
@@ -189,7 +186,7 @@ export function BlitzAnalises({
               content: (
                 <BlitzColaboradoresLista key={versaoFaltam} dados={ad} rotuloPeriodo={periodo}
                   chaveArquivo={`${dados.de}_${dados.ate}`} filtroInicial={filtroFaltam}
-                  situacaoInicial="faltam" />
+                  situacaoInicial={situacaoLista} />
               ),
             },
             {

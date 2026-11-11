@@ -19,6 +19,7 @@ export function StatCard({
   tone = "blue",
   icon,
   delta,
+  destaque,
 }: {
   label: string;
   /** o número do cartão; um nó quando o cartão mostra mais de um número (ex.: alertas e sem tratativa) */
@@ -29,10 +30,25 @@ export function StatCard({
   icon?: React.ReactNode;
   /** variação percentual: positivo = verde, negativo = vermelho */
   delta?: number;
+  /**
+   * Pinta o cartão inteiro com o tom, em transparência, para chamar atenção
+   * (ex.: bloqueios da blitz). Só para o que pede ação, e só quando há o que ver.
+   */
+  destaque?: Tone;
 }) {
   const c = TONE_VAR[tone];
+  const d = destaque ? TONE_VAR[destaque] : null;
   return (
-    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+    <div
+      className="card card-pad"
+      style={{
+        display: "flex", flexDirection: "column", gap: "0.85rem",
+        ...(d ? {
+          background: `color-mix(in srgb, ${d} 18%, var(--surface))`,
+          borderColor: `color-mix(in srgb, ${d} 55%, transparent)`,
+        } : {}),
+      }}
+    >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
         <div
           className="soft"
