@@ -34,6 +34,8 @@ export type BlitzRow = {
   registroDia: string;
   registroHora: string;
   userId: string;
+  /** a matrícula de hoje (a blitz não guarda a da época) */
+  matricula: string | null;
   pessoa: string | null;
   setor: string | null;
   gestor: string | null;
@@ -229,11 +231,11 @@ export function SegBlitzManager({
             filename="blitz-de-trajeto.xlsx"
             sheetName="Blitz"
             headers={[
-              "Data", "Hora do registro", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Modelo",
+              "Data", "Hora do registro", "Matrícula", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Modelo",
               "Propriedade", "Cor", "Situação", "Motivo do bloqueio", "Observação", "Avaliador",
             ]}
             rows={lista.map((r) => [
-              dataBr(r.occurredOn), horaDoRegistro(r), r.pessoa ?? "", r.setor ?? "", r.gestor ?? "", r.unidade ?? "",
+              dataBr(r.occurredOn), horaDoRegistro(r), r.matricula ?? "", r.pessoa ?? "", r.setor ?? "", r.gestor ?? "", r.unidade ?? "",
               nomeMeio.get(r.meioId) ?? "", r.placa ?? "", r.veiculoTipo ?? "",
               r.propriedade ? SEG_VEICULO_PROPRIEDADE[r.propriedade] : "",
               nomeDaCor(r.cor),
@@ -270,7 +272,10 @@ export function SegBlitzManager({
                 }}
               >
                 <span style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
-                  <span style={{ fontWeight: 600, fontSize: "0.92rem", minWidth: 0 }}>{shortName(r.pessoa)}</span>
+                  <span style={{ fontWeight: 600, fontSize: "0.92rem", minWidth: 0 }}>
+                    {shortName(r.pessoa)}
+                    {r.matricula && <span className="soft" style={{ fontWeight: 400, fontSize: "0.78rem" }}> · {r.matricula}</span>}
+                  </span>
                   <Badge tone={s.tone}>{s.label}</Badge>
                 </span>
                 <span className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem 0.6rem", fontSize: "0.8rem" }}>
@@ -289,6 +294,7 @@ export function SegBlitzManager({
             <tr>
               <th style={{ width: 100 }}>Data</th>
               <th style={{ width: 100 }}>Hora</th>
+              <th style={{ width: 90 }}>Matrícula</th>
               <th>Colaborador</th>
               <th style={{ width: 140 }}>Setor</th>
               <th style={{ width: 150 }}>Meio</th>
@@ -304,6 +310,7 @@ export function SegBlitzManager({
                 <tr key={r.id} onClick={() => setAberto(r.id)} style={{ cursor: "pointer" }} title="Abrir a blitz">
                   <td>{dataBr(r.occurredOn)}</td>
                   <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title={tituloDaHora(r)}>{horaDoRegistro(r)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r.matricula ?? "—"}</td>
                   <td style={{ fontWeight: 600 }}>{shortName(r.pessoa)}</td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
                   <td>

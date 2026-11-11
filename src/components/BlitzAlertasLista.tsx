@@ -73,9 +73,9 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
         <ExportButton
           filename={`blitz-alertas-${chaveArquivo}.xlsx`}
           sheetName="Alertas"
-          headers={["Data da blitz", "Colaborador", "Setor", "Unidade", "Gestor", "Ocorrência", "Itens não", "Situação", "Data da conversa", "O que foi tratado", "O que ficou combinado"]}
+          headers={["Data da blitz", "Matrícula", "Colaborador", "Setor", "Unidade", "Gestor", "Ocorrência", "Itens não", "Situação", "Data da conversa", "O que foi tratado", "O que ficou combinado"]}
           rows={lista.map((a) => [
-            formatDate(a.occurred_on), a.colaborador ?? "", a.setor ?? "", a.unidade ?? "", a.gestor ?? "",
+            formatDate(a.occurred_on), a.matricula ?? "", a.colaborador ?? "", a.setor ?? "", a.unidade ?? "", a.gestor ?? "",
             ocorrencia(a), a.respostas_nao.join("; "),
             a.registrada_em ? "Tratado" : "Aguardando tratativa",
             a.tratativa_em ? formatDate(a.tratativa_em) : "", a.tratativa_resumo ?? "", a.tratativa_acordo ?? "",
@@ -129,6 +129,7 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
             <thead>
               <tr>
                 <th style={{ width: 100 }}>Blitz</th>
+                <th style={{ width: 90 }}>Matrícula</th>
                 <th>Colaborador</th>
                 <th className="so-desktop">Gestor</th>
                 <th className="so-desktop">Ocorrência</th>
@@ -139,6 +140,7 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
               {lista.map((a) => (
                 <tr key={a.id} onClick={() => setAberto(a.id)} style={{ cursor: "pointer" }} title="Abrir o alerta">
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{formatDate(a.occurred_on)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{a.matricula ?? "—"}</td>
                   <td style={{ fontWeight: 600 }}>
                     {shortName(a.colaborador)}
                     {a.setor && <span className="soft" style={{ fontWeight: 400, fontSize: "0.76rem" }}> · {a.setor}</span>}

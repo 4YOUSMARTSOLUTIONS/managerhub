@@ -60,6 +60,7 @@ export type BlitzIndicadores = {
 
 export type BlitzRecorrencia = {
   user_id: string;
+  matricula?: string | null;
   nome: string | null;
   setor: string | null;
   /** da última blitz da pessoa no período */
@@ -87,6 +88,7 @@ export type BlitzAlertaAnalise = {
   enviado_em: string;
   occurred_on: string;
   colaborador: string | null;
+  matricula?: string | null;
   setor: string | null;
   unidade: string | null;
   funcao?: string | null;

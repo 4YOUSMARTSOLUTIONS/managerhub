@@ -110,6 +110,7 @@ export default async function SegurancaBlitzPage() {
     .filter((m): m is typeof m & { profile: NonNullable<typeof m.profile> } => !!m.profile)
     .map((m) => ({ id: m.profile.id, name: m.profile.full_name ?? m.profile.email ?? "—", code: m.code }));
   const nomeDoUser = new Map(pessoas.map((p) => [p.id, p.name]));
+  const matriculaDo = new Map(pessoas.map((p) => [p.id, p.code]));
 
   const nomeMotivo = new Map((motivos ?? []).map((m) => [m.id, m.name]));
 
@@ -129,6 +130,7 @@ export default async function SegurancaBlitzPage() {
     registroDia: diaSp.format(new Date(b.registrada_em)),
     registroHora: horaSp.format(new Date(b.registrada_em)),
     userId: b.user_id,
+    matricula: matriculaDo.get(b.user_id) ?? null,
     pessoa: b.snap_full_name,
     setor: b.snap_department_name,
     gestor: b.snap_manager_name,

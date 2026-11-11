@@ -480,6 +480,8 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
           <table className="table">
             <thead>
               <tr>
+                {/* a matrícula na primeira coluna: o nome é curto, ela é que diferencia (LUIZ, 11/11/2026) */}
+                <th style={{ width: 90 }}>Matrícula</th>
                 <th>Colaborador</th>
                 <th className="so-desktop">Função</th>
                 <th>Setor</th>
@@ -492,10 +494,8 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
             <tbody>
               {lista.map((f) => (
                 <tr key={f.user_id}>
-                  <td style={{ fontWeight: 600 }}>
-                    {shortName(f.nome)}
-                    {f.matricula && <span className="soft" style={{ fontWeight: 400, fontSize: "0.76rem" }}> · {f.matricula}</span>}
-                  </td>
+                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{f.matricula ?? "—"}</td>
+                  <td style={{ fontWeight: 600 }}>{shortName(f.nome)}</td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{f.funcao ?? "—"}</td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{f.setor ?? "—"}</td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{shortName(f.gestor) || "—"}</td>
@@ -534,6 +534,7 @@ export function BlitzRecorrenciaLista({ recorrencia: lista, rotuloPeriodo }: { r
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 90 }}>Matrícula</th>
                 <th>Colaborador</th>
                 <th className="so-desktop">Setor</th>
                 <th className="so-desktop">Gestor</th>
@@ -545,6 +546,7 @@ export function BlitzRecorrenciaLista({ recorrencia: lista, rotuloPeriodo }: { r
             <tbody>
               {lista.map((r) => (
                 <tr key={r.user_id}>
+                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r.matricula ?? "—"}</td>
                   <td style={{ fontWeight: 600 }}>{shortName(r.nome)}</td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{shortName(r.gestor) || "—"}</td>
