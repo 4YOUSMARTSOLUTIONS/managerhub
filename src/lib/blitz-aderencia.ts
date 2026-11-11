@@ -70,6 +70,17 @@ export type BlitzRecorrencia = {
   total: number;
 };
 
+/** Uma blitz do recorte, com o carimbo da época: a tela refaz os cartões com o filtro. */
+export type BlitzItem = {
+  id: string;
+  setor: string | null;
+  gestor: string | null;
+  unidade: string | null;
+  funcao: string | null;
+  liberado: boolean;
+  conforme: boolean;
+};
+
 /** Um alerta da blitz no período (`seg_blitz_alertas_do_periodo`), só leitura. */
 export type BlitzAlertaAnalise = {
   id: string;
@@ -78,6 +89,7 @@ export type BlitzAlertaAnalise = {
   colaborador: string | null;
   setor: string | null;
   unidade: string | null;
+  funcao?: string | null;
   /** o gestor alertado (o do colaborador no dia da blitz) */
   gestor: string | null;
   meio: string | null;
@@ -100,6 +112,8 @@ export type BlitzAnaliseDados = {
   recorrencia: BlitzRecorrencia[];
   /** vem de uma segunda função, no mesmo recorte */
   alertas?: BlitzAlertaAnalise[];
+  /** as blitz do recorte, uma a uma (o filtro da tela refaz os cartões com elas) */
+  blitz?: BlitzItem[];
 };
 
 /** O cadastro do público, para Configurações > Segurança. */

@@ -8,18 +8,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { formatDate, formatDateTime, normalizar, shortName } from "@/lib/format";
 import type { BlitzAlertaAnalise } from "@/lib/blitz-aderencia";
+import { valorDoCampo } from "./BlitzAderencia";
 
 export type SituacaoAlerta = "" | "aguardando" | "tratado";
 type Situacao = SituacaoAlerta;
-type Campo = "gestor" | "setor" | "unidade";
 
-const CAMPOS: { campo: Campo; rotulo: string; vazio: string }[] = [
-  { campo: "gestor", rotulo: "Gestor", vazio: "Sem gestor" },
-  { campo: "setor", rotulo: "Setor", vazio: "Sem setor" },
-  { campo: "unidade", rotulo: "Unidade", vazio: "Sem unidade" },
-];
-
-const valor = (a: BlitzAlertaAnalise, c: (typeof CAMPOS)[number]) => a[c.campo] ?? c.vazio;
+/** O gestor como o filtro único das Análises mostra (vazio vira "Sem gestor (sucessores)"). */
+const gestorDe = (a: BlitzAlertaAnalise) => valorDoCampo(a, "gestor");
 
 /** O que deu errado na blitz, numa linha. */
 function ocorrencia(a: BlitzAlertaAnalise): string {
@@ -33,39 +28,36 @@ function ocorrencia(a: BlitzAlertaAnalise): string {
  * liberada com desvio ou bloqueada avisa o gestor do colaborador, e só ele
  * registra a tratativa. Aqui quem acompanha (owner, admin, Gerencial,
  * segurança; o Gestor, a cadeia dele) vê quem já tratou e quem está devendo,
- * com o resumo por gestor para cobrar. Só leitura.
+ * com o resumo por gestor para cobrar. Só leitura. Chega já filtrada pelo
+ * filtro único das Análises; o resumo por gestor liga o filtro de gestor.
  */
-export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, gestorInicial, situacaoInicial = "" }: {
+export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situacaoInicial = "", gestorAtivo, onGestor }: {
   alertas: BlitzAlertaAnalise[];
   rotuloPeriodo: string;
   chaveArquivo: string;
-  /** vindo do quadro de pendências: abre filtrada no gestor (quem usa remonta com `key`) */
-  gestorInicial?: string;
+  /** quem usa remonta com `key` quando o quadro de pendências pede "aguardando" */
   situacaoInicial?: Situacao;
+  /** o gestor do filtro único, e como trocá-lo ("" tira) */
+  gestorAtivo?: string;
+  onGestor?: (gestor: string) => void;
 }) {
   const [situacao, setSituacao] = useState<Situacao>(situacaoInicial);
-  const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>(gestorInicial ? { gestor: gestorInicial } : {});
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState<string | null>(null);
 
-  const opcoes = useMemo(
-    () => Object.fromEntries(CAMPOS.map((c) => [c.campo, [...new Set(alertas.map((a) => valor(a, c)))].sort((x, y) => x.localeCompare(y, "pt-BR"))])),
-    [alertas],
-  );
   // quem está devendo, do que mais deve para o que menos deve
   const devendo = useMemo(() => {
     const m = new Map<string, number>();
-    for (const a of alertas) if (!a.registrada_em) m.set(valor(a, CAMPOS[0]), (m.get(valor(a, CAMPOS[0])) ?? 0) + 1);
+    for (const a of alertas) if (!a.registrada_em) m.set(gestorDe(a), (m.get(gestorDe(a)) ?? 0) + 1);
     return [...m.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "pt-BR"));
   }, [alertas]);
 
   const termo = normalizar(busca.trim());
   const lista = alertas.filter((a) =>
     (!situacao || (situacao === "tratado") === !!a.registrada_em)
-    && CAMPOS.every((c) => !filtro[c.campo] || valor(a, c) === filtro[c.campo])
     && (!termo || normalizar([a.colaborador, a.gestor, a.setor].filter(Boolean).join(" ")).includes(termo)));
   const tratados = alertas.filter((a) => a.registrada_em).length;
-  const algumFiltro = !!situacao || !!busca || CAMPOS.some((c) => filtro[c.campo]);
+  const algumFiltro = !!situacao || !!busca;
   const detalhe = alertas.find((a) => a.id === aberto) ?? null;
 
   return (
@@ -96,13 +88,13 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, gestor
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem" }}>
           <span className="soft" style={{ fontSize: "0.78rem" }}>Aguardando tratativa:</span>
           {devendo.map(([g, n]) => {
-            const escolhido = filtro.gestor === g && situacao === "aguardando";
+            const escolhido = gestorAtivo === g && situacao === "aguardando";
             return (
               <button key={g} type="button" aria-pressed={escolhido}
                 className={`btn btn-xs ${escolhido ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => {
-                  if (escolhido) { setFiltro((f) => ({ ...f, gestor: "" })); setSituacao(""); return; }
-                  setFiltro((f) => ({ ...f, gestor: g })); setSituacao("aguardando");
+                  if (escolhido) { onGestor?.(""); setSituacao(""); return; }
+                  onGestor?.(g); setSituacao("aguardando");
                 }}>
                 {shortName(g)} <strong>{n}</strong>
               </button>
@@ -120,15 +112,8 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, gestor
           <option value="aguardando">Aguardando tratativa</option>
           <option value="tratado">Tratados</option>
         </select>
-        {CAMPOS.map((c) => (
-          <select key={c.campo} className="select" value={filtro[c.campo] ?? ""} aria-label={c.rotulo}
-            onChange={(e) => setFiltro((f) => ({ ...f, [c.campo]: e.target.value }))} style={{ width: "auto", maxWidth: 220 }}>
-            <option value="">{c.rotulo}: todos</option>
-            {(opcoes[c.campo] ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
-          </select>
-        ))}
         {algumFiltro && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSituacao(""); setFiltro({}); setBusca(""); }}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSituacao(""); setBusca(""); }}>
             Limpar filtros
           </button>
         )}
@@ -237,7 +222,7 @@ export function TratativasPendentesPorGestor({ alertas, rotuloPeriodo, onVer }: 
   const linhas = useMemo(() => {
     const m = new Map<string, { gestor: string; pendentes: number; total: number }>();
     for (const a of alertas) {
-      const g = valor(a, CAMPOS[0]);
+      const g = gestorDe(a);
       const l = m.get(g) ?? { gestor: g, pendentes: 0, total: 0 };
       l.total += 1;
       if (!a.registrada_em) l.pendentes += 1;

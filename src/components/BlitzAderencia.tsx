@@ -12,12 +12,31 @@ import {
 
 // ---------------------------------------------------------------- base
 
-type Campo = "unidade" | "setor" | "gestor" | "funcao";
-/** Filtro das listas por pessoa; também é o que um clique no gráfico leva para "Faltam passar". */
+export type Campo = "unidade" | "setor" | "gestor" | "funcao";
+/**
+ * O filtro das Análises (unidade, setor, gestor, função). Vale para a tela
+ * inteira, cartões inclusive (LUIZ, 11/11/2026); o clique nos gráficos liga ele.
+ */
 export type FiltroPessoa = Partial<Record<Campo, string>>;
 // Quem não tem gestor no cadastro hoje são os sucessores (JAIME e MARIANA): a
 // observação deixa claro de quem é a barra (LUIZ, 11/11/2026)
-const VAZIO: Record<Campo, string> = { unidade: "Sem unidade", setor: "Sem setor", gestor: "Sem gestor (sucessores)", funcao: "Sem função" };
+export const VAZIO: Record<Campo, string> = { unidade: "Sem unidade", setor: "Sem setor", gestor: "Sem gestor (sucessores)", funcao: "Sem função" };
+
+export const FILTROS_PESSOA: { campo: Campo; rotulo: string }[] = [
+  { campo: "unidade", rotulo: "Unidade" },
+  { campo: "setor", rotulo: "Setor" },
+  { campo: "gestor", rotulo: "Gestor" },
+  { campo: "funcao", rotulo: "Função" },
+];
+
+type ComCampos = Partial<Record<Campo, string | null | undefined>>;
+
+/** O valor do campo como a tela mostra: vazio vira "Sem …". */
+export const valorDoCampo = (o: ComCampos, c: Campo) => o[c] ?? VAZIO[c];
+
+/** Passa no filtro? Campo sem escolha não restringe; `ignorar` deixa um de fora. */
+export const passaNoFiltro = (o: ComCampos, f: FiltroPessoa, ignorar?: Campo) =>
+  FILTROS_PESSOA.every(({ campo }) => campo === ignorar || !f[campo] || valorDoCampo(o, campo) === f[campo]);
 
 /** Agrupa o público por um campo: quantos são e quantos passaram. */
 function agrupar(pessoas: AderenciaPessoa[], campo: Campo): AderenciaGrupo[] {
@@ -77,35 +96,6 @@ function LegendaEscala({ min, max }: { min: number; max: number }) {
       <span>{min}%</span>
       <span aria-hidden style={{ width: 80, height: 8, borderRadius: 99, background: "linear-gradient(90deg, var(--mh-primary-500), var(--mh-info))" }} />
       <span>{max}%</span>
-    </div>
-  );
-}
-
-const valoresDe = (lista: (string | null | undefined)[], vazio: string) =>
-  [...new Set(lista.map((v) => v ?? vazio))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-
-/** Linha de filtros das listas: um select por campo e "Limpar". */
-function Filtros({ campos, valores, opcoes, onChange }: {
-  campos: { campo: Campo; rotulo: string }[];
-  valores: Partial<Record<Campo, string>>;
-  opcoes: Partial<Record<Campo, string[]>>;
-  onChange: (campo: Campo, valor: string) => void;
-}) {
-  const algum = campos.some((c) => valores[c.campo]);
-  return (
-    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-      {campos.map((c) => (
-        <select key={c.campo} className="select" value={valores[c.campo] ?? ""} aria-label={c.rotulo}
-          onChange={(e) => onChange(c.campo, e.target.value)} style={{ width: "auto", maxWidth: 220 }}>
-          <option value="">{c.rotulo}: todos</option>
-          {(opcoes[c.campo] ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
-      ))}
-      {algum && (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => campos.forEach((c) => onChange(c.campo, ""))}>
-          Limpar filtros
-        </button>
-      )}
     </div>
   );
 }
@@ -324,27 +314,31 @@ function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
  * Gráfico é a visão principal; a tabela fica a um clique. Tudo calculado aqui a
  * partir do público pessoa a pessoa, sem voltar ao banco.
  */
-export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
-  dados: AderenciaDados;
+export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, onUnidade, fora, rotuloPeriodo, onVerFaltam }: {
+  /** o público já filtrado (unidade, setor, gestor, função) */
+  pessoas: AderenciaPessoa[];
+  /** filtrado por tudo menos a unidade: os cartões de unidade continuam todos à vista */
+  pessoasDasUnidades: AderenciaPessoa[];
+  /** a unidade do filtro único ("" = todas) */
+  unidade: string;
+  onUnidade: (unidade: string) => void;
+  fora: AderenciaDados["fora"];
   /** "novembro de 2026", "2026", "01/11/2026 a 11/11/2026" */
   rotuloPeriodo: string;
-  /** clique numa barra ou linha: abre a lista do público com este filtro (e a unidade escolhida, se houver) */
+  /** clique numa barra ou linha: liga o filtro e abre a lista do público */
   onVerFaltam?: (filtro: FiltroPessoa, situacao: SituacaoPessoa) => void;
 }) {
-  const [unidade, setUnidade] = useState("");
   const escolher = (campo: "setor" | "gestor") =>
-    onVerFaltam ? (nome: string, situacao: SituacaoPessoa) => onVerFaltam({ ...(unidade ? { unidade } : {}), [campo]: nome }, situacao) : undefined;
+    onVerFaltam ? (nome: string, situacao: SituacaoPessoa) => onVerFaltam({ [campo]: nome }, situacao) : undefined;
   const dica = onVerFaltam ? "Clique numa barra para ver os colaboradores: quem falta ou, com 100%, quem passou." : undefined;
-  const pessoas = useMemo(() => dados.pessoas ?? [], [dados.pessoas]);
-  const unidades = useMemo(() => agrupar(pessoas, "unidade"), [pessoas]);
-  const daUnidade = useMemo(() => pessoas.filter((p) => !unidade || (p.unidade ?? VAZIO.unidade) === unidade), [pessoas, unidade]);
-  const setores = useMemo(() => agrupar(daUnidade, "setor"), [daUnidade]);
-  const gestores = useMemo(() => agrupar(daUnidade, "gestor"), [daUnidade]);
+  const unidades = useMemo(() => agrupar(pessoasDasUnidades, "unidade"), [pessoasDasUnidades]);
+  const setores = useMemo(() => agrupar(pessoas, "setor"), [pessoas]);
+  const gestores = useMemo(() => agrupar(pessoas, "gestor"), [pessoas]);
 
   const sufixo = unidade ? (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
       <Badge variant="quiet" tone="blue">{unidade}</Badge>
-      <button type="button" className="btn btn-ghost btn-xs" onClick={() => setUnidade("")}>Ver todas</button>
+      <button type="button" className="btn btn-ghost btn-xs" onClick={() => onUnidade("")}>Ver todas</button>
     </span>
   ) : <span className="soft" style={{ fontWeight: 500, fontSize: "0.8rem" }}>todas as unidades</span>;
 
@@ -352,7 +346,7 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
         Aderência em {rotuloPeriodo}: do público, quem passou pela blitz pelo menos uma vez. Setor, gestor e unidade são os de hoje.
-        Fora da conta: {dados.fora.por_funcao} por função, {dados.fora.por_excecao} por exceção e {dados.fora.ausentes} ausentes o período todo.
+        Fora da conta: {fora.por_funcao} por função, {fora.por_excecao} por exceção e {fora.ausentes} ausentes o período todo.
       </p>
 
       {/* 1. cada unidade; clicar filtra os próximos */}
@@ -370,7 +364,7 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
               const { cor } = escalaDe(unidades);
               const escolhida = unidade === u.nome;
               return (
-                <button key={u.nome} type="button" aria-pressed={escolhida} onClick={() => setUnidade(escolhida ? "" : u.nome)}
+                <button key={u.nome} type="button" aria-pressed={escolhida} onClick={() => onUnidade(escolhida ? "" : u.nome)}
                   style={{
                     textAlign: "left", cursor: "pointer", borderRadius: "var(--mh-radius-lg)", padding: "0.9rem 1rem",
                     background: "var(--surface-2)", color: "var(--mh-text-1)",
@@ -408,45 +402,30 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
 
 // ---------------------------------------------------------------- listas
 
-const FILTROS_PESSOA: { campo: Campo; rotulo: string }[] = [
-  { campo: "unidade", rotulo: "Unidade" },
-  { campo: "setor", rotulo: "Setor" },
-  { campo: "gestor", rotulo: "Gestor" },
-  { campo: "funcao", rotulo: "Função" },
-];
-
 export type SituacaoPessoa = "todos" | "faltam" | "passaram";
 
 /**
  * O público do período, pessoa a pessoa (LUIZ, 11/11/2026: uma lista só, com
- * quem passou e quem falta, em vez de uma aba para cada). A situação fica num
- * seletor no topo (abre em "Faltam passar"), com a contagem que respeita os outros filtros; quem falta
- * vem primeiro. É a lista que a portaria usa no dia a dia, com filtros
- * (unidade, setor, gestor, função), busca e exportação.
+ * quem passou e quem falta). Chega já filtrada pelo filtro único das Análises;
+ * aqui ficam a situação (abre em "Faltam passar", com a contagem), a busca e a
+ * exportação. Quem falta vem primeiro.
  */
-export function BlitzColaboradoresLista({ dados, rotuloPeriodo, chaveArquivo, filtroInicial, situacaoInicial = "faltam" }: {
-  dados: AderenciaDados;
+export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chaveArquivo, situacaoInicial = "faltam" }: {
+  pessoas: AderenciaPessoa[];
   rotuloPeriodo: string;
   /** pedaço do nome do arquivo exportado (ex.: 2026-11-01_2026-11-30) */
   chaveArquivo: string;
-  /** o filtro que o clique no gráfico trouxe (quem usa remonta a lista com `key` a cada clique) */
-  filtroInicial?: FiltroPessoa;
+  /** quem usa remonta a lista com `key` quando o clique no gráfico pede outra situação */
   situacaoInicial?: SituacaoPessoa;
 }) {
   // quem falta primeiro; dentro de cada grupo, a ordem do banco (nome)
-  const pessoas = useMemo(() => {
-    const todas = dados.pessoas ?? dados.faltam.map((f) => ({ ...f, passou: false }));
-    return [...todas.filter((x) => !x.passou), ...todas.filter((x) => x.passou)];
-  }, [dados]);
+  const pessoas = useMemo(() => [...doFiltro.filter((x) => !x.passou), ...doFiltro.filter((x) => x.passou)], [doFiltro]);
   const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<FiltroPessoa>(filtroInicial ?? {});
   const [situacao, setSituacao] = useState<SituacaoPessoa>(situacaoInicial);
-  const opcoes = useMemo(() => Object.fromEntries(FILTROS_PESSOA.map((c) => [c.campo, valoresDe(pessoas.map((f) => f[c.campo]), VAZIO[c.campo])])), [pessoas]);
   const termo = normalizar(busca.trim());
   const base = useMemo(() => pessoas.filter((f) =>
-    FILTROS_PESSOA.every((c) => !filtro[c.campo] || (f[c.campo] ?? VAZIO[c.campo]) === filtro[c.campo])
-    && (!termo || normalizar([f.nome, f.matricula, f.funcao, f.setor, f.gestor, f.unidade].filter(Boolean).join(" ")).includes(termo)),
-  ), [pessoas, filtro, termo]);
+    !termo || normalizar([f.nome, f.matricula, f.funcao, f.setor, f.gestor, f.unidade].filter(Boolean).join(" ")).includes(termo),
+  ), [pessoas, termo]);
   const conta = { todos: base.length, faltam: base.filter((f) => !f.passou).length, passaram: base.filter((f) => f.passou).length };
   const lista = situacao === "todos" ? base : base.filter((f) => (situacao === "passaram") === f.passou);
 
@@ -477,11 +456,8 @@ export function BlitzColaboradoresLista({ dados, rotuloPeriodo, chaveArquivo, fi
           </button>
         ))}
       </div>
-      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-        <input className="input" placeholder="Buscar nome ou matrícula…" value={busca}
-          onChange={(e) => setBusca(e.target.value)} style={{ width: 220, maxWidth: "100%" }} />
-        <Filtros campos={FILTROS_PESSOA} valores={filtro} opcoes={opcoes} onChange={(c, v) => setFiltro((f) => ({ ...f, [c]: v }))} />
-      </div>
+      <input className="input" placeholder="Buscar nome ou matrícula…" value={busca}
+        onChange={(e) => setBusca(e.target.value)} style={{ width: 260, maxWidth: "100%" }} />
       {pessoas.length === 0 ? (
         <EmptyState title="Sem público no período" description="Ninguém do público da blitz neste recorte." />
       ) : lista.length === 0 ? (
@@ -528,15 +504,8 @@ export function BlitzColaboradoresLista({ dados, rotuloPeriodo, chaveArquivo, fi
   );
 }
 
-/** Quem repetiu o "não OK" no período, com os mesmos filtros da lista do público. */
-export function BlitzRecorrenciaLista({ recorrencia, rotuloPeriodo }: { recorrencia: BlitzRecorrencia[]; rotuloPeriodo: string }) {
-  const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>({});
-  const opcoes = useMemo(
-    () => Object.fromEntries(FILTROS_PESSOA.map((c) => [c.campo, valoresDe(recorrencia.map((r) => r[c.campo]), VAZIO[c.campo])])),
-    [recorrencia],
-  );
-  const lista = useMemo(() => recorrencia.filter((r) =>
-    FILTROS_PESSOA.every((c) => !filtro[c.campo] || (r[c.campo] ?? VAZIO[c.campo]) === filtro[c.campo])), [recorrencia, filtro]);
+/** Quem repetiu o "não OK" no período; chega filtrada pelo filtro único das Análises. */
+export function BlitzRecorrenciaLista({ recorrencia: lista, rotuloPeriodo }: { recorrencia: BlitzRecorrencia[]; rotuloPeriodo: string }) {
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -547,13 +516,8 @@ export function BlitzRecorrenciaLista({ recorrencia, rotuloPeriodo }: { recorren
           Setor, gestor e unidade são os da última blitz da pessoa no período.
         </p>
       </div>
-      {recorrencia.length > 0 && (
-        <Filtros campos={FILTROS_PESSOA} valores={filtro} opcoes={opcoes} onChange={(c, v) => setFiltro((f) => ({ ...f, [c]: v }))} />
-      )}
-      {recorrencia.length === 0 ? (
-        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém saiu não conforme no período.</p>
-      ) : lista.length === 0 ? (
-        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém com esses filtros.</p>
+      {lista.length === 0 ? (
+        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém saiu não conforme no período (com o filtro atual).</p>
       ) : (
         <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto" }}>
           <table className="table">

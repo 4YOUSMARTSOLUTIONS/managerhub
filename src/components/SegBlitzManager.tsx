@@ -14,6 +14,7 @@ import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
 import { BlitzAnalises } from "@/components/BlitzAnalises";
+import { FILTROS_PESSOA, passaNoFiltro, type FiltroPessoa } from "@/components/BlitzAderencia";
 import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
@@ -37,6 +38,8 @@ export type BlitzRow = {
   setor: string | null;
   gestor: string | null;
   unidade: string | null;
+  /** a função no dia da blitz (o recorte vindo das Análises filtra por ela) */
+  funcao: string | null;
   meioId: string;
   placa: string | null;
   veiculoTipo: string | null;
@@ -120,7 +123,7 @@ export function SegBlitzManager({
   const [meio, setMeio] = useState("");
   const [sit, setSit] = useState("");
   // período vindo do cartão das Análises (desvio/bloqueio): os números batem com o cartão
-  const [periodoRegistros, setPeriodoRegistros] = useState<{ de: string; ate: string; rotulo: string } | null>(null);
+  const [periodoRegistros, setPeriodoRegistros] = useState<{ de: string; ate: string; rotulo: string; filtro?: FiltroPessoa } | null>(null);
   const [abaTopo, setAbaTopo] = useState<string | undefined>(undefined);
   const topoDasAbas = useRef<HTMLDivElement>(null);
   const [aberto, setAberto] = useState<string | null>(null);
@@ -133,6 +136,8 @@ export function SegBlitzManager({
     const q = normalizar(busca.trim());
     return rows.filter((r) => {
       if (periodoRegistros && (r.occurredOn < periodoRegistros.de || r.occurredOn > periodoRegistros.ate)) return false;
+      // o mesmo filtro das Análises (unidade, setor, gestor, função): a lista bate com o cartão
+      if (periodoRegistros?.filtro && !passaNoFiltro(r, periodoRegistros.filtro)) return false;
       if (meio && r.meioId !== meio) return false;
       if (sit === "conforme" && !(r.liberado && r.conforme)) return false;
       if (sit === "desvio" && !(r.liberado && !r.conforme)) return false;
@@ -153,7 +158,7 @@ export function SegBlitzManager({
   };
 
   /** Do cartão das Análises para a lista de Registros, filtrada (LUIZ, 11/11/2026). */
-  const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string }) => {
+  const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string; filtro?: FiltroPessoa }) => {
     setSit(situacaoDoCartao);
     setPeriodoRegistros(periodo);
     setBusca("");
@@ -214,7 +219,9 @@ export function SegBlitzManager({
         </select>
         {periodoRegistros && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPeriodoRegistros(null)} title="Tirar o filtro de período">
-            Período: {periodoRegistros.rotulo} <X size={13} aria-hidden />
+            Período: {periodoRegistros.rotulo}
+            {FILTROS_PESSOA.filter(({ campo }) => periodoRegistros.filtro?.[campo]).map(({ campo, rotulo }) => ` · ${rotulo}: ${periodoRegistros.filtro?.[campo]}`).join("")}
+            <X size={13} aria-hidden />
           </button>
         )}
         <div style={{ marginLeft: "auto" }}>

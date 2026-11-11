@@ -133,6 +133,7 @@ export default async function SegurancaBlitzPage() {
     setor: b.snap_department_name,
     gestor: b.snap_manager_name,
     unidade: b.snap_unit_name,
+    funcao: b.snap_position_name,
     meioId: b.meio_id,
     placa: b.placa,
     veiculoTipo: b.veiculo_tipo,

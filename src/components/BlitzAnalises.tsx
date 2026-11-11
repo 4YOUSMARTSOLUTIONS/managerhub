@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, X } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dropdown } from "@/components/ui/Dropdown";
-import { BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, type FiltroPessoa, type SituacaoPessoa } from "./BlitzAderencia";
-import { BlitzAlertasLista, TratativasPendentesPorGestor } from "./BlitzAlertasLista";
+import {
+  BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, FILTROS_PESSOA, passaNoFiltro, valorDoCampo,
+  type FiltroPessoa, type SituacaoPessoa,
+} from "./BlitzAderencia";
+import { BlitzAlertasLista, TratativasPendentesPorGestor, type SituacaoAlerta } from "./BlitzAlertasLista";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
@@ -75,7 +78,7 @@ export function BlitzAnalises({
   /** o bloco das tratativas que o gestor logado deve (no painel de Análises) */
   tratativas?: React.ReactNode;
   /** clique nos cartões de desvio e bloqueio: a lista de Registros filtrada no período */
-  onVerRegistros?: (situacao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string }) => void;
+  onVerRegistros?: (situacao: "desvio" | "bloqueado", recorte: { de: string; ate: string; rotulo: string; filtro: FiltroPessoa }) => void;
   registros: React.ReactNode;
   /** a aba "+ Nova blitz" do celular (só para quem avalia) */
   novaBlitz?: React.ReactNode;
@@ -94,23 +97,28 @@ export function BlitzAnalises({
   const [dados, setDados] = useState(inicial);
   const [modoDosDados, setModoDosDados] = useState<Modo>("mes");
   const [escopoDosDados, setEscopoDosDados] = useState<Escopo>("todos");
-  // o clique no gráfico de aderência leva à lista do público já filtrada; com
-  // 100% abre em "Passaram". A versão remonta a lista a cada clique
-  const [filtroFaltam, setFiltroFaltam] = useState<FiltroPessoa>({});
+  // o filtro único (LUIZ, 11/11/2026): unidade, setor, gestor e função valem
+  // para a tela inteira, cartões inclusive. Os gráficos e o quadro de
+  // pendências ligam ele ao serem clicados
+  const [filtro, setFiltro] = useState<FiltroPessoa>({});
+  // a situação em que cada lista abre quando chega por um clique; a versão
+  // remonta a lista para valer a nova
   const [situacaoLista, setSituacaoLista] = useState<SituacaoPessoa>("faltam");
   const [versaoFaltam, setVersaoFaltam] = useState(0);
-  // o quadro de pendências leva aos Alertas filtrados no gestor
-  const [gestorAlertas, setGestorAlertas] = useState<string | undefined>(undefined);
+  const [situacaoAlertas, setSituacaoAlertas] = useState<SituacaoAlerta>("");
   const [versaoAlertas, setVersaoAlertas] = useState(0);
 
+  const mudarFiltro = (f: FiltroPessoa) => setFiltro((atual) => ({ ...atual, ...f }));
+
   const verAlertas = (gestor: string) => {
-    setGestorAlertas(gestor);
+    mudarFiltro({ gestor });
+    setSituacaoAlertas("aguardando");
     setVersaoAlertas((v) => v + 1);
     onAba("alertas");
   };
 
   const verFaltam = (f: FiltroPessoa, situacao: SituacaoPessoa) => {
-    setFiltroFaltam(f);
+    mudarFiltro(f);
     setSituacaoLista(situacao);
     setVersaoFaltam((v) => v + 1);
     onAba("colaboradores");
@@ -139,21 +147,45 @@ export function BlitzAnalises({
     carregar(modoDosDados, dados.de, dados.ate, esc);
   };
 
-  const ind = dados.indicadores;
   const ad = dados.aderencia;
-  const conformidade = pct(ind.conformes, ind.total);
-  const aderencia = pct(ad.passaram, ad.publico);
-  const tratou = pct(ind.alertas.com_tratativa, ind.alertas.enviados);
   const periodo = rotulo(modoDosDados, dados.de, dados.ate);
 
-  // um botão só para o período e a visão (LUIZ, 11/11/2026: tela mais limpa)
-  const filtro = (
+  // tudo passa pelo filtro único; os cartões são refeitos com o que sobrou
+  const pessoasTodas = useMemo(
+    () => ad.pessoas ?? ad.faltam.map((f) => ({ ...f, passou: false })), [ad.pessoas, ad.faltam]);
+  const pessoas = useMemo(() => pessoasTodas.filter((p) => passaNoFiltro(p, filtro)), [pessoasTodas, filtro]);
+  const pessoasDasUnidades = useMemo(() => pessoasTodas.filter((p) => passaNoFiltro(p, filtro, "unidade")), [pessoasTodas, filtro]);
+  const alertas = useMemo(() => (dados.alertas ?? []).filter((a) => passaNoFiltro(a, filtro)), [dados.alertas, filtro]);
+  const recorrencia = useMemo(() => dados.recorrencia.filter((r) => passaNoFiltro(r, filtro)), [dados.recorrencia, filtro]);
+  const blitz = useMemo(() => dados.blitz?.filter((b) => passaNoFiltro(b, filtro)), [dados.blitz, filtro]);
+  const temFiltro = FILTROS_PESSOA.some(({ campo }) => filtro[campo]);
+  // sem a lista de blitz (versão antiga do banco), vale o número do servidor
+  const ind = blitz ? {
+    total: blitz.length,
+    conformes: blitz.filter((b) => b.conforme).length,
+    com_desvio: blitz.filter((b) => b.liberado && !b.conforme).length,
+    bloqueios: blitz.filter((b) => !b.liberado).length,
+    alertas: { enviados: alertas.length, com_tratativa: alertas.filter((a) => a.registrada_em).length },
+  } : dados.indicadores;
+  const publico = pessoas.length;
+  const passaram = pessoas.filter((p) => p.passou).length;
+  const conformidade = pct(ind.conformes, ind.total);
+  const aderencia = pct(passaram, publico);
+  const tratou = pct(ind.alertas.com_tratativa, ind.alertas.enviados);
+  // as opções de cada filtro: o que aparece no público e nas blitz do período
+  const opcoes = useMemo(() => Object.fromEntries(FILTROS_PESSOA.map(({ campo }) => [campo,
+    [...new Set([...pessoasTodas, ...(dados.blitz ?? [])].map((o) => valorDoCampo(o, campo)))]
+      .sort((x, y) => x.localeCompare(y, "pt-BR"))])), [pessoasTodas, dados.blitz]);
+
+  // um botão só para o período, a visão e os filtros (LUIZ, 11/11/2026: tela mais limpa)
+  const menuDoFiltro = (
     <Dropdown
       rotulo={carregando ? "Carregando…" : `${periodo}${escopoDosDados === "minha" ? " · Minha gestão" : ""}`}
       icone={<CalendarDays size={15} aria-hidden />}
       alinharDireita={!celular}
       largura={300}
-      titulo="Período e visão das análises"
+      titulo="Período, visão e filtros das análises"
+      contador={FILTROS_PESSOA.filter(({ campo }) => filtro[campo]).length}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
         <span className="soft" style={ROTULO_DO_MENU}>Período</span>
@@ -187,6 +219,19 @@ export function BlitzAnalises({
             opcoes={[["todos", "Todos"], ["minha", "Minha gestão"]]} />
         </div>
       )}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem", borderTop: "1px solid var(--border)", paddingTop: "0.7rem" }}>
+        <span className="soft" style={ROTULO_DO_MENU}>Filtrar</span>
+        {FILTROS_PESSOA.map(({ campo, rotulo: nome }) => (
+          <select key={campo} className="select" value={filtro[campo] ?? ""} aria-label={nome}
+            onChange={(e) => setFiltro((f) => ({ ...f, [campo]: e.target.value }))}>
+            <option value="">{nome}: todos</option>
+            {(opcoes[campo] ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </select>
+        ))}
+        {temFiltro && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFiltro({})}>Limpar filtros</button>
+        )}
+      </div>
     </Dropdown>
   );
 
@@ -198,7 +243,7 @@ export function BlitzAnalises({
         label="Aderência"
         value={aderencia === null ? "—" : `${aderencia}%`}
         tone={aderencia === null ? "blue" : aderencia >= 90 ? "green" : aderencia >= 70 ? "amber" : "red"}
-        hint={`${ad.passaram} de ${ad.publico} do público passaram`}
+        hint={`${passaram} de ${publico} do público passaram`}
       />
       <StatCard
         label="Conformidade"
@@ -206,15 +251,15 @@ export function BlitzAnalises({
         tone={conformidade === null ? "blue" : conformidade >= 80 ? "green" : conformidade >= 50 ? "amber" : "red"}
         hint={ind.total ? `${ind.conformes} de ${ind.total} blitz conformes` : "Nenhuma blitz no período"}
       />
-      <StatCard label="Faltam passar" value={ad.publico - ad.passaram} hint="do público do período" />
+      <StatCard label="Faltam passar" value={publico - passaram} hint="do público do período" />
       {/* desvio e bloqueio pintados para chamar atenção; sem ocorrência, cartão neutro */}
       <StatCard label="Liberadas com desvio" value={ind.com_desvio} tone={ind.com_desvio > 0 ? "amber" : "green"}
         destaque={ind.com_desvio > 0 ? "amber" : undefined}
-        onClick={onVerRegistros && ind.com_desvio > 0 ? () => onVerRegistros("desvio", { de: dados.de, ate: dados.ate, rotulo: periodo }) : undefined}
+        onClick={onVerRegistros && ind.com_desvio > 0 ? () => onVerRegistros("desvio", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
         acao="Ver as blitz liberadas com desvio" />
       <StatCard label="Bloqueios" value={ind.bloqueios} tone={ind.bloqueios > 0 ? "red" : "green"}
         destaque={ind.bloqueios > 0 ? "red" : undefined}
-        onClick={onVerRegistros && ind.bloqueios > 0 ? () => onVerRegistros("bloqueado", { de: dados.de, ate: dados.ate, rotulo: periodo }) : undefined}
+        onClick={onVerRegistros && ind.bloqueios > 0 ? () => onVerRegistros("bloqueado", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
         acao="Ver as blitz bloqueadas" />
       {/* o % tratado em destaque; o total de alertas já se lê nos dois cartões ao lado */}
       <StatCard
@@ -225,10 +270,25 @@ export function BlitzAnalises({
     </div>
   );
 
-  /** Uma aba de análise: (no celular, o botão do filtro), os cartões e o conteúdo. */
+  // o que está filtrado fica à vista, e cada um sai com um clique
+  const etiquetas = temFiltro && (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem" }}>
+      <span className="soft" style={{ fontSize: "0.78rem" }}>Filtrado por:</span>
+      {FILTROS_PESSOA.filter(({ campo }) => filtro[campo]).map(({ campo, rotulo: nome }) => (
+        <button key={campo} type="button" className="btn btn-ghost btn-xs" title="Tirar este filtro"
+          onClick={() => setFiltro((f) => ({ ...f, [campo]: "" }))}>
+          {nome}: {filtro[campo]} <X size={12} aria-hidden />
+        </button>
+      ))}
+      <button type="button" className="btn btn-ghost btn-xs" onClick={() => setFiltro({})}>Limpar</button>
+    </div>
+  );
+
+  /** Uma aba de análise: (no celular, o botão do filtro), os filtros ligados, os cartões e o conteúdo. */
   const painel = (corpo: React.ReactNode) => (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", opacity: carregando ? 0.6 : 1 }}>
-      {celular && <div style={{ display: "flex" }}>{filtro}</div>}
+      {celular && <div style={{ display: "flex" }}>{menuDoFiltro}</div>}
+      {etiquetas}
       {cartoes}
       {corpo}
     </div>
@@ -240,12 +300,14 @@ export function BlitzAnalises({
       content: painel(
         <>
           {tratativas}
-          <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} onVerFaltam={verFaltam} />
+          <BlitzAderenciaDetalhe pessoas={pessoas} pessoasDasUnidades={pessoasDasUnidades} fora={ad.fora}
+            unidade={filtro.unidade ?? ""} onUnidade={(u) => mudarFiltro({ unidade: u })}
+            rotuloPeriodo={periodo} onVerFaltam={verFaltam} />
           {/* pendências por gestor por último e em meia largura (LUIZ, 11/11/2026); auto-fill
               guarda a coluna vazia ao lado, e em tela estreita ocupa a linha toda */}
-          {(dados.alertas ?? []).some((a) => !a.registrada_em) && (
+          {alertas.some((a) => !a.registrada_em) && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 480px), 1fr))", gap: "1rem" }}>
-              <TratativasPendentesPorGestor alertas={dados.alertas ?? []} rotuloPeriodo={periodo} onVer={verAlertas} />
+              <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
             </div>
           )}
         </>,
@@ -253,23 +315,23 @@ export function BlitzAnalises({
     },
     {
       // quem passou e quem falta numa lista só; abre em "Faltam passar"
-      id: "colaboradores", label: `Colaboradores (${ad.publico})`,
+      id: "colaboradores", label: `Colaboradores (${publico})`,
       content: painel(
-        <BlitzColaboradoresLista key={versaoFaltam} dados={ad} rotuloPeriodo={periodo}
-          chaveArquivo={`${dados.de}_${dados.ate}`} filtroInicial={filtroFaltam} situacaoInicial={situacaoLista} />,
+        <BlitzColaboradoresLista key={versaoFaltam} pessoas={pessoas} rotuloPeriodo={periodo}
+          chaveArquivo={`${dados.de}_${dados.ate}`} situacaoInicial={situacaoLista} />,
       ),
     },
     {
-      id: "recorrencia", label: `Recorrência (${dados.recorrencia.length})`,
-      content: painel(<BlitzRecorrenciaLista recorrencia={dados.recorrencia} rotuloPeriodo={periodo} />),
+      id: "recorrencia", label: `Recorrência (${recorrencia.length})`,
+      content: painel(<BlitzRecorrenciaLista recorrencia={recorrencia} rotuloPeriodo={periodo} />),
     },
     {
       // quem tratou e quem está devendo
-      id: "alertas", label: `Alertas (${(dados.alertas ?? []).length})`,
+      id: "alertas", label: `Alertas (${alertas.length})`,
       content: painel(
-        <BlitzAlertasLista key={versaoAlertas} alertas={dados.alertas ?? []} rotuloPeriodo={periodo}
-          chaveArquivo={`${dados.de}_${dados.ate}`}
-          gestorInicial={gestorAlertas} situacaoInicial={gestorAlertas ? "aguardando" : ""} />,
+        <BlitzAlertasLista key={versaoAlertas} alertas={alertas} rotuloPeriodo={periodo}
+          chaveArquivo={`${dados.de}_${dados.ate}`} situacaoInicial={situacaoAlertas}
+          gestorAtivo={filtro.gestor} onGestor={(g) => mudarFiltro({ gestor: g })} />,
       ),
     },
   ];
@@ -287,7 +349,7 @@ export function BlitzAnalises({
       tabs={abas}
       active={atual}
       onActiveChange={onAba}
-      aside={!celular && ehDeAnalise ? filtro : undefined}
+      aside={!celular && ehDeAnalise ? menuDoFiltro : undefined}
     />
   );
 }
