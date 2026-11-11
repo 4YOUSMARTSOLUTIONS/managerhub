@@ -585,6 +585,18 @@ a {
     grid-template-rows: auto 1fr;
     grid-template-areas: "setor gestor" "pend gestor";
   }
+  /* as duas colunas terminam juntas (LUIZ, 11/11/2026): as pendências esticam
+     até o fim do gestor, e o gestor estica se a esquerda for a mais alta */
+  .blitz-aderencia-grade > .area-pend,
+  .blitz-aderencia-grade > .area-gestor {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
+  .blitz-aderencia-grade > .area-pend > *,
+  .blitz-aderencia-grade > .area-gestor > * {
+    flex: 1 1 auto;
+  }
 }
 
 /* ── celular: abaixo de 720px ──
