@@ -335,17 +335,30 @@ export function AgendaManager(props: {
   );
 
   // ----- aba: Minhas agendas -----
+  // As de "Demandas não previstas" ficam numa subaba própria (LUIZ, 11/11/2026):
+  // nascem do atalho do diário, uma por pessoa e sempre com o mesmo nome, e no
+  // meio das agendas de rotina só atrapalhavam quem procura uma agenda de função.
   const myAgendas = agendas.filter((a) => a.ownerId === currentUserId || a.responsibleId === currentUserId || isAdmin);
-  const agendasTab = (
-    <Section title={`${myAgendas.length} ${myAgendas.length === 1 ? "agenda" : "agendas"}`} padded={false}>
-      {myAgendas.length === 0 ? (
+  const agendasDeRotina = myAgendas.filter((a) => !a.imprevistos);
+  const agendasImprevistas = myAgendas.filter((a) => a.imprevistos);
+
+  const excluirAgendaBotao = (a: AgendaFull, mensagem: React.ReactNode) => (
+    <ConfirmActionButton action={deleteAgenda} fields={{ id: a.id }} className="icon-btn icon-btn-danger" buttonTitle="Excluir"
+      title="Excluir agenda" message={mensagem} confirmLabel="Excluir">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+    </ConfirmActionButton>
+  );
+
+  const rotinaTab = (
+    <Section title={`${agendasDeRotina.length} ${agendasDeRotina.length === 1 ? "agenda" : "agendas"}`} padded={false}>
+      {agendasDeRotina.length === 0 ? (
         <EmptyState title="Nenhuma agenda" description="Crie uma agenda de rotina para você ou para um colaborador." />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table className="table">
             <thead><tr><th>Agenda</th><th>Responsável</th><th>Tarefas</th><th>Status</th><th style={{ textAlign: "right" }}>Ações</th></tr></thead>
             <tbody>
-              {myAgendas.map((a) => (
+              {agendasDeRotina.map((a) => (
                 <tr key={a.id} style={{ opacity: a.active ? 1 : 0.55 }}>
                   <td style={{ fontWeight: 600 }}>{a.name}</td>
                   <td className="muted">{shortName(a.responsibleName)}{a.responsibleId !== a.ownerId && <span className="soft"> · de {shortName(a.ownerName)}</span>}</td>
@@ -361,12 +374,7 @@ export function AgendaManager(props: {
                       {canEditAgenda(a) && (
                         <button className="icon-btn" title={a.active ? "Inativar" : "Reativar"} onClick={() => start(async () => { const r = await toggleAgendaActive({ id: a.id, active: !a.active }); if (r.error) toast.error(r.error); else router.refresh(); })}><Power size={14} /></button>
                       )}
-                      {canEditAgenda(a) && (
-                        <ConfirmActionButton action={deleteAgenda} fields={{ id: a.id }} className="icon-btn icon-btn-danger" buttonTitle="Excluir"
-                          title="Excluir agenda" message={<>Excluir <strong>{a.name}</strong> e todo o histórico de execuções?</>} confirmLabel="Excluir">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                        </ConfirmActionButton>
-                      )}
+                      {canEditAgenda(a) && excluirAgendaBotao(a, <>Excluir <strong>{a.name}</strong> e todo o histórico de execuções?</>)}
                     </div>
                   </td>
                 </tr>
@@ -376,6 +384,51 @@ export function AgendaManager(props: {
         </div>
       )}
     </Section>
+  );
+
+  // Uma por pessoa, criada e mantida pelo diário: a coluna que importa é quem,
+  // e não há o que editar nem inativar (inativa, a próxima demanda cairia numa
+  // agenda que o diário não mostra). Ver e excluir continuam.
+  const imprevistasTab = (
+    <Section title={`${agendasImprevistas.length} ${agendasImprevistas.length === 1 ? "pessoa" : "pessoas"} com demandas não previstas`} padded={false}>
+      {agendasImprevistas.length === 0 ? (
+        <EmptyState
+          title="Nenhuma demanda não prevista"
+          description="Quando alguém registra uma demanda pelo botão Demanda não prevista, no Diário de bordo, ela aparece aqui."
+        />
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead><tr><th>Colaborador</th><th>Demandas registradas</th><th style={{ textAlign: "right" }}>Ações</th></tr></thead>
+            <tbody>
+              {[...agendasImprevistas]
+                .sort((x, y) => (x.responsibleName ?? "").localeCompare(y.responsibleName ?? "", "pt-BR"))
+                .map((a) => (
+                  <tr key={a.id}>
+                    <td style={{ fontWeight: 600 }}>{shortName(a.responsibleName)}</td>
+                    <td className="muted">{a.tasks.length}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
+                        <button className="icon-btn" title="Visualizar demandas" aria-label="Visualizar demandas" onClick={() => setViewing(a)}><Eye size={14} /></button>
+                        {canEditAgenda(a) && excluirAgendaBotao(a, <>Excluir todas as demandas não previstas de <strong>{shortName(a.responsibleName)}</strong> e o histórico delas?</>)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+
+  const agendasTab = (
+    <Tabs
+      tabs={[
+        { id: "rotina", label: `Agendas de rotina (${agendasDeRotina.length})`, content: rotinaTab },
+        { id: "imprevistas", label: `Demandas não previstas (${agendasImprevistas.length})`, content: imprevistasTab },
+      ]}
+    />
   );
 
   // ----- aba: Equipe -----
