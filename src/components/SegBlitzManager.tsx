@@ -108,6 +108,8 @@ export function SegBlitzManager({
     unitIds: string[] | null;
     hoje: string;
     anos: number[];
+    /** vê a empresa e tem equipe: ganha o "Todos | Minha gestão" */
+    podeEscolherGestao: boolean;
   } | null;
   /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
   dono: string;
@@ -141,14 +143,22 @@ export function SegBlitzManager({
     });
   }, [rows, busca, meio, sit, periodoRegistros]);
 
+  /** Troca de aba por código (cartão, gráfico, quadro); sobe até as abas se elas saíram da tela. */
+  const irPara = (id: string) => {
+    setAbaTopo(id);
+    requestAnimationFrame(() => {
+      const el = topoDasAbas.current;
+      if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   /** Do cartão das Análises para a lista de Registros, filtrada (LUIZ, 11/11/2026). */
   const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string }) => {
     setSit(situacaoDoCartao);
     setPeriodoRegistros(periodo);
     setBusca("");
     setMeio("");
-    setAbaTopo("registros");
-    requestAnimationFrame(() => topoDasAbas.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    irPara("registros");
   };
 
   const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
@@ -178,8 +188,6 @@ export function SegBlitzManager({
   const temAnalises = alertas.length > 0 || !!analise;
   // no celular a ordem das abas muda (LUIZ, 11/11/2026): "+ Nova blitz" primeiro
   const celular = useSyncExternalStore(assinarTela, ehCelular, () => false);
-  // vaga do filtro de período das Análises na linha das abas (no computador)
-  const [vagaDoFiltro, setVagaDoFiltro] = useState<HTMLDivElement | null>(null);
 
   const registros = (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
@@ -308,22 +316,10 @@ export function SegBlitzManager({
     </div>
   );
 
-  // Análises: filtro de período, cartões no topo, tratativas e o detalhe
+  // sem alçada nas análises: a aba mostra só as tratativas que a pessoa deve
   const analises = (
     <div style={{ paddingTop: "0.9rem" }}>
-      {analise ? (
-        <BlitzAnalises
-          inicial={analise.inicial}
-          unitIds={analise.unitIds}
-          hoje={analise.hoje}
-          anos={analise.anos}
-          vagaDoFiltro={celular ? null : vagaDoFiltro}
-          tratativas={<SegBlitzTratativas alertas={alertas} />}
-          onVerRegistros={verRegistros}
-        />
-      ) : (
-        <SegBlitzTratativas alertas={alertas} />
-      )}
+      <SegBlitzTratativas alertas={alertas} />
     </div>
   );
 
@@ -359,14 +355,31 @@ export function SegBlitzManager({
 
       {/* a ordem muda com a tela, então a chave remonta as abas e a primeira
           (Análises no computador, "+ Nova blitz" no celular) abre selecionada */}
-      {abas.length > 1
-        ? (
-          <div ref={topoDasAbas} style={{ scrollMarginTop: 72 }}>
-            <Tabs key={celular ? "celular" : "computador"} tabs={abas} active={abaTopo} onActiveChange={setAbaTopo}
-              aside={!celular && temAnalises ? <div ref={setVagaDoFiltro} /> : undefined} />
-          </div>
-        )
-        : registros}
+      {analise ? (
+        // com alçada: uma linha só de abas (Análises, Colaboradores, Recorrência,
+        // Alertas, Registros), montada pelas Análises (LUIZ, 11/11/2026)
+        <div ref={topoDasAbas} style={{ scrollMarginTop: 72 }}>
+          <BlitzAnalises
+            inicial={analise.inicial}
+            unitIds={analise.unitIds}
+            hoje={analise.hoje}
+            anos={analise.anos}
+            podeEscolherGestao={analise.podeEscolherGestao}
+            tratativas={<SegBlitzTratativas alertas={alertas} />}
+            onVerRegistros={verRegistros}
+            registros={registros}
+            novaBlitz={celular && podeAvaliar ? novaBlitz : null}
+            celular={celular}
+            rotuloAnalises={abaAnalises.label}
+            aba={abaTopo}
+            onAba={irPara}
+          />
+        </div>
+      ) : abas.length > 1 ? (
+        <div ref={topoDasAbas} style={{ scrollMarginTop: 72 }}>
+          <Tabs key={celular ? "celular" : "computador"} tabs={abas} active={abaTopo} onActiveChange={setAbaTopo} />
+        </div>
+      ) : registros}
 
       {detalhe && (
         <DetailModal

@@ -296,13 +296,13 @@ function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
         <div style={{ display: "flex", alignItems: "center", gap: "0.7rem", flexWrap: "wrap" }}>
           {visao === "grafico" && !vazio && <LegendaEscala min={min} max={max} />}
           <div role="group" aria-label="Visão" style={{ display: "inline-flex", gap: "0.25rem" }}>
-            <button type="button" aria-pressed={visao === "grafico"} title="Gráfico"
+            <button type="button" aria-pressed={visao === "grafico"} title="Gráfico" aria-label="Ver em gráfico"
               className={`btn btn-sm ${visao === "grafico" ? "btn-primary" : "btn-ghost"}`} onClick={() => setVisao("grafico")}>
-              <BarChart3 size={14} /> Gráfico
+              <BarChart3 size={15} aria-hidden />
             </button>
-            <button type="button" aria-pressed={visao === "tabela"} title="Tabela"
+            <button type="button" aria-pressed={visao === "tabela"} title="Tabela" aria-label="Ver em tabela"
               className={`btn btn-sm ${visao === "tabela" ? "btn-primary" : "btn-ghost"}`} onClick={() => setVisao("tabela")}>
-              <Table2 size={14} /> Tabela
+              <Table2 size={15} aria-hidden />
             </button>
           </div>
         </div>

@@ -1388,12 +1388,13 @@ export type BlitzAlerta = {
  * Análises da blitz num período (datas YYYY-MM-DD). As unidades vêm do seletor
  * do topo (são só recorte: a RPC confere empresa e alçada).
  */
-export async function getBlitzAnalise(input: { de: string; ate: string; unitIds: string[] | null }): Promise<{ data?: BlitzAnaliseDados; error?: string }> {
+export async function getBlitzAnalise(input: { de: string; ate: string; unitIds: string[] | null; soMinhaGestao?: boolean }): Promise<{ data?: BlitzAnaliseDados; error?: string }> {
   try {
     const data_ = /^\d{4}-\d{2}-\d{2}$/;
     if (!data_.test(input.de) || !data_.test(input.ate) || input.ate < input.de) return { error: "Período inválido." };
     const { supabase } = await actionContext();
-    const args = { p_de: input.de, p_ate: input.ate, p_unit_ids: input.unitIds };
+    // "Minha gestão": a cadeia de quem pede, mesmo vendo a empresa (a RPC confere a alçada)
+    const args = { p_de: input.de, p_ate: input.ate, p_unit_ids: input.unitIds, p_so_minha_gestao: !!input.soMinhaGestao };
     const [analise, alertas] = await Promise.all([
       supabase.rpc("seg_blitz_analise", args),
       supabase.rpc("seg_blitz_alertas_do_periodo", args),

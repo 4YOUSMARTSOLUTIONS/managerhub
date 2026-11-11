@@ -73,6 +73,14 @@ export default async function SegurancaBlitzPage() {
         supabase.rpc("seg_blitz_alertas_do_periodo", argsDoMes),
       ])
     : [{ data: null }, { data: null }];
+  // "Todos | Minha gestão" (LUIZ, 11/11/2026): para quem vê a empresa inteira e
+  // também tem gente embaixo. O Gestor já vê só a cadeia dele
+  const veAEmpresa = role === "owner" || role === "admin" || role === "manager" || daSeguranca === true;
+  const { count: diretos } = veAEmpresa
+    ? await supabase.from("memberships").select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id).eq("manager_id", user.id).eq("is_active", true)
+    : { count: 0 };
+  const podeEscolherGestao = veAEmpresa && (diretos ?? 0) > 0;
   const analise = analiseRes.data
     ? {
         ...(analiseRes.data as unknown as BlitzAnaliseDados),
@@ -160,7 +168,7 @@ export default async function SegurancaBlitzPage() {
           tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor,
         }))}
         analise={analise ? {
-          inicial: analise, unitIds: unidades, hoje: hojeSp, anos,
+          inicial: analise, unitIds: unidades, hoje: hojeSp, anos, podeEscolherGestao,
         } : null}
         alertas={alertas}
       />

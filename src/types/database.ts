@@ -2433,8 +2433,8 @@ export type Database = {
       // aderência do mês (p_mes = qualquer dia do mês); alçada igual à das Análises
       seg_blitz_aderencia: { Args: { p_mes: string; p_unit_ids?: string[] | null }; Returns: Json }
       // análises num período: indicadores, aderência e recorrência, com a mesma alçada
-      seg_blitz_analise: { Args: { p_de: string; p_ate: string; p_unit_ids?: string[] | null }; Returns: Json }
-      seg_blitz_alertas_do_periodo: { Args: { p_de: string; p_ate: string; p_unit_ids?: string[] | null }; Returns: Json }
+      seg_blitz_analise: { Args: { p_de: string; p_ate: string; p_unit_ids?: string[] | null; p_so_minha_gestao?: boolean }; Returns: Json }
+      seg_blitz_alertas_do_periodo: { Args: { p_de: string; p_ate: string; p_unit_ids?: string[] | null; p_so_minha_gestao?: boolean }; Returns: Json }
       pode_ver_blitz: { Args: { p_tenant: string; p_user: string }; Returns: boolean }
       seg_criar_relato: { Args: { p_data: Json }; Returns: string }
       // só o autor, e só enquanto o relato está `aberto`
