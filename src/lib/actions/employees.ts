@@ -201,9 +201,15 @@ export async function updateEmployee(
       if (admissao && desligamento < admissao) return { error: "A data de desligamento não pode ser antes da admissão." };
     }
 
+    // Sem o campo de perfil na ficha (o RH vê o campo travado, que não é
+    // enviado), o perfil fica como está: vai vazio e a RPC mantém o atual. Antes
+    // ia "member", e salvar a ficha de um Gestor ou Gerencial pelo RH tentava
+    // rebaixar a pessoa; a trava do banco recusava a ficha inteira, inclusive a
+    // troca de gestor (LUIZ, 11/11/2026: Livia e Maria Eduarda).
+    const dados = buildData(formData, cpf);
     const { error } = await supabase.rpc("admin_update_employee", {
       p_user: userId,
-      p_data: buildData(formData, cpf),
+      p_data: formData.has("role") ? dados : { ...dados, role: "" },
     });
     if (error) return { error: error.message };
 
