@@ -515,6 +515,8 @@ export function BlitzRecorrenciaLista({ recorrencia: lista, rotuloPeriodo }: { r
                 <th className="so-desktop">Unidade</th>
                 <th style={{ width: 120, textAlign: "right" }}>Não conformes</th>
                 <th style={{ width: 80, textAlign: "right" }}>Blitz</th>
+                {/* quanto das blitz da pessoa saiu não conforme (LUIZ, 11/11/2026) */}
+                <th style={{ width: 130, textAlign: "right" }}>% não conforme</th>
               </tr>
             </thead>
             <tbody>
@@ -529,6 +531,7 @@ export function BlitzRecorrenciaLista({ recorrencia: lista, rotuloPeriodo }: { r
                     <Badge tone={r.nao_conformes >= 3 ? "red" : "amber"}>{r.nao_conformes}</Badge>
                   </td>
                   <td className="muted" style={{ textAlign: "right", fontSize: "0.82rem" }}>{r.total}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{pct(r.nao_conformes, r.total) ?? 0}%</td>
                 </tr>
               ))}
             </tbody>
