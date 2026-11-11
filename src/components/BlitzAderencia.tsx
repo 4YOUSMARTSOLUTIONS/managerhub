@@ -376,15 +376,16 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
 }
 
 /** Quem repetiu o "não OK" no período; chega filtrada pelo filtro único das Análises. */
-export function BlitzRecorrenciaLista({ recorrencia: lista, rotuloPeriodo }: { recorrencia: BlitzRecorrencia[]; rotuloPeriodo: string }) {
+export function BlitzRecorrenciaLista({ recorrencia: lista }: { recorrencia: BlitzRecorrencia[] }) {
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <div>
         <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Recorrência de não conformidade</h3>
         <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0" }}>
-          Quantas vezes cada colaborador saiu não conforme em {rotuloPeriodo}. Recorrência é conversa de gestor, não de multa.
-          Setor, gestor e unidade são os da última blitz da pessoa no período.
+          {/* texto do LUIZ, 11/11/2026 */}
+          Quantas vezes cada colaborador esteve não conforme. Setor, gestor e unidade são considerados como os da última
+          blitz do colaborador no período.
         </p>
       </div>
       {lista.length === 0 ? (

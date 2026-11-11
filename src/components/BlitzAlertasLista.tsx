@@ -53,10 +53,11 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem 1.5rem", flexWrap: "wrap" }}>
+        {/* o texto ocupa a linha até o botão de exportar, sem quebrar à toa (LUIZ, 11/11/2026) */}
+        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
           <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Alertas de {rotuloPeriodo}</h3>
-          <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0", maxWidth: 720 }}>
+          <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0" }}>
             Toda blitz liberada com desvio ou bloqueada avisa o gestor do colaborador, que conversa com a pessoa e registra a
             tratativa. Só o gestor alertado registra. {tratados} de {alertas.length} com tratativa.
           </p>

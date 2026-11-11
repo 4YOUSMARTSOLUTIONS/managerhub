@@ -149,7 +149,7 @@ const COM_BUSCA = new Set(["gestor", "funcao"]);
  */
 export function BlitzAnalises({
   inicial, unitIds, hoje, anos, podeEscolherGestao, tratativas, onVerRegistros,
-  registros, novaBlitz, celular, rotuloAnalises, aba, onAba,
+  registros, onPeriodo, novaBlitz, celular, rotuloAnalises, aba, onAba,
 }: {
   /** o mês corrente, já calculado no servidor */
   inicial: BlitzAnaliseDados;
@@ -167,6 +167,8 @@ export function BlitzAnalises({
   onVerRegistros?: (situacao: "desvio" | "bloqueado") => void;
   /** a lista de Registros, já no recorte dos dois botões */
   registros: (recorte: RecorteDosRegistros) => React.ReactNode;
+  /** troca de período: a lista de Registros busca as blitz dele junto com a análise */
+  onPeriodo?: (de: string, ate: string) => Promise<void>;
   /** a aba "+ Nova blitz" do celular (só para quem avalia) */
   novaBlitz?: React.ReactNode;
   celular: boolean;
@@ -224,7 +226,11 @@ export function BlitzAnalises({
   const carregar = (m: Modo, d: string, a: string, esc: Escopo = escopo) => {
     if (!d || !a || a < d) { toast.error("Escolha um período válido."); return; }
     iniciar(async () => {
-      const r = await getBlitzAnalise({ de: d, ate: a, unitIds, soMinhaGestao: esc === "minha" });
+      // a análise e os registros do período chegam juntos: a tela troca de período de uma vez
+      const [r] = await Promise.all([
+        getBlitzAnalise({ de: d, ate: a, unitIds, soMinhaGestao: esc === "minha" }),
+        onPeriodo?.(d, a),
+      ]);
       if (r.error || !r.data) { toast.error(r.error ?? "Não foi possível carregar as análises."); return; }
       setDados(r.data);
       setModoDosDados(m);
@@ -407,7 +413,7 @@ export function BlitzAnalises({
     },
     {
       id: "recorrencia", label: `Recorrência (${recorrencia.length})`,
-      content: painel(<BlitzRecorrenciaLista recorrencia={recorrencia} rotuloPeriodo={periodo} />),
+      content: painel(<BlitzRecorrenciaLista recorrencia={recorrencia} />),
     },
     {
       // quem tratou e quem está devendo

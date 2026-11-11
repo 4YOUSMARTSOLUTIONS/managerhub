@@ -9,6 +9,9 @@ import { hojeYmd, normalizar } from "@/lib/format";
 import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
 import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
+import { lerRegistrosDaBlitz } from "@/lib/blitz-registros";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
+import type { BlitzResposta, BlitzRow } from "@/components/SegBlitzManager";
 import type { Enums, Json } from "@/types/database";
 
 /**
@@ -1406,6 +1409,41 @@ export async function getBlitzAnalise(input: { de: string; ate: string; unitIds:
         alertas: (alertas.data ?? []) as unknown as BlitzAlertaAnalise[],
       },
     };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Os Registros da blitz num período (LUIZ, 11/11/2026: a lista acompanha o
+ * período das Análises). Paginado no servidor; a unidade é a do seletor do
+ * topo, lida aqui, e a RLS decide o resto.
+ */
+export async function getBlitzRegistros(input: { de: string; ate: string }): Promise<{ data?: BlitzRow[]; error?: string }> {
+  try {
+    const data_ = /^\d{4}-\d{2}-\d{2}$/;
+    if (!data_.test(input.de) || !data_.test(input.ate) || input.ate < input.de) return { error: "Período inválido." };
+    await actionContext(); // sessão e troca de senha pendente
+    const { tenant, unitScope } = await requireContext();
+    const r = await lerRegistrosDaBlitz(tenant.id, { de: input.de, ate: input.ate, unidades: effectiveUnitFilter(unitScope) });
+    if (r.error !== null) return { error: r.error };
+    return { data: r.data };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** As respostas de uma blitz, para a ficha (a RLS de seg_blitz_respostas segue a da blitz). */
+export async function getBlitzRespostas(avaliacaoId: string): Promise<{ data?: BlitzResposta[]; error?: string }> {
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(avaliacaoId)) return { error: "Blitz inválida." };
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase
+      .from("seg_blitz_respostas")
+      .select("pergunta_id, snap_pergunta, resposta")
+      .eq("avaliacao_id", avaliacaoId);
+    if (error) return { error: error.message };
+    return { data: (data ?? []).map((r) => ({ perguntaId: r.pergunta_id, pergunta: r.snap_pergunta, resposta: r.resposta })) };
   } catch (e) {
     return { error: (e as Error).message };
   }

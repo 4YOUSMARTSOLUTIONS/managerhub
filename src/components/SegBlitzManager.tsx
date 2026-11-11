@@ -24,7 +24,7 @@ import { SegBlitzTratativas } from "@/components/SegBlitzTratativas";
 import type { BlitzAlerta } from "@/lib/actions/seguranca";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_PROPRIEDADE, nomeDaCor } from "@/lib/constants";
 import { normalizar, shortName } from "@/lib/format";
-import { excluirBlitz } from "@/lib/actions/seguranca";
+import { excluirBlitz, getBlitzRegistros, getBlitzRespostas } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
 export type BlitzRow = {
@@ -52,8 +52,10 @@ export type BlitzRow = {
   observacao: string | null;
   conforme: boolean;
   avaliador: string | null;
-  respostas: { pergunta: string; resposta: Enums<"seg_blitz_resposta"> }[];
 };
+
+/** Uma resposta da blitz, lida quando a ficha abre (`getBlitzRespostas`). */
+export type BlitzResposta = { perguntaId: string | null; pergunta: string; resposta: Enums<"seg_blitz_resposta"> };
 
 function dataBr(iso: string) {
   const [a, m, d] = iso.slice(0, 10).split("-");
@@ -135,13 +137,55 @@ export function SegBlitzManager({
   const nomeMeio = useMemo(() => new Map(meios.map((m) => [m.id, m.name])), [meios]);
 
   /**
+   * Os registros acompanham o período das Análises (LUIZ, 11/11/2026). A página
+   * traz o mês corrente; outro período é buscado no servidor, paginado, e soma
+   * com o do mês: o mês vem sempre da página (fresco depois de salvar ou
+   * excluir) e o resto, da busca.
+   */
+  const mesDaPagina = analise ? { de: analise.inicial.de, ate: analise.inicial.ate } : null;
+  const [doPeriodo, setDoPeriodo] = useState<{ de: string; ate: string; rows: BlitzRow[] } | null>(null);
+  const ultimoPedido = useRef(0);
+  const linhas = useMemo(() => {
+    if (!doPeriodo || !mesDaPagina) return rows;
+    // a página vem do mais novo para o mais velho e o resto é anterior ao mês: a ordem se mantém
+    return [...rows, ...doPeriodo.rows.filter((r) => r.occurredOn < mesDaPagina.de || r.occurredOn > mesDaPagina.ate)];
+  }, [rows, doPeriodo, mesDaPagina?.de, mesDaPagina?.ate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const carregarPeriodo = async (de: string, ate: string) => {
+    const pedido = ++ultimoPedido.current;
+    // dentro do mês da página não precisa buscar nada
+    if (!mesDaPagina || (de >= mesDaPagina.de && ate <= mesDaPagina.ate)) { setDoPeriodo(null); return; }
+    if (doPeriodo && doPeriodo.de === de && doPeriodo.ate === ate) return;
+    const r = await getBlitzRegistros({ de, ate });
+    if (pedido !== ultimoPedido.current) return; // já pediram outro período
+    if (r.error || !r.data) { toast.error(r.error ?? "Não foi possível carregar os registros do período."); return; }
+    setDoPeriodo({ de, ate, rows: r.data });
+  };
+
+  // as respostas de cada blitz, lidas quando a ficha abre (vinham todas com a lista)
+  const [respostas, setRespostas] = useState<Record<string, BlitzResposta[] | "erro">>({});
+  const ordemDaPergunta = useMemo(() => new Map(perguntas.map((q, i) => [q.id, i])), [perguntas]);
+  const abrir = (id: string) => {
+    setAberto(id);
+    const ja = respostas[id];
+    if (ja && ja !== "erro") return;
+    void getBlitzRespostas(id).then((r) => {
+      const lista = r.data
+        // na ordem do cadastro de perguntas; pergunta que saiu do cadastro vai para o fim
+        ? [...r.data].sort((a, b) => (ordemDaPergunta.get(a.perguntaId ?? "") ?? 999) - (ordemDaPergunta.get(b.perguntaId ?? "") ?? 999))
+        : "erro" as const;
+      setRespostas((m) => ({ ...m, [id]: lista }));
+    });
+  };
+
+  /**
    * A lista de Registros. Com alçada, obedece aos dois botões das Análises
    * (LUIZ, 11/11/2026): o período, o filtro de setor, gestor e função e, em
    * "Minha gestão", só as blitz da análise. Sem alçada, vale tudo que chegou.
    */
   const filtrar = (recorte: RecorteDosRegistros | null) => {
     const q = normalizar(busca.trim());
-    return rows.filter((r) => {
+    return linhas.filter((r) => {
       if (recorte && (r.occurredOn < recorte.de || r.occurredOn > recorte.ate)) return false;
       if (recorte && !passaNoFiltro(r, recorte.filtro)) return false;
       if (recorte?.ids && !recorte.ids.has(r.id)) return false;
@@ -172,7 +216,8 @@ export function SegBlitzManager({
     irPara("registros");
   };
 
-  const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
+  const detalhe = aberto ? linhas.find((r) => r.id === aberto) ?? null : null;
+  const respostasDoDetalhe = detalhe ? respostas[detalhe.id] : undefined;
 
   const excluir = () => {
     if (!detalhe) return;
@@ -189,6 +234,8 @@ export function SegBlitzManager({
         if (r.error) { toast.error(r.error); return; }
         toast.success(r.message ?? "Blitz excluída.");
         setAberto(null);
+        // o mês volta fresco no refresh; a de outro período sai daqui
+        setDoPeriodo((p) => p && { ...p, rows: p.rows.filter((x) => x.id !== detalhe.id) });
         router.refresh();
       });
     })();
@@ -264,7 +311,7 @@ export function SegBlitzManager({
             const rodape = [r.setor, r.avaliador ? `por ${shortName(r.avaliador)}` : null].filter(Boolean).join(" · ");
             return (
               <button
-                key={r.id} type="button" className="card" onClick={() => setAberto(r.id)}
+                key={r.id} type="button" className="card" onClick={() => abrir(r.id)}
                 style={{
                   display: "flex", flexDirection: "column", gap: "0.35rem", width: "100%",
                   padding: "0.75rem 0.85rem", textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit",
@@ -306,7 +353,7 @@ export function SegBlitzManager({
             {lista.map((r) => {
               const s = situacao(r);
               return (
-                <tr key={r.id} onClick={() => setAberto(r.id)} style={{ cursor: "pointer" }} title="Abrir a blitz">
+                <tr key={r.id} onClick={() => abrir(r.id)} style={{ cursor: "pointer" }} title="Abrir a blitz">
                   <td>{dataBr(r.occurredOn)}</td>
                   <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title={tituloDaHora(r)}>{horaDoRegistro(r)}</td>
                   <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r.matricula ?? "—"}</td>
@@ -386,6 +433,7 @@ export function SegBlitzManager({
             podeEscolherGestao={analise.podeEscolherGestao}
             tratativas={<SegBlitzTratativas alertas={alertas} />}
             onVerRegistros={verRegistros}
+            onPeriodo={carregarPeriodo}
             registros={registros}
             novaBlitz={celular && podeAvaliar ? novaBlitz : null}
             celular={celular}
@@ -454,11 +502,15 @@ export function SegBlitzManager({
           )}
 
           <DetailSection title="Verificação">
-            {detalhe.respostas.length === 0 ? (
+            {respostasDoDetalhe === undefined ? (
+              <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Carregando as respostas…</p>
+            ) : respostasDoDetalhe === "erro" ? (
+              <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Não foi possível carregar as respostas. Feche e abra de novo.</p>
+            ) : respostasDoDetalhe.length === 0 ? (
               <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Sem perguntas nesta blitz.</p>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                {detalhe.respostas.map((x, i) => (
+                {respostasDoDetalhe.map((x, i) => (
                   <li
                     key={i}
                     style={{
