@@ -160,7 +160,7 @@ export function BlitzAnalises({
           <StatCard
             label="Alertas"
             value={
-              <span style={{ display: "inline-flex", alignItems: "flex-start", gap: "0.6rem 1rem", flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", alignItems: "flex-start", gap: "0.6rem 2rem", flexWrap: "wrap" }}>
                 {([[tratou === null ? "—" : `${tratou}%`, "tratado"], [ind.alertas.enviados - ind.alertas.com_tratativa, "sem tratativa"]] as const).map(([n, r]) => (
                   <span key={r} style={{ display: "inline-flex", flexDirection: "column", gap: "0.3rem" }}>
                     {n}
