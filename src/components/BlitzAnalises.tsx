@@ -132,9 +132,9 @@ const COM_BUSCA = new Set(["gestor", "funcao"]);
 /**
  * A tela da blitz para quem tem alçada (LUIZ, 11/11/2026). Uma linha só de
  * abas: Análises (o painel de aderência), Colaboradores, Recorrência, Alertas
- * e Registros. Nas quatro de análise os cartões ficam sempre no topo, e um
- * botão só (período e, para quem vê a empresa e tem equipe, "Minha gestão")
- * vale para todas. Registros tem os filtros dela e não leva o botão.
+ * e Registros. Os cartões ficam só no topo de Análises; um botão só (período
+ * e, para quem vê a empresa e tem equipe, "Minha gestão") vale para as quatro
+ * de análise. Registros tem os filtros dela e não leva o botão.
  *
  * A aba aberta mora em quem usa (o cartão de desvio leva a Registros e o
  * gráfico, a Colaboradores), por isso `aba`/`onAba`.
@@ -352,7 +352,8 @@ export function BlitzAnalises({
     </>
   );
 
-  // cartões sempre no topo das abas de análise, em três grupos (LUIZ, 11/11/2026)
+  // os cartões do topo, em três grupos; só na aba Análises (LUIZ, 11/11/2026:
+  // nas listas eles só empurravam a tabela para baixo)
   const cartoes = (
     <CartoesAgrupados
       aderencia={aderencia} passaram={passaram} publico={publico}
@@ -364,12 +365,12 @@ export function BlitzAnalises({
     />
   );
 
-  /** Uma aba de análise: (no celular, os botões), os cartões e o conteúdo. Os filtros ligados
-   *  aparecem só dentro do botão Filtros, com o contador nele (LUIZ, 11/11/2026: a linha empurrava a tela). */
-  const painel = (corpo: React.ReactNode) => (
+  /** Uma aba de análise: (no celular, os botões), os cartões quando pedidos e o conteúdo. Os filtros
+   *  ligados aparecem só dentro do botão Filtros, com o contador nele (LUIZ, 11/11/2026: a linha empurrava a tela). */
+  const painel = (corpo: React.ReactNode, comCartoes = false) => (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", opacity: carregando ? 0.6 : 1 }}>
       {celular && controles}
-      {cartoes}
+      {comCartoes && cartoes}
       {corpo}
     </div>
   );
@@ -380,6 +381,7 @@ export function BlitzAnalises({
       content: painel(
         <PainelDaBlitz pessoas={pessoas} alertas={alertas} recorrencia={recorrencia} blitz={blitz ?? []} tratativas={tratativas}
           onVerFaltam={verFaltam} onVerAlertas={verAlertas} onVerItem={verItem} onVerRecorrencia={() => onAba("recorrencia")} />,
+        true,
       ),
     },
     {
