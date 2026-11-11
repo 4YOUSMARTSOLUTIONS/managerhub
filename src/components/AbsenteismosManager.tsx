@@ -23,7 +23,7 @@ import {
   decidirAbsenteismo, getAlertaInss, getAtestado, getDocumentoAbsenteismoUrl,
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
-  type AlertaInss, type AtestadoLido,
+  type AlertaInss, type AtestadoLido, type ConfirmacaoInput,
 } from "@/lib/actions/absenteismos";
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
 import type { Enums } from "@/types/database";
@@ -161,13 +161,16 @@ export function AbsenteismosManager({
   const [novo, setNovo] = useState<
     {
       userId: string; occurredOn: string; reasonNote: string; emHoras: boolean; horaInicio: string; horaFim: string;
-      /** "Já sei o motivo" (LUIZ, 11/11/2026): segue direto para o motivo e o documento, sem o aviso de abertura */
+      /**
+       * "Já sei o motivo e já recebi o documento" (LUIZ, 11/11/2026): a janela já
+       * é o formulário do Efetivar, e o lançamento só nasce no envio ao RH
+       */
       comMotivo: boolean;
     } | null
   >(null);
   const [confirmando, setConfirmando] = useState<AbsenteismoRow | null>(null);
-  // o lançamento que nasceu pelo "Já sei o motivo" e ainda não teve comunicado:
-  // se o gestor fechar sem enviar ao RH, sai o aviso de abertura
+  // o lançamento do "Já sei o motivo" que foi gravado mas não chegou ao RH (o
+  // envio falhou no meio): ao fechar a janela, sai o aviso de abertura
   const [semComunicado, setSemComunicado] = useState<string | null>(null);
   // o mesmo valor em ref: o fechamento logo depois do envio ainda enxergaria o estado velho
   const semComunicadoRef = useRef<string | null>(null);
@@ -194,6 +197,7 @@ export function AbsenteismosManager({
   const historico = filtrar(rows.filter((r) =>
     r.status === "aprovado" || r.status === "reprovado" || r.status === "cancelado"));
 
+  /** "Ainda não sei o motivo": grava e comunica na hora; o resto vem pelo Efetivar. */
   const lancar = () => {
     if (!novo) return;
     setErro("");
@@ -204,62 +208,38 @@ export function AbsenteismosManager({
       const r = await lancarNaoComparecimento({
         userId: n.userId,
         occurredOn: n.occurredOn,
-        reasonNote: n.comMotivo ? "" : n.reasonNote,
+        reasonNote: n.reasonNote,
         horaInicio: n.emHoras ? n.horaInicio : "",
         horaFim: n.emHoras ? n.horaFim : "",
-        comunicar: !n.comMotivo,
       });
       if (r.error) { setErro(r.error); return; }
       setNovo(null);
       if (r.warning) setErro(r.warning);
       router.refresh();
-      // "Já sei o motivo": o mesmo formulário do Efetivar abre na hora, sobre o
-      // lançamento que acabou de nascer (sem e-mail ainda)
-      if (n.comMotivo && r.id) {
-        marcarSemComunicado(r.id);
-        setConfirmando(linhaNova(r.id, n));
-      }
     });
   };
 
-  /** O lançamento recém-criado, montado com o que a tela já sabe (a lista chega no refresh). */
-  const linhaNova = (id: string, n: NonNullable<typeof novo>): AbsenteismoRow => {
-    const p = pessoaPorId.get(n.userId);
-    return {
-      id, status: "aberto", userId: n.userId, occurredOn: n.occurredOn, reasonNote: null,
-      absenceTypeId: null, typeName: null, kind: null, requiresDocument: false, requiresMedical: false,
-      startDate: null, endDate: null, discountsRv: null, note: null, kinship: null, workAccident: false,
-      certificateKind: null, waived: false,
-      hoursStart: n.emHoras ? n.horaInicio : null, hoursEnd: n.emHoras ? n.horaFim : null,
-      fullName: p?.name ?? null, employeeCode: p?.matricula ?? null, departmentName: p?.setor ?? null,
-      subdepartmentName: p?.subsetor ?? null, positionName: p?.funcao ?? null, managerName: p?.gestor ?? null,
-      unitName: p?.unidade ?? null, docPath: null, docFilename: null, createdBy: meuId, createdByName: null,
-      submittedAt: null, decidedAt: null, decidedByName: null, decisionNote: null, cancelledAt: null, cancelNote: null,
-      emailStatus: null, emailAt: null,
-    };
-  };
-
   /**
-   * Fecha o Efetivar. Se o lançamento nasceu pelo "Já sei o motivo" e não foi ao
-   * RH, ele fica em aberto como qualquer outro, e o RH precisa saber: sai o
-   * aviso de abertura (uma vez só).
+   * Fecha o "Lançar ausência". Se o caminho com o motivo gravou o lançamento e o
+   * envio ao RH falhou depois, ele fica em aberto como qualquer outro, e o RH
+   * precisa saber: sai o aviso de abertura (uma vez só).
    */
-  const fecharEfetivar = () => {
-    const id = confirmando?.id;
-    setConfirmando(null);
+  const fecharNovo = () => {
+    setNovo(null);
     setErro("");
-    if (id && id === semComunicadoRef.current) {
-      marcarSemComunicado(null);
-      void comunicarAberturaPendente(id).then((r) => {
-        if (r.error || r.warning) setErro(r.error ?? r.warning ?? "");
-        else if (r.message) toast.success(r.message);
-        router.refresh();
-      });
-    }
+    const id = semComunicadoRef.current;
+    if (!id) return;
+    marcarSemComunicado(null);
+    void comunicarAberturaPendente(id).then((r) => {
+      if (r.error || r.warning) setErro(r.error ?? r.warning ?? "");
+      else if (r.message) toast.success(r.message);
+      router.refresh();
+    });
   };
 
-  // o registro do Efetivar acompanha a lista (o anexo enviado aparece na hora);
-  // o recém-criado vale até a lista trazer o de verdade
+  const fecharEfetivar = () => { setConfirmando(null); setErro(""); };
+
+  // o registro do Efetivar acompanha a lista: o anexo enviado aparece na hora
   const linhaConfirmando = confirmando ? rows.find((r) => r.id === confirmando.id) ?? confirmando : null;
 
   const abrirDocumento = async (path: string) => {
@@ -490,17 +470,19 @@ export function AbsenteismosManager({
 
       {/* ---------------- lançamento da ausência ---------------- */}
       {novo && (
-        <Dialogo titulo="Lançar ausência" onFechar={() => setNovo(null)}>
+        <Dialogo titulo="Lançar ausência" onFechar={fecharNovo}>
           {/* dois caminhos num botão só (LUIZ, 11/11/2026) */}
           <div role="group" aria-label="Você já sabe o motivo?" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.5rem" }}>
             {([
-              [false, "Ainda não sei o motivo", "Comunica agora; o motivo e o atestado entram depois, pelo Efetivar."],
-              [true, "Já sei o motivo", "Já tenho o motivo ou o atestado: lança e envia ao RH de uma vez."],
+              [false, "Ainda não sei o motivo e/ou ainda não recebi o atestado/documento comprobatório", "Comunica agora. O motivo e o documento entram depois, pelo Efetivar."],
+              [true, "Já sei o motivo e já recebi o atestado/documento comprobatório", "Lança e envia ao RH de uma vez."],
             ] as [boolean, string, string][]).map(([v, titulo, texto]) => {
               const ativo = novo.comMotivo === v;
               return (
                 <button
                   key={titulo} type="button" aria-pressed={ativo}
+                  // depois de gravado (envio que falhou no meio), o caminho não troca mais
+                  disabled={Boolean(semComunicado) && !ativo}
                   onClick={() => setNovo((n) => (n ? { ...n, comMotivo: v } : n))}
                   style={{
                     textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit", padding: "0.65rem 0.8rem",
@@ -518,7 +500,7 @@ export function AbsenteismosManager({
 
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
             {novo.comMotivo
-              ? "Informe quem e quando, e continue: em seguida vêm o motivo, o período e o documento. Um comunicado só sai para o RH, no envio. Se você fechar antes de enviar, a ausência fica em aberto e o RH é avisado."
+              ? "Preencha o motivo, o período e o documento. O lançamento é gravado no envio, e um comunicado só sai para o RH."
               : <>
                   {novo.emHoras
                     ? "Use quando o colaborador se ausentou por algumas horas, chegou atrasado ou saiu mais cedo, e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
@@ -530,13 +512,18 @@ export function AbsenteismosManager({
 
           <div>
             <label className="label">Colaborador <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-            <PeoplePicker
-              people={pessoas.map((p) => ({ id: p.id, name: p.name }))}
-              selected={novo.userId ? [novo.userId] : []}
-              onChange={(ids) => setNovo((n) => (n ? { ...n, userId: ids[0] ?? "" } : n))}
-              placeholder="Buscar na sua equipe…"
-              single
-            />
+            {semComunicado ? (
+              // já gravado para esta pessoa (o envio falhou no meio): ela não troca mais
+              <div className="input" style={{ background: "var(--surface-2)" }}>{pessoaEscolhida?.name ?? "—"}</div>
+            ) : (
+              <PeoplePicker
+                people={pessoas.map((p) => ({ id: p.id, name: p.name }))}
+                selected={novo.userId ? [novo.userId] : []}
+                onChange={(ids) => setNovo((n) => (n ? { ...n, userId: ids[0] ?? "" } : n))}
+                placeholder="Buscar na sua equipe…"
+                single
+              />
+            )}
           </div>
 
           {pessoaEscolhida && (
@@ -554,6 +541,32 @@ export function AbsenteismosManager({
             </div>
           )}
 
+          {novo.comMotivo ? (
+            novo.userId ? (
+              <PainelConfirmacao
+                key={novo.userId}
+                linha={null}
+                novoPara={{ userId: novo.userId }}
+                tipos={tiposAtivos}
+                kindsComRedutor={kindsComRedutor}
+                onErro={setErro}
+                erro={erro}
+                onAbrirDocumento={abrirDocumento}
+                onCriado={marcarSemComunicado}
+                // enviado ao RH: o comunicado saiu no envio, não há aviso pendente
+                onEnviado={() => { marcarSemComunicado(null); setNovo(null); setErro(""); }}
+                onFechar={fecharNovo}
+              />
+            ) : (
+              <>
+                <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Escolha o colaborador para preencher o motivo e o documento.</p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={fecharNovo}>Cancelar</button>
+                </div>
+              </>
+            )
+          ) : (
+            <>
           {/* Dia e horário juntos, porque são a mesma pergunta: QUANDO.
               A marcação usa a mesma frase do Efetivar de propósito: quem lança
               aqui vai reencontrá-la lá, já preenchida, e duas palavras diferentes
@@ -605,43 +618,40 @@ export function AbsenteismosManager({
             </p>
           )}
 
-          {!novo.comMotivo && (
-            <div>
-              <label className="label">O que se sabe até agora</label>
-              <textarea
-                className="input" rows={3} value={novo.reasonNote}
-                placeholder="Ex.: não avisou nada até agora; avisou por mensagem que passaria no médico."
-                onChange={(e) => setNovo((n) => (n ? { ...n, reasonNote: e.target.value } : n))}
-              />
-              {/* escreveu que já tem o atestado: o caminho completo poupa a volta pelo Efetivar */}
-              {/\b(atestado|declara[çc][ãa]o)\b/i.test(novo.reasonNote) && (
-                <p style={{ fontSize: "0.78rem", margin: "0.4rem 0 0", display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-                  <span className="soft">Já está com o atestado?</span>
-                  <button type="button" className="btn btn-ghost btn-xs" onClick={() => setNovo((n) => (n ? { ...n, comMotivo: true } : n))}>
-                    Lançar já com o motivo
-                  </button>
-                </p>
-              )}
-            </div>
-          )}
+          <div>
+            <label className="label">O que se sabe até agora</label>
+            <textarea
+              className="input" rows={3} value={novo.reasonNote}
+              placeholder="Ex.: não avisou nada até agora; avisou por mensagem que passaria no médico."
+              onChange={(e) => setNovo((n) => (n ? { ...n, reasonNote: e.target.value } : n))}
+            />
+            {/* escreveu que já tem o atestado: o caminho completo poupa a volta pelo Efetivar */}
+            {/\b(atestado|declara[çc][ãa]o)\b/i.test(novo.reasonNote) && (
+              <p style={{ fontSize: "0.78rem", margin: "0.4rem 0 0", display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                <span className="soft">Já está com o atestado?</span>
+                <button type="button" className="btn btn-ghost btn-xs" onClick={() => setNovo((n) => (n ? { ...n, comMotivo: true } : n))}>
+                  Lançar já com o motivo
+                </button>
+              </p>
+            )}
+          </div>
 
           {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
 
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={lancar}>
-              {pendente ? "Lançando…" : novo.comMotivo ? "Continuar: motivo e documento" : "Lançar e comunicar"}
+              {pendente ? "Lançando…" : "Lançar e comunicar"}
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNovo(null)}>Cancelar</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={fecharNovo}>Cancelar</button>
           </div>
+            </>
+          )}
         </Dialogo>
       )}
 
       {/* ---------------- efetivação ---------------- */}
       {linhaConfirmando && (
-        <Dialogo
-          titulo={linhaConfirmando.id === semComunicado ? "Lançar ausência: motivo e documento" : "Efetivar a ausência"}
-          onFechar={fecharEfetivar}
-        >
+        <Dialogo titulo="Efetivar a ausência" onFechar={fecharEfetivar}>
           <PainelConfirmacao
             key={linhaConfirmando.id}
             linha={linhaConfirmando}
@@ -650,8 +660,6 @@ export function AbsenteismosManager({
             onErro={setErro}
             erro={erro}
             onAbrirDocumento={abrirDocumento}
-            // enviado ao RH: o comunicado já saiu no envio, não há aviso pendente
-            onEnviado={() => marcarSemComunicado(null)}
             onFechar={fecharEfetivar}
           />
         </Dialogo>
@@ -789,46 +797,58 @@ function BuscaCid({
  * bloco clínico e trava o envio sem o documento.
  */
 function PainelConfirmacao({
-  linha, tipos, kindsComRedutor, erro, onErro, onAbrirDocumento, onEnviado, onFechar,
+  linha, novoPara, tipos, kindsComRedutor, erro, onErro, onAbrirDocumento, onCriado, onEnviado, onFechar,
 }: {
-  linha: AbsenteismoRow;
+  /** o lançamento a efetivar; null no lançamento novo já com o motivo */
+  linha: AbsenteismoRow | null;
+  /** "Já sei o motivo" (LUIZ, 11/11/2026): para quem é; o lançamento só nasce no envio */
+  novoPara?: { userId: string };
   tipos: Tipo[];
   kindsComRedutor: Enums<"absence_kind">[];
   erro: string;
   onErro: (m: string) => void;
   onAbrirDocumento: (path: string) => void;
+  /** o lançamento novo foi gravado (o envio pode ainda falhar depois) */
+  onCriado?: (id: string) => void;
   /** chamado depois do envio ao RH dar certo, antes de fechar */
   onEnviado?: () => void;
   onFechar: () => void;
 }) {
+  const userId = linha?.userId ?? novoPara?.userId ?? "";
   const [c, setC] = useState<Confirmacao>({
-    absenceTypeId: linha.absenceTypeId ?? tipos[0]?.id ?? "",
-    startDate: linha.startDate ?? linha.occurredOn,
-    endDate: linha.endDate ?? linha.occurredOn,
-    note: linha.note ?? "",
-    parentesco: linha.kinship ?? "",
-    acidenteTrabalho: linha.workAccident,
-    tipoAtestado: linha.certificateKind ?? "medico",
-    abonada: linha.waived,
+    absenceTypeId: linha?.absenceTypeId ?? tipos[0]?.id ?? "",
+    startDate: linha?.startDate ?? linha?.occurredOn ?? hoje(),
+    endDate: linha?.endDate ?? linha?.occurredOn ?? hoje(),
+    note: linha?.note ?? "",
+    parentesco: linha?.kinship ?? "",
+    acidenteTrabalho: linha?.workAccident ?? false,
+    tipoAtestado: linha?.certificateKind ?? "medico",
+    abonada: linha?.waived ?? false,
     cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
-    emHoras: Boolean(linha.hoursStart),
-    horaInicio: linha.hoursStart?.slice(0, 5) ?? "",
-    horaFim: linha.hoursEnd?.slice(0, 5) ?? "",
+    emHoras: Boolean(linha?.hoursStart),
+    horaInicio: linha?.hoursStart?.slice(0, 5) ?? "",
+    horaFim: linha?.hoursEnd?.slice(0, 5) ?? "",
     acompanhado: "",
   });
   const [inss, setInss] = useState<AlertaInss | null>(null);
-  const [temDoc, setTemDoc] = useState(Boolean(linha.docPath));
+  const [temDoc, setTemDoc] = useState(Boolean(linha?.docPath));
+  // no lançamento novo o arquivo fica na tela até o envio (ainda não há onde guardá-lo)
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arquivoSubiu, setArquivoSubiu] = useState(false);
+  const [criadoId, setCriadoId] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
+  const ehNovo = !linha;
 
   const tipo = tipos.find((t) => t.id === c.absenceTypeId) ?? null;
 
   // O dado clínico já gravado vem pela RPC, uma vez, ao abrir. Não viaja na
   // listagem justamente para isso.
+  const idDoAtestado = linha?.requiresMedical ? linha.id : null;
   useEffect(() => {
-    if (!linha.requiresMedical) return;
+    if (!idDoAtestado) return;
     let vivo = true;
-    getAtestado(linha.id).then((a: AtestadoLido | null) => {
+    getAtestado(idDoAtestado).then((a: AtestadoLido | null) => {
       if (!vivo || !a) return;
       setC((x) => ({
         ...x,
@@ -839,36 +859,40 @@ function PainelConfirmacao({
       }));
     });
     return () => { vivo = false; };
-  }, [linha.id, linha.requiresMedical]);
+  }, [idDoAtestado]);
 
   // O alerta dos 15 dias vem do banco: a conta precisa do histórico inteiro do
   // colaborador, e não só do que está nesta tela.
   useEffect(() => {
+    if (!userId) return;
     let vivo = true;
-    getAlertaInss(linha.userId, c.endDate || undefined).then((r) => { if (vivo) setInss(r); });
+    getAlertaInss(userId, c.endDate || undefined).then((r) => { if (vivo) setInss(r); });
     return () => { vivo = false; };
-  }, [linha.userId, c.endDate]);
+  }, [userId, c.endDate]);
+
+  const dados = (id: string): ConfirmacaoInput => ({
+    id,
+    absenceTypeId: c.absenceTypeId,
+    startDate: c.startDate,
+    endDate: c.endDate,
+    note: c.note,
+    parentesco: c.parentesco,
+    acidenteTrabalho: c.acidenteTrabalho,
+    tipoAtestado: c.tipoAtestado,
+    abonada: c.abonada,
+    horaInicio: c.emHoras ? c.horaInicio : "",
+    horaFim: c.emHoras ? c.horaFim : "",
+    atestado: tipo?.requiresMedical ? {
+      cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
+      local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
+    } : undefined,
+  });
 
   const salvar = (depois?: () => void) => {
+    if (!linha) return;
     onErro("");
     iniciar(async () => {
-      const r = await salvarConfirmacao({
-        id: linha.id,
-        absenceTypeId: c.absenceTypeId,
-        startDate: c.startDate,
-        endDate: c.endDate,
-        note: c.note,
-        parentesco: c.parentesco,
-        acidenteTrabalho: c.acidenteTrabalho,
-        tipoAtestado: c.tipoAtestado,
-        abonada: c.abonada,
-        horaInicio: c.emHoras ? c.horaInicio : "",
-        horaFim: c.emHoras ? c.horaFim : "",
-        atestado: tipo?.requiresMedical ? {
-          cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
-          local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
-        } : undefined,
-      });
+      const r = await salvarConfirmacao(dados(linha.id));
       if (r.error) { onErro(r.error); return; }
       router.refresh();
       // Sem isto o botão não dizia nada: o diálogo fica aberto de propósito
@@ -881,48 +905,62 @@ function PainelConfirmacao({
 
   const enviar = async () => {
     const ok = await confirmDialog({
-      title: "Enviar ao RH",
+      title: ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH",
       confirmLabel: "Enviar",
       message: "Depois de enviado o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.",
     });
     if (!ok) return;
     onErro("");
     iniciar(async () => {
+      // lançamento novo: nasce agora, sem comunicado; o único sai no envio
+      let id = linha?.id ?? criadoId;
+      if (!id) {
+        const r = await lancarNaoComparecimento({
+          userId,
+          occurredOn: c.startDate,
+          reasonNote: "",
+          horaInicio: c.emHoras ? c.horaInicio : "",
+          horaFim: c.emHoras ? c.horaFim : "",
+          comunicar: false,
+        });
+        if (r.error || !r.id) { onErro(r.error ?? "Não foi possível lançar a ausência."); return; }
+        id = r.id;
+        setCriadoId(r.id);
+        onCriado?.(r.id);
+      }
+
       // salva antes de enviar: a RPC valida o que está GRAVADO, não o que está
       // na tela, e o gestor não deveria descobrir isso por uma mensagem estranha
-      const s = await salvarConfirmacao({
-        id: linha.id,
-        absenceTypeId: c.absenceTypeId,
-        startDate: c.startDate,
-        endDate: c.endDate,
-        note: c.note,
-        parentesco: c.parentesco,
-        acidenteTrabalho: c.acidenteTrabalho,
-        tipoAtestado: c.tipoAtestado,
-        abonada: c.abonada,
-        horaInicio: c.emHoras ? c.horaInicio : "",
-        horaFim: c.emHoras ? c.horaFim : "",
-        atestado: tipo?.requiresMedical ? {
-          cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
-          local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
-        } : undefined,
-      });
+      const s = await salvarConfirmacao(dados(id));
       if (s.error) { onErro(s.error); return; }
 
+      if (ehNovo && arquivo && !arquivoSubiu) {
+        const fd = new FormData();
+        fd.set("id", id);
+        fd.set("file", arquivo);
+        const a = await anexarDocumentoAbsenteismo(fd);
+        if (a.error) { onErro(a.error); return; }
+        setArquivoSubiu(true);
+      }
+
       const fd = new FormData();
-      fd.set("id", linha.id);
+      fd.set("id", id);
       const r = await confirmarAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
       onEnviado?.();
       onFechar();
       if (r.warning) toast.warning(r.warning);
-      else toast.success("Enviado ao RH.");
+      else toast.success(ehNovo ? "Ausência lançada e enviada ao RH." : "Enviado ao RH.");
       router.refresh();
     });
   };
 
+  const docOk = ehNovo ? Boolean(arquivo) : temDoc;
+
   return (
     <>
+      {linha && (
+        <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
         <Campo rotulo="Colaborador" valor={linha.fullName} />
         <Campo rotulo="Dia" valor={formatDate(linha.occurredOn)} />
@@ -930,6 +968,8 @@ function PainelConfirmacao({
         <Campo rotulo="Função" valor={linha.positionName} />
       </div>
       {linha.reasonNote && <Campo rotulo="O que se sabia no lançamento" valor={linha.reasonNote} />}
+        </>
+      )}
 
       {/* Quatro colunas do mesmo tamanho: o Motivo ocupava metade da linha e
           empurrava o Término para baixo, separando o par de datas. O mínimo é
@@ -1094,7 +1134,7 @@ function PainelConfirmacao({
                 {[["medico", "Médico"], ["odontologico", "Odontológico"]].map(([v, r]) => (
                   <label key={v} style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem", cursor: "pointer" }}>
                     <input
-                      type="radio" name={`tipo-atestado-${linha.id}`} value={v}
+                      type="radio" name={`tipo-atestado-${linha?.id ?? "novo"}`} value={v}
                       checked={c.tipoAtestado === v}
                       onChange={() => setC((x) => ({ ...x, tipoAtestado: v }))}
                     />
@@ -1173,14 +1213,18 @@ function PainelConfirmacao({
       {/* O anexo aparece para QUALQUER tipo: uma falta pode ter o print da
           conversa em que o colaborador a assume. O que o catálogo controla é a
           obrigatoriedade, não a possibilidade. */}
-      <Anexo
-        linha={linha}
-        obrigatorio={Boolean(tipo?.requiresDocument)}
-        temDoc={temDoc}
-        onMudou={(v) => setTemDoc(v)}
-        onErro={onErro}
-        onAbrir={onAbrirDocumento}
-      />
+      {linha ? (
+        <Anexo
+          linha={linha}
+          obrigatorio={Boolean(tipo?.requiresDocument)}
+          temDoc={temDoc}
+          onMudou={(v) => setTemDoc(v)}
+          onErro={onErro}
+          onAbrir={onAbrirDocumento}
+        />
+      ) : (
+        <AnexoNoEnvio obrigatorio={Boolean(tipo?.requiresDocument)} arquivo={arquivo} onArquivo={setArquivo} travado={arquivoSubiu} />
+      )}
 
       <div>
         <label className="label">Observação</label>
@@ -1194,18 +1238,21 @@ function PainelConfirmacao({
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-        <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => salvar()}>
-          {pendente ? "Salvando…" : "Salvar sem enviar"}
-        </button>
+        {/* no lançamento novo não há rascunho: quem ainda não tem tudo usa o outro caminho */}
+        {!ehNovo && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => salvar()}>
+            {pendente ? "Salvando…" : "Salvar sem enviar"}
+          </button>
+        )}
         <button
           type="button" className="btn btn-primary btn-sm"
-          disabled={pendente || (Boolean(tipo?.requiresDocument) && !temDoc)}
-          title={tipo?.requiresDocument && !temDoc ? "Anexe o documento primeiro" : undefined}
+          disabled={pendente || !userId || (Boolean(tipo?.requiresDocument) && !docOk)}
+          title={tipo?.requiresDocument && !docOk ? "Anexe o documento primeiro" : undefined}
           onClick={enviar}
         >
-          <Send size={15} /> Enviar ao RH
+          <Send size={15} /> {pendente && ehNovo ? "Enviando…" : ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH"}
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>Fechar</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>{ehNovo ? "Cancelar" : "Fechar"}</button>
       </div>
 
       <p className="soft" style={{ fontSize: "0.75rem", margin: 0 }}>
@@ -1285,6 +1332,49 @@ function Anexo({
         />
       )}
       {enviando && <p className="soft" style={{ fontSize: "0.75rem", margin: "0.4rem 0 0" }}>Enviando…</p>}
+    </div>
+  );
+}
+
+/**
+ * O anexo do lançamento novo: o arquivo fica na tela e sobe no envio, depois que
+ * o lançamento existe (o armazenamento é por lançamento).
+ */
+function AnexoNoEnvio({ obrigatorio, arquivo, onArquivo, travado }: {
+  obrigatorio: boolean;
+  arquivo: File | null;
+  onArquivo: (f: File | null) => void;
+  /** já subiu (envio que falhou depois): não troca mais */
+  travado: boolean;
+}) {
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.75rem" }}>
+      <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.3rem" }}>
+        Documento comprobatório
+        {obrigatorio
+          ? <span style={{ color: "var(--mh-danger)" }}> *</span>
+          : <span className="soft" style={{ fontWeight: 400 }}> (opcional)</span>}
+      </div>
+      <p className="soft" style={{ fontSize: "0.75rem", margin: "0 0 0.6rem" }}>
+        O atestado digitalizado ou, no caso de falta, um comprovante como o print da conversa em
+        que o colaborador confirma. PDF ou foto, até 10 MB. Sobe junto com o envio e fica em área
+        restrita.
+      </p>
+      {arquivo ? (
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem" }}>
+            <Paperclip size={15} aria-hidden /> {arquivo.name}
+          </span>
+          {!travado && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onArquivo(null)}>Remover</button>
+          )}
+        </div>
+      ) : (
+        <input
+          type="file" className="input" accept="application/pdf,image/*"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onArquivo(f); e.target.value = ""; }}
+        />
+      )}
     </div>
   );
 }
