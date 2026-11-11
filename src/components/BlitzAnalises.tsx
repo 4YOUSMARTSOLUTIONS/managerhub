@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays, Filter } from "lucide-react";
+import { CalendarDays, Filter, X } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -12,7 +12,7 @@ import {
 } from "./BlitzAderencia";
 import { BlitzAlertasLista, TratativasPendentesPorGestor, type SituacaoAlerta } from "./BlitzAlertasLista";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
-import { formatDate } from "@/lib/format";
+import { formatDate, normalizar } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 
 type Modo = "mes" | "ano" | "periodo";
@@ -50,6 +50,77 @@ function Segmentado<T extends string>({ opcoes, valor, onChange, rotulo: nome, d
 }
 
 const ROTULO_DO_MENU: React.CSSProperties = { fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" };
+
+/**
+ * Escolha de um valor com busca por digitação (LUIZ, 11/11/2026: gestor e função
+ * têm opções demais para rolar). Fechado, mostra o escolhido; ao focar, digitar
+ * reduz a lista (sem acento e sem caixa), clique ou Enter escolhe, Esc fecha.
+ * A lista abre dentro do painel, logo abaixo do campo.
+ */
+function ComBusca({ rotulo, valor, opcoes, onChange }: {
+  rotulo: string; valor: string; opcoes: string[]; onChange: (v: string) => void;
+}) {
+  const [texto, setTexto] = useState("");
+  const [aberto, setAberto] = useState(false);
+  const idDaLista = useId();
+  const termo = normalizar(texto.trim());
+  const lista = termo ? opcoes.filter((o) => normalizar(o).includes(termo)) : opcoes;
+  const escolher = (v: string) => { onChange(v); setAberto(false); setTexto(""); };
+  return (
+    <div>
+      <div style={{ position: "relative" }}>
+        <input
+          className="input" role="combobox" aria-expanded={aberto} aria-controls={idDaLista} aria-label={rotulo} autoComplete="off"
+          placeholder={aberto ? "Digite para buscar…" : `${rotulo}: todos`}
+          value={aberto ? texto : valor ? `${rotulo}: ${valor}` : ""}
+          onFocus={() => { setAberto(true); setTexto(""); }}
+          onBlur={() => setAberto(false)}
+          onChange={(e) => { setTexto(e.target.value); setAberto(true); }}
+          onKeyDown={(e) => {
+            // Esc fecha só a lista, não o painel dos filtros
+            if (e.key === "Escape") { e.stopPropagation(); setAberto(false); (e.target as HTMLInputElement).blur(); }
+            if (e.key === "Enter" && lista[0]) { e.preventDefault(); escolher(lista[0]); (e.target as HTMLInputElement).blur(); }
+          }}
+          style={{ paddingRight: valor ? "2rem" : undefined }}
+        />
+        {valor && !aberto && (
+          <button type="button" aria-label={`Tirar o filtro de ${rotulo.toLowerCase()}`} title="Tirar este filtro"
+            onClick={() => onChange("")}
+            style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--mh-text-2)", display: "grid", placeItems: "center", padding: 4 }}>
+            <X size={14} aria-hidden />
+          </button>
+        )}
+      </div>
+      {aberto && (
+        <div id={idDaLista} role="listbox" aria-label={rotulo} style={{
+          marginTop: 4, maxHeight: 220, overflowY: "auto", border: "1px solid var(--border)",
+          borderRadius: "var(--mh-radius-sm)", background: "var(--surface)", padding: 4,
+        }}>
+          {[...(termo ? [] : [""]), ...lista].map((o) => (
+            <button key={o || "__todos"} type="button" role="option" aria-selected={o === valor}
+              // mousedown antes do blur do campo: sem isso a lista fecha antes do clique
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => escolher(o)}
+              style={{
+                display: "block", width: "100%", textAlign: "left", padding: "0.4rem 0.5rem", border: "none",
+                borderRadius: "var(--mh-radius-sm)", font: "inherit", fontSize: "0.82rem", cursor: "pointer",
+                background: o === valor ? "var(--mh-primary-soft)" : "none",
+                color: o ? "var(--mh-text-1)" : "var(--mh-text-2)",
+              }}
+              onMouseEnter={(e) => { if (o !== valor) e.currentTarget.style.background = "var(--mh-surface-2)"; }}
+              onMouseLeave={(e) => { if (o !== valor) e.currentTarget.style.background = "none"; }}>
+              {o || `${rotulo}: todos`}
+            </button>
+          ))}
+          {lista.length === 0 && <div className="soft" style={{ fontSize: "0.8rem", padding: "0.4rem 0.5rem" }}>Nada encontrado.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Gestor e função têm muitas opções: ganham a busca por digitação. */
+const COM_BUSCA = new Set(["gestor", "funcao"]);
 
 /**
  * A tela da blitz para quem tem alçada (LUIZ, 11/11/2026). Uma linha só de
@@ -233,7 +304,10 @@ export function BlitzAnalises({
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
         <span className="soft" style={ROTULO_DO_MENU}>Filtrar por</span>
-        {FILTROS_PESSOA.map(({ campo, rotulo: nome }) => (
+        {FILTROS_PESSOA.map(({ campo, rotulo: nome }) => COM_BUSCA.has(campo) ? (
+          <ComBusca key={campo} rotulo={nome} valor={filtro[campo] ?? ""} opcoes={opcoes[campo] ?? []}
+            onChange={(v) => setFiltro((f) => ({ ...f, [campo]: v }))} />
+        ) : (
           <select key={campo} className="select" value={filtro[campo] ?? ""} aria-label={nome}
             onChange={(e) => setFiltro((f) => ({ ...f, [campo]: e.target.value }))}>
             <option value="">{nome}: todos</option>
