@@ -563,45 +563,71 @@ a {
   }
 }
 
-/* ── Blitz, aba Análises: a grade dos gráficos de aderência (LUIZ, 11/11/2026) ──
-   Larga: setor e, embaixo dele, as tratativas pendentes à esquerda; gestor
-   (comprido) à direita, ocupando as duas linhas. A segunda linha leva o espaço
-   que sobra (1fr), então as pendências ficam coladas no setor. Estreita (pela
-   largura do bloco, não da tela): setor, gestor e pendências, nessa ordem. */
-.blitz-aderencia-envoltorio { container-type: inline-size; }
-.blitz-aderencia-grade {
-  display: grid;
-  gap: 1rem;
-  align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "setor" "gestor" "pend";
+/* ── Blitz, aba Análises: o painel em três seções (LUIZ, 11/11/2026) ──
+   Grade de 12 colunas pela largura do bloco (BlitzPainel.tsx): estreito, tudo
+   em uma coluna; médio, dois por linha onde cabe; largo, as frações aprovadas. */
+.painel-envoltorio { container-type: inline-size; }
+.painel-grade { display: grid; gap: 1rem; grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.painel-grade > * { grid-column: span 12; min-width: 0; display: flex; flex-direction: column; }
+.painel-grade > * > section { flex: 1 1 auto; }
+@container (min-width: 700px) {
+  .painel-grade > .k-cob, .painel-grade > .k-qual,
+  .painel-grade > .p-motivos, .painel-grade > .p-meio,
+  .painel-grade > .p-pend, .painel-grade > .p-repete { grid-column: span 6; }
+  .lista-barras.duas-colunas { column-count: 2; }
 }
-.blitz-aderencia-grade > .area-setor { grid-area: setor; }
-.blitz-aderencia-grade > .area-gestor { grid-area: gestor; }
-.blitz-aderencia-grade > .area-pend { grid-area: pend; }
-@container (min-width: 976px) {
-  .blitz-aderencia-grade {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: auto 1fr;
-    grid-template-areas: "setor gestor" "pend gestor";
-  }
-  /* as duas colunas terminam juntas (LUIZ, 11/11/2026): as pendências esticam
-     até o fim do gestor, e o gestor estica se a esquerda for a mais alta */
-  .blitz-aderencia-grade > .area-pend,
-  .blitz-aderencia-grade > .area-gestor {
-    align-self: stretch;
-    display: flex;
-    flex-direction: column;
-  }
-  .blitz-aderencia-grade > .area-pend > *,
-  .blitz-aderencia-grade > .area-gestor > * {
-    flex: 1 1 auto;
-  }
+@container (min-width: 1150px) {
+  .painel-grade > .k-cob { grid-column: span 4; }
+  .painel-grade > .k-qual { grid-column: span 5; }
+  .painel-grade > .k-trat { grid-column: span 3; }
+  .painel-grade > .p-uni { grid-column: span 3; }
+  .painel-grade > .p-setor { grid-column: span 9; }
+  .painel-grade > .p-itens { grid-column: span 6; }
+  .painel-grade > .p-motivos, .painel-grade > .p-meio { grid-column: span 3; }
 }
-
-/* linhas de barra clicáveis (Blitz, Principais falhas) */
-.linha-de-barra.clicavel:hover,
-.linha-de-barra.clicavel:focus-visible { background: var(--mh-surface-2) !important; }
+.painel-secao {
+  display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mh-text-3);
+}
+.painel-secao::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.painel-cartao { display: flex; flex-direction: column; gap: 0.9rem; }
+.painel-numero.clicavel:hover, .painel-numero.clicavel:focus-visible { background: var(--mh-surface-2) !important; }
+.lista-barras { display: flex; flex-direction: column; gap: 2px; }
+/* duas colunas só na tela larga (o @container acima liga o column-count) */
+.lista-barras.duas-colunas { display: block; column-gap: 2.5rem; }
+.lista-barras-linha {
+  display: grid; grid-template-columns: minmax(110px, var(--largura-nome, 44%)) minmax(0, 1fr) auto;
+  align-items: center; gap: 0.6rem; padding: 3px 6px; border-radius: 6px; width: 100%;
+  background: none; border: none; font: inherit; color: inherit; text-align: left; break-inside: avoid;
+}
+.lista-barras-linha.clicavel { cursor: pointer; }
+.lista-barras-linha.clicavel:hover, .lista-barras-linha.clicavel:focus-visible { background: var(--mh-surface-2); }
+.lista-barras-nome {
+  font-size: 0.78rem; color: var(--mh-text-2); line-height: 1.25; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.lista-barras-trilho { height: 12px; border-radius: 4px; background: color-mix(in srgb, var(--mh-text-3) 16%, transparent); overflow: hidden; }
+.lista-barras-valor { font-size: 0.78rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* empilhado: nome e número em cima, barra inteira embaixo (cartão estreito ou nome comprido) */
+.lista-barras.empilhado { gap: 0.3rem; }
+.lista-barras.empilhado .lista-barras-linha {
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "nome valor" "trilho trilho";
+  row-gap: 0.3rem; column-gap: 0.75rem; align-items: baseline; padding: 4px 6px;
+}
+.lista-barras.empilhado .lista-barras-nome { grid-area: nome; color: var(--mh-text-1); }
+.lista-barras.empilhado .lista-barras-valor { grid-area: valor; }
+.lista-barras.empilhado .lista-barras-trilho { grid-area: trilho; height: 8px; }
+/* no celular toda lista fica empilhada: o nome ganha a largura inteira */
+@container (max-width: 699px) {
+  .lista-barras { gap: 0.3rem; }
+  .lista-barras .lista-barras-linha {
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "nome valor" "trilho trilho";
+    row-gap: 0.3rem; column-gap: 0.75rem; align-items: baseline; padding: 4px 6px;
+  }
+  .lista-barras .lista-barras-nome { grid-area: nome; color: var(--mh-text-1); }
+  .lista-barras .lista-barras-valor { grid-area: valor; }
+  .lista-barras .lista-barras-trilho { grid-area: trilho; height: 8px; }
+}
 
 /* ── celular: abaixo de 720px ──
    Utilitários para telas que mudam de forma no telefone (a primeira foi a

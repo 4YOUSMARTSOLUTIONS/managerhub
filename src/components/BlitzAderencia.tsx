@@ -39,7 +39,7 @@ export const passaNoFiltro = (o: ComCampos, f: FiltroPessoa, ignorar?: Campo) =>
   FILTROS_PESSOA.every(({ campo }) => campo === ignorar || !f[campo] || valorDoCampo(o, campo) === f[campo]);
 
 /** Agrupa o público por um campo: quantos são e quantos passaram. */
-function agrupar(pessoas: AderenciaPessoa[], campo: Campo): AderenciaGrupo[] {
+export function agrupar(pessoas: AderenciaPessoa[], campo: Campo): AderenciaGrupo[] {
   const m = new Map<string, AderenciaGrupo>();
   for (const p of pessoas) {
     const nome = p[campo] ?? VAZIO[campo];
@@ -62,7 +62,7 @@ function ordenar(grupos: AderenciaGrupo[]) {
  * é em OKLab entre o roxo da marca e o azul de informação do tema, então
  * acompanha o claro e o escuro sem cor fixa.
  */
-const corDaEscala = (t: number) =>
+export const corDaEscala = (t: number) =>
   `color-mix(in oklab, var(--mh-primary-500) ${100 - t}%, var(--mh-info) ${t}%)`;
 
 /**
@@ -72,7 +72,7 @@ const corDaEscala = (t: number) =>
  * barra continua absoluto, com eixo do zero até a maior aderência
  * arredondada para cima de 10 em 10.
  */
-function escalaDe(grupos: AderenciaGrupo[]) {
+export function escalaDe(grupos: AderenciaGrupo[]) {
   const ps = grupos.map((g) => pct(g.passaram, g.publico) ?? 0);
   const min = ps.length ? Math.min(...ps) : 0;
   const max = ps.length ? Math.max(...ps) : 0;
@@ -115,7 +115,7 @@ function clicavel(fazer: (() => void) | null, rotulo: string): React.HTMLAttribu
 }
 
 /** Clique num grupo: o nome e a situação em que a lista do público deve abrir. */
-type OnEscolher = (nome: string, situacao: SituacaoPessoa) => void;
+export type OnEscolher = (nome: string, situacao: SituacaoPessoa) => void;
 
 /**
  * Com gente faltando, o clique abre a lista em "Faltam passar"; com todos ok
@@ -128,7 +128,9 @@ const verQuem = (g: AderenciaGrupo) => (g.publico - g.passaram > 0 ? "Ver quem f
 const dicaDoGrupo = (g: AderenciaGrupo) => `Clique para ${verQuem(g).toLowerCase()}`;
 
 /** Barras em pé (setores): valor no topo, nome embaixo, detalhe no hover. */
-function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolher?: OnEscolher }) {
+export function BarrasEmPe({ grupos, onEscolher, rotulo = "Aderência por setor, da maior para a menor" }: {
+  grupos: AderenciaGrupo[]; onEscolher?: OnEscolher; rotulo?: string;
+}) {
   const [sobre, setSobre] = useState<string | null>(null);
   const ALTURA = 260; // área das barras, sem o rótulo de valor
   const { teto, cor } = escalaDe(grupos);
@@ -143,7 +145,7 @@ function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolh
             </span>
           ))}
         </div>
-        <div role="group" aria-label="Aderência por setor, da maior para a menor" style={{ position: "relative", height: ALTURA + 22 }}>
+        <div role="group" aria-label={rotulo} style={{ position: "relative", height: ALTURA + 22 }}>
           {[0.5, 1].map((f) => (
             <div key={f} aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: f * ALTURA, borderTop: "1px dashed var(--border)" }} />
           ))}
@@ -192,46 +194,11 @@ function BarrasEmPe({ grupos, onEscolher }: { grupos: AderenciaGrupo[]; onEscolh
   );
 }
 
-/** Barras deitadas (gestores, que são muitos e têm nomes longos). */
-function BarrasDeitadas({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: OnEscolher }) {
-  const [sobre, setSobre] = useState<string | null>(null);
-  const { teto, cor } = escalaDe(grupos);
-  return (
-    <div role="group" aria-label={`Aderência por ${rotulo.toLowerCase()}, da maior para a menor`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {grupos.map((g) => {
-        const p = pct(g.passaram, g.publico) ?? 0;
-        const ativo = sobre === g.nome;
-        const fazer = acaoDoGrupo(g, onEscolher);
-        return (
-          <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
-            {...clicavel(fazer, `${g.nome}: ${p}%, faltam ${g.publico - g.passaram}. ${verQuem(g)}`)}
-            style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(110px, 30%) 1fr 44px", alignItems: "center", gap: "0.6rem", padding: "3px 0", cursor: fazer ? "pointer" : "default" }}>
-            <span className="soft" title={g.nome} style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nome}</span>
-            <div style={{ height: 16, borderLeft: "1px solid var(--border)" }}>
-              <div style={{
-                width: `${(p / teto) * 100}%`, minWidth: p > 0 ? 3 : 0, height: "100%", borderRadius: "0 4px 4px 0",
-                background: cor(p), opacity: sobre && !ativo ? 0.5 : 1, transition: "opacity 120ms",
-              }} />
-            </div>
-            <span style={{ fontSize: "0.78rem", fontWeight: 700, textAlign: "right" }}>{p}%</span>
-            {ativo && (
-              <div role="tooltip" style={{
-                position: "absolute", left: "30%", bottom: "100%", zIndex: 5, pointerEvents: "none",
-                background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.35rem 0.6rem",
-                fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
-              }}>
-                <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
-                {fazer && <div className="soft" style={{ fontSize: "0.7rem", marginTop: 2 }}>{dicaDoGrupo(g)}</div>}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: OnEscolher }) {
+export function TabelaGrupos({ grupos, rotulo, onEscolher, nomear }: {
+  grupos: AderenciaGrupo[]; rotulo: string; onEscolher?: OnEscolher;
+  /** como o nome aparece (gente: o nome reduzido, com o inteiro na dica) */
+  nomear?: (nome: string) => string;
+}) {
   return (
     <div style={{ overflowX: "auto" }}>
       <table className="table">
@@ -250,7 +217,7 @@ function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]
             return (
             <tr key={g.nome} {...clicavel(fazer, `${g.nome}: ${verQuem(g).toLowerCase()}`)} title={fazer ? dicaDoGrupo(g) : undefined}
               style={{ cursor: fazer ? "pointer" : "default" }}>
-              <td style={{ fontWeight: 600 }}>{g.nome}</td>
+              <td style={{ fontWeight: 600 }} title={nomear ? g.nome : undefined}>{nomear ? nomear(g.nome) : g.nome}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.publico}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.passaram}</td>
               <td className="muted" style={{ textAlign: "right" }}>{g.publico - g.passaram}</td>
@@ -265,7 +232,7 @@ function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]
 }
 
 /** Uma seção do painel: o gráfico é a visão principal, a tabela é a alternativa. */
-function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
+export function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
   titulo: string; sufixo?: React.ReactNode;
   grafico: React.ReactNode; tabela: React.ReactNode; grupos: AderenciaGrupo[];
   /** uma linha sob o título (ex.: o que o clique faz) */
@@ -301,87 +268,6 @@ function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
         ? <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem público neste período.</p>
         : visao === "grafico" ? grafico : tabela}
     </section>
-  );
-}
-
-// ---------------------------------------------------------------- aderência
-
-/**
- * O painel de aderência do período (LUIZ, 11/11/2026), em três passos:
- *   1. cada unidade (Matriz, Filial), só leitura: o filtro de unidade é sempre
- *      o seletor do topo, nunca um dentro da página (LUIZ, 11/11/2026);
- *   2. por setor, em barras em pé;
- *   3. por gestor.
- * Gráfico é a visão principal; a tabela fica a um clique. Tudo calculado aqui a
- * partir do público pessoa a pessoa, sem voltar ao banco.
- */
-export function BlitzAderenciaDetalhe({ pessoas, onVerFaltam, pendencias }: {
-  /** o público já filtrado (setor, gestor, função; a unidade vem do seletor do topo) */
-  pessoas: AderenciaPessoa[];
-  /** clique numa barra ou linha: liga o filtro e abre a lista do público */
-  onVerFaltam?: (filtro: FiltroPessoa, situacao: SituacaoPessoa) => void;
-  /** o quadro de tratativas pendentes: ocupa o vão embaixo do gráfico por setor */
-  pendencias?: React.ReactNode;
-}) {
-  const escolher = (campo: "setor" | "gestor") =>
-    onVerFaltam ? (nome: string, situacao: SituacaoPessoa) => onVerFaltam({ [campo]: nome }, situacao) : undefined;
-  const dica = onVerFaltam ? "Clique numa barra para ver os colaboradores: quem falta ou, com 100%, quem passou." : undefined;
-  const unidades = useMemo(() => agrupar(pessoas, "unidade"), [pessoas]);
-  const setores = useMemo(() => agrupar(pessoas, "setor"), [pessoas]);
-  const gestores = useMemo(() => agrupar(pessoas, "gestor"), [pessoas]);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* 1. cada unidade, só leitura (a unidade se escolhe no seletor do topo) */}
-      <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-        <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Aderência por unidade</h4>
-        {unidades.length === 0 ? (
-          <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem público neste período.</p>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "0.8rem" }}>
-            {unidades.map((u) => {
-              const p = pct(u.passaram, u.publico) ?? 0;
-              const { cor } = escalaDe(unidades);
-              return (
-                <div key={u.nome}
-                  style={{
-                    borderRadius: "var(--mh-radius-lg)", padding: "0.9rem 1rem",
-                    background: "var(--surface-2)", color: "var(--mh-text-1)", border: "1px solid var(--border)",
-                  }}>
-                  <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>{u.nome}</div>
-                  <div style={{ fontSize: "1.8rem", fontWeight: 800, lineHeight: 1.2, margin: "0.2rem 0" }}>{p}%</div>
-                  <div style={{ height: 8, borderRadius: 99, background: "var(--border)", overflow: "hidden" }}>
-                    <div style={{ width: `${p}%`, height: "100%", background: cor(p), borderRadius: 99 }} />
-                  </div>
-                  <div className="soft" style={{ fontSize: "0.76rem", marginTop: "0.4rem" }}>
-                    {u.passaram} de {u.publico} passaram, faltam {u.publico - u.passaram}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* setor e gestor lado a lado; as pendências no vão embaixo do setor, ao lado
-          do gestor, que é comprido (LUIZ, 11/11/2026). Estreito: setor, gestor e
-          pendências, um embaixo do outro (globals.css, .blitz-aderencia-grade) */}
-      <div className="blitz-aderencia-envoltorio">
-        <div className="blitz-aderencia-grade">
-          <div className="area-setor">
-            <Secao titulo="Aderência por setor" grupos={setores} dica={dica}
-              grafico={<BarrasEmPe grupos={setores} onEscolher={escolher("setor")} />}
-              tabela={<TabelaGrupos grupos={setores} rotulo="Setor" onEscolher={escolher("setor")} />} />
-          </div>
-          <div className="area-gestor">
-            <Secao titulo="Aderência por gestor" grupos={gestores} dica={dica}
-              grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />}
-              tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />} />
-          </div>
-          {pendencias && <div className="area-pend">{pendencias}</div>}
-        </div>
-      </div>
-    </div>
   );
 }
 

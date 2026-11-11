@@ -3,15 +3,14 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { CalendarDays, Filter, X } from "lucide-react";
-import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dropdown } from "@/components/ui/Dropdown";
 import {
-  BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, FILTROS_PESSOA, passaNoFiltro, valorDoCampo,
+  BlitzColaboradoresLista, BlitzRecorrenciaLista, FILTROS_PESSOA, passaNoFiltro, valorDoCampo,
   type FiltroPessoa, type SituacaoPessoa,
 } from "./BlitzAderencia";
-import { BlitzAlertasLista, TratativasPendentesPorGestor, type SituacaoAlerta } from "./BlitzAlertasLista";
-import { BlitzFalhas } from "./BlitzFalhas";
+import { BlitzAlertasLista, type SituacaoAlerta } from "./BlitzAlertasLista";
+import { CartoesAgrupados, PainelDaBlitz } from "./BlitzPainel";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate, normalizar } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
@@ -338,53 +337,31 @@ export function BlitzAnalises({
     </Dropdown>
   );
 
-  // cartões sempre no topo das abas de análise (LUIZ, 11/11/2026)
-  const cartoes = (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))", gap: "0.8rem" }}>
-      {/* aderência primeiro, depois conformidade (LUIZ, 11/11/2026) */}
-      <StatCard
-        label="Aderência"
-        // a explicação da conta vira dica do cartão, em vez de uma linha na tela (LUIZ, 11/11/2026)
-        dica={
-          <>
-            Do público, quem passou pela blitz pelo menos uma vez no período. Setor, gestor e unidade são os de hoje.
-            Fora da conta: {ad.fora.por_funcao} por função, {ad.fora.por_excecao} por exceção e {ad.fora.ausentes} ausentes o período todo.
-          </>
-        }
-        value={aderencia === null ? "—" : `${aderencia}%`}
-        tone={aderencia === null ? "blue" : aderencia >= 90 ? "green" : aderencia >= 70 ? "amber" : "red"}
-        hint={`${passaram} de ${publico} do público passaram`}
-      />
-      <StatCard
-        label="Conformidade"
-        value={conformidade === null ? "—" : `${conformidade}%`}
-        tone={conformidade === null ? "blue" : conformidade >= 80 ? "green" : conformidade >= 50 ? "amber" : "red"}
-        hint={ind.total ? `${ind.conformes} de ${ind.total} blitz conformes` : "Nenhuma blitz no período"}
-      />
-      <StatCard label="Faltam passar" value={publico - passaram} hint="do público do período" />
-      {/* desvio e bloqueio pintados para chamar atenção; sem ocorrência, cartão neutro */}
-      <StatCard label="Liberadas com desvio" value={ind.com_desvio} tone={ind.com_desvio > 0 ? "amber" : "green"}
-        destaque={ind.com_desvio > 0 ? "amber" : undefined}
-        onClick={onVerRegistros && ind.com_desvio > 0 ? () => onVerRegistros("desvio", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
-        acao="Ver as blitz liberadas com desvio" />
-      <StatCard label="Bloqueios" value={ind.bloqueios} tone={ind.bloqueios > 0 ? "red" : "green"}
-        destaque={ind.bloqueios > 0 ? "red" : undefined}
-        onClick={onVerRegistros && ind.bloqueios > 0 ? () => onVerRegistros("bloqueado", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
-        acao="Ver as blitz bloqueadas" />
-      {/* o % tratado em destaque; o total de alertas já se lê nos dois cartões ao lado */}
-      <StatCard
-        label="Alertas com tratativa"
-        value={tratou === null ? "—" : `${tratou}%`}
-        hint={ind.alertas.enviados ? `${ind.alertas.com_tratativa} de ${ind.alertas.enviados} ${ind.alertas.enviados === 1 ? "alerta tratado" : "alertas tratados"}` : "Nenhum alerta no período"}
-      />
-    </div>
-  );
-
   const controles = (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
       {menuDosFiltros}
       {menuDoPeriodo}
     </div>
+  );
+
+  // a conta da aderência vira dica do cartão, sem o mês na frase (LUIZ, 11/11/2026)
+  const dicaAderencia = (
+    <>
+      Do público, quem passou pela blitz pelo menos uma vez no período. Setor, gestor e unidade são os de hoje.
+      Fora da conta: {ad.fora.por_funcao} por função, {ad.fora.por_excecao} por exceção e {ad.fora.ausentes} ausentes o período todo.
+    </>
+  );
+
+  // cartões sempre no topo das abas de análise, em três grupos (LUIZ, 11/11/2026)
+  const cartoes = (
+    <CartoesAgrupados
+      aderencia={aderencia} passaram={passaram} publico={publico}
+      conformidade={conformidade} total={ind.total} conformes={ind.conformes} desvio={ind.com_desvio} bloqueios={ind.bloqueios}
+      tratou={tratou} tratados={ind.alertas.com_tratativa} enviados={ind.alertas.enviados}
+      dicaAderencia={dicaAderencia}
+      onDesvio={onVerRegistros ? () => onVerRegistros("desvio", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
+      onBloqueio={onVerRegistros ? () => onVerRegistros("bloqueado", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
+    />
   );
 
   /** Uma aba de análise: (no celular, os botões), os cartões e o conteúdo. Os filtros ligados
@@ -401,15 +378,8 @@ export function BlitzAnalises({
     {
       id: "analises", label: rotuloAnalises,
       content: painel(
-        <>
-          {tratativas}
-          <BlitzAderenciaDetalhe pessoas={pessoas} onVerFaltam={verFaltam}
-            pendencias={alertas.some((a) => !a.registrada_em)
-              ? <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
-              : null} />
-          {/* o que mais falha: perguntas, motivos de bloqueio e meio (LUIZ, 11/11/2026) */}
-          <BlitzFalhas blitz={blitz ?? []} rotuloPeriodo={periodo} onVerItem={verItem} />
-        </>,
+        <PainelDaBlitz pessoas={pessoas} alertas={alertas} recorrencia={recorrencia} blitz={blitz ?? []} tratativas={tratativas}
+          onVerFaltam={verFaltam} onVerAlertas={verAlertas} onVerItem={verItem} onVerRecorrencia={() => onAba("recorrencia")} />,
       ),
     },
     {
