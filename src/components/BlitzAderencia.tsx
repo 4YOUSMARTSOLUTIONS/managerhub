@@ -308,20 +308,16 @@ function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
 
 /**
  * O painel de aderência do período (LUIZ, 11/11/2026), em três passos:
- *   1. cada unidade (Matriz, Filial), que também é o filtro dos próximos;
+ *   1. cada unidade (Matriz, Filial), só leitura: o filtro de unidade é sempre
+ *      o seletor do topo, nunca um dentro da página (LUIZ, 11/11/2026);
  *   2. por setor, em barras em pé;
  *   3. por gestor.
  * Gráfico é a visão principal; a tabela fica a um clique. Tudo calculado aqui a
  * partir do público pessoa a pessoa, sem voltar ao banco.
  */
-export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, onUnidade, fora, rotuloPeriodo, onVerFaltam, pendencias }: {
-  /** o público já filtrado (unidade, setor, gestor, função) */
+export function BlitzAderenciaDetalhe({ pessoas, fora, rotuloPeriodo, onVerFaltam, pendencias }: {
+  /** o público já filtrado (setor, gestor, função; a unidade vem do seletor do topo) */
   pessoas: AderenciaPessoa[];
-  /** filtrado por tudo menos a unidade: os cartões de unidade continuam todos à vista */
-  pessoasDasUnidades: AderenciaPessoa[];
-  /** a unidade do filtro único ("" = todas) */
-  unidade: string;
-  onUnidade: (unidade: string) => void;
   fora: AderenciaDados["fora"];
   /** "novembro de 2026", "2026", "01/11/2026 a 11/11/2026" */
   rotuloPeriodo: string;
@@ -333,16 +329,9 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
   const escolher = (campo: "setor" | "gestor") =>
     onVerFaltam ? (nome: string, situacao: SituacaoPessoa) => onVerFaltam({ [campo]: nome }, situacao) : undefined;
   const dica = onVerFaltam ? "Clique numa barra para ver os colaboradores: quem falta ou, com 100%, quem passou." : undefined;
-  const unidades = useMemo(() => agrupar(pessoasDasUnidades, "unidade"), [pessoasDasUnidades]);
+  const unidades = useMemo(() => agrupar(pessoas, "unidade"), [pessoas]);
   const setores = useMemo(() => agrupar(pessoas, "setor"), [pessoas]);
   const gestores = useMemo(() => agrupar(pessoas, "gestor"), [pessoas]);
-
-  const sufixo = unidade ? (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-      <Badge variant="quiet" tone="blue">{unidade}</Badge>
-      <button type="button" className="btn btn-ghost btn-xs" onClick={() => onUnidade("")}>Ver todas</button>
-    </span>
-  ) : <span className="soft" style={{ fontWeight: 500, fontSize: "0.8rem" }}>todas as unidades</span>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -351,12 +340,9 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
         Fora da conta: {fora.por_funcao} por função, {fora.por_excecao} por exceção e {fora.ausentes} ausentes o período todo.
       </p>
 
-      {/* 1. cada unidade; clicar filtra os próximos */}
+      {/* 1. cada unidade, só leitura (a unidade se escolhe no seletor do topo) */}
       <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-          <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Aderência por unidade</h4>
-          <span className="soft" style={{ fontSize: "0.76rem" }}>Clique numa unidade para ver setores e gestores só dela.</span>
-        </div>
+        <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Aderência por unidade</h4>
         {unidades.length === 0 ? (
           <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Sem público neste período.</p>
         ) : (
@@ -364,15 +350,11 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
             {unidades.map((u) => {
               const p = pct(u.passaram, u.publico) ?? 0;
               const { cor } = escalaDe(unidades);
-              const escolhida = unidade === u.nome;
               return (
-                <button key={u.nome} type="button" aria-pressed={escolhida} onClick={() => onUnidade(escolhida ? "" : u.nome)}
+                <div key={u.nome}
                   style={{
-                    textAlign: "left", cursor: "pointer", borderRadius: "var(--mh-radius-lg)", padding: "0.9rem 1rem",
-                    background: "var(--surface-2)", color: "var(--mh-text-1)",
-                    border: `1px solid ${escolhida ? "var(--mh-primary-500)" : "var(--border)"}`,
-                    boxShadow: escolhida ? "0 0 0 1px var(--mh-primary-500)" : "none",
-                    opacity: unidade && !escolhida ? 0.6 : 1,
+                    borderRadius: "var(--mh-radius-lg)", padding: "0.9rem 1rem",
+                    background: "var(--surface-2)", color: "var(--mh-text-1)", border: "1px solid var(--border)",
                   }}>
                   <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>{u.nome}</div>
                   <div style={{ fontSize: "1.8rem", fontWeight: 800, lineHeight: 1.2, margin: "0.2rem 0" }}>{p}%</div>
@@ -382,7 +364,7 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
                   <div className="soft" style={{ fontSize: "0.76rem", marginTop: "0.4rem" }}>
                     {u.passaram} de {u.publico} passaram, faltam {u.publico - u.passaram}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -395,12 +377,12 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
       <div className="blitz-aderencia-envoltorio">
         <div className="blitz-aderencia-grade">
           <div className="area-setor">
-            <Secao titulo="Aderência por setor" sufixo={sufixo} grupos={setores} dica={dica}
+            <Secao titulo="Aderência por setor" grupos={setores} dica={dica}
               grafico={<BarrasEmPe grupos={setores} onEscolher={escolher("setor")} />}
               tabela={<TabelaGrupos grupos={setores} rotulo="Setor" onEscolher={escolher("setor")} />} />
           </div>
           <div className="area-gestor">
-            <Secao titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores} dica={dica}
+            <Secao titulo="Aderência por gestor" grupos={gestores} dica={dica}
               grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />}
               tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />} />
           </div>

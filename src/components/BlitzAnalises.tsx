@@ -119,6 +119,13 @@ function ComBusca({ rotulo, valor, opcoes, onChange }: {
   );
 }
 
+/**
+ * Os filtros da página: setor, gestor e função. Unidade fica de fora de
+ * propósito: o filtro de unidade é sempre o seletor do topo, ao lado do sino
+ * (LUIZ, 11/11/2026), e ele já chega aqui no recorte da análise.
+ */
+const FILTROS_DA_TELA = FILTROS_PESSOA.filter(({ campo }) => campo !== "unidade");
+
 /** Gestor e função têm muitas opções: ganham a busca por digitação. */
 const COM_BUSCA = new Set(["gestor", "funcao"]);
 
@@ -225,11 +232,10 @@ export function BlitzAnalises({
   const pessoasTodas = useMemo(
     () => ad.pessoas ?? ad.faltam.map((f) => ({ ...f, passou: false })), [ad.pessoas, ad.faltam]);
   const pessoas = useMemo(() => pessoasTodas.filter((p) => passaNoFiltro(p, filtro)), [pessoasTodas, filtro]);
-  const pessoasDasUnidades = useMemo(() => pessoasTodas.filter((p) => passaNoFiltro(p, filtro, "unidade")), [pessoasTodas, filtro]);
   const alertas = useMemo(() => (dados.alertas ?? []).filter((a) => passaNoFiltro(a, filtro)), [dados.alertas, filtro]);
   const recorrencia = useMemo(() => dados.recorrencia.filter((r) => passaNoFiltro(r, filtro)), [dados.recorrencia, filtro]);
   const blitz = useMemo(() => dados.blitz?.filter((b) => passaNoFiltro(b, filtro)), [dados.blitz, filtro]);
-  const temFiltro = FILTROS_PESSOA.some(({ campo }) => filtro[campo]);
+  const temFiltro = FILTROS_DA_TELA.some(({ campo }) => filtro[campo]);
   // sem a lista de blitz (versão antiga do banco), vale o número do servidor
   const ind = blitz ? {
     total: blitz.length,
@@ -300,11 +306,11 @@ export function BlitzAnalises({
       alinharDireita={!celular}
       largura={280}
       titulo="Filtrar por unidade, setor, gestor e função"
-      contador={FILTROS_PESSOA.filter(({ campo }) => filtro[campo]).length}
+      contador={FILTROS_DA_TELA.filter(({ campo }) => filtro[campo]).length}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
         <span className="soft" style={ROTULO_DO_MENU}>Filtrar por</span>
-        {FILTROS_PESSOA.map(({ campo, rotulo: nome }) => COM_BUSCA.has(campo) ? (
+        {FILTROS_DA_TELA.map(({ campo, rotulo: nome }) => COM_BUSCA.has(campo) ? (
           <ComBusca key={campo} rotulo={nome} valor={filtro[campo] ?? ""} opcoes={opcoes[campo] ?? []}
             onChange={(v) => setFiltro((f) => ({ ...f, [campo]: v }))} />
         ) : (
@@ -379,8 +385,7 @@ export function BlitzAnalises({
       content: painel(
         <>
           {tratativas}
-          <BlitzAderenciaDetalhe pessoas={pessoas} pessoasDasUnidades={pessoasDasUnidades} fora={ad.fora}
-            unidade={filtro.unidade ?? ""} onUnidade={(u) => mudarFiltro({ unidade: u })}
+          <BlitzAderenciaDetalhe pessoas={pessoas} fora={ad.fora}
             rotuloPeriodo={periodo} onVerFaltam={verFaltam}
             pendencias={alertas.some((a) => !a.registrada_em)
               ? <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
