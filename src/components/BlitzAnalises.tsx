@@ -7,7 +7,7 @@ import { Users } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
-import { BlitzAderenciaDetalhe } from "./BlitzAderencia";
+import { BlitzAderenciaDetalhe, BlitzFaltamPassar } from "./BlitzAderencia";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate, shortName } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
@@ -188,9 +188,10 @@ export function BlitzAnalises({
         <Tabs
           variant="sub"
           tabs={[
+            { id: "aderencia", label: "Aderência", content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} /> },
             {
-              id: "aderencia", label: "Aderência",
-              content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
+              id: "faltam", label: `Faltam passar (${ad.faltam.length})`,
+              content: <BlitzFaltamPassar faltam={ad.faltam} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
             },
             { id: "recorrencia", label: `Recorrência (${dados.recorrencia.length})`, content: recorrencia },
           ]}
