@@ -11,6 +11,18 @@ import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 const BUCKET = "agenda-attachments";
 type Ctx = { supabase: SupabaseClient<Database>; tenantId: string; userId: string; role: Enums<"member_role"> };
 const clean = (v: string | null | undefined) => (v ?? "").trim() || null;
+
+/**
+ * Uma agenda de rotina ativa por pessoa: o gatilho do banco já explica o
+ * conflito com nome e dono da outra agenda; só o índice único (dois envios ao
+ * mesmo tempo) chega com a mensagem crua do Postgres.
+ */
+function mensagemDeAgenda(error: { code?: string; message: string }): string {
+  if (error.code === "23505" && error.message.includes("agendas_uma_ativa_por_pessoa_idx")) {
+    return "Essa pessoa já tem uma agenda de rotina ativa. Cada pessoa tem uma só: edite a que existe ou inative-a antes.";
+  }
+  return error.message;
+}
 const numOrNull = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : null; };
 
 // ---------- tipos de entrada ----------
@@ -87,7 +99,7 @@ export async function createAgenda(input: AgendaInput): Promise<ActionState> {
       can_responsible_edit: input.responsible_id === ctx.userId ? true : (input.can_responsible_edit ?? false),
       created_by: ctx.userId,
     }).select("id").single();
-    if (error) return { error: error.message };
+    if (error) return { error: mensagemDeAgenda(error) };
     await syncTasks(ctx, ag.id, input.tasks ?? []);
     revalidatePath("/agenda");
     return { ok: true };
@@ -107,7 +119,7 @@ export async function updateAgenda(input: AgendaInput): Promise<ActionState> {
       can_responsible_edit: input.responsible_id === ctx.userId ? true : (input.can_responsible_edit ?? false),
       updated_at: new Date().toISOString(),
     }).eq("id", input.id);
-    if (error) return { error: error.message };
+    if (error) return { error: mensagemDeAgenda(error) };
     await syncTasks(ctx, input.id, input.tasks ?? []);
     revalidatePath("/agenda");
     return { ok: true };
@@ -119,7 +131,7 @@ export async function toggleAgendaActive(input: { id: string; active: boolean })
     const ctx = await actionContext();
     const { error } = await ctx.supabase.from("agendas")
       .update({ active: input.active, updated_at: new Date().toISOString() }).eq("id", input.id);
-    if (error) return { error: error.message };
+    if (error) return { error: mensagemDeAgenda(error) };
     revalidatePath("/agenda");
     return { ok: true };
   } catch (e) { return { error: (e as Error).message }; }

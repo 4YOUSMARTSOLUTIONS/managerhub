@@ -81,13 +81,19 @@ function findOverlaps(tasks: TaskDraft[]): [string, string][] {
 }
 
 export function AgendaBuilderDialog({
-  open, onClose, agenda, people, currentUserId,
+  open, onClose, agenda, people, currentUserId, ativaPorPessoa = {},
 }: {
   open: boolean;
   onClose: () => void;
   agenda: AgendaFull | null;
   people: Opt[];
   currentUserId: string;
+  /**
+   * A agenda de rotina ativa de cada pessoa (das que esta tela enxerga). Cada
+   * pessoa tem uma só: o aviso sai aqui, ao escolher o responsável, e o banco
+   * recusa de qualquer jeito (inclusive a agenda que a RLS esconde daqui).
+   */
+  ativaPorPessoa?: Record<string, { id: string; name: string }>;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -134,6 +140,13 @@ export function AgendaBuilderDialog({
   const imprevistos = !!agenda?.imprevistos;
   const overlaps = useMemo(() => (imprevistos ? [] : findOverlaps(tasks)), [tasks, imprevistos]);
 
+  // agenda nova ou ativa indo para quem já tem outra ativa: não passa no banco
+  const outraAtiva = !imprevistos && responsibleId ? ativaPorPessoa[responsibleId] : undefined;
+  const conflitoDeAgenda = outraAtiva && outraAtiva.id !== agenda?.id && (!agenda || agenda.active)
+    ? `${people.find((p) => p.id === responsibleId)?.name ?? "Essa pessoa"} já tem a agenda ativa "${outraAtiva.name}". `
+      + "Cada pessoa tem uma agenda de rotina ativa só: edite essa agenda ou inative-a antes."
+    : null;
+
   if (!open) return null;
 
   const patch = (key: string, p: Partial<TaskDraft>) => setTasks((ts) => ts.map((t) => t.key === key ? { ...t, ...p } : t));
@@ -153,6 +166,7 @@ export function AgendaBuilderDialog({
     setError(null);
     if (!name.trim()) { setError("Informe o nome da agenda."); return; }
     if (!responsibleId) { setError("Escolha o responsável."); return; }
+    if (conflitoDeAgenda) { setError(conflitoDeAgenda); return; }
     const cleanTasks = tasks.filter((t) => t.title.trim());
     if (cleanTasks.length === 0) { setError("Adicione ao menos uma tarefa."); return; }
     if (overlaps.length > 0) { setError("Há tarefas com horários sobrepostos. Ajuste os horários ou a duração antes de salvar."); return; }
@@ -202,6 +216,11 @@ export function AgendaBuilderDialog({
               <label className="label">Responsável</label>
               {/* a agenda de demandas não previstas é de uma pessoa só */}
               <SearchSelect options={people} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" disabled={imprevistos} />
+              {conflitoDeAgenda && (
+                <p role="alert" style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: "0.4rem 0 0", background: "var(--mh-danger-soft)", padding: "0.45rem 0.65rem", borderRadius: 8 }}>
+                  {conflitoDeAgenda}
+                </p>
+              )}
             </div>
           </div>
 

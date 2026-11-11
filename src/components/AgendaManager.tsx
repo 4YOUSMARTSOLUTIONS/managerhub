@@ -341,6 +341,17 @@ export function AgendaManager(props: {
   const myAgendas = agendas.filter((a) => a.ownerId === currentUserId || a.responsibleId === currentUserId || isAdmin);
   const agendasDeRotina = myAgendas.filter((a) => !a.imprevistos);
   const agendasImprevistas = myAgendas.filter((a) => a.imprevistos);
+  // cada pessoa tem uma agenda de rotina ativa só (trava no banco desde
+  // 11/11/2026); as inativas guardam o histórico e ficam atrás do filtro
+  const [verInativas, setVerInativas] = useState(false);
+  const rotinaAtivas = agendasDeRotina.filter((a) => a.active);
+  const rotinaInativas = agendasDeRotina.length - rotinaAtivas.length;
+  const rotinaVisiveis = verInativas ? agendasDeRotina : rotinaAtivas;
+  const ativaPorPessoa = useMemo(() => {
+    const m: Record<string, { id: string; name: string }> = {};
+    for (const a of agendas) if (a.active && !a.imprevistos) m[a.responsibleId] = { id: a.id, name: a.name };
+    return m;
+  }, [agendas]);
 
   const excluirAgendaBotao = (a: AgendaFull, mensagem: React.ReactNode) => (
     <ConfirmActionButton action={deleteAgenda} fields={{ id: a.id }} className="icon-btn icon-btn-danger" buttonTitle="Excluir"
@@ -350,15 +361,23 @@ export function AgendaManager(props: {
   );
 
   const rotinaTab = (
-    <Section title={`${agendasDeRotina.length} ${agendasDeRotina.length === 1 ? "agenda" : "agendas"}`} padded={false}>
-      {agendasDeRotina.length === 0 ? (
+    <Section
+      title={`${rotinaAtivas.length} ${rotinaAtivas.length === 1 ? "agenda ativa" : "agendas ativas"}`}
+      padded={false}
+      action={rotinaInativas > 0 && (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVerInativas((v) => !v)}>
+          {verInativas ? "Ocultar inativas" : `Mostrar inativas (${rotinaInativas})`}
+        </button>
+      )}
+    >
+      {rotinaVisiveis.length === 0 ? (
         <EmptyState title="Nenhuma agenda" description="Crie uma agenda de rotina para você ou para um colaborador." />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table className="table">
             <thead><tr><th>Agenda</th><th>Responsável</th><th>Tarefas</th><th>Status</th><th style={{ textAlign: "right" }}>Ações</th></tr></thead>
             <tbody>
-              {agendasDeRotina.map((a) => (
+              {rotinaVisiveis.map((a) => (
                 <tr key={a.id} style={{ opacity: a.active ? 1 : 0.55 }}>
                   <td style={{ fontWeight: 600 }}>{a.name}</td>
                   <td className="muted">{shortName(a.responsibleName)}{a.responsibleId !== a.ownerId && <span className="soft"> · de {shortName(a.ownerName)}</span>}</td>
@@ -425,7 +444,7 @@ export function AgendaManager(props: {
   const agendasTab = (
     <Tabs
       tabs={[
-        { id: "rotina", label: `Agendas de rotina (${agendasDeRotina.length})`, content: rotinaTab },
+        { id: "rotina", label: `Agendas de rotina (${rotinaAtivas.length})`, content: rotinaTab },
         { id: "imprevistas", label: `Demandas não previstas (${agendasImprevistas.length})`, content: imprevistasTab },
       ]}
     />
@@ -669,7 +688,7 @@ export function AgendaManager(props: {
       {section === "historico" && historyTab}
 
       <AgendaViewDialog agenda={viewing} onClose={() => setViewing(null)} />
-      <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} currentUserId={currentUserId} />
+      <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} currentUserId={currentUserId} ativaPorPessoa={ativaPorPessoa} />
       <AgendaLogDetail ctx={detail} onClose={() => setDetail(null)} canFill={detailCanFill} nameById={nameById} />
       {demandaOpen && (
         <DemandaNaoPrevistaDialog
