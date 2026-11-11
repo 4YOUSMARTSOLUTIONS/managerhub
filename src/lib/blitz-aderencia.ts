@@ -22,6 +22,20 @@ export type AderenciaFalta = {
   ultima: string | null;
 };
 
+/** Uma pessoa do público no período: a tela agrupa e filtra a partir daqui. */
+export type AderenciaPessoa = {
+  user_id: string;
+  nome: string | null;
+  matricula: string | null;
+  funcao: string | null;
+  setor: string | null;
+  gestor: string | null;
+  unidade: string | null;
+  passou: boolean;
+  /** última blitz da pessoa em qualquer data (YYYY-MM-DD) */
+  ultima: string | null;
+};
+
 export type AderenciaDados = {
   publico: number;
   passaram: number;
@@ -31,6 +45,8 @@ export type AderenciaDados = {
   por_unidade: AderenciaGrupo[];
   por_funcao: AderenciaGrupo[];
   faltam: AderenciaFalta[];
+  /** o público pessoa a pessoa (desde 11/11/2026; ausente em respostas antigas) */
+  pessoas?: AderenciaPessoa[];
 };
 
 export type BlitzIndicadores = {
@@ -42,7 +58,17 @@ export type BlitzIndicadores = {
   alertas: { enviados: number; com_tratativa: number };
 };
 
-export type BlitzRecorrencia = { user_id: string; nome: string | null; setor: string | null; nao_conformes: number; total: number };
+export type BlitzRecorrencia = {
+  user_id: string;
+  nome: string | null;
+  setor: string | null;
+  /** da última blitz da pessoa no período */
+  gestor?: string | null;
+  unidade?: string | null;
+  funcao?: string | null;
+  nao_conformes: number;
+  total: number;
+};
 
 export type BlitzAnaliseDados = {
   de: string;

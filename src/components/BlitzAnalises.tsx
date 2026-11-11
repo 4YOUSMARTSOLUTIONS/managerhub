@@ -6,10 +6,9 @@ import { toast } from "sonner";
 import { Users } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
-import { Badge } from "@/components/ui/Badge";
-import { BlitzAderenciaDetalhe, BlitzFaltamPassar } from "./BlitzAderencia";
+import { BlitzAderenciaDetalhe, BlitzFaltamPassar, BlitzRecorrenciaLista } from "./BlitzAderencia";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
-import { formatDate, shortName } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 
 type Modo = "mes" | "ano" | "periodo";
@@ -81,43 +80,6 @@ export function BlitzAnalises({
   const aderencia = pct(ad.passaram, ad.publico);
   const tratou = pct(ind.alertas.com_tratativa, ind.alertas.enviados);
   const periodo = rotulo(modoDosDados, dados.de, dados.ate);
-
-  const recorrencia = (
-    <div className="card card-pad">
-      <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Recorrência de não conformidade</h3>
-      <p className="soft" style={{ fontSize: "0.76rem", margin: "0 0 0.7rem" }}>
-        Quantas vezes cada colaborador saiu não conforme em {periodo}. Recorrência é conversa de gestor, não de multa.
-      </p>
-      {dados.recorrencia.length === 0 ? (
-        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém saiu não conforme no período.</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Colaborador</th>
-                <th className="so-desktop" style={{ width: 160 }}>Setor</th>
-                <th style={{ width: 120, textAlign: "right" }}>Não conformes</th>
-                <th style={{ width: 80, textAlign: "right" }}>Blitzes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dados.recorrencia.map((r) => (
-                <tr key={r.user_id}>
-                  <td style={{ fontWeight: 600 }}>{shortName(r.nome)}</td>
-                  <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <Badge tone={r.nao_conformes >= 3 ? "red" : "amber"}>{r.nao_conformes}</Badge>
-                  </td>
-                  <td className="muted" style={{ textAlign: "right", fontSize: "0.82rem" }}>{r.total}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
@@ -191,9 +153,12 @@ export function BlitzAnalises({
             { id: "aderencia", label: "Aderência", content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} /> },
             {
               id: "faltam", label: `Faltam passar (${ad.faltam.length})`,
-              content: <BlitzFaltamPassar faltam={ad.faltam} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
+              content: <BlitzFaltamPassar dados={ad} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
             },
-            { id: "recorrencia", label: `Recorrência (${dados.recorrencia.length})`, content: recorrencia },
+            {
+              id: "recorrencia", label: `Recorrência (${dados.recorrencia.length})`,
+              content: <BlitzRecorrenciaLista recorrencia={dados.recorrencia} rotuloPeriodo={periodo} />,
+            },
           ]}
         />
       </div>
