@@ -35,12 +35,14 @@ export function BlitzPublicoManager({
   const [erro, setErro] = useState("");
 
   const termo = normalizar(busca.trim());
+  // função sem ninguém hoje não entra na lista (LUIZ, 11/11/2026), a não ser
+  // que já esteja marcada: aí aparece para poder ser desmarcada
   const funcoes = useMemo(
-    () => config.funcoes.filter((f) => !termo || normalizar(f.name).includes(termo)),
-    [config.funcoes, termo],
+    () => config.funcoes.filter((f) =>
+      (f.pessoas > 0 || config.funcoesFora.includes(f.id)) && (!termo || normalizar(f.name).includes(termo))),
+    [config.funcoes, config.funcoesFora, termo],
   );
   const pessoasFora = config.funcoes.filter((f) => fora.has(f.id)).reduce((n, f) => n + f.pessoas, 0);
-  const visiveisMarcadas = funcoes.filter((f) => fora.has(f.id)).length;
 
   const mudou = useMemo(() => {
     const antes = new Set(config.funcoesFora);
@@ -52,12 +54,6 @@ export function BlitzPublicoManager({
   const alternar = (id: string) => setFora((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id); else n.add(id);
-    return n;
-  });
-  // vale para a lista em vista: busque "MOTORISTA" e marque todas de uma vez
-  const marcarVisiveis = (marcar: boolean) => setFora((s) => {
-    const n = new Set(s);
-    for (const f of funcoes) { if (marcar) n.add(f.id); else n.delete(f.id); }
     return n;
   });
 
@@ -102,21 +98,8 @@ export function BlitzPublicoManager({
             {fora.size} {fora.size === 1 ? "função" : "funções"}, {pessoasFora} {pessoasFora === 1 ? "pessoa" : "pessoas"} hoje
           </span>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-          <input className="input" placeholder="Buscar função…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ flex: "1 1 220px" }} />
-          {canEdit && (
-            <>
-              <button type="button" className="btn btn-ghost btn-sm" disabled={funcoes.length === 0 || visiveisMarcadas === funcoes.length}
-                onClick={() => marcarVisiveis(true)}>
-                {termo ? `Marcar as ${funcoes.length} da busca` : "Marcar todas"}
-              </button>
-              <button type="button" className="btn btn-ghost btn-sm" disabled={visiveisMarcadas === 0}
-                onClick={() => marcarVisiveis(false)}>
-                {termo ? "Desmarcar as da busca" : "Desmarcar todas"}
-              </button>
-            </>
-          )}
-        </div>
+        {/* a lista é de quem NÃO passa: quase sempre poucas funções, marcadas uma a uma */}
+        <input className="input" placeholder="Buscar função…" value={busca} onChange={(e) => setBusca(e.target.value)} />
         <div style={{ maxHeight: 340, overflowY: "auto", marginTop: "0.5rem", border: "1px solid var(--border)", borderRadius: 8 }}>
           {funcoes.length === 0 ? (
             <p className="soft" style={{ fontSize: "0.82rem", margin: 0, padding: "0.7rem" }}>Nenhuma função com esse nome.</p>
