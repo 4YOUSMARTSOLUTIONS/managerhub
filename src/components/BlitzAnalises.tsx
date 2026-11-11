@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays, X } from "lucide-react";
+import { CalendarDays, Filter, X } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -177,15 +177,14 @@ export function BlitzAnalises({
     [...new Set([...pessoasTodas, ...(dados.blitz ?? [])].map((o) => valorDoCampo(o, campo)))]
       .sort((x, y) => x.localeCompare(y, "pt-BR"))])), [pessoasTodas, dados.blitz]);
 
-  // um botão só para o período, a visão e os filtros (LUIZ, 11/11/2026: tela mais limpa)
-  const menuDoFiltro = (
+  // um botão para o período e a visão (LUIZ, 11/11/2026: tela mais limpa)
+  const menuDoPeriodo = (
     <Dropdown
       rotulo={carregando ? "Carregando…" : `${periodo}${escopoDosDados === "minha" ? " · Minha gestão" : ""}`}
       icone={<CalendarDays size={15} aria-hidden />}
       alinharDireita={!celular}
       largura={300}
-      titulo="Período, visão e filtros das análises"
-      contador={FILTROS_PESSOA.filter(({ campo }) => filtro[campo]).length}
+      titulo="Período e visão das análises"
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
         <span className="soft" style={ROTULO_DO_MENU}>Período</span>
@@ -219,8 +218,21 @@ export function BlitzAnalises({
             opcoes={[["todos", "Todos"], ["minha", "Minha gestão"]]} />
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem", borderTop: "1px solid var(--border)", paddingTop: "0.7rem" }}>
-        <span className="soft" style={ROTULO_DO_MENU}>Filtrar</span>
+    </Dropdown>
+  );
+
+  // e outro, ao lado, para os filtros: dentro do período ninguém achava (LUIZ, 11/11/2026)
+  const menuDosFiltros = (
+    <Dropdown
+      rotulo="Filtros"
+      icone={<Filter size={15} aria-hidden />}
+      alinharDireita={!celular}
+      largura={280}
+      titulo="Filtrar por unidade, setor, gestor e função"
+      contador={FILTROS_PESSOA.filter(({ campo }) => filtro[campo]).length}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+        <span className="soft" style={ROTULO_DO_MENU}>Filtrar por</span>
         {FILTROS_PESSOA.map(({ campo, rotulo: nome }) => (
           <select key={campo} className="select" value={filtro[campo] ?? ""} aria-label={nome}
             onChange={(e) => setFiltro((f) => ({ ...f, [campo]: e.target.value }))}>
@@ -284,10 +296,17 @@ export function BlitzAnalises({
     </div>
   );
 
-  /** Uma aba de análise: (no celular, o botão do filtro), os filtros ligados, os cartões e o conteúdo. */
+  const controles = (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      {menuDosFiltros}
+      {menuDoPeriodo}
+    </div>
+  );
+
+  /** Uma aba de análise: (no celular, os botões), os filtros ligados, os cartões e o conteúdo. */
   const painel = (corpo: React.ReactNode) => (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", opacity: carregando ? 0.6 : 1 }}>
-      {celular && <div style={{ display: "flex" }}>{menuDoFiltro}</div>}
+      {celular && controles}
       {etiquetas}
       {cartoes}
       {corpo}
@@ -302,14 +321,10 @@ export function BlitzAnalises({
           {tratativas}
           <BlitzAderenciaDetalhe pessoas={pessoas} pessoasDasUnidades={pessoasDasUnidades} fora={ad.fora}
             unidade={filtro.unidade ?? ""} onUnidade={(u) => mudarFiltro({ unidade: u })}
-            rotuloPeriodo={periodo} onVerFaltam={verFaltam} />
-          {/* pendências por gestor por último e em meia largura (LUIZ, 11/11/2026); auto-fill
-              guarda a coluna vazia ao lado, e em tela estreita ocupa a linha toda */}
-          {alertas.some((a) => !a.registrada_em) && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 480px), 1fr))", gap: "1rem" }}>
-              <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
-            </div>
-          )}
+            rotuloPeriodo={periodo} onVerFaltam={verFaltam}
+            pendencias={alertas.some((a) => !a.registrada_em)
+              ? <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
+              : null} />
         </>,
       ),
     },
@@ -349,7 +364,7 @@ export function BlitzAnalises({
       tabs={abas}
       active={atual}
       onActiveChange={onAba}
-      aside={!celular && ehDeAnalise ? menuDoFiltro : undefined}
+      aside={!celular && ehDeAnalise ? controles : undefined}
     />
   );
 }

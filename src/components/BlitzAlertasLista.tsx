@@ -207,11 +207,18 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
   );
 }
 
+/** As duas cores do quadro: vermelho para bloqueio, amarelo para desvio, translúcidas, com a borda cheia. */
+const COR_PENDENCIA = {
+  bloqueio: { fundo: "color-mix(in srgb, var(--mh-danger) 55%, transparent)", borda: "var(--mh-danger)", rotulo: "Bloqueio" },
+  desvio: { fundo: "color-mix(in srgb, var(--mh-warning) 55%, transparent)", borda: "var(--mh-warning)", rotulo: "Liberado com desvio" },
+} as const;
+
 /**
- * Tratativas pendentes por gestor (LUIZ, 11/11/2026), no painel das Análises,
- * logo abaixo dos cartões: quem está devendo conversa com a equipe, do que
- * mais deve para o que menos deve. Clicar num gestor abre a subaba Alertas
- * filtrada nele. Some quando não há pendência.
+ * Tratativas pendentes por gestor (LUIZ, 11/11/2026), no painel das Análises:
+ * quem está devendo conversa com a equipe, do que mais deve para o que menos
+ * deve. A barra separa o que é bloqueio (vermelho) do que é liberado com
+ * desvio (amarelo), translúcidos. Clicar num gestor abre os Alertas filtrados
+ * nele. Some quando não há pendência.
  */
 export function TratativasPendentesPorGestor({ alertas, rotuloPeriodo, onVer }: {
   alertas: BlitzAlertaAnalise[];
@@ -220,12 +227,15 @@ export function TratativasPendentesPorGestor({ alertas, rotuloPeriodo, onVer }: 
 }) {
   const [sobre, setSobre] = useState<string | null>(null);
   const linhas = useMemo(() => {
-    const m = new Map<string, { gestor: string; pendentes: number; total: number }>();
+    const m = new Map<string, { gestor: string; pendentes: number; bloqueio: number; desvio: number; total: number }>();
     for (const a of alertas) {
       const g = gestorDe(a);
-      const l = m.get(g) ?? { gestor: g, pendentes: 0, total: 0 };
+      const l = m.get(g) ?? { gestor: g, pendentes: 0, bloqueio: 0, desvio: 0, total: 0 };
       l.total += 1;
-      if (!a.registrada_em) l.pendentes += 1;
+      if (!a.registrada_em) {
+        l.pendentes += 1;
+        if (a.liberado) l.desvio += 1; else l.bloqueio += 1;
+      }
       m.set(g, l);
     }
     return [...m.values()].filter((l) => l.pendentes > 0)
@@ -235,33 +245,55 @@ export function TratativasPendentesPorGestor({ alertas, rotuloPeriodo, onVer }: 
   if (linhas.length === 0) return null;
   const maior = Math.max(...linhas.map((l) => l.pendentes));
   const totalPendente = linhas.reduce((n, l) => n + l.pendentes, 0);
+  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
   return (
     <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.6rem", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.6rem", flexWrap: "wrap" }}>
         <div>
           <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Tratativas pendentes por gestor</h4>
           <p className="soft" style={{ fontSize: "0.74rem", margin: "0.2rem 0 0" }}>
             {totalPendente} {totalPendente === 1 ? "alerta" : "alertas"} de {rotuloPeriodo} sem tratativa registrada. Clique num gestor para ver os alertas dele.
           </p>
         </div>
+        {/* legenda: duas séries, então a cor nunca fica sozinha */}
+        <div style={{ display: "flex", gap: "0.8rem", fontSize: "0.72rem" }} className="soft">
+          {(["bloqueio", "desvio"] as const).map((k) => (
+            <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", whiteSpace: "nowrap" }}>
+              <span aria-hidden style={{ width: 10, height: 10, borderRadius: 3, background: COR_PENDENCIA[k].fundo, border: `1px solid ${COR_PENDENCIA[k].borda}` }} />
+              {COR_PENDENCIA[k].rotulo}
+            </span>
+          ))}
+        </div>
       </div>
       <div role="group" aria-label="Tratativas pendentes por gestor" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {linhas.map((l) => {
           const ativo = sobre === l.gestor;
           const ver = () => onVer(l.gestor);
+          const detalhe = [l.bloqueio ? plural(l.bloqueio, "bloqueio", "bloqueios") : "", l.desvio ? plural(l.desvio, "com desvio", "com desvio") : ""]
+            .filter(Boolean).join(" e ");
           return (
-            <div key={l.gestor} role="button" tabIndex={0} aria-label={`${l.gestor}: ${l.pendentes} de ${l.total} alertas sem tratativa. Ver os alertas`}
+            <div key={l.gestor} role="button" tabIndex={0}
+              aria-label={`${l.gestor}: ${l.pendentes} de ${l.total} alertas sem tratativa (${detalhe}). Ver os alertas`}
+              title={`${l.gestor}: ${detalhe} sem tratativa`}
               onClick={ver} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ver(); } }}
               onMouseEnter={() => setSobre(l.gestor)} onMouseLeave={() => setSobre(null)}
               style={{ display: "grid", gridTemplateColumns: "minmax(120px, 30%) 1fr 92px", alignItems: "center", gap: "0.6rem", padding: "3px 0", cursor: "pointer" }}>
-              <span className="soft" title={l.gestor} style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.gestor}</span>
+              <span className="soft" style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.gestor}</span>
               <div style={{ height: 16, borderLeft: "1px solid var(--border)" }}>
-                {/* pendência é o que pede ação: a cor de atenção do tema */}
+                {/* bloqueio primeiro (o mais grave), depois desvio; 2px entre os pedaços */}
                 <div style={{
-                  width: `${(l.pendentes / maior) * 100}%`, minWidth: 3, height: "100%", borderRadius: "0 4px 4px 0",
-                  background: "var(--mh-warning)", opacity: sobre && !ativo ? 0.5 : 1, transition: "opacity 120ms",
-                }} />
+                  display: "flex", gap: 2, width: `${(l.pendentes / maior) * 100}%`, minWidth: 6, height: "100%",
+                  opacity: sobre && !ativo ? 0.5 : 1, transition: "opacity 120ms",
+                }}>
+                  {(["bloqueio", "desvio"] as const).filter((k) => l[k] > 0).map((k, i, lista) => (
+                    <div key={k} style={{
+                      flex: l[k], minWidth: 3, height: "100%", background: COR_PENDENCIA[k].fundo,
+                      border: `1px solid ${COR_PENDENCIA[k].borda}`, borderLeft: i === 0 ? "none" : undefined,
+                      borderRadius: i === lista.length - 1 ? "0 4px 4px 0" : 0,
+                    }} />
+                  ))}
+                </div>
               </div>
               <span style={{ fontSize: "0.78rem", textAlign: "right", whiteSpace: "nowrap" }}>
                 <strong>{l.pendentes}</strong> <span className="soft">de {l.total}</span>

@@ -314,7 +314,7 @@ function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
  * Gráfico é a visão principal; a tabela fica a um clique. Tudo calculado aqui a
  * partir do público pessoa a pessoa, sem voltar ao banco.
  */
-export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, onUnidade, fora, rotuloPeriodo, onVerFaltam }: {
+export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, onUnidade, fora, rotuloPeriodo, onVerFaltam, pendencias }: {
   /** o público já filtrado (unidade, setor, gestor, função) */
   pessoas: AderenciaPessoa[];
   /** filtrado por tudo menos a unidade: os cartões de unidade continuam todos à vista */
@@ -327,6 +327,8 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
   rotuloPeriodo: string;
   /** clique numa barra ou linha: liga o filtro e abre a lista do público */
   onVerFaltam?: (filtro: FiltroPessoa, situacao: SituacaoPessoa) => void;
+  /** o quadro de tratativas pendentes: ocupa o vão embaixo do gráfico por setor */
+  pendencias?: React.ReactNode;
 }) {
   const escolher = (campo: "setor" | "gestor") =>
     onVerFaltam ? (nome: string, situacao: SituacaoPessoa) => onVerFaltam({ [campo]: nome }, situacao) : undefined;
@@ -387,14 +389,23 @@ export function BlitzAderenciaDetalhe({ pessoas, pessoasDasUnidades, unidade, on
         )}
       </section>
 
-      {/* setor e gestor lado a lado (LUIZ, 11/11/2026); empilham em tela estreita */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 480px), 1fr))", gap: "1rem", alignItems: "start" }}>
-        <Secao titulo="Aderência por setor" sufixo={sufixo} grupos={setores} dica={dica}
-          grafico={<BarrasEmPe grupos={setores} onEscolher={escolher("setor")} />}
-          tabela={<TabelaGrupos grupos={setores} rotulo="Setor" onEscolher={escolher("setor")} />} />
-        <Secao titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores} dica={dica}
-          grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />}
-          tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />} />
+      {/* setor e gestor lado a lado; as pendências no vão embaixo do setor, ao lado
+          do gestor, que é comprido (LUIZ, 11/11/2026). Estreito: setor, gestor e
+          pendências, um embaixo do outro (globals.css, .blitz-aderencia-grade) */}
+      <div className="blitz-aderencia-envoltorio">
+        <div className="blitz-aderencia-grade">
+          <div className="area-setor">
+            <Secao titulo="Aderência por setor" sufixo={sufixo} grupos={setores} dica={dica}
+              grafico={<BarrasEmPe grupos={setores} onEscolher={escolher("setor")} />}
+              tabela={<TabelaGrupos grupos={setores} rotulo="Setor" onEscolher={escolher("setor")} />} />
+          </div>
+          <div className="area-gestor">
+            <Secao titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores} dica={dica}
+              grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />}
+              tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />} />
+          </div>
+          {pendencias && <div className="area-pend">{pendencias}</div>}
+        </div>
       </div>
     </div>
   );

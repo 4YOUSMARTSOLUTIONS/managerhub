@@ -563,6 +563,30 @@ a {
   }
 }
 
+/* ── Blitz, aba Análises: a grade dos gráficos de aderência (LUIZ, 11/11/2026) ──
+   Larga: setor e, embaixo dele, as tratativas pendentes à esquerda; gestor
+   (comprido) à direita, ocupando as duas linhas. A segunda linha leva o espaço
+   que sobra (1fr), então as pendências ficam coladas no setor. Estreita (pela
+   largura do bloco, não da tela): setor, gestor e pendências, nessa ordem. */
+.blitz-aderencia-envoltorio { container-type: inline-size; }
+.blitz-aderencia-grade {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "setor" "gestor" "pend";
+}
+.blitz-aderencia-grade > .area-setor { grid-area: setor; }
+.blitz-aderencia-grade > .area-gestor { grid-area: gestor; }
+.blitz-aderencia-grade > .area-pend { grid-area: pend; }
+@container (min-width: 976px) {
+  .blitz-aderencia-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "setor gestor" "pend gestor";
+  }
+}
+
 /* ── celular: abaixo de 720px ──
    Utilitários para telas que mudam de forma no telefone (a primeira foi a
    Blitz de trajeto, usada na portaria pelo app instalado):
