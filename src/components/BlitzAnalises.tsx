@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays, Filter, X } from "lucide-react";
+import { CalendarDays, Filter } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -282,20 +282,6 @@ export function BlitzAnalises({
     </div>
   );
 
-  // o que está filtrado fica à vista, e cada um sai com um clique
-  const etiquetas = temFiltro && (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem" }}>
-      <span className="soft" style={{ fontSize: "0.78rem" }}>Filtrado por:</span>
-      {FILTROS_PESSOA.filter(({ campo }) => filtro[campo]).map(({ campo, rotulo: nome }) => (
-        <button key={campo} type="button" className="btn btn-ghost btn-xs" title="Tirar este filtro"
-          onClick={() => setFiltro((f) => ({ ...f, [campo]: "" }))}>
-          {nome}: {filtro[campo]} <X size={12} aria-hidden />
-        </button>
-      ))}
-      <button type="button" className="btn btn-ghost btn-xs" onClick={() => setFiltro({})}>Limpar</button>
-    </div>
-  );
-
   const controles = (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
       {menuDosFiltros}
@@ -303,11 +289,11 @@ export function BlitzAnalises({
     </div>
   );
 
-  /** Uma aba de análise: (no celular, os botões), os filtros ligados, os cartões e o conteúdo. */
+  /** Uma aba de análise: (no celular, os botões), os cartões e o conteúdo. Os filtros ligados
+   *  aparecem só dentro do botão Filtros, com o contador nele (LUIZ, 11/11/2026: a linha empurrava a tela). */
   const painel = (corpo: React.ReactNode) => (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", opacity: carregando ? 0.6 : 1 }}>
       {celular && controles}
-      {etiquetas}
       {cartoes}
       {corpo}
     </div>
