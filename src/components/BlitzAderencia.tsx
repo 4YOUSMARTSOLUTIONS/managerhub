@@ -376,7 +376,13 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
 }
 
 /** Quem repetiu o "não OK" no período; chega filtrada pelo filtro único das Análises. */
-export function BlitzRecorrenciaLista({ recorrencia: lista }: { recorrencia: BlitzRecorrencia[] }) {
+export function BlitzRecorrenciaLista({ recorrencia: todos }: { recorrencia: BlitzRecorrencia[] }) {
+  // a busca da aba, como em Colaboradores e Alertas (LUIZ, 11/11/2026)
+  const [busca, setBusca] = useState("");
+  const termo = normalizar(busca.trim());
+  const lista = useMemo(() => todos.filter((r) =>
+    !termo || normalizar([r.nome, r.matricula, r.setor, r.gestor, r.unidade].filter(Boolean).join(" ")).includes(termo),
+  ), [todos, termo]);
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -388,8 +394,14 @@ export function BlitzRecorrenciaLista({ recorrencia: lista }: { recorrencia: Bli
           blitz do colaborador no período.
         </p>
       </div>
-      {lista.length === 0 ? (
+      {todos.length > 0 && (
+        <input className="input" placeholder="Buscar nome ou matrícula…" value={busca} aria-label="Buscar na recorrência"
+          onChange={(e) => setBusca(e.target.value)} style={{ width: 260, maxWidth: "100%" }} />
+      )}
+      {todos.length === 0 ? (
         <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém saiu não conforme no período (com o filtro atual).</p>
+      ) : lista.length === 0 ? (
+        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém com essa busca.</p>
       ) : (
         <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto" }}>
           <table className="table">
