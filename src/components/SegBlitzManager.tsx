@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
@@ -14,8 +13,8 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
-import { BlitzAderencia } from "@/components/BlitzAderencia";
-import type { BlitzAderencia as BlitzAderenciaDados } from "@/lib/blitz-aderencia";
+import { BlitzAnalises } from "@/components/BlitzAnalises";
+import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
   SegBlitzDialog, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
@@ -48,17 +47,6 @@ export type BlitzRow = {
   respostas: { pergunta: string; resposta: Enums<"seg_blitz_resposta"> }[];
 };
 
-export type BlitzPainel = {
-  total: number;
-  conformes: number;
-  com_desvio: number;
-  bloqueios: number;
-  colaboradores: number;
-  alertas: { enviados: number; com_tratativa: number };
-  /** vazia para quem não tem alçada; recortada pela cadeia para team_lead */
-  recorrencia: { user_id: string; nome: string | null; setor: string | null; nao_conformes: number; total: number }[];
-};
-
 function dataBr(iso: string) {
   const [a, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}/${a}`;
@@ -77,8 +65,16 @@ function situacao(r: BlitzRow): { label: string; tone: "green" | "amber" | "red"
   return { label: "Conforme", tone: "green" };
 }
 
+const TELA_DE_CELULAR = "(max-width: 719px)";
+function assinarTela(avisar: () => void) {
+  const mq = window.matchMedia(TELA_DE_CELULAR);
+  mq.addEventListener("change", avisar);
+  return () => mq.removeEventListener("change", avisar);
+}
+const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
+
 export function SegBlitzManager({
-  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, painel, alertas, dono, tenantId, aderencia = null,
+  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -88,14 +84,14 @@ export function SegBlitzManager({
   perguntas: BlitzPerguntaOpt[];
   motivos: { id: string; name: string; active: boolean }[];
   veiculos: VeiculoSugestao[];
-  painel: BlitzPainel | null;
   /** os alertas do usuário logado como gestor */
   alertas: BlitzAlerta[];
-  /** aderência do mês (só para quem tem alçada); o público se configura em Configurações */
-  aderencia?: {
-    inicial: BlitzAderenciaDados;
+  /** as análises do mês corrente (só para quem tem alçada); o filtro da tela troca o período */
+  analise?: {
+    inicial: BlitzAnaliseDados;
     unitIds: string[] | null;
-    mesAtual: string;
+    hoje: string;
+    anos: number[];
     podeConfigurar: boolean;
   } | null;
   /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
@@ -149,16 +145,18 @@ export function SegBlitzManager({
 
   // tratativas que o gestor logado ainda deve: aparecem no título da aba
   const tratativasPendentes = alertas.filter((a) => !a.tratativa_em).length;
-  const temAnalises = alertas.length > 0 || !!aderencia || (!!painel && (painel.total > 0 || painel.recorrencia.length > 0));
+  const temAnalises = alertas.length > 0 || !!analise;
+  // no celular a ordem das abas muda (LUIZ, 11/11/2026): "+ Nova blitz" primeiro
+  const celular = useSyncExternalStore(assinarTela, ehCelular, () => false);
 
   const registros = (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
-      {podeAvaliar && (
-        <button type="button" className="btn btn-primary largo-no-celular" style={{ alignSelf: "flex-start" }} onClick={() => setNovo(true)}>
+      {podeAvaliar && !celular && (
+        <button type="button" className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={() => setNovo(true)}>
           <Plus size={15} /> Nova blitz
         </button>
       )}
-      <AvisoBlitzGuardadas dono={dono} tenantId={tenantId} />
+      {!celular && <AvisoBlitzGuardadas dono={dono} tenantId={tenantId} />}
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
         <input
           className="input" placeholder="Buscar por pessoa, placa, setor ou avaliador…"
@@ -271,91 +269,42 @@ export function SegBlitzManager({
     </div>
   );
 
-  // o indicador pedido: quem repete o "não OK", para o acompanhamento sair da
-  // memória e virar conversa. team_lead recebe só a própria cadeia.
-  const recorrencia = painel && painel.recorrencia.length > 0 ? (
-    <div className="card card-pad">
-      <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Recorrência de não conformidade</h3>
-      <p className="soft" style={{ fontSize: "0.76rem", margin: "0 0 0.7rem" }}>
-        Quantas vezes cada colaborador saiu não conforme no ano. Recorrência é conversa de
-        gestor, não de multa.
-      </p>
-      <div style={{ overflowX: "auto" }}>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Colaborador</th>
-            <th className="so-desktop" style={{ width: 160 }}>Setor</th>
-            <th style={{ width: 120, textAlign: "right" }}>Não conformes</th>
-            <th style={{ width: 80, textAlign: "right" }}>Blitzes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {painel.recorrencia.map((r) => (
-            <tr key={r.user_id}>
-              <td style={{ fontWeight: 600 }}>{shortName(r.nome)}</td>
-              <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
-              <td style={{ textAlign: "right" }}>
-                <Badge tone={r.nao_conformes >= 3 ? "red" : "amber"}>{r.nao_conformes}</Badge>
-              </td>
-              <td className="muted" style={{ textAlign: "right", fontSize: "0.82rem" }}>{r.total}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-    </div>
-  ) : null;
-
-  const subabasDeAnalise = [
-    ...(aderencia ? [{
-      id: "aderencia", label: "Aderência",
-      content: (
-        <BlitzAderencia
-          inicial={aderencia.inicial}
-          unitIds={aderencia.unitIds}
-          mesAtual={aderencia.mesAtual}
-          podeConfigurar={aderencia.podeConfigurar}
-        />
-      ),
-    }] : []),
-    ...(recorrencia ? [{ id: "recorrencia", label: `Recorrência (${painel!.recorrencia.length})`, content: recorrencia }] : []),
-  ];
-
-  // Cartões sempre no topo (LUIZ, 11/11/2026); embaixo, as tratativas que o
-  // gestor deve e as subabas de detalhe (aderência e recorrência)
+  // Análises: filtro de período, cartões no topo, tratativas e o detalhe
   const analises = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", paddingTop: "0.9rem" }}>
-      {painel && painel.total > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.8rem" }}>
-          <StatCard label="Blitzes no ano" value={painel.total} hint={`${painel.colaboradores} colaborador(es) abordado(s)`} />
-          <StatCard
-            label="Conformidade"
-            value={`${Math.round((painel.conformes / painel.total) * 100)}%`}
-            tone={painel.conformes / painel.total >= 0.8 ? "green" : painel.conformes / painel.total >= 0.5 ? "amber" : "red"}
-            hint={`${painel.conformes} de ${painel.total} conformes`}
-          />
-          <StatCard label="Liberadas com desvio" value={painel.com_desvio} tone="amber" />
-          <StatCard label="Bloqueios" value={painel.bloqueios} tone={painel.bloqueios > 0 ? "red" : "green"} />
-          {painel.alertas.enviados > 0 && (
-            <StatCard
-              label="Alertas com tratativa"
-              value={`${Math.round((painel.alertas.com_tratativa / painel.alertas.enviados) * 100)}%`}
-              tone={
-                painel.alertas.com_tratativa / painel.alertas.enviados >= 0.8 ? "green"
-                  : painel.alertas.com_tratativa / painel.alertas.enviados >= 0.5 ? "amber" : "red"
-              }
-              hint={`${painel.alertas.com_tratativa} de ${painel.alertas.enviados} gestores registraram`}
-            />
-          )}
-        </div>
+    <div style={{ paddingTop: "0.9rem" }}>
+      {analise ? (
+        <BlitzAnalises
+          inicial={analise.inicial}
+          unitIds={analise.unitIds}
+          hoje={analise.hoje}
+          anos={analise.anos}
+          podeConfigurar={analise.podeConfigurar}
+          tratativas={<SegBlitzTratativas alertas={alertas} />}
+        />
+      ) : (
+        <SegBlitzTratativas alertas={alertas} />
       )}
-      <SegBlitzTratativas alertas={alertas} />
-      {subabasDeAnalise.length > 1 ? (
-        <Tabs variant="sub" tabs={subabasDeAnalise} />
-      ) : subabasDeAnalise[0]?.content}
     </div>
   );
+
+  // a porta de entrada no celular: um toque e o formulário abre
+  const novaBlitz = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
+      <button type="button" className="btn btn-primary" style={{ width: "100%", minHeight: 56, fontSize: "1rem" }} onClick={() => setNovo(true)}>
+        <Plus size={18} /> Nova blitz
+      </button>
+      <AvisoBlitzGuardadas dono={dono} tenantId={tenantId} />
+    </div>
+  );
+
+  // computador: Análises, Registros. Celular: + Nova blitz, Registros, Análises
+  const abaAnalises = { id: "analises", label: tratativasPendentes ? `Análises (${tratativasPendentes})` : "Análises", content: analises };
+  const abas = [
+    ...(celular && podeAvaliar ? [{ id: "nova", label: "+ Nova blitz", content: novaBlitz }] : []),
+    ...(!celular && temAnalises ? [abaAnalises] : []),
+    { id: "registros", label: "Registros", content: registros },
+    ...(celular && temAnalises ? [abaAnalises] : []),
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
@@ -368,17 +317,9 @@ export function SegBlitzManager({
         }
       />
 
-      {/* Duas abas (LUIZ, 10/11/2026): quem avalia entra direto no registro, com
-          o botão e a lista do dia; indicadores, recorrência e tratativas ficam
-          na segunda. Sem nada para analisar, a página é só a lista. */}
-      {temAnalises ? (
-        <Tabs
-          tabs={[
-            { id: "registros", label: "Registros", content: registros },
-            { id: "analises", label: tratativasPendentes ? `Análises (${tratativasPendentes})` : "Análises", content: analises },
-          ]}
-        />
-      ) : registros}
+      {/* a ordem muda com a tela, então a chave remonta as abas e a primeira
+          (Análises no computador, "+ Nova blitz" no celular) abre selecionada */}
+      {abas.length > 1 ? <Tabs key={celular ? "celular" : "computador"} tabs={abas} /> : registros}
 
       {detalhe && (
         <DetailModal

@@ -1,9 +1,9 @@
 import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
-import { SegBlitzManager, type BlitzPainel, type BlitzRow } from "@/components/SegBlitzManager";
+import { SegBlitzManager, type BlitzRow } from "@/components/SegBlitzManager";
 import { getBlitzAlertas } from "@/lib/actions/seguranca";
-import type { BlitzAderencia } from "@/lib/blitz-aderencia";
+import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 
 /**
  * Blitz de trajeto.
@@ -35,7 +35,7 @@ export default async function SegurancaBlitzPage() {
     { data: blitzes }, { data: podeAvaliar }, membros,
     { data: meios }, { data: perguntas }, { data: perguntaMeios },
     { data: motivos }, { data: veiculos },
-    { data: painel }, alertas, { data: daSeguranca },
+    alertas, { data: daSeguranca },
   ] = await Promise.all([
     lista,
     supabase.rpc("pode_avaliar_blitz", { p_tenant: tenant.id }),
@@ -50,11 +50,6 @@ export default async function SegurancaBlitzPage() {
     // o veículo mais recente de cada colaborador vira a sugestão do formulário
     supabase.from("seg_veiculos").select("user_id, meio_id, placa, tipo_descricao, propriedade, cor, updated_at")
       .eq("tenant_id", tenant.id).eq("active", true).order("updated_at", { ascending: false }),
-    // painel do ano corrente, com a recorrência já recortada pela alçada
-    supabase.rpc("seg_blitz_painel", {
-      p_ano: new Date().getFullYear(),
-      p_unit_ids: unidades,
-    }),
     // os alertas do usuário logado como gestor
     getBlitzAlertas(),
     supabase.rpc("is_safety_member", { p_tenant: tenant.id }),
@@ -66,15 +61,18 @@ export default async function SegurancaBlitzPage() {
    */
   const temAlcada = role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || daSeguranca === true;
 
-  // Aderência do mês corrente (o seletor da tela troca o mês). O público mora
-  // em Configurações > Segurança; owner/admin ganham o atalho para lá.
+  // Análises do mês corrente (o filtro da tela troca o período). O público
+  // mora em Configurações > Segurança; owner/admin ganham o atalho para lá.
   const hojeSp = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const mesAtual = hojeSp.slice(0, 7);
+  const [anoAtual, mesNum] = hojeSp.split("-").map(Number);
+  const fimDoMes = `${hojeSp.slice(0, 7)}-${String(new Date(anoAtual, mesNum, 0).getDate()).padStart(2, "0")}`;
   const podeConfigurarPublico = role === "owner" || role === "admin";
-  const aderenciaRes = temAlcada
-    ? await supabase.rpc("seg_blitz_aderencia", { p_mes: `${mesAtual}-01`, p_unit_ids: unidades })
+  const analiseRes = temAlcada
+    ? await supabase.rpc("seg_blitz_analise", { p_de: `${hojeSp.slice(0, 7)}-01`, p_ate: fimDoMes, p_unit_ids: unidades })
     : { data: null };
-  const aderencia = (aderenciaRes.data ?? null) as unknown as BlitzAderencia | null;
+  const analise = (analiseRes.data ?? null) as unknown as BlitzAnaliseDados | null;
+  // a blitz começou em 2026: o filtro oferece de lá até o ano corrente
+  const anos = Array.from({ length: Math.max(1, anoAtual - 2026 + 1) }, (_, i) => anoAtual - i);
 
   const ids = (blitzes ?? []).map((b) => b.id);
   const { data: respostas } = ids.length
@@ -147,9 +145,8 @@ export default async function SegurancaBlitzPage() {
           userId: v.user_id, meioId: v.meio_id, placa: v.placa,
           tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor,
         }))}
-        painel={temAlcada ? ((painel ?? null) as BlitzPainel | null) : null}
-        aderencia={aderencia ? {
-          inicial: aderencia, unitIds: unidades, mesAtual, podeConfigurar: podeConfigurarPublico,
+        analise={analise ? {
+          inicial: analise, unitIds: unidades, hoje: hojeSp, anos, podeConfigurar: podeConfigurarPublico,
         } : null}
         alertas={alertas}
       />

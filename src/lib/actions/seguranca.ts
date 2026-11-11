@@ -8,7 +8,7 @@ import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import { hojeYmd, normalizar } from "@/lib/format";
 import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
-import type { BlitzAderencia } from "@/lib/blitz-aderencia";
+import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import type { Enums, Json } from "@/types/database";
 
 /**
@@ -1378,18 +1378,19 @@ export type BlitzAlerta = {
 };
 
 /**
- * Aderência à blitz de um mês ("YYYY-MM"). As unidades vêm do seletor do topo
- * (são só recorte: a RPC confere empresa e alçada).
+ * Análises da blitz num período (datas YYYY-MM-DD). As unidades vêm do seletor
+ * do topo (são só recorte: a RPC confere empresa e alçada).
  */
-export async function getBlitzAderencia(input: { mes: string; unitIds: string[] | null }): Promise<{ data?: BlitzAderencia; error?: string }> {
+export async function getBlitzAnalise(input: { de: string; ate: string; unitIds: string[] | null }): Promise<{ data?: BlitzAnaliseDados; error?: string }> {
   try {
-    if (!/^\d{4}-\d{2}$/.test(input.mes)) return { error: "Mês inválido." };
+    const data_ = /^\d{4}-\d{2}-\d{2}$/;
+    if (!data_.test(input.de) || !data_.test(input.ate) || input.ate < input.de) return { error: "Período inválido." };
     const { supabase } = await actionContext();
-    const { data, error } = await supabase.rpc("seg_blitz_aderencia", {
-      p_mes: `${input.mes}-01`, p_unit_ids: input.unitIds,
+    const { data, error } = await supabase.rpc("seg_blitz_analise", {
+      p_de: input.de, p_ate: input.ate, p_unit_ids: input.unitIds,
     });
     if (error) return { error: error.message };
-    return { data: data as unknown as BlitzAderencia };
+    return { data: data as unknown as BlitzAnaliseDados };
   } catch (e) {
     return { error: (e as Error).message };
   }
