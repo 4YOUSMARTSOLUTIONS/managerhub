@@ -408,56 +408,79 @@ const FILTROS_PESSOA: { campo: Campo; rotulo: string }[] = [
   { campo: "funcao", rotulo: "Função" },
 ];
 
+export type SituacaoPessoa = "todos" | "faltam" | "passaram";
+
 /**
- * Quem do público ainda não passou no período: a lista que a portaria usa no
- * dia a dia, com filtros (unidade, setor, gestor, função), busca e exportação.
+ * O público do período, pessoa a pessoa (LUIZ, 11/11/2026: uma lista só, com
+ * quem passou e quem falta, em vez de uma aba para cada). A situação fica num
+ * seletor no topo, com a contagem que respeita os outros filtros; quem falta
+ * vem primeiro. É a lista que a portaria usa no dia a dia, com filtros
+ * (unidade, setor, gestor, função), busca e exportação.
  */
-export function BlitzFaltamPassar({ dados, rotuloPeriodo, chaveArquivo, filtroInicial }: {
+export function BlitzColaboradoresLista({ dados, rotuloPeriodo, chaveArquivo, filtroInicial, situacaoInicial = "todos" }: {
   dados: AderenciaDados;
   rotuloPeriodo: string;
   /** pedaço do nome do arquivo exportado (ex.: 2026-11-01_2026-11-30) */
   chaveArquivo: string;
   /** o filtro que o clique no gráfico trouxe (quem usa remonta a lista com `key` a cada clique) */
   filtroInicial?: FiltroPessoa;
+  situacaoInicial?: SituacaoPessoa;
 }) {
-  const faltam = useMemo(
-    () => (dados.pessoas ? dados.pessoas.filter((p) => !p.passou) : dados.faltam.map((f) => ({ ...f, passou: false }))),
-    [dados],
-  );
+  // quem falta primeiro; dentro de cada grupo, a ordem do banco (nome)
+  const pessoas = useMemo(() => {
+    const todas = dados.pessoas ?? dados.faltam.map((f) => ({ ...f, passou: false }));
+    return [...todas.filter((x) => !x.passou), ...todas.filter((x) => x.passou)];
+  }, [dados]);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<FiltroPessoa>(filtroInicial ?? {});
-  const opcoes = useMemo(() => Object.fromEntries(FILTROS_PESSOA.map((c) => [c.campo, valoresDe(faltam.map((f) => f[c.campo]), VAZIO[c.campo])])), [faltam]);
+  const [situacao, setSituacao] = useState<SituacaoPessoa>(situacaoInicial);
+  const opcoes = useMemo(() => Object.fromEntries(FILTROS_PESSOA.map((c) => [c.campo, valoresDe(pessoas.map((f) => f[c.campo]), VAZIO[c.campo])])), [pessoas]);
   const termo = normalizar(busca.trim());
-  const lista = useMemo(() => faltam.filter((f) =>
+  const base = useMemo(() => pessoas.filter((f) =>
     FILTROS_PESSOA.every((c) => !filtro[c.campo] || (f[c.campo] ?? VAZIO[c.campo]) === filtro[c.campo])
     && (!termo || normalizar([f.nome, f.matricula, f.funcao, f.setor, f.gestor, f.unidade].filter(Boolean).join(" ")).includes(termo)),
-  ), [faltam, filtro, termo]);
+  ), [pessoas, filtro, termo]);
+  const conta = { todos: base.length, faltam: base.filter((f) => !f.passou).length, passaram: base.filter((f) => f.passou).length };
+  const lista = situacao === "todos" ? base : base.filter((f) => (situacao === "passaram") === f.passou);
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
         <div>
-          <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Faltam passar em {rotuloPeriodo}</h3>
+          <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Público da blitz em {rotuloPeriodo}</h3>
           <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0" }}>
-            Mostrando {lista.length} de {faltam.length} pessoas do público que ainda não passaram pela blitz no período.
+            Mostrando {lista.length} de {pessoas.length} pessoas. Passou quem fez a blitz pelo menos uma vez no período.
           </p>
         </div>
         <ExportButton
-          filename={`blitz-faltam-${chaveArquivo}.xlsx`}
-          sheetName="Faltam passar"
-          headers={["Matrícula", "Colaborador", "Função", "Setor", "Gestor", "Unidade", "Última blitz"]}
-          rows={lista.map((f) => [f.matricula ?? "", f.nome ?? "", f.funcao ?? "", f.setor ?? "", f.gestor ?? "", f.unidade ?? "", f.ultima ? formatDate(f.ultima) : ""])}
+          filename={`blitz-publico-${chaveArquivo}.xlsx`}
+          sheetName="Público"
+          headers={["Matrícula", "Colaborador", "Função", "Setor", "Gestor", "Unidade", "Situação", "Última blitz"]}
+          rows={lista.map((f) => [
+            f.matricula ?? "", f.nome ?? "", f.funcao ?? "", f.setor ?? "", f.gestor ?? "", f.unidade ?? "",
+            f.passou ? "Passou" : "Falta passar", f.ultima ? formatDate(f.ultima) : "",
+          ])}
         />
+      </div>
+      <div role="group" aria-label="Situação" style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+        {([["todos", "Todos"], ["faltam", "Faltam passar"], ["passaram", "Passaram"]] as [SituacaoPessoa, string][]).map(([v, r]) => (
+          <button key={v} type="button" aria-pressed={situacao === v}
+            className={`btn btn-sm ${situacao === v ? "btn-primary" : "btn-ghost"}`} onClick={() => setSituacao(v)}>
+            {r} ({conta[v]})
+          </button>
+        ))}
       </div>
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
         <input className="input" placeholder="Buscar nome ou matrícula…" value={busca}
           onChange={(e) => setBusca(e.target.value)} style={{ width: 220, maxWidth: "100%" }} />
         <Filtros campos={FILTROS_PESSOA} valores={filtro} opcoes={opcoes} onChange={(c, v) => setFiltro((f) => ({ ...f, [c]: v }))} />
       </div>
-      {faltam.length === 0 ? (
-        <EmptyState title="Ninguém faltando" description="Todo o público do período já passou pela blitz." />
+      {pessoas.length === 0 ? (
+        <EmptyState title="Sem público no período" description="Ninguém do público da blitz neste recorte." />
       ) : lista.length === 0 ? (
-        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém com esses filtros.</p>
+        <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>
+          {situacao === "faltam" && base.length > 0 ? "Ninguém faltando com esses filtros: todos já passaram." : "Ninguém com esses filtros."}
+        </p>
       ) : (
         <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto" }}>
           <table className="table">
@@ -468,6 +491,7 @@ export function BlitzFaltamPassar({ dados, rotuloPeriodo, chaveArquivo, filtroIn
                 <th>Setor</th>
                 <th className="so-desktop">Gestor</th>
                 <th className="so-desktop">Unidade</th>
+                <th style={{ width: 130 }}>Situação</th>
                 <th className="so-desktop" style={{ width: 110 }}>Última blitz</th>
               </tr>
             </thead>
@@ -482,6 +506,10 @@ export function BlitzFaltamPassar({ dados, rotuloPeriodo, chaveArquivo, filtroIn
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{f.setor ?? "—"}</td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{shortName(f.gestor) || "—"}</td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{f.unidade ?? "—"}</td>
+                  <td>
+                    {/* falta passar é o que pede ação: só ela leva a pílula tintada (DESIGN.md) */}
+                    {f.passou ? <Badge variant="quiet" tone="green">Passou</Badge> : <Badge tone="amber">Falta passar</Badge>}
+                  </td>
                   <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{f.ultima ? formatDate(f.ultima) : "Nunca"}</td>
                 </tr>
               ))}
@@ -493,7 +521,7 @@ export function BlitzFaltamPassar({ dados, rotuloPeriodo, chaveArquivo, filtroIn
   );
 }
 
-/** Quem repetiu o "não OK" no período, com os mesmos filtros da lista de quem falta. */
+/** Quem repetiu o "não OK" no período, com os mesmos filtros da lista do público. */
 export function BlitzRecorrenciaLista({ recorrencia, rotuloPeriodo }: { recorrencia: BlitzRecorrencia[]; rotuloPeriodo: string }) {
   const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>({});
   const opcoes = useMemo(

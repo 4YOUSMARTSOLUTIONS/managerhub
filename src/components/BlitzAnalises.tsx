@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
-import { BlitzAderenciaDetalhe, BlitzFaltamPassar, BlitzRecorrenciaLista, type FiltroPessoa } from "./BlitzAderencia";
+import { BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, type FiltroPessoa } from "./BlitzAderencia";
 import { BlitzAlertasLista } from "./BlitzAlertasLista";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate } from "@/lib/format";
@@ -57,7 +57,7 @@ export function BlitzAnalises({
   const [dados, setDados] = useState(inicial);
   const [modoDosDados, setModoDosDados] = useState<Modo>("mes");
   const [subaba, setSubaba] = useState("aderencia");
-  // o clique no gráfico de aderência leva para "Faltam passar" já filtrada
+  // o clique no gráfico de aderência leva para a lista do público, em "Faltam passar" e já filtrada
   // (LUIZ, 11/11/2026); a versão remonta a lista com o filtro novo a cada clique
   const [filtroFaltam, setFiltroFaltam] = useState<FiltroPessoa>({});
   const [versaoFaltam, setVersaoFaltam] = useState(0);
@@ -66,7 +66,7 @@ export function BlitzAnalises({
   const verFaltam = (f: FiltroPessoa) => {
     setFiltroFaltam(f);
     setVersaoFaltam((v) => v + 1);
-    setSubaba("faltam");
+    setSubaba("colaboradores");
     // a lista é mais curta que o painel: sobe até as subabas para ela não abrir fora da tela
     requestAnimationFrame(() => {
       const el = topoDasSubabas.current;
@@ -183,10 +183,13 @@ export function BlitzAnalises({
           tabs={[
             { id: "aderencia", label: "Aderência", content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} onVerFaltam={verFaltam} /> },
             {
-              id: "faltam", label: `Faltam passar (${ad.faltam.length})`,
+              // quem passou e quem falta numa lista só, com seletor (LUIZ, 11/11/2026);
+              // aberta pelo gráfico, já vem em "Faltam passar"
+              id: "colaboradores", label: `Colaboradores (${ad.publico})`,
               content: (
-                <BlitzFaltamPassar key={versaoFaltam} dados={ad} rotuloPeriodo={periodo}
-                  chaveArquivo={`${dados.de}_${dados.ate}`} filtroInicial={filtroFaltam} />
+                <BlitzColaboradoresLista key={versaoFaltam} dados={ad} rotuloPeriodo={periodo}
+                  chaveArquivo={`${dados.de}_${dados.ate}`} filtroInicial={filtroFaltam}
+                  situacaoInicial={versaoFaltam > 0 ? "faltam" : "todos"} />
               ),
             },
             {
