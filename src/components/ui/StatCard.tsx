@@ -21,7 +21,8 @@ export function StatCard({
   delta,
 }: {
   label: string;
-  value: number | string;
+  /** o número do cartão; um nó quando o cartão mostra mais de um número (ex.: alertas e sem tratativa) */
+  value: React.ReactNode;
   hint?: string;
   tone?: Tone;
   /** ícone Lucide, renderizado num tile tintado */

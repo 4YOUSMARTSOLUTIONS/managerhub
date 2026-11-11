@@ -156,11 +156,20 @@ export function BlitzAnalises({
           <StatCard label="Faltam passar" value={ad.publico - ad.passaram} hint="do público do período" />
           <StatCard label="Liberadas com desvio" value={ind.com_desvio} tone={ind.com_desvio > 0 ? "amber" : "green"} />
           <StatCard label="Bloqueios" value={ind.bloqueios} tone={ind.bloqueios > 0 ? "red" : "green"} />
+          {/* total e sem tratativa em destaque, o % tratado embaixo (LUIZ, 11/11/2026) */}
           <StatCard
-            label="Alertas com tratativa"
-            value={tratou === null ? "—" : `${tratou}%`}
-            tone={tratou === null ? "blue" : tratou >= 80 ? "green" : tratou >= 50 ? "amber" : "red"}
-            hint={ind.alertas.enviados ? `${ind.alertas.com_tratativa} de ${ind.alertas.enviados} gestores registraram` : "Nenhum alerta no período"}
+            label="Alertas"
+            value={
+              <span style={{ display: "inline-flex", alignItems: "flex-start", gap: "0.6rem 1rem", flexWrap: "wrap" }}>
+                {([[ind.alertas.enviados, "no total"], [ind.alertas.enviados - ind.alertas.com_tratativa, "sem tratativa"]] as const).map(([n, r]) => (
+                  <span key={r} style={{ display: "inline-flex", flexDirection: "column", gap: "0.3rem" }}>
+                    {n}
+                    <span className="soft" style={{ fontSize: "0.72rem", fontWeight: 500, letterSpacing: 0, whiteSpace: "nowrap" }}>{r}</span>
+                  </span>
+                ))}
+              </span>
+            }
+            hint={tratou === null ? "Nenhum alerta no período" : `${tratou}% tratado (${ind.alertas.com_tratativa} de ${ind.alertas.enviados})`}
           />
         </div>
 
