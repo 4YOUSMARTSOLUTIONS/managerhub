@@ -92,7 +92,6 @@ export function SegBlitzManager({
     unitIds: string[] | null;
     hoje: string;
     anos: number[];
-    podeConfigurar: boolean;
   } | null;
   /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
   dono: string;
@@ -148,6 +147,8 @@ export function SegBlitzManager({
   const temAnalises = alertas.length > 0 || !!analise;
   // no celular a ordem das abas muda (LUIZ, 11/11/2026): "+ Nova blitz" primeiro
   const celular = useSyncExternalStore(assinarTela, ehCelular, () => false);
+  // vaga do filtro de período das Análises na linha das abas (no computador)
+  const [vagaDoFiltro, setVagaDoFiltro] = useState<HTMLDivElement | null>(null);
 
   const registros = (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
@@ -278,7 +279,7 @@ export function SegBlitzManager({
           unitIds={analise.unitIds}
           hoje={analise.hoje}
           anos={analise.anos}
-          podeConfigurar={analise.podeConfigurar}
+          vagaDoFiltro={celular ? null : vagaDoFiltro}
           tratativas={<SegBlitzTratativas alertas={alertas} />}
         />
       ) : (
@@ -319,7 +320,9 @@ export function SegBlitzManager({
 
       {/* a ordem muda com a tela, então a chave remonta as abas e a primeira
           (Análises no computador, "+ Nova blitz" no celular) abre selecionada */}
-      {abas.length > 1 ? <Tabs key={celular ? "celular" : "computador"} tabs={abas} /> : registros}
+      {abas.length > 1
+        ? <Tabs key={celular ? "celular" : "computador"} tabs={abas} aside={!celular && temAnalises ? <div ref={setVagaDoFiltro} /> : undefined} />
+        : registros}
 
       {detalhe && (
         <DetailModal

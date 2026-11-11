@@ -62,11 +62,10 @@ export default async function SegurancaBlitzPage() {
   const temAlcada = role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || daSeguranca === true;
 
   // Análises do mês corrente (o filtro da tela troca o período). O público
-  // mora em Configurações > Segurança; owner/admin ganham o atalho para lá.
+  // da blitz se configura em Configurações > Segurança.
   const hojeSp = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const [anoAtual, mesNum] = hojeSp.split("-").map(Number);
   const fimDoMes = `${hojeSp.slice(0, 7)}-${String(new Date(anoAtual, mesNum, 0).getDate()).padStart(2, "0")}`;
-  const podeConfigurarPublico = role === "owner" || role === "admin";
   const analiseRes = temAlcada
     ? await supabase.rpc("seg_blitz_analise", { p_de: `${hojeSp.slice(0, 7)}-01`, p_ate: fimDoMes, p_unit_ids: unidades })
     : { data: null };
@@ -146,7 +145,7 @@ export default async function SegurancaBlitzPage() {
           tipoDescricao: v.tipo_descricao, propriedade: v.propriedade, cor: v.cor,
         }))}
         analise={analise ? {
-          inicial: analise, unitIds: unidades, hoje: hojeSp, anos, podeConfigurar: podeConfigurarPublico,
+          inicial: analise, unitIds: unidades, hoje: hojeSp, anos,
         } : null}
         alertas={alertas}
       />

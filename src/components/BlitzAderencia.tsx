@@ -13,7 +13,9 @@ import {
 // ---------------------------------------------------------------- base
 
 type Campo = "unidade" | "setor" | "gestor" | "funcao";
-const VAZIO: Record<Campo, string> = { unidade: "Sem unidade", setor: "Sem setor", gestor: "Sem gestor", funcao: "Sem função" };
+// Quem não tem gestor no cadastro hoje são os sucessores (JAIME e MARIANA): a
+// observação deixa claro de quem é a barra (LUIZ, 11/11/2026)
+const VAZIO: Record<Campo, string> = { unidade: "Sem unidade", setor: "Sem setor", gestor: "Sem gestor (sucessores)", funcao: "Sem função" };
 
 /** Agrupa o público por um campo: quantos são e quantos passaram. */
 function agrupar(pessoas: AderenciaPessoa[], campo: Campo): AderenciaGrupo[] {
@@ -39,15 +41,40 @@ function ordenar(grupos: AderenciaGrupo[]) {
  * é em OKLab entre o roxo da marca e o azul de informação do tema, então
  * acompanha o claro e o escuro sem cor fixa.
  */
-const corDaEscala = (p: number) =>
-  `color-mix(in oklab, var(--mh-primary-500) ${100 - p}%, var(--mh-info) ${p}%)`;
+const corDaEscala = (t: number) =>
+  `color-mix(in oklab, var(--mh-primary-500) ${100 - t}%, var(--mh-info) ${t}%)`;
 
-function LegendaEscala() {
+/**
+ * A cor é RELATIVA ao que está na tela: a menor aderência visível fica roxa
+ * cheia e a maior, azul cheia (com a escala absoluta, 20% e 54% saíam quase
+ * da mesma cor). A legenda mostra os dois valores reais. O comprimento da
+ * barra continua absoluto, com eixo do zero até a maior aderência
+ * arredondada para cima de 10 em 10.
+ */
+function escalaDe(grupos: AderenciaGrupo[]) {
+  const ps = grupos.map((g) => pct(g.passaram, g.publico) ?? 0);
+  const min = ps.length ? Math.min(...ps) : 0;
+  const max = ps.length ? Math.max(...ps) : 0;
+  const teto = Math.min(100, Math.max(10, Math.ceil(max / 10) * 10));
+  // faixa mínima de 30 pontos: 39% e 41% não podem sair roxo e azul opostos;
+  // 20% e 54% continuam com o contraste inteiro
+  const faixa = Math.max(max - min, 30);
+  let lo = (max + min) / 2 - faixa / 2;
+  let hi = lo + faixa;
+  if (lo < 0) { hi -= lo; lo = 0; }
+  if (hi > 100) { lo -= hi - 100; hi = 100; }
+  return {
+    min: Math.round(lo), max: Math.round(hi), teto,
+    cor: (p: number) => corDaEscala(Math.min(100, Math.max(0, ((p - lo) / (hi - lo)) * 100))),
+  };
+}
+
+function LegendaEscala({ min, max }: { min: number; max: number }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.72rem" }} className="soft">
-      <span>0%</span>
-      <span aria-hidden style={{ width: 90, height: 8, borderRadius: 99, background: "linear-gradient(90deg, var(--mh-primary-500), var(--mh-info))" }} />
-      <span>100%</span>
+      <span>{min}%</span>
+      <span aria-hidden style={{ width: 80, height: 8, borderRadius: 99, background: "linear-gradient(90deg, var(--mh-primary-500), var(--mh-info))" }} />
+      <span>{max}%</span>
     </div>
   );
 }
@@ -86,46 +113,60 @@ function Filtros({ campos, valores, opcoes, onChange }: {
 /** Barras em pé (setores): valor no topo, nome embaixo, detalhe no hover. */
 function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
   const [sobre, setSobre] = useState<string | null>(null);
-  const ALTURA = 200;
+  const ALTURA = 260; // área das barras, sem o rótulo de valor
+  const { teto, cor } = escalaDe(grupos);
   return (
     <div style={{ overflowX: "auto" }}>
-      <div
-        role="img" aria-label="Aderência por setor, da maior para a menor"
-        style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: 8, minWidth: grupos.length * 64, padding: "1.4rem 0 0" }}
-      >
-        {grupos.map((g) => {
-          const p = pct(g.passaram, g.publico) ?? 0;
-          const ativo = sobre === g.nome;
-          return (
-            <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
-              style={{ position: "relative", flex: "1 1 0", minWidth: 56, display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <span style={{ fontSize: "0.78rem", fontWeight: 700, marginBottom: 4 }}>{p}%</span>
-              {/* linha de referência discreta em 50%, desenhada no fundo de cada coluna */}
-              <div style={{
-                width: "100%", maxWidth: 64, height: ALTURA, display: "flex", alignItems: "flex-end", borderBottom: "1px solid var(--border)",
-                backgroundImage: "linear-gradient(to top, transparent calc(50% - 0.5px), var(--border) calc(50% - 0.5px), var(--border) calc(50% + 0.5px), transparent calc(50% + 0.5px))",
-              }}>
-                <div style={{
-                  width: "100%", height: `${Math.max(p, p > 0 ? 1.5 : 0)}%`, borderRadius: "4px 4px 0 0",
-                  background: corDaEscala(p), opacity: sobre && !ativo ? 0.55 : 1, transition: "opacity 120ms",
-                }} />
-              </div>
-              <span className="soft" title={g.nome} style={{
-                marginTop: 6, fontSize: "0.72rem", textAlign: "center", lineHeight: 1.25, height: "2.5em", overflow: "hidden",
-                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word",
-              }}>{g.nome}</span>
-              {ativo && (
-                <div role="tooltip" style={{
-                  position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", zIndex: 5, pointerEvents: "none",
-                  background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.35rem 0.6rem",
-                  fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
-                }}>
-                  <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
+      <div style={{ minWidth: grupos.length * 70, display: "grid", gridTemplateColumns: "34px 1fr", columnGap: 6 }}>
+        {/* eixo: 0, metade e o teto */}
+        <div aria-hidden style={{ position: "relative", height: ALTURA + 22 }}>
+          {[0, 0.5, 1].map((f) => (
+            <span key={f} className="soft" style={{ position: "absolute", right: 0, bottom: f * ALTURA - 6, fontSize: "0.66rem" }}>
+              {Math.round(teto * f)}%
+            </span>
+          ))}
+        </div>
+        <div role="img" aria-label="Aderência por setor, da maior para a menor" style={{ position: "relative", height: ALTURA + 22 }}>
+          {[0.5, 1].map((f) => (
+            <div key={f} aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: f * ALTURA, borderTop: "1px dashed var(--border)" }} />
+          ))}
+          <div aria-hidden style={{ position: "absolute", left: 0, right: 0, bottom: 0, borderTop: "1px solid var(--border)" }} />
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-end", gap: 10, padding: "0 6px" }}>
+            {grupos.map((g) => {
+              const p = pct(g.passaram, g.publico) ?? 0;
+              const ativo = sobre === g.nome;
+              return (
+                <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
+                  style={{ position: "relative", flex: "1 1 0", minWidth: 56, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 700, marginBottom: 4 }}>{p}%</span>
+                  <div style={{
+                    width: "78%", maxWidth: 110, height: Math.max((p / teto) * ALTURA, p > 0 ? 3 : 0), borderRadius: "4px 4px 0 0",
+                    background: cor(p), opacity: sobre && !ativo ? 0.5 : 1, transition: "opacity 120ms",
+                  }} />
+                  {ativo && (
+                    <div role="tooltip" style={{
+                      position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", zIndex: 5, pointerEvents: "none",
+                      background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.35rem 0.6rem",
+                      fontSize: "0.76rem", boxShadow: "var(--mh-shadow-e2)", whiteSpace: "nowrap",
+                    }}>
+                      <strong>{g.nome}</strong>: {g.passaram} de {g.publico} passaram ({p}%), faltam {g.publico - g.passaram}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
+        <span />
+        {/* nomes embaixo, na mesma grade das barras */}
+        <div style={{ display: "flex", gap: 10, padding: "6px 6px 0" }}>
+          {grupos.map((g) => (
+            <span key={g.nome} className="soft" title={g.nome} style={{
+              flex: "1 1 0", minWidth: 56, fontSize: "0.72rem", textAlign: "center", lineHeight: 1.25, height: "2.5em", overflow: "hidden",
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word",
+            }}>{g.nome}</span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -134,6 +175,7 @@ function BarrasEmPe({ grupos }: { grupos: AderenciaGrupo[] }) {
 /** Barras deitadas (gestores, que são muitos e têm nomes longos). */
 function BarrasDeitadas({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: string }) {
   const [sobre, setSobre] = useState<string | null>(null);
+  const { teto, cor } = escalaDe(grupos);
   return (
     <div role="img" aria-label={`Aderência por ${rotulo.toLowerCase()}, da maior para a menor`} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {grupos.map((g) => {
@@ -143,10 +185,10 @@ function BarrasDeitadas({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: 
           <div key={g.nome} onMouseEnter={() => setSobre(g.nome)} onMouseLeave={() => setSobre(null)}
             style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(110px, 30%) 1fr 44px", alignItems: "center", gap: "0.6rem", padding: "3px 0" }}>
             <span className="soft" title={g.nome} style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nome}</span>
-            <div style={{ height: 14, borderLeft: "1px solid var(--border)" }}>
+            <div style={{ height: 16, borderLeft: "1px solid var(--border)" }}>
               <div style={{
-                width: `${p}%`, minWidth: p > 0 ? 3 : 0, height: "100%", borderRadius: "0 4px 4px 0",
-                background: corDaEscala(p), opacity: sobre && !ativo ? 0.55 : 1, transition: "opacity 120ms",
+                width: `${(p / teto) * 100}%`, minWidth: p > 0 ? 3 : 0, height: "100%", borderRadius: "0 4px 4px 0",
+                background: cor(p), opacity: sobre && !ativo ? 0.5 : 1, transition: "opacity 120ms",
               }} />
             </div>
             <span style={{ fontSize: "0.78rem", fontWeight: 700, textAlign: "right" }}>{p}%</span>
@@ -196,10 +238,12 @@ function TabelaGrupos({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: st
 }
 
 /** Uma seção do painel: o gráfico é a visão principal, a tabela é a alternativa. */
-function Secao({ numero, titulo, sufixo, grafico, tabela, vazio }: {
+function Secao({ numero, titulo, sufixo, grafico, tabela, grupos }: {
   numero: number; titulo: string; sufixo?: React.ReactNode;
-  grafico: React.ReactNode; tabela: React.ReactNode; vazio: boolean;
+  grafico: React.ReactNode; tabela: React.ReactNode; grupos: AderenciaGrupo[];
 }) {
+  const vazio = grupos.length === 0;
+  const { min, max } = escalaDe(grupos);
   const [visao, setVisao] = useState<"grafico" | "tabela">("grafico");
   return (
     <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
@@ -208,7 +252,7 @@ function Secao({ numero, titulo, sufixo, grafico, tabela, vazio }: {
           <span className="soft" style={{ fontWeight: 600 }}>{numero}.</span> {titulo} {sufixo}
         </h4>
         <div style={{ display: "flex", alignItems: "center", gap: "0.7rem", flexWrap: "wrap" }}>
-          {visao === "grafico" && !vazio && <LegendaEscala />}
+          {visao === "grafico" && !vazio && <LegendaEscala min={min} max={max} />}
           <div role="group" aria-label="Visão" style={{ display: "inline-flex", gap: "0.25rem" }}>
             <button type="button" aria-pressed={visao === "grafico"} title="Gráfico"
               className={`btn btn-sm ${visao === "grafico" ? "btn-primary" : "btn-ghost"}`} onClick={() => setVisao("grafico")}>
@@ -276,6 +320,7 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo }: {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "0.8rem" }}>
             {unidades.map((u) => {
               const p = pct(u.passaram, u.publico) ?? 0;
+              const { cor } = escalaDe(unidades);
               const escolhida = unidade === u.nome;
               return (
                 <button key={u.nome} type="button" aria-pressed={escolhida} onClick={() => setUnidade(escolhida ? "" : u.nome)}
@@ -289,7 +334,7 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo }: {
                   <div className="soft" style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>{u.nome}</div>
                   <div style={{ fontSize: "1.8rem", fontWeight: 800, lineHeight: 1.2, margin: "0.2rem 0" }}>{p}%</div>
                   <div style={{ height: 8, borderRadius: 99, background: "var(--border)", overflow: "hidden" }}>
-                    <div style={{ width: `${p}%`, height: "100%", background: corDaEscala(p), borderRadius: 99 }} />
+                    <div style={{ width: `${p}%`, height: "100%", background: cor(p), borderRadius: 99 }} />
                   </div>
                   <div className="soft" style={{ fontSize: "0.76rem", marginTop: "0.4rem" }}>
                     {u.passaram} de {u.publico} passaram, faltam {u.publico - u.passaram}
@@ -301,11 +346,13 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo }: {
         )}
       </section>
 
-      <Secao numero={2} titulo="Aderência por setor" sufixo={sufixo} vazio={setores.length === 0}
-        grafico={<BarrasEmPe grupos={setores} />} tabela={<TabelaGrupos grupos={setores} rotulo="Setor" />} />
-
-      <Secao numero={3} titulo="Aderência por gestor" sufixo={sufixo} vazio={gestores.length === 0}
-        grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" />} tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" />} />
+      {/* setor e gestor lado a lado (LUIZ, 11/11/2026); empilham em tela estreita */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 480px), 1fr))", gap: "1rem", alignItems: "start" }}>
+        <Secao numero={2} titulo="Aderência por setor" sufixo={sufixo} grupos={setores}
+          grafico={<BarrasEmPe grupos={setores} />} tabela={<TabelaGrupos grupos={setores} rotulo="Setor" />} />
+        <Secao numero={3} titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores}
+          grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" />} tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" />} />
+      </div>
     </div>
   );
 }

@@ -10,6 +10,7 @@ export function Tabs({
   initialId,
   active: ativaDeFora,
   onActiveChange,
+  aside,
 }: {
   tabs: Tab[];
   variant?: "default" | "sub";
@@ -21,6 +22,8 @@ export function Tabs({
    */
   active?: string;
   onActiveChange?: (id: string) => void;
+  /** conteúdo à direita, na mesma linha das abas (ex.: o filtro de período da aba) */
+  aside?: React.ReactNode;
 }) {
   const [interna, setInterna] = useState(
     initialId && tabs.some((t) => t.id === initialId) ? initialId : tabs[0]?.id,
@@ -45,6 +48,7 @@ export function Tabs({
             {t.label}
           </button>
         ))}
+        {aside && <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", paddingBottom: 4 }}>{aside}</div>}
       </div>
       <div>{current?.content}</div>
     </div>

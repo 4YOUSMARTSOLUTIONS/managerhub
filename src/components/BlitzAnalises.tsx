@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Users } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { BlitzAderenciaDetalhe, BlitzFaltamPassar, BlitzRecorrenciaLista } from "./BlitzAderencia";
@@ -34,7 +33,7 @@ function rotulo(modo: Modo, de: string, ate: string): string {
  * deve entram entre os cartões e o detalhe.
  */
 export function BlitzAnalises({
-  inicial, unitIds, hoje, anos, podeConfigurar, tratativas,
+  inicial, unitIds, hoje, anos, vagaDoFiltro, tratativas,
 }: {
   /** o mês corrente, já calculado no servidor */
   inicial: BlitzAnaliseDados;
@@ -44,8 +43,8 @@ export function BlitzAnalises({
   hoje: string;
   /** anos que o filtro oferece */
   anos: number[];
-  /** owner/admin: atalho para o público, em Configurações > Segurança */
-  podeConfigurar: boolean;
+  /** onde desenhar o filtro (a linha das abas, no computador); sem vaga, fica no topo daqui */
+  vagaDoFiltro?: HTMLElement | null;
   tratativas?: React.ReactNode;
 }) {
   const [carregando, iniciar] = useTransition();
@@ -81,43 +80,45 @@ export function BlitzAnalises({
   const tratou = pct(ind.alertas.com_tratativa, ind.alertas.enviados);
   const periodo = rotulo(modoDosDados, dados.de, dados.ate);
 
+  // o filtro: vale para os cartões e para o detalhe. No computador ele mora na
+  // linha das abas (LUIZ, 11/11/2026); no celular, aqui no topo
+  const filtro = (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+      <div style={{ display: "inline-flex", gap: "0.3rem" }} role="group" aria-label="Tipo de período">
+        {([["mes", "Mês"], ["ano", "Ano"], ["periodo", "Período"]] as [Modo, string][]).map(([m, r]) => (
+          <button key={m} type="button" aria-pressed={modo === m} disabled={carregando}
+            className={`btn btn-sm ${modo === m ? "btn-primary" : "btn-ghost"}`} onClick={() => escolherModo(m)}>
+            {r}
+          </button>
+        ))}
+      </div>
+      {modo === "mes" && (
+        <input type="month" className="input" value={mes} max={hoje.slice(0, 7)} aria-label="Mês" style={{ width: "auto" }}
+          onChange={(e) => { const v = e.target.value; if (!v) return; setMes(v); carregar("mes", `${v}-01`, fimDoMes(v)); }} />
+      )}
+      {modo === "ano" && (
+        <select className="select" value={ano} aria-label="Ano" style={{ width: "auto" }}
+          onChange={(e) => { const v = Number(e.target.value); setAno(v); carregar("ano", `${v}-01-01`, `${v}-12-31`); }}>
+          {anos.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      )}
+      {modo === "periodo" && (
+        <>
+          <input type="date" className="input" value={de} max={hoje} aria-label="De" style={{ width: "auto" }} onChange={(e) => setDe(e.target.value)} />
+          <span className="soft" style={{ fontSize: "0.82rem" }}>até</span>
+          <input type="date" className="input" value={ate} max={hoje} aria-label="Até" style={{ width: "auto" }} onChange={(e) => setAte(e.target.value)} />
+          <button type="button" className="btn btn-ghost btn-sm" disabled={carregando} onClick={() => carregar("periodo", de, ate)}>Aplicar</button>
+        </>
+      )}
+      {(carregando || !vagaDoFiltro) && (
+        <span className="soft" style={{ fontSize: "0.8rem" }}>{carregando ? "Carregando…" : `Mostrando ${periodo}`}</span>
+      )}
+    </div>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-      {/* filtro: vale para os cartões e para o detalhe */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <div style={{ display: "inline-flex", gap: "0.3rem" }} role="group" aria-label="Tipo de período">
-          {([["mes", "Mês"], ["ano", "Ano"], ["periodo", "Período"]] as [Modo, string][]).map(([m, r]) => (
-            <button key={m} type="button" aria-pressed={modo === m} disabled={carregando}
-              className={`btn btn-sm ${modo === m ? "btn-primary" : "btn-ghost"}`} onClick={() => escolherModo(m)}>
-              {r}
-            </button>
-          ))}
-        </div>
-        {modo === "mes" && (
-          <input type="month" className="input" value={mes} max={hoje.slice(0, 7)} aria-label="Mês" style={{ width: "auto" }}
-            onChange={(e) => { const v = e.target.value; if (!v) return; setMes(v); carregar("mes", `${v}-01`, fimDoMes(v)); }} />
-        )}
-        {modo === "ano" && (
-          <select className="select" value={ano} aria-label="Ano" style={{ width: "auto" }}
-            onChange={(e) => { const v = Number(e.target.value); setAno(v); carregar("ano", `${v}-01-01`, `${v}-12-31`); }}>
-            {anos.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        )}
-        {modo === "periodo" && (
-          <>
-            <input type="date" className="input" value={de} max={hoje} aria-label="De" style={{ width: "auto" }} onChange={(e) => setDe(e.target.value)} />
-            <span className="soft" style={{ fontSize: "0.82rem" }}>até</span>
-            <input type="date" className="input" value={ate} max={hoje} aria-label="Até" style={{ width: "auto" }} onChange={(e) => setAte(e.target.value)} />
-            <button type="button" className="btn btn-ghost btn-sm" disabled={carregando} onClick={() => carregar("periodo", de, ate)}>Aplicar</button>
-          </>
-        )}
-        <span className="soft" style={{ fontSize: "0.8rem" }}>{carregando ? "Carregando…" : `Mostrando ${periodo}`}</span>
-        {podeConfigurar && (
-          <Link href="/configuracoes?aba=seguranca&sub=seg-blitz-publico" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}>
-            <Users size={14} /> Público da blitz
-          </Link>
-        )}
-      </div>
+      {vagaDoFiltro ? createPortal(filtro, vagaDoFiltro) : filtro}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", opacity: carregando ? 0.6 : 1 }}>
         {/* cartões sempre no topo (LUIZ, 11/11/2026) */}
