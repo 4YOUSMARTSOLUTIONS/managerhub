@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -13,8 +13,8 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
-import { BlitzAnalises } from "@/components/BlitzAnalises";
-import { FILTROS_PESSOA, passaNoFiltro, type FiltroPessoa } from "@/components/BlitzAderencia";
+import { BlitzAnalises, type RecorteDosRegistros } from "@/components/BlitzAnalises";
+import { passaNoFiltro } from "@/components/BlitzAderencia";
 import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
@@ -126,8 +126,6 @@ export function SegBlitzManager({
   const [busca, setBusca] = useState("");
   const [meio, setMeio] = useState("");
   const [sit, setSit] = useState("");
-  // período vindo do cartão das Análises (desvio/bloqueio): os números batem com o cartão
-  const [periodoRegistros, setPeriodoRegistros] = useState<{ de: string; ate: string; rotulo: string; filtro?: FiltroPessoa } | null>(null);
   const [abaTopo, setAbaTopo] = useState<string | undefined>(undefined);
   const topoDasAbas = useRef<HTMLDivElement>(null);
   const [aberto, setAberto] = useState<string | null>(null);
@@ -136,12 +134,17 @@ export function SegBlitzManager({
 
   const nomeMeio = useMemo(() => new Map(meios.map((m) => [m.id, m.name])), [meios]);
 
-  const lista = useMemo(() => {
+  /**
+   * A lista de Registros. Com alçada, obedece aos dois botões das Análises
+   * (LUIZ, 11/11/2026): o período, o filtro de setor, gestor e função e, em
+   * "Minha gestão", só as blitz da análise. Sem alçada, vale tudo que chegou.
+   */
+  const filtrar = (recorte: RecorteDosRegistros | null) => {
     const q = normalizar(busca.trim());
     return rows.filter((r) => {
-      if (periodoRegistros && (r.occurredOn < periodoRegistros.de || r.occurredOn > periodoRegistros.ate)) return false;
-      // o mesmo filtro das Análises (unidade, setor, gestor, função): a lista bate com o cartão
-      if (periodoRegistros?.filtro && !passaNoFiltro(r, periodoRegistros.filtro)) return false;
+      if (recorte && (r.occurredOn < recorte.de || r.occurredOn > recorte.ate)) return false;
+      if (recorte && !passaNoFiltro(r, recorte.filtro)) return false;
+      if (recorte?.ids && !recorte.ids.has(r.id)) return false;
       if (meio && r.meioId !== meio) return false;
       if (sit === "conforme" && !(r.liberado && r.conforme)) return false;
       if (sit === "desvio" && !(r.liberado && !r.conforme)) return false;
@@ -150,7 +153,7 @@ export function SegBlitzManager({
       return [r.pessoa, r.setor, r.placa, r.avaliador, r.motivoNome]
         .some((v) => v && normalizar(v).includes(q));
     });
-  }, [rows, busca, meio, sit, periodoRegistros]);
+  };
 
   /** Troca de aba por código (cartão, gráfico, quadro); sobe até as abas se elas saíram da tela. */
   const irPara = (id: string) => {
@@ -161,10 +164,9 @@ export function SegBlitzManager({
     });
   };
 
-  /** Do cartão das Análises para a lista de Registros, filtrada (LUIZ, 11/11/2026). */
-  const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string; filtro?: FiltroPessoa }) => {
+  /** Do cartão das Análises para a lista de Registros na situação; período e filtros já são os mesmos. */
+  const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado") => {
     setSit(situacaoDoCartao);
-    setPeriodoRegistros(periodo);
     setBusca("");
     setMeio("");
     irPara("registros");
@@ -198,7 +200,9 @@ export function SegBlitzManager({
   // no celular a ordem das abas muda (LUIZ, 11/11/2026): "+ Nova blitz" primeiro
   const celular = useSyncExternalStore(assinarTela, ehCelular, () => false);
 
-  const registros = (
+  const registros = (recorte: RecorteDosRegistros | null) => {
+    const lista = filtrar(recorte);
+    return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
       {podeAvaliar && !celular && (
         <button type="button" className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={() => setNovo(true)}>
@@ -221,13 +225,6 @@ export function SegBlitzManager({
           <option value="desvio">Liberado com desvio</option>
           <option value="bloqueado">Bloqueado</option>
         </select>
-        {periodoRegistros && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPeriodoRegistros(null)} title="Tirar o filtro de período">
-            Período: {periodoRegistros.rotulo}
-            {FILTROS_PESSOA.filter(({ campo }) => periodoRegistros.filtro?.[campo]).map(({ campo, rotulo }) => ` · ${rotulo}: ${periodoRegistros.filtro?.[campo]}`).join("")}
-            <X size={13} aria-hidden />
-          </button>
-        )}
         <div style={{ marginLeft: "auto" }}>
           <ExportButton
             filename="blitz-de-trajeto.xlsx"
@@ -330,7 +327,8 @@ export function SegBlitzManager({
         </>
       )}
     </div>
-  );
+    );
+  };
 
   // sem alçada nas análises: a aba mostra só as tratativas que a pessoa deve
   const analises = (
@@ -354,7 +352,7 @@ export function SegBlitzManager({
   const abas = [
     ...(celular && podeAvaliar ? [{ id: "nova", label: "+ Nova blitz", content: novaBlitz }] : []),
     ...(!celular && temAnalises ? [abaAnalises] : []),
-    { id: "registros", label: "Registros", content: registros },
+    { id: "registros", label: "Registros", content: registros(null) },
     ...(celular && temAnalises ? [abaAnalises] : []),
   ];
 
@@ -400,7 +398,7 @@ export function SegBlitzManager({
         <div ref={topoDasAbas} style={{ scrollMarginTop: 72 }}>
           <Tabs key={celular ? "celular" : "computador"} tabs={abas} active={abaTopo} onActiveChange={setAbaTopo} />
         </div>
-      ) : registros}
+      ) : registros(null)}
 
       {detalhe && (
         <DetailModal

@@ -19,6 +19,13 @@ type Modo = "mes" | "ano" | "periodo";
 /** "Minha gestão": quem vê a empresa olhando só a própria cadeia (LUIZ, 11/11/2026) */
 type Escopo = "todos" | "minha";
 
+/**
+ * O que os dois botões (período e filtros) mandam para a lista de Registros:
+ * as datas, o filtro de setor, gestor e função e, em "Minha gestão", as blitz
+ * da análise (a cadeia vem do banco; a lista sozinha não sabe quem é de quem).
+ */
+export type RecorteDosRegistros = { de: string; ate: string; filtro: FiltroPessoa; ids: Set<string> | null };
+
 const NOME_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 function fimDoMes(ym: string): string {
@@ -132,9 +139,10 @@ const COM_BUSCA = new Set(["gestor", "funcao"]);
 /**
  * A tela da blitz para quem tem alçada (LUIZ, 11/11/2026). Uma linha só de
  * abas: Análises (o painel de aderência), Colaboradores, Recorrência, Alertas
- * e Registros. Os cartões ficam só no topo de Análises; um botão só (período
- * e, para quem vê a empresa e tem equipe, "Minha gestão") vale para as quatro
- * de análise. Registros tem os filtros dela e não leva o botão.
+ * e Registros. Os cartões ficam só no topo de Análises; os dois botões (período,
+ * com "Minha gestão" para quem vê a empresa e tem equipe, e Filtros) valem para
+ * todas, Registros inclusive (LUIZ, 11/11/2026), que soma a busca, o meio e a
+ * situação dela.
  *
  * A aba aberta mora em quem usa (o cartão de desvio leva a Registros e o
  * gráfico, a Colaboradores), por isso `aba`/`onAba`.
@@ -155,9 +163,10 @@ export function BlitzAnalises({
   podeEscolherGestao: boolean;
   /** o bloco das tratativas que o gestor logado deve (no painel de Análises) */
   tratativas?: React.ReactNode;
-  /** clique nos cartões de desvio e bloqueio: a lista de Registros filtrada no período */
-  onVerRegistros?: (situacao: "desvio" | "bloqueado", recorte: { de: string; ate: string; rotulo: string; filtro: FiltroPessoa }) => void;
-  registros: React.ReactNode;
+  /** clique nos cartões de desvio e bloqueio: a lista de Registros naquela situação */
+  onVerRegistros?: (situacao: "desvio" | "bloqueado") => void;
+  /** a lista de Registros, já no recorte dos dois botões */
+  registros: (recorte: RecorteDosRegistros) => React.ReactNode;
   /** a aba "+ Nova blitz" do celular (só para quem avalia) */
   novaBlitz?: React.ReactNode;
   celular: boolean;
@@ -237,6 +246,10 @@ export function BlitzAnalises({
 
   const ad = dados.aderencia;
   const periodo = rotulo(modoDosDados, dados.de, dados.ate);
+  const recorteDosRegistros = useMemo<RecorteDosRegistros>(() => ({
+    de: dados.de, ate: dados.ate, filtro,
+    ids: escopoDosDados === "minha" && dados.blitz ? new Set(dados.blitz.map((b) => b.id)) : null,
+  }), [dados.de, dados.ate, dados.blitz, filtro, escopoDosDados]);
 
   // tudo passa pelo filtro único; os cartões são refeitos com o que sobrou
   const pessoasTodas = useMemo(
@@ -360,8 +373,8 @@ export function BlitzAnalises({
       conformidade={conformidade} total={ind.total} conformes={ind.conformes} desvio={ind.com_desvio} bloqueios={ind.bloqueios}
       tratou={tratou} tratados={ind.alertas.com_tratativa} enviados={ind.alertas.enviados}
       dicaAderencia={dicaAderencia}
-      onDesvio={onVerRegistros ? () => onVerRegistros("desvio", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
-      onBloqueio={onVerRegistros ? () => onVerRegistros("bloqueado", { de: dados.de, ate: dados.ate, rotulo: periodo, filtro }) : undefined}
+      onDesvio={onVerRegistros ? () => onVerRegistros("desvio") : undefined}
+      onBloqueio={onVerRegistros ? () => onVerRegistros("bloqueado") : undefined}
     />
   );
 
@@ -406,13 +419,21 @@ export function BlitzAnalises({
       ),
     },
   ];
-  const abaRegistros = { id: "registros", label: "Registros", content: registros };
+  // Registros também obedece aos dois botões (LUIZ, 11/11/2026); no celular eles vão no topo da aba
+  const abaRegistros = {
+    id: "registros", label: "Registros",
+    content: (
+      <div style={{ display: "flex", flexDirection: "column", opacity: carregando ? 0.6 : 1 }}>
+        {celular && controles}
+        {registros(recorteDosRegistros)}
+      </div>
+    ),
+  };
   // computador: as de análise e Registros. Celular: + Nova blitz, Registros e as de análise
   const abas = celular
     ? [...(novaBlitz ? [{ id: "nova", label: "+ Nova blitz", content: novaBlitz }] : []), abaRegistros, ...abasDeAnalise]
     : [...abasDeAnalise, abaRegistros];
   const atual = aba && abas.some((t) => t.id === aba) ? aba : abas[0].id;
-  const ehDeAnalise = abasDeAnalise.some((t) => t.id === atual);
 
   return (
     <Tabs
@@ -420,7 +441,7 @@ export function BlitzAnalises({
       tabs={abas}
       active={atual}
       onActiveChange={onAba}
-      aside={!celular && ehDeAnalise ? controles : undefined}
+      aside={!celular ? controles : undefined}
     />
   );
 }
