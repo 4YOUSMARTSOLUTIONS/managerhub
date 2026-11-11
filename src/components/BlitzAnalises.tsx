@@ -184,12 +184,12 @@ export function BlitzAnalises({
             { id: "aderencia", label: "Aderência", content: <BlitzAderenciaDetalhe dados={ad} rotuloPeriodo={periodo} onVerFaltam={verFaltam} /> },
             {
               // quem passou e quem falta numa lista só, com seletor (LUIZ, 11/11/2026);
-              // aberta pelo gráfico, já vem em "Faltam passar"
+              // abre sempre em "Faltam passar" (LUIZ, 11/11/2026); pelo gráfico, já filtrada
               id: "colaboradores", label: `Colaboradores (${ad.publico})`,
               content: (
                 <BlitzColaboradoresLista key={versaoFaltam} dados={ad} rotuloPeriodo={periodo}
                   chaveArquivo={`${dados.de}_${dados.ate}`} filtroInicial={filtroFaltam}
-                  situacaoInicial={versaoFaltam > 0 ? "faltam" : "todos"} />
+                  situacaoInicial="faltam" />
               ),
             },
             {

@@ -413,11 +413,11 @@ export type SituacaoPessoa = "todos" | "faltam" | "passaram";
 /**
  * O público do período, pessoa a pessoa (LUIZ, 11/11/2026: uma lista só, com
  * quem passou e quem falta, em vez de uma aba para cada). A situação fica num
- * seletor no topo, com a contagem que respeita os outros filtros; quem falta
+ * seletor no topo (abre em "Faltam passar"), com a contagem que respeita os outros filtros; quem falta
  * vem primeiro. É a lista que a portaria usa no dia a dia, com filtros
  * (unidade, setor, gestor, função), busca e exportação.
  */
-export function BlitzColaboradoresLista({ dados, rotuloPeriodo, chaveArquivo, filtroInicial, situacaoInicial = "todos" }: {
+export function BlitzColaboradoresLista({ dados, rotuloPeriodo, chaveArquivo, filtroInicial, situacaoInicial = "faltam" }: {
   dados: AderenciaDados;
   rotuloPeriodo: string;
   /** pedaço do nome do arquivo exportado (ex.: 2026-11-01_2026-11-30) */
