@@ -2,15 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck, CloudOff, Plus } from "lucide-react";
+import { CircleCheck, CloudOff, Plus, TriangleAlert } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, type SegVeiculoCor } from "@/lib/constants";
 import { formatDate, hojeYmd, shortName } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
 import { criarBlitz, type BlitzInput } from "@/lib/actions/seguranca";
 import {
-  comLimite, guardarBlitz, novoCodigoDeBlitz, removerBlitzGuardada, useConectado, type BlitzGuardada,
+  comLimite, guardarBlitz, novoCodigoDeBlitz, removerBlitzGuardada, useBlitzGuardadas, useConectado, type BlitzGuardada,
 } from "@/lib/blitz-fila";
+
+/** A última blitz do mês de um colaborador, de qualquer avaliador (só o necessário para o aviso). */
+export type BlitzJaPassou = { vezes: number; dia: string; hora: string | null };
 import type { Enums } from "@/types/database";
 
 export type BlitzMeioOpt = {
@@ -81,7 +84,7 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  * todas") transformaria a blitz em carimbo. O avaliador toca cada resposta.
  */
 export function SegBlitzDialog({
-  open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId,
+  open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId, jaPassaram,
 }: {
   open: boolean;
   onClose: () => void;
@@ -94,6 +97,8 @@ export function SegBlitzDialog({
   motivos: { id: string; name: string; active: boolean }[];
   /** o veículo mais recente de cada colaborador, para a sugestão */
   veiculos: VeiculoSugestao[];
+  /** quem já passou pela blitz neste mês: avisa ao escolher (LUIZ, 11/11/2026) */
+  jaPassaram?: Record<string, BlitzJaPassou>;
 }) {
   const hoje = hojeYmd();
   const inicioDoMes = `${hoje.slice(0, 7)}-01`;
@@ -119,6 +124,13 @@ export function SegBlitzDialog({
   // então tentar de novo depois de um erro reaproveita o mesmo
   const [clientId, setClientId] = useState(novoCodigoDeBlitz);
   const conectado = useConectado();
+  // o aviso de blitz repetida no mês: as do sistema (qualquer avaliador) e as
+  // guardadas neste aparelho sem sinal, que o sistema ainda não conhece
+  const guardadas = useBlitzGuardadas(dono, tenantId);
+  const anterior = userId ? jaPassaram?.[userId] : undefined;
+  const guardadasDele = userId
+    ? guardadas.filter((g) => g.input.userId === userId && g.input.occurredOn >= inicioDoMes).length
+    : 0;
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
   const secoes = useRef<Partial<Record<Secao, HTMLDivElement | null>>>({});
@@ -351,6 +363,23 @@ export function SegBlitzDialog({
                 people={pessoas} selected={userId ? [userId] : []}
                 onChange={escolherPessoa} single autoFocus placeholder="Nome ou matrícula…"
               />
+              {/* já passou no mês: avisa sem travar. Pega a pessoa errada na lista,
+                  e a segunda blitz de verdade segue normal (LUIZ, 11/11/2026) */}
+              {(anterior || guardadasDele > 0) && (
+                <p role="status" style={{
+                  display: "flex", gap: "0.45rem", alignItems: "flex-start", fontSize: "0.8rem", margin: "0.45rem 0 0",
+                  background: "var(--mh-warning-soft)", padding: "0.5rem 0.7rem", borderRadius: 8,
+                }}>
+                  <TriangleAlert size={15} style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+                  <span>
+                    {shortName(pessoas.find((p) => p.id === userId)?.name)} já passou pela blitz este mês
+                    {anterior && <>: {formatDate(anterior.dia).slice(0, 5)}{anterior.hora ? ` às ${anterior.hora}` : ""}</>}
+                    {anterior && anterior.vezes > 1 ? ` (${anterior.vezes} vezes)` : ""}
+                    {guardadasDele > 0 ? `${anterior ? ", e" : ","} ${guardadasDele === 1 ? "1 blitz guardada" : `${guardadasDele} blitz guardadas`} neste aparelho` : ""}.
+                    {" "}Confira se é a pessoa certa; se for, pode seguir.
+                  </span>
+                </p>
+              )}
               {/* a data quase sempre é hoje: fica fechada até alguém precisar mudar */}
               <div className="soft" style={{ fontSize: "0.8rem", marginTop: "0.45rem", display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
                 {editarData ? (

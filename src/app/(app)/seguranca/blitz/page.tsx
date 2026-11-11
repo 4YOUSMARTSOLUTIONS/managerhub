@@ -2,6 +2,7 @@ import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { moduleGate } from "@/lib/module-gate";
 import { SegBlitzManager, type BlitzRow } from "@/components/SegBlitzManager";
+import type { BlitzJaPassou } from "@/components/SegBlitzDialog";
 import { getBlitzAlertas } from "@/lib/actions/seguranca";
 import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 
@@ -149,9 +150,24 @@ export default async function SegurancaBlitzPage() {
     respostas: respostasPorBlitz.get(b.id) ?? [],
   }));
 
+  // quem já passou pela blitz neste mês, de qualquer avaliador: o formulário
+  // avisa ao escolher a pessoa (LUIZ, 11/11/2026: Arthur lançado duas vezes)
+  const { data: jaPassaramRes } = podeAvaliar === true
+    ? await supabase.rpc("seg_blitz_ja_passaram_no_mes")
+    : { data: null };
+  const jaPassaram: Record<string, BlitzJaPassou> = Object.fromEntries(
+    ((jaPassaramRes ?? []) as unknown as { user_id: string; vezes: number; occurred_on: string; registrada_em: string }[])
+      .map((x) => {
+        const quando = new Date(x.registrada_em);
+        // a hora só vale quando o registro foi no próprio dia da blitz
+        return [x.user_id, { vezes: x.vezes, dia: x.occurred_on, hora: diaSp.format(quando) === x.occurred_on ? horaSp.format(quando) : null }];
+      }),
+  );
+
   return (
     <div>
       <SegBlitzManager
+        jaPassaram={jaPassaram}
         dono={user.id}
         tenantId={tenant.id}
         rows={rows}

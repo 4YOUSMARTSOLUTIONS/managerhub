@@ -2428,6 +2428,7 @@ export type Database = {
       seg_criar_blitz: { Args: { p_data: Json }; Returns: string }
       seg_excluir_blitz: { Args: { p_id: string }; Returns: undefined }
       seg_blitz_meus_alertas: { Args: Record<PropertyKey, never>; Returns: Json }
+      seg_blitz_ja_passaram_no_mes: { Args: Record<PropertyKey, never>; Returns: Json }
       seg_blitz_registrar_tratativa: { Args: { p_alerta: string; p_em: string; p_resumo: string; p_acordo?: string | null }; Returns: undefined }
       seg_blitz_painel: { Args: { p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
       // aderência do mês (p_mes = qualquer dia do mês); alçada igual à das Análises

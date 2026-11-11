@@ -18,7 +18,7 @@ import { FILTROS_PESSOA, passaNoFiltro, type FiltroPessoa } from "@/components/B
 import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
-  SegBlitzDialog, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
+  SegBlitzDialog, type BlitzJaPassou, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
 } from "@/components/SegBlitzDialog";
 import { SegBlitzTratativas } from "@/components/SegBlitzTratativas";
 import type { BlitzAlerta } from "@/lib/actions/seguranca";
@@ -95,7 +95,7 @@ function assinarTela(avisar: () => void) {
 const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
 
 export function SegBlitzManager({
-  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null,
+  rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null, jaPassaram,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -119,6 +119,8 @@ export function SegBlitzManager({
   /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
   dono: string;
   tenantId: string;
+  /** quem já passou pela blitz neste mês (para o aviso do formulário) */
+  jaPassaram?: Record<string, BlitzJaPassou>;
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -374,6 +376,11 @@ export function SegBlitzManager({
         // Alertas, Registros), montada pelas Análises (LUIZ, 11/11/2026)
         <div ref={topoDasAbas} style={{ scrollMarginTop: 72 }}>
           <BlitzAnalises
+            // a análise guarda os números no estado dela: sem a chave, trocar a
+            // unidade no seletor do topo trazia os números novos e a tela
+            // continuava com os antigos (LUIZ, 11/11/2026). A unidade nova
+            // remonta a análise, no mês corrente
+            key={(analise.unitIds ?? []).join(",") || "todas"}
             inicial={analise.inicial}
             unitIds={analise.unitIds}
             hoje={analise.hoje}
@@ -483,7 +490,7 @@ export function SegBlitzManager({
       <SegBlitzDialog
         open={novo} onClose={() => setNovo(false)}
         pessoas={pessoas} meios={meios} perguntas={perguntas} motivos={motivos} veiculos={veiculos}
-        dono={dono} tenantId={tenantId}
+        dono={dono} tenantId={tenantId} jaPassaram={jaPassaram}
       />
     </div>
   );
