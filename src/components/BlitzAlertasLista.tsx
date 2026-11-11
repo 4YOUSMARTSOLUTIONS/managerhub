@@ -28,29 +28,19 @@ function ocorrencia(a: BlitzAlertaAnalise): string {
  * liberada com desvio ou bloqueada avisa o gestor do colaborador, e só ele
  * registra a tratativa. Aqui quem acompanha (owner, admin, Gerencial,
  * segurança; o Gestor, a cadeia dele) vê quem já tratou e quem está devendo,
- * com o resumo por gestor para cobrar. Só leitura. Chega já filtrada pelo
- * filtro único das Análises; o resumo por gestor liga o filtro de gestor.
+ * Só leitura. Chega já filtrada pelo filtro único das Análises; o resumo de
+ * quem está devendo fica no quadro de pendências da aba Análises.
  */
-export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situacaoInicial = "", gestorAtivo, onGestor }: {
+export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situacaoInicial = "" }: {
   alertas: BlitzAlertaAnalise[];
   rotuloPeriodo: string;
   chaveArquivo: string;
   /** quem usa remonta com `key` quando o quadro de pendências pede "aguardando" */
   situacaoInicial?: Situacao;
-  /** o gestor do filtro único, e como trocá-lo ("" tira) */
-  gestorAtivo?: string;
-  onGestor?: (gestor: string) => void;
 }) {
   const [situacao, setSituacao] = useState<Situacao>(situacaoInicial);
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState<string | null>(null);
-
-  // quem está devendo, do que mais deve para o que menos deve
-  const devendo = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const a of alertas) if (!a.registrada_em) m.set(gestorDe(a), (m.get(gestorDe(a)) ?? 0) + 1);
-    return [...m.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "pt-BR"));
-  }, [alertas]);
 
   const termo = normalizar(busca.trim());
   const lista = alertas.filter((a) =>
@@ -82,26 +72,6 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
           ])}
         />
       </div>
-
-      {/* quem está devendo: clicar filtra a lista por aquele gestor */}
-      {devendo.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem" }}>
-          <span className="soft" style={{ fontSize: "0.78rem" }}>Aguardando tratativa:</span>
-          {devendo.map(([g, n]) => {
-            const escolhido = gestorAtivo === g && situacao === "aguardando";
-            return (
-              <button key={g} type="button" aria-pressed={escolhido}
-                className={`btn btn-xs ${escolhido ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => {
-                  if (escolhido) { onGestor?.(""); setSituacao(""); return; }
-                  onGestor?.(g); setSituacao("aguardando");
-                }}>
-                {shortName(g)} <strong>{n}</strong>
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
         <input className="input" placeholder="Buscar colaborador ou gestor…" value={busca}

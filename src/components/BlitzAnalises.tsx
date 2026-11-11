@@ -410,8 +410,7 @@ export function BlitzAnalises({
       id: "alertas", label: `Alertas (${alertas.length})`,
       content: painel(
         <BlitzAlertasLista key={versaoAlertas} alertas={alertas} rotuloPeriodo={periodo}
-          chaveArquivo={`${dados.de}_${dados.ate}`} situacaoInicial={situacaoAlertas}
-          gestorAtivo={filtro.gestor} onGestor={(g) => mudarFiltro({ gestor: g })} />,
+          chaveArquivo={`${dados.de}_${dados.ate}`} situacaoInicial={situacaoAlertas} />,
       ),
     },
   ];
