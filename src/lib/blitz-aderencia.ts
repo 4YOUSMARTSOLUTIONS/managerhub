@@ -74,6 +74,8 @@ export type BlitzRecorrencia = {
 /** Uma blitz do recorte, com o carimbo da época: a tela refaz os cartões com o filtro. */
 export type BlitzItem = {
   id: string;
+  /** quem foi abordado: a recorrência se refaz com o filtro de meio e situação */
+  user_id?: string;
   setor: string | null;
   gestor: string | null;
   unidade: string | null;
