@@ -7,7 +7,7 @@ import { ExportButton } from "@/components/ui/ExportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, normalizar, shortName } from "@/lib/format";
 import {
-  pct, type AderenciaDados, type AderenciaGrupo, type AderenciaPessoa, type BlitzRecorrencia,
+  pct, type AderenciaGrupo, type AderenciaPessoa, type BlitzRecorrencia,
 } from "@/lib/blitz-aderencia";
 
 // ---------------------------------------------------------------- base
@@ -315,12 +315,9 @@ function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
  * Gráfico é a visão principal; a tabela fica a um clique. Tudo calculado aqui a
  * partir do público pessoa a pessoa, sem voltar ao banco.
  */
-export function BlitzAderenciaDetalhe({ pessoas, fora, rotuloPeriodo, onVerFaltam, pendencias }: {
+export function BlitzAderenciaDetalhe({ pessoas, onVerFaltam, pendencias }: {
   /** o público já filtrado (setor, gestor, função; a unidade vem do seletor do topo) */
   pessoas: AderenciaPessoa[];
-  fora: AderenciaDados["fora"];
-  /** "novembro de 2026", "2026", "01/11/2026 a 11/11/2026" */
-  rotuloPeriodo: string;
   /** clique numa barra ou linha: liga o filtro e abre a lista do público */
   onVerFaltam?: (filtro: FiltroPessoa, situacao: SituacaoPessoa) => void;
   /** o quadro de tratativas pendentes: ocupa o vão embaixo do gráfico por setor */
@@ -335,11 +332,6 @@ export function BlitzAderenciaDetalhe({ pessoas, fora, rotuloPeriodo, onVerFalta
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
-        Aderência em {rotuloPeriodo}: do público, quem passou pela blitz pelo menos uma vez. Setor, gestor e unidade são os de hoje.
-        Fora da conta: {fora.por_funcao} por função, {fora.por_excecao} por exceção e {fora.ausentes} ausentes o período todo.
-      </p>
-
       {/* 1. cada unidade, só leitura (a unidade se escolhe no seletor do topo) */}
       <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
         <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Aderência por unidade</h4>

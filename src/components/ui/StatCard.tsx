@@ -1,4 +1,5 @@
 import type { Tone } from "@/lib/constants";
+import { InfoHint } from "@/components/ui/InfoHint";
 
 /** cada tom aponta para um token semântico — tema-aware por construção */
 const TONE_VAR: Record<Tone, string> = {
@@ -22,6 +23,7 @@ export function StatCard({
   destaque,
   onClick,
   acao,
+  dica,
 }: {
   label: string;
   /** o número do cartão; um nó quando o cartão mostra mais de um número (ex.: alertas e sem tratativa) */
@@ -41,6 +43,8 @@ export function StatCard({
   onClick?: () => void;
   /** o que o clique faz, para o leitor de tela e o title (ex.: "Ver as blitz bloqueadas") */
   acao?: string;
+  /** explicação do número: ícone de informação ao lado do título, com balão */
+  dica?: React.ReactNode;
 }) {
   const c = TONE_VAR[tone];
   const d = destaque ? TONE_VAR[destaque] : null;
@@ -64,11 +68,15 @@ export function StatCard({
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
-        <div
-          className="soft"
-          style={{ fontSize: "0.69rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", ...corSuave }}
-        >
-          {label}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", minWidth: 0 }}>
+          <div
+            className="soft"
+            style={{ fontSize: "0.69rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", ...corSuave }}
+          >
+            {label}
+          </div>
+          {/* fora do título em caixa alta: o balão não herda a caixa alta nem a letra miúda */}
+          {dica && <InfoHint label={`Sobre ${label.toLowerCase()}`} size={13}>{dica}</InfoHint>}
         </div>
         {icon && (
           <div

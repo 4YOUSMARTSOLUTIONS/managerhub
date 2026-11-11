@@ -333,6 +333,13 @@ export function BlitzAnalises({
       {/* aderência primeiro, depois conformidade (LUIZ, 11/11/2026) */}
       <StatCard
         label="Aderência"
+        // a explicação da conta vira dica do cartão, em vez de uma linha na tela (LUIZ, 11/11/2026)
+        dica={
+          <>
+            Do público, quem passou pela blitz pelo menos uma vez no período. Setor, gestor e unidade são os de hoje.
+            Fora da conta: {ad.fora.por_funcao} por função, {ad.fora.por_excecao} por exceção e {ad.fora.ausentes} ausentes o período todo.
+          </>
+        }
         value={aderencia === null ? "—" : `${aderencia}%`}
         tone={aderencia === null ? "blue" : aderencia >= 90 ? "green" : aderencia >= 70 ? "amber" : "red"}
         hint={`${passaram} de ${publico} do público passaram`}
@@ -385,8 +392,7 @@ export function BlitzAnalises({
       content: painel(
         <>
           {tratativas}
-          <BlitzAderenciaDetalhe pessoas={pessoas} fora={ad.fora}
-            rotuloPeriodo={periodo} onVerFaltam={verFaltam}
+          <BlitzAderenciaDetalhe pessoas={pessoas} onVerFaltam={verFaltam}
             pendencias={alertas.some((a) => !a.registrada_em)
               ? <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
               : null} />
