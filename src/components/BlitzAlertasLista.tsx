@@ -148,7 +148,7 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
                   <td>
                     {a.registrada_em
                       ? <Badge tone="green">Tratado em {formatDate(a.tratativa_em)}</Badge>
-                      : <Badge tone="amber">Aguardando tratativa</Badge>}
+                      : <Badge tone={a.liberado ? "amber" : "red"}>Aguardando tratativa</Badge>}
                   </td>
                 </tr>
               ))}
@@ -163,7 +163,7 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
           title={`${shortName(detalhe.colaborador)} · ${formatDate(detalhe.occurred_on)}`}
           badges={detalhe.registrada_em
             ? <Badge tone="green">Tratado em {formatDate(detalhe.tratativa_em)}</Badge>
-            : <Badge tone="amber">Aguardando tratativa</Badge>}
+            : <Badge tone={detalhe.liberado ? "amber" : "red"}>Aguardando tratativa</Badge>}
           footer={<><span /><button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button></>}
         >
           <DetailSection title="A blitz">
