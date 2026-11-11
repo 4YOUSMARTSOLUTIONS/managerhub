@@ -137,6 +137,24 @@ export async function toggleAgendaActive(input: { id: string; active: boolean })
   } catch (e) { return { error: (e as Error).message }; }
 }
 
+/**
+ * Passa a agenda para outra pessoa a partir de uma data (hoje ou passada).
+ * O banco fecha o período de quem saiu na véspera e abre o do novo: o passado
+ * continua com quem fez. Regras e permissão ficam em `agenda_transferir`.
+ */
+export async function transferirAgenda(input: { agendaId: string; novoId: string; data: string }): Promise<ActionState> {
+  try {
+    const ctx = await actionContext();
+    if (!input.agendaId || !input.novoId || !input.data) return { error: "Escolha o novo responsável e a data." };
+    const { error } = await ctx.supabase.rpc("agenda_transferir", {
+      p_agenda: input.agendaId, p_novo: input.novoId, p_data: input.data,
+    });
+    if (error) return { error: mensagemDeAgenda(error) };
+    revalidatePath("/agenda");
+    return { ok: true, message: "Agenda transferida." };
+  } catch (e) { return { error: (e as Error).message }; }
+}
+
 export async function deleteAgenda(formData: FormData): Promise<ActionState> {
   try {
     const ctx = await actionContext();

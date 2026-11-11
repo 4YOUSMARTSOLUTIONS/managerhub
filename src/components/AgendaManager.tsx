@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Pencil, Plus, Power, Users } from "lucide-react";
+import { ArrowRightLeft, Eye, Pencil, Plus, Power, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -19,6 +19,8 @@ import { AgendaBuilderDialog } from "./AgendaBuilderDialog";
 import { AgendaViewDialog } from "./AgendaViewDialog";
 import { AgendaLogDetail, type LogDetailCtx } from "./AgendaLogDetail";
 import { DemandaNaoPrevistaDialog } from "./DemandaNaoPrevistaDialog";
+import { AgendaTransferDialog } from "./AgendaTransferDialog";
+import { responsavelEm, responsaveisDaAgenda } from "@/lib/agenda-responsavel";
 import { AGENDA_STATUS_LABEL, AGENDA_STATUS_TONE } from "@/lib/constants";
 import { formatDate, shortName } from "@/lib/format";
 import {
@@ -107,8 +109,9 @@ export function AgendaManager(props: {
   }, [checklistRuns]);
 
   const taskInfo = useMemo(() => {
-    const m = new Map<string, { title: string; agendaName: string; responsibleId: string }>();
-    for (const a of agendas) for (const t of a.tasks) m.set(t.id, { title: t.title, agendaName: a.name, responsibleId: a.responsibleId });
+    // a agenda inteira vai junto: o responsável de cada registro é o do dia dele
+    const m = new Map<string, { title: string; agendaName: string; agenda: AgendaFull }>();
+    for (const a of agendas) for (const t of a.tasks) m.set(t.id, { title: t.title, agendaName: a.name, agenda: a });
     return m;
   }, [agendas]);
 
@@ -119,7 +122,8 @@ export function AgendaManager(props: {
     const items: DayItem[] = [];
     let reserved = 0;
     for (const a of agendas) {
-      if (!a.active || a.responsibleId !== subjectUserId) continue;
+      // de quem era a agenda NESTE dia: a transferência com data não reescreve o passado
+      if (!a.active || responsavelEm(a, dateStr) !== subjectUserId) continue;
       // a de demandas não previstas nasce no primeiro uso, e a demanda pode ser
       // de dias antes disso: lá quem manda é a data da própria tarefa
       if (!a.imprevistos && dateStr < a.createdDate) continue; // agenda ainda não existia nessa data
@@ -193,7 +197,7 @@ export function AgendaManager(props: {
         const ds = ymd(cur);
         const isPast = ds < todayStr;
         for (const a of agendas) {
-          if (!a.active || a.responsibleId !== subjectUserId) continue;
+          if (!a.active || responsavelEm(a, ds) !== subjectUserId) continue;
           if (a.imprevistos) continue; // fora da aderência e das "tarefas planejadas"
           if (ds < a.createdDate) continue; // não cobra dias anteriores à criação da agenda
           for (const t of a.tasks) {
@@ -254,7 +258,7 @@ export function AgendaManager(props: {
   // pessoal inteiro. O próprio usuário aparece sempre, mesmo sem agenda.
   const comAgenda = useMemo(() => {
     const s = new Set<string>();
-    for (const a of agendas) { s.add(a.ownerId); s.add(a.responsibleId); }
+    for (const a of agendas) { s.add(a.ownerId); for (const u of responsaveisDaAgenda(a)) s.add(u); }
     return s;
   }, [agendas]);
 
@@ -344,6 +348,7 @@ export function AgendaManager(props: {
   // cada pessoa tem uma agenda de rotina ativa só (trava no banco desde
   // 11/11/2026); as inativas guardam o histórico e ficam atrás do filtro
   const [verInativas, setVerInativas] = useState(false);
+  const [transferindo, setTransferindo] = useState<AgendaFull | null>(null);
   const rotinaAtivas = agendasDeRotina.filter((a) => a.active);
   const rotinaInativas = agendasDeRotina.length - rotinaAtivas.length;
   const rotinaVisiveis = verInativas ? agendasDeRotina : rotinaAtivas;
@@ -390,6 +395,9 @@ export function AgendaManager(props: {
                           para quem é apenas responsável, e não dono, da agenda. */}
                       <button className="icon-btn" title="Visualizar agenda" aria-label="Visualizar agenda" onClick={() => setViewing(a)}><Eye size={14} /></button>
                       {canEditAgenda(a) && <button className="icon-btn" title="Editar" onClick={() => { setEditing(a); setBuilderOpen(true); }}><Pencil size={14} /></button>}
+                      {canEditAgenda(a) && a.active && (
+                        <button className="icon-btn" title="Transferir para outra pessoa, com data" aria-label="Transferir agenda" onClick={() => setTransferindo(a)}><ArrowRightLeft size={14} /></button>
+                      )}
                       {canEditAgenda(a) && (
                         <button className="icon-btn" title={a.active ? "Inativar" : "Reativar"} onClick={() => start(async () => { const r = await toggleAgendaActive({ id: a.id, active: !a.active }); if (r.error) toast.error(r.error); else router.refresh(); })}><Power size={14} /></button>
                       )}
@@ -582,7 +590,7 @@ export function AgendaManager(props: {
       .map((l) => ({ log: l, info: taskInfo.get(l.taskId) }))
       .filter((r) => !!r.info)
       .filter((r) => !hStatus || r.log.status === hStatus)
-      .filter((r) => !hPerson || r.info!.responsibleId === hPerson)
+      .filter((r) => !hPerson || responsavelEm(r.info!.agenda, r.log.logDate) === hPerson)
       .filter((r) => !hFrom || r.log.logDate >= hFrom)
       .filter((r) => !hTo || r.log.logDate <= hTo)
       .sort((a, b) => (a.log.logDate < b.log.logDate ? 1 : -1));
@@ -611,7 +619,7 @@ export function AgendaManager(props: {
               {historyRows.map(({ log, info }) => (
                 <tr key={log.id}>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{formatDate(log.logDate)}</td>
-                  <td className="muted">{shortName(nameById[info!.responsibleId] ?? "—")}</td>
+                  <td className="muted">{shortName(nameById[responsavelEm(info!.agenda, log.logDate)] ?? "—")}</td>
                   <td className="muted">{info!.agendaName}</td>
                   <td>{info!.title}</td>
                   <td><Badge tone={AGENDA_STATUS_TONE[log.status]}>{AGENDA_STATUS_LABEL[log.status]}</Badge></td>
@@ -688,6 +696,16 @@ export function AgendaManager(props: {
       {section === "historico" && historyTab}
 
       <AgendaViewDialog agenda={viewing} onClose={() => setViewing(null)} />
+      {transferindo && (
+        <AgendaTransferDialog
+          key={transferindo.id}
+          agenda={transferindo}
+          onClose={() => setTransferindo(null)}
+          people={people}
+          hoje={todayStr}
+          ativaPorPessoa={ativaPorPessoa}
+        />
+      )}
       <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} currentUserId={currentUserId} ativaPorPessoa={ativaPorPessoa} />
       <AgendaLogDetail ctx={detail} onClose={() => setDetail(null)} canFill={detailCanFill} nameById={nameById} />
       {demandaOpen && (

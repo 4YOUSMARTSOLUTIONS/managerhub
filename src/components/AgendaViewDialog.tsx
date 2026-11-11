@@ -40,6 +40,13 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
   );
 }
 
+/** `ate` é exclusivo: o último dia do período é a véspera. */
+function diaAnterior(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d - 1, 12);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
 export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | null; onClose: () => void }) {
   if (!agenda) return null;
 
@@ -106,6 +113,22 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
               {agenda.canResponsibleEdit ? "Sim" : <span className="soft">Não</span>}
             </Campo>
           </div>
+
+          {agenda.responsaveis.length > 1 && (
+            <div>
+              <div className="soft" style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.35rem" }}>Responsáveis ao longo do tempo</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontSize: "0.84rem" }}>
+                {[...agenda.responsaveis].sort((x, y) => y.de.localeCompare(x.de)).map((p) => (
+                  <div key={p.de} style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600 }}>{shortName(p.nome)}</span>
+                    <span className="soft">
+                      {p.ate === null ? `desde ${formatDate(p.de)}` : `de ${formatDate(p.de)} a ${formatDate(diaAnterior(p.ate))}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {agenda.description && (
             <div>

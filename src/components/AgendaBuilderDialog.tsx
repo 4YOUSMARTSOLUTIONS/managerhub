@@ -215,7 +215,14 @@ export function AgendaBuilderDialog({
             <div style={{ gridColumn: "1 / -1" }}>
               <label className="label">Responsável</label>
               {/* a agenda de demandas não previstas é de uma pessoa só */}
-              <SearchSelect options={people} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" disabled={imprevistos} />
+              {/* Agenda que já existe troca de responsável por "Transferir", com data:
+                  trocar aqui jogaria o passado inteiro para quem entra */}
+              <SearchSelect options={people} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" disabled={imprevistos || !!agenda} />
+              {agenda && !imprevistos && (
+                <p className="soft" style={{ fontSize: "0.76rem", margin: "0.35rem 0 0" }}>
+                  Para trocar o responsável, use Transferir na lista de agendas, com a data da troca.
+                </p>
+              )}
               {conflitoDeAgenda && (
                 <p role="alert" style={{ color: "var(--mh-danger)", fontSize: "0.8rem", margin: "0.4rem 0 0", background: "var(--mh-danger-soft)", padding: "0.45rem 0.65rem", borderRadius: 8 }}>
                   {conflitoDeAgenda}

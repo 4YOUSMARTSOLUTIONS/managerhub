@@ -12,6 +12,14 @@ export type Database = {
   }
   public: {
     Tables: {
+      // Períodos de responsabilidade por agenda (`de` incluso, `ate` exclusivo).
+      // Escrita só pelo gatilho `agenda_registrar_responsavel` (via agenda_transferir).
+      agenda_responsaveis: {
+        Row: { id: string; tenant_id: string; agenda_id: string; user_id: string; de: string; ate: string | null; created_by: string | null; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       agendas: {
         Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; owner_id: string; responsible_id: string; can_responsible_edit: boolean; active: boolean; imprevistos: boolean; created_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; owner_id: string; responsible_id: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
@@ -1953,6 +1961,7 @@ export type Database = {
         Returns: undefined
       }
       my_active_tenant: { Args: Record<PropertyKey, never>; Returns: string }
+      agenda_transferir: { Args: { p_agenda: string; p_novo: string; p_data: string }; Returns: undefined }
       /**
        * Minha equipe: a cadeia INTEIRA abaixo de mim, e vazia se eu não tiver
        * papel de Gestor (`team_lead`) ou acima. É a mesma função que as policies

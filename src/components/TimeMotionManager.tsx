@@ -10,6 +10,7 @@ import { AGENDA_FREQUENCY_LABEL, AGENDA_WORKDAY_MINUTES, WEEKDAYS_PT } from "@/l
 import { shortName } from "@/lib/format";
 import { taskOccursOn, nonWorkingReason, dateFromYMD, ymd, fmtMinutes } from "@/lib/agenda-schedule";
 import type { AgendaFull } from "@/lib/agenda-types";
+import { responsavelEm } from "@/lib/agenda-responsavel";
 
 type Opt = { id: string; name: string };
 const BUDGET = AGENDA_WORKDAY_MINUTES;
@@ -54,7 +55,7 @@ export function TimeMotionManager(props: {
           const ds = ymd(cur);
           let dayMin = 0;
           for (const a of agendas) {
-            if (!a.active || a.responsibleId !== subjectId) continue;
+            if (!a.active || responsavelEm(a, ds) !== subjectId) continue;
             if (ds < a.createdDate) continue;
             for (const t of a.tasks) {
               if (!t.active) continue;
@@ -88,7 +89,7 @@ export function TimeMotionManager(props: {
           workingDays++;
           const ds = ymd(cur);
           for (const a of agendas) {
-            if (!a.active || a.responsibleId !== subjectId) continue;
+            if (!a.active || responsavelEm(a, ds) !== subjectId) continue;
             if (ds < a.createdDate) continue;
             for (const t of a.tasks) {
               if (!t.active) continue;

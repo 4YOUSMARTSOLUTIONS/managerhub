@@ -14,6 +14,9 @@ export type AgendaTaskFull = {
   flexible: boolean; // sem horário fixo, duração média (conta na carga do dia)
 };
 
+/** Um período de responsabilidade pela agenda: `de` incluso, `ate` exclusivo (null = em vigor). */
+export type AgendaResponsavel = { userId: string; nome: string; de: string; ate: string | null };
+
 export type AgendaFull = {
   id: string;
   name: string;
@@ -29,6 +32,8 @@ export type AgendaFull = {
   createdDate: string; // YYYY-MM-DD (não cobra dias anteriores à criação)
   /** agenda pessoal de demandas não previstas: fora da aderência e da carga planejada */
   imprevistos: boolean;
+  /** quem foi responsável em cada período (ver `lib/agenda-responsavel.ts`) */
+  responsaveis: AgendaResponsavel[];
   tasks: AgendaTaskFull[];
 };
 

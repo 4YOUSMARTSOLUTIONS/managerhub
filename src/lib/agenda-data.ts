@@ -39,7 +39,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
   const from = fromD.toLocaleDateString("sv-SE");
   const fromIso = fromD.toISOString();
 
-  const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes, comentRes, anexoRes, plTaskRes, plAssigneeRes, plBoardRes] = await Promise.all([
+  const [members, agendaRes, logRes, schedRes, runRes, holidayRes, membershipRes, reportRes, comentRes, anexoRes, plTaskRes, plAssigneeRes, plBoardRes, respRes] = await Promise.all([
     getMembers(tenant.id),
     (() => {
       const q = supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id);
@@ -62,6 +62,8 @@ export async function loadAgendaData(): Promise<AgendaData> {
     supabase.from("planner_tasks").select("id, title, due_date, progress, board_id").not("due_date", "is", null).gte("due_date", from),
     supabase.from("planner_task_assignees").select("task_id, user_id"),
     supabase.from("planner_boards").select("id, name"),
+    // quem foi responsável por cada agenda em cada período (transferência com data)
+    supabase.from("agenda_responsaveis").select("agenda_id, user_id, de, ate").eq("tenant_id", tenant.id).order("de"),
   ]);
 
   const people = members
@@ -75,12 +77,21 @@ export async function loadAgendaData(): Promise<AgendaData> {
   const reportIds = (reportRes.data ?? []).map((r) => r.user_id);
 
   type AgendaRow = Tables<"agendas"> & { agenda_tasks: Tables<"agenda_tasks">[] };
+  const periodosPorAgenda = new Map<string, Tables<"agenda_responsaveis">[]>();
+  for (const p of (respRes.data ?? []) as Tables<"agenda_responsaveis">[]) {
+    const lista = periodosPorAgenda.get(p.agenda_id) ?? [];
+    lista.push(p);
+    periodosPorAgenda.set(p.agenda_id, lista);
+  }
   const agendas: AgendaFull[] = ((agendaRes.data ?? []) as unknown as AgendaRow[]).map((a) => ({
     id: a.id, name: a.name, description: a.description, unitId: a.unit_id, unitName: null,
     ownerId: a.owner_id, ownerName: nameById[a.owner_id] ?? "Usuário",
     responsibleId: a.responsible_id, responsibleName: nameById[a.responsible_id] ?? "Usuário",
     canResponsibleEdit: a.can_responsible_edit, active: a.active, createdDate: (a.created_at ?? "").slice(0, 10),
     imprevistos: a.imprevistos ?? false,
+    responsaveis: (periodosPorAgenda.get(a.id) ?? []).map((p) => ({
+      userId: p.user_id, nome: nameById[p.user_id] ?? "Usuário", de: p.de, ate: p.ate,
+    })),
     tasks: (a.agenda_tasks ?? []).slice().sort((x, y) => x.sort - y.sort).map((t) => ({
       id: t.id, title: t.title, description: t.description, scheduledTime: t.scheduled_time,
       durationMinutes: t.duration_minutes, frequency: t.frequency, weekdays: t.weekdays ?? [],
