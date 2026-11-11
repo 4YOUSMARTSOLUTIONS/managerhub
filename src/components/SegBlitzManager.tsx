@@ -13,7 +13,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
-import { BlitzAnalises, situacaoDa, type RecorteDosRegistros } from "@/components/BlitzAnalises";
+import { BlitzAnalises, type RecorteDosRegistros } from "@/components/BlitzAnalises";
 import { passaNoFiltro } from "@/components/BlitzAderencia";
 import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
@@ -189,14 +189,10 @@ export function SegBlitzManager({
       if (recorte && (r.occurredOn < recorte.de || r.occurredOn > recorte.ate)) return false;
       if (recorte && !passaNoFiltro(r, recorte.filtro)) return false;
       if (recorte?.ids && !recorte.ids.has(r.id)) return false;
-      // com alçada, meio e situação vêm do botão Filtros (LUIZ, 11/11/2026); sem alçada, dos campos da aba
-      if (recorte) {
-        if (recorte.meio && nomeMeio.get(r.meioId) !== recorte.meio) return false;
-        if (recorte.situacao && situacaoDa(r.liberado, r.conforme) !== recorte.situacao) return false;
-      } else {
-        if (meio && r.meioId !== meio) return false;
-        if (sit && situacaoDa(r.liberado, r.conforme) !== sit) return false;
-      }
+      if (meio && r.meioId !== meio) return false;
+      if (sit === "conforme" && !(r.liberado && r.conforme)) return false;
+      if (sit === "desvio" && !(r.liberado && !r.conforme)) return false;
+      if (sit === "bloqueado" && r.liberado) return false;
       if (!q) return true;
       return [r.pessoa, r.setor, r.placa, r.avaliador, r.motivoNome]
         .some((v) => v && normalizar(v).includes(q));
@@ -212,8 +208,13 @@ export function SegBlitzManager({
     });
   };
 
-  /** Do cartão das Análises para Registros: a situação já foi para o botão Filtros; a busca se limpa. */
-  const verRegistros = () => setBusca("");
+  /** Do cartão das Análises para a lista de Registros na situação; período e filtros já são os mesmos. */
+  const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado") => {
+    setSit(situacaoDoCartao);
+    setBusca("");
+    setMeio("");
+    irPara("registros");
+  };
 
   const detalhe = aberto ? linhas.find((r) => r.id === aberto) ?? null : null;
   const respostasDoDetalhe = detalhe ? respostas[detalhe.id] : undefined;
@@ -261,21 +262,16 @@ export function SegBlitzManager({
           className="input" placeholder="Buscar por pessoa, placa, setor ou avaliador…"
           value={busca} onChange={(e) => setBusca(e.target.value)} style={{ flex: "1 1 240px", maxWidth: 360 }}
         />
-        {/* com alçada, meio e situação moram no botão Filtros; aqui só para quem não tem as Análises */}
-        {!recorte && (
-          <>
-            <select className="select" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ flex: "1 1 140px", maxWidth: 200 }}>
-              <option value="">Todos os meios</option>
-              {meios.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <select className="select" value={sit} onChange={(e) => setSit(e.target.value)} style={{ flex: "1 1 140px", maxWidth: 200 }}>
-              <option value="">Todas as situações</option>
-              <option value="conforme">Conforme</option>
-              <option value="desvio">Liberado com desvio</option>
-              <option value="bloqueado">Bloqueado</option>
-            </select>
-          </>
-        )}
+        <select className="select" value={meio} onChange={(e) => setMeio(e.target.value)} style={{ flex: "1 1 140px", maxWidth: 200 }}>
+          <option value="">Todos os meios</option>
+          {meios.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <select className="select" value={sit} onChange={(e) => setSit(e.target.value)} style={{ flex: "1 1 140px", maxWidth: 200 }}>
+          <option value="">Todas as situações</option>
+          <option value="conforme">Conforme</option>
+          <option value="desvio">Liberado com desvio</option>
+          <option value="bloqueado">Bloqueado</option>
+        </select>
         <div style={{ marginLeft: "auto" }}>
           <ExportButton
             filename="blitz-de-trajeto.xlsx"

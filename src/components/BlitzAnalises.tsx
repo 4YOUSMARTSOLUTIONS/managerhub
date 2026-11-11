@@ -24,19 +24,7 @@ type Escopo = "todos" | "minha";
  * as datas, o filtro de setor, gestor e função e, em "Minha gestão", as blitz
  * da análise (a cadeia vem do banco; a lista sozinha não sabe quem é de quem).
  */
-export type RecorteDosRegistros = {
-  de: string; ate: string; filtro: FiltroPessoa; ids: Set<string> | null;
-  /** do botão Filtros: o nome do meio e a situação da blitz */
-  meio: string; situacao: SituacaoBlitz | "";
-};
-
-/** A situação de uma blitz: o que o filtro "Situação" escolhe. */
-export type SituacaoBlitz = "conforme" | "desvio" | "bloqueado";
-export const SITUACOES_BLITZ: [SituacaoBlitz, string][] = [
-  ["conforme", "Conforme"], ["desvio", "Liberado com desvio"], ["bloqueado", "Bloqueado"],
-];
-export const situacaoDa = (liberado: boolean, conforme: boolean): SituacaoBlitz =>
-  !liberado ? "bloqueado" : conforme ? "conforme" : "desvio";
+export type RecorteDosRegistros = { de: string; ate: string; filtro: FiltroPessoa; ids: Set<string> | null };
 
 const NOME_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
@@ -50,11 +38,6 @@ function rotulo(modo: Modo, de: string, ate: string): string {
   if (modo === "ano") return de.slice(0, 4);
   if (modo === "mes") return `${NOME_MES[Number(de.slice(5, 7)) - 1]} de ${de.slice(0, 4)}`;
   return `${formatDate(de)} a ${formatDate(ate)}`;
-}
-
-/** A blitz passa no filtro de meio e situação do botão Filtros? */
-function passaNaBlitz(meio: string | null | undefined, liberado: boolean, conforme: boolean, meioFiltro: string, situacaoFiltro: SituacaoBlitz | "") {
-  return (!meioFiltro || meio === meioFiltro) && (!situacaoFiltro || situacaoDa(liberado, conforme) === situacaoFiltro);
 }
 
 /** Botões lado a lado, um ativo (o padrão dos filtros da tela). */
@@ -180,8 +163,8 @@ export function BlitzAnalises({
   podeEscolherGestao: boolean;
   /** o bloco das tratativas que o gestor logado deve (no painel de Análises) */
   tratativas?: React.ReactNode;
-  /** clique nos cartões de desvio e bloqueio: a situação vai para o filtro e a tela abre Registros */
-  onVerRegistros?: () => void;
+  /** clique nos cartões de desvio e bloqueio: a lista de Registros naquela situação */
+  onVerRegistros?: (situacao: "desvio" | "bloqueado") => void;
   /** a lista de Registros, já no recorte dos dois botões */
   registros: (recorte: RecorteDosRegistros) => React.ReactNode;
   /** troca de período: a lista de Registros busca as blitz dele junto com a análise */
@@ -207,10 +190,6 @@ export function BlitzAnalises({
   // para a tela inteira, cartões inclusive. Os gráficos e o quadro de
   // pendências ligam ele ao serem clicados
   const [filtro, setFiltro] = useState<FiltroPessoa>({});
-  // meio e situação também no botão Filtros (LUIZ, 11/11/2026): valem para tudo
-  // que é blitz (qualidade, alertas, recorrência, registros); a cobertura conta pessoas
-  const [meioFiltro, setMeioFiltro] = useState("");
-  const [situacaoFiltro, setSituacaoFiltro] = useState<SituacaoBlitz | "">("");
   // a situação em que cada lista abre quando chega por um clique; a versão
   // remonta a lista para valer a nova
   const [situacaoLista, setSituacaoLista] = useState<SituacaoPessoa>("faltam");
@@ -235,13 +214,6 @@ export function BlitzAnalises({
     setSituacaoAlertas("aguardando");
     setVersaoAlertas((v) => v + 1);
     onAba("alertas");
-  };
-
-  /** Cartão de desvio ou bloqueio: a situação entra no filtro e a tela abre Registros. */
-  const verRegistros = (situacao: SituacaoBlitz) => {
-    setSituacaoFiltro(situacao);
-    onVerRegistros?.();
-    onAba("registros");
   };
 
   const verFaltam = (f: FiltroPessoa, situacao: SituacaoPessoa) => {
@@ -281,45 +253,18 @@ export function BlitzAnalises({
   const ad = dados.aderencia;
   const periodo = rotulo(modoDosDados, dados.de, dados.ate);
   const recorteDosRegistros = useMemo<RecorteDosRegistros>(() => ({
-    de: dados.de, ate: dados.ate, filtro, meio: meioFiltro, situacao: situacaoFiltro,
+    de: dados.de, ate: dados.ate, filtro,
     ids: escopoDosDados === "minha" && dados.blitz ? new Set(dados.blitz.map((b) => b.id)) : null,
-  }), [dados.de, dados.ate, dados.blitz, filtro, escopoDosDados, meioFiltro, situacaoFiltro]);
-  const filtraBlitz = !!(meioFiltro || situacaoFiltro);
+  }), [dados.de, dados.ate, dados.blitz, filtro, escopoDosDados]);
 
   // tudo passa pelo filtro único; os cartões são refeitos com o que sobrou
   const pessoasTodas = useMemo(
     () => ad.pessoas ?? ad.faltam.map((f) => ({ ...f, passou: false })), [ad.pessoas, ad.faltam]);
   const pessoas = useMemo(() => pessoasTodas.filter((p) => passaNoFiltro(p, filtro)), [pessoasTodas, filtro]);
-  const blitz = useMemo(() => dados.blitz?.filter((b) =>
-    passaNoFiltro(b, filtro) && passaNaBlitz(b.meio, b.liberado, b.conforme, meioFiltro, situacaoFiltro),
-  ), [dados.blitz, filtro, meioFiltro, situacaoFiltro]);
-  // alerta só nasce de blitz não conforme: com "Conforme" na situação, não sobra nenhum
-  const alertas = useMemo(() => (dados.alertas ?? []).filter((a) =>
-    passaNoFiltro(a, filtro) && passaNaBlitz(a.meio, a.liberado, false, meioFiltro, situacaoFiltro),
-  ), [dados.alertas, filtro, meioFiltro, situacaoFiltro]);
-  const recorrencia = useMemo(() => {
-    const doServidor = dados.recorrencia.filter((r) => passaNoFiltro(r, filtro));
-    // com meio ou situação ligados, a conta se refaz só com as blitz que passam
-    // (nome, matrícula, setor e gestor seguem os do servidor)
-    if (!filtraBlitz || !blitz || blitz.some((b) => !b.user_id)) return doServidor;
-    const quem = new Map(dados.recorrencia.map((r) => [r.user_id, r]));
-    const conta = new Map<string, { nc: number; n: number }>();
-    for (const b of blitz) {
-      const id = b.user_id as string;
-      const c = conta.get(id) ?? { nc: 0, n: 0 };
-      c.n += 1;
-      if (!b.conforme) c.nc += 1;
-      conta.set(id, c);
-    }
-    return [...conta.entries()].flatMap(([id, c]) => {
-      const r = quem.get(id);
-      return r && c.nc > 0 ? [{ ...r, nao_conformes: c.nc, total: c.n }] : [];
-    }).sort((x, y) => y.nao_conformes - x.nao_conformes || (x.nome ?? "").localeCompare(y.nome ?? "", "pt-BR"));
-  }, [dados.recorrencia, filtro, filtraBlitz, blitz]);
-  const temFiltro = FILTROS_DA_TELA.some(({ campo }) => filtro[campo]) || filtraBlitz;
-  const meiosDoPeriodo = useMemo(() => [...new Set([
-    ...(dados.blitz ?? []).map((b) => b.meio), ...(dados.alertas ?? []).map((a) => a.meio),
-  ].filter((m): m is string => !!m))].sort((x, y) => x.localeCompare(y, "pt-BR")), [dados.blitz, dados.alertas]);
+  const alertas = useMemo(() => (dados.alertas ?? []).filter((a) => passaNoFiltro(a, filtro)), [dados.alertas, filtro]);
+  const recorrencia = useMemo(() => dados.recorrencia.filter((r) => passaNoFiltro(r, filtro)), [dados.recorrencia, filtro]);
+  const blitz = useMemo(() => dados.blitz?.filter((b) => passaNoFiltro(b, filtro)), [dados.blitz, filtro]);
+  const temFiltro = FILTROS_DA_TELA.some(({ campo }) => filtro[campo]);
   // sem a lista de blitz (versão antiga do banco), vale o número do servidor
   const ind = blitz ? {
     total: blitz.length,
@@ -389,8 +334,8 @@ export function BlitzAnalises({
       icone={<Filter size={15} aria-hidden />}
       alinharDireita={!celular}
       largura={280}
-      titulo="Filtrar por setor, gestor, função, meio e situação"
-      contador={FILTROS_DA_TELA.filter(({ campo }) => filtro[campo]).length + (meioFiltro ? 1 : 0) + (situacaoFiltro ? 1 : 0)}
+      titulo="Filtrar por unidade, setor, gestor e função"
+      contador={FILTROS_DA_TELA.filter(({ campo }) => filtro[campo]).length}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
         <span className="soft" style={ROTULO_DO_MENU}>Filtrar por</span>
@@ -404,22 +349,8 @@ export function BlitzAnalises({
             {(opcoes[campo] ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         ))}
-        <span className="soft" style={{ ...ROTULO_DO_MENU, marginTop: "0.4rem" }}>Da blitz</span>
-        <select className="select" value={meioFiltro} aria-label="Meio de transporte" onChange={(e) => setMeioFiltro(e.target.value)}>
-          <option value="">Meio: todos</option>
-          {meiosDoPeriodo.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <select className="select" value={situacaoFiltro} aria-label="Situação da blitz"
-          onChange={(e) => setSituacaoFiltro(e.target.value as SituacaoBlitz | "")}>
-          <option value="">Situação: todas</option>
-          {SITUACOES_BLITZ.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-        </select>
-        <span className="soft" style={{ fontSize: "0.72rem", lineHeight: 1.35 }}>
-          Meio e situação valem para as blitz. A cobertura e a lista de colaboradores contam pessoas e não mudam.
-        </span>
         {temFiltro && (
-          <button type="button" className="btn btn-ghost btn-sm"
-            onClick={() => { setFiltro({}); setMeioFiltro(""); setSituacaoFiltro(""); }}>Limpar filtros</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFiltro({})}>Limpar filtros</button>
         )}
       </div>
     </Dropdown>
@@ -448,8 +379,8 @@ export function BlitzAnalises({
       conformidade={conformidade} total={ind.total} conformes={ind.conformes} desvio={ind.com_desvio} bloqueios={ind.bloqueios}
       tratou={tratou} tratados={ind.alertas.com_tratativa} enviados={ind.alertas.enviados}
       dicaAderencia={dicaAderencia}
-      onDesvio={() => verRegistros("desvio")}
-      onBloqueio={() => verRegistros("bloqueado")}
+      onDesvio={onVerRegistros ? () => onVerRegistros("desvio") : undefined}
+      onBloqueio={onVerRegistros ? () => onVerRegistros("bloqueado") : undefined}
     />
   );
 
