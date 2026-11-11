@@ -80,6 +80,13 @@ export type BlitzItem = {
   funcao: string | null;
   liberado: boolean;
   conforme: boolean;
+  /** para "Principais falhas": o meio, o motivo do bloqueio e as perguntas */
+  meio?: string | null;
+  motivo?: string | null;
+  /** perguntas respondidas com "não" */
+  nao?: string[];
+  /** perguntas feitas (sem os "não se aplica") */
+  perguntadas?: string[];
 };
 
 /** Um alerta da blitz no período (`seg_blitz_alertas_do_periodo`), só leitura. */

@@ -11,6 +11,7 @@ import {
   type FiltroPessoa, type SituacaoPessoa,
 } from "./BlitzAderencia";
 import { BlitzAlertasLista, TratativasPendentesPorGestor, type SituacaoAlerta } from "./BlitzAlertasLista";
+import { BlitzFalhas } from "./BlitzFalhas";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate, normalizar } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
@@ -396,6 +397,8 @@ export function BlitzAnalises({
             pendencias={alertas.some((a) => !a.registrada_em)
               ? <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
               : null} />
+          {/* o que mais falha: perguntas, motivos de bloqueio e meio (LUIZ, 11/11/2026) */}
+          <BlitzFalhas blitz={blitz ?? []} rotuloPeriodo={periodo} />
         </>,
       ),
     },
