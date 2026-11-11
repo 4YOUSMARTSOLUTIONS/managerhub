@@ -268,8 +268,8 @@ function TabelaGrupos({ grupos, rotulo, onEscolher }: { grupos: AderenciaGrupo[]
 }
 
 /** Uma seção do painel: o gráfico é a visão principal, a tabela é a alternativa. */
-function Secao({ numero, titulo, sufixo, grafico, tabela, grupos, dica }: {
-  numero: number; titulo: string; sufixo?: React.ReactNode;
+function Secao({ titulo, sufixo, grafico, tabela, grupos, dica }: {
+  titulo: string; sufixo?: React.ReactNode;
   grafico: React.ReactNode; tabela: React.ReactNode; grupos: AderenciaGrupo[];
   /** uma linha sob o título (ex.: o que o clique faz) */
   dica?: string;
@@ -282,7 +282,7 @@ function Secao({ numero, titulo, sufixo, grafico, tabela, grupos, dica }: {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
         <div>
           <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-            <span className="soft" style={{ fontWeight: 600 }}>{numero}.</span> {titulo} {sufixo}
+            {titulo} {sufixo}
           </h4>
           {dica && !vazio && <p className="soft" style={{ fontSize: "0.74rem", margin: "0.2rem 0 0" }}>{dica}</p>}
         </div>
@@ -351,7 +351,7 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
       {/* 1. cada unidade; clicar filtra os próximos */}
       <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-          <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}><span className="soft" style={{ fontWeight: 600 }}>1.</span> Aderência por unidade</h4>
+          <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Aderência por unidade</h4>
           <span className="soft" style={{ fontSize: "0.76rem" }}>Clique numa unidade para ver setores e gestores só dela.</span>
         </div>
         {unidades.length === 0 ? (
@@ -388,10 +388,10 @@ export function BlitzAderenciaDetalhe({ dados, rotuloPeriodo, onVerFaltam }: {
 
       {/* setor e gestor lado a lado (LUIZ, 11/11/2026); empilham em tela estreita */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 480px), 1fr))", gap: "1rem", alignItems: "start" }}>
-        <Secao numero={2} titulo="Aderência por setor" sufixo={sufixo} grupos={setores} dica={dica}
+        <Secao titulo="Aderência por setor" sufixo={sufixo} grupos={setores} dica={dica}
           grafico={<BarrasEmPe grupos={setores} onEscolher={escolher("setor")} />}
           tabela={<TabelaGrupos grupos={setores} rotulo="Setor" onEscolher={escolher("setor")} />} />
-        <Secao numero={3} titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores} dica={dica}
+        <Secao titulo="Aderência por gestor" sufixo={sufixo} grupos={gestores} dica={dica}
           grafico={<BarrasDeitadas grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />}
           tabela={<TabelaGrupos grupos={gestores} rotulo="Gestor" onEscolher={escolher("gestor")} />} />
       </div>
