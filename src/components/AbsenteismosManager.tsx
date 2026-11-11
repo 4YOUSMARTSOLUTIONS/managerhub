@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -19,7 +19,7 @@ import {
   ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO,
 } from "@/lib/constants";
 import {
-  anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, confirmarAbsenteismo,
+  anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, comunicarAberturaPendente, confirmarAbsenteismo,
   decidirAbsenteismo, getAlertaInss, getAtestado, getDocumentoAbsenteismoUrl,
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
@@ -159,9 +159,19 @@ export function AbsenteismosManager({
   podeCancelarAprovado: boolean;
 }) {
   const [novo, setNovo] = useState<
-    { userId: string; occurredOn: string; reasonNote: string; emHoras: boolean; horaInicio: string; horaFim: string } | null
+    {
+      userId: string; occurredOn: string; reasonNote: string; emHoras: boolean; horaInicio: string; horaFim: string;
+      /** "Já sei o motivo" (LUIZ, 11/11/2026): segue direto para o motivo e o documento, sem o aviso de abertura */
+      comMotivo: boolean;
+    } | null
   >(null);
   const [confirmando, setConfirmando] = useState<AbsenteismoRow | null>(null);
+  // o lançamento que nasceu pelo "Já sei o motivo" e ainda não teve comunicado:
+  // se o gestor fechar sem enviar ao RH, sai o aviso de abertura
+  const [semComunicado, setSemComunicado] = useState<string | null>(null);
+  // o mesmo valor em ref: o fechamento logo depois do envio ainda enxergaria o estado velho
+  const semComunicadoRef = useRef<string | null>(null);
+  const marcarSemComunicado = (id: string | null) => { semComunicadoRef.current = id; setSemComunicado(id); };
   const [aberto, setAberto] = useState<AbsenteismoRow | null>(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
@@ -187,22 +197,70 @@ export function AbsenteismosManager({
   const lancar = () => {
     if (!novo) return;
     setErro("");
+    const n = novo;
     iniciar(async () => {
       // o que vai ao servidor é só o que ele grava, e as horas só quando a
       // ausência é de horas: a marcação é estado de tela, não dado do lançamento
       const r = await lancarNaoComparecimento({
-        userId: novo.userId,
-        occurredOn: novo.occurredOn,
-        reasonNote: novo.reasonNote,
-        horaInicio: novo.emHoras ? novo.horaInicio : "",
-        horaFim: novo.emHoras ? novo.horaFim : "",
+        userId: n.userId,
+        occurredOn: n.occurredOn,
+        reasonNote: n.comMotivo ? "" : n.reasonNote,
+        horaInicio: n.emHoras ? n.horaInicio : "",
+        horaFim: n.emHoras ? n.horaFim : "",
+        comunicar: !n.comMotivo,
       });
       if (r.error) { setErro(r.error); return; }
       setNovo(null);
       if (r.warning) setErro(r.warning);
       router.refresh();
+      // "Já sei o motivo": o mesmo formulário do Efetivar abre na hora, sobre o
+      // lançamento que acabou de nascer (sem e-mail ainda)
+      if (n.comMotivo && r.id) {
+        marcarSemComunicado(r.id);
+        setConfirmando(linhaNova(r.id, n));
+      }
     });
   };
+
+  /** O lançamento recém-criado, montado com o que a tela já sabe (a lista chega no refresh). */
+  const linhaNova = (id: string, n: NonNullable<typeof novo>): AbsenteismoRow => {
+    const p = pessoaPorId.get(n.userId);
+    return {
+      id, status: "aberto", userId: n.userId, occurredOn: n.occurredOn, reasonNote: null,
+      absenceTypeId: null, typeName: null, kind: null, requiresDocument: false, requiresMedical: false,
+      startDate: null, endDate: null, discountsRv: null, note: null, kinship: null, workAccident: false,
+      certificateKind: null, waived: false,
+      hoursStart: n.emHoras ? n.horaInicio : null, hoursEnd: n.emHoras ? n.horaFim : null,
+      fullName: p?.name ?? null, employeeCode: p?.matricula ?? null, departmentName: p?.setor ?? null,
+      subdepartmentName: p?.subsetor ?? null, positionName: p?.funcao ?? null, managerName: p?.gestor ?? null,
+      unitName: p?.unidade ?? null, docPath: null, docFilename: null, createdBy: meuId, createdByName: null,
+      submittedAt: null, decidedAt: null, decidedByName: null, decisionNote: null, cancelledAt: null, cancelNote: null,
+      emailStatus: null, emailAt: null,
+    };
+  };
+
+  /**
+   * Fecha o Efetivar. Se o lançamento nasceu pelo "Já sei o motivo" e não foi ao
+   * RH, ele fica em aberto como qualquer outro, e o RH precisa saber: sai o
+   * aviso de abertura (uma vez só).
+   */
+  const fecharEfetivar = () => {
+    const id = confirmando?.id;
+    setConfirmando(null);
+    setErro("");
+    if (id && id === semComunicadoRef.current) {
+      marcarSemComunicado(null);
+      void comunicarAberturaPendente(id).then((r) => {
+        if (r.error || r.warning) setErro(r.error ?? r.warning ?? "");
+        else if (r.message) toast.success(r.message);
+        router.refresh();
+      });
+    }
+  };
+
+  // o registro do Efetivar acompanha a lista (o anexo enviado aparece na hora);
+  // o recém-criado vale até a lista trazer o de verdade
+  const linhaConfirmando = confirmando ? rows.find((r) => r.id === confirmando.id) ?? confirmando : null;
 
   const abrirDocumento = async (path: string) => {
     const url = await getDocumentoAbsenteismoUrl(path);
@@ -417,7 +475,7 @@ export function AbsenteismosManager({
           {podeDecidir && <RelatorioAbsenteismoDialog unidades={unidades} />}
           <button
             type="button" className="btn btn-primary btn-sm"
-            onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "", emHoras: false, horaInicio: "", horaFim: "" }); }}
+            onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "", emHoras: false, horaInicio: "", horaFim: "", comMotivo: false }); }}
           >
             + Lançar ausência
           </button>
@@ -433,14 +491,41 @@ export function AbsenteismosManager({
       {/* ---------------- lançamento da ausência ---------------- */}
       {novo && (
         <Dialogo titulo="Lançar ausência" onFechar={() => setNovo(null)}>
+          {/* dois caminhos num botão só (LUIZ, 11/11/2026) */}
+          <div role="group" aria-label="Você já sabe o motivo?" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.5rem" }}>
+            {([
+              [false, "Ainda não sei o motivo", "Comunica agora; o motivo e o atestado entram depois, pelo Efetivar."],
+              [true, "Já sei o motivo", "Já tenho o motivo ou o atestado: lança e envia ao RH de uma vez."],
+            ] as [boolean, string, string][]).map(([v, titulo, texto]) => {
+              const ativo = novo.comMotivo === v;
+              return (
+                <button
+                  key={titulo} type="button" aria-pressed={ativo}
+                  onClick={() => setNovo((n) => (n ? { ...n, comMotivo: v } : n))}
+                  style={{
+                    textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit", padding: "0.65rem 0.8rem",
+                    borderRadius: "var(--mh-radius-lg)", display: "flex", flexDirection: "column", gap: "0.2rem",
+                    border: `1px solid ${ativo ? "var(--mh-primary-500)" : "var(--border)"}`,
+                    background: ativo ? "var(--mh-primary-soft)" : "var(--surface)",
+                  }}
+                >
+                  <span style={{ fontWeight: 700, fontSize: "0.86rem" }}>{titulo}</span>
+                  <span className="soft" style={{ fontSize: "0.76rem", lineHeight: 1.35 }}>{texto}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-            {novo.emHoras
-              ? "Use essa opção quando o colaborador se ausentou por algumas horas, chegou atrasado ou saiu mais cedo, e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
-              : "Use essa opção quando o colaborador não apareceu e o motivo ainda não é conhecido, ou se o atestado ainda não foi entregue."}{" "}
-            O comunicado por e-mail é enviado na hora, para os endereços definidos em
-            Configurações. Quando a situação estiver confirmada e o atestado tiver sido recebido,
-            volte na aba Em aberto e use Efetivar, informando o motivo, o período real, bem como o
-            documento.
+            {novo.comMotivo
+              ? "Informe quem e quando, e continue: em seguida vêm o motivo, o período e o documento. Um comunicado só sai para o RH, no envio. Se você fechar antes de enviar, a ausência fica em aberto e o RH é avisado."
+              : <>
+                  {novo.emHoras
+                    ? "Use quando o colaborador se ausentou por algumas horas, chegou atrasado ou saiu mais cedo, e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
+                    : "Use quando o colaborador não apareceu e o motivo ainda não é conhecido, ou o atestado ainda não foi entregue."}{" "}
+                  O comunicado por e-mail sai na hora, para os endereços definidos em Configurações.
+                  Quando o motivo estiver confirmado, volte na aba Em aberto e use Efetivar.
+                </>}
           </p>
 
           <div>
@@ -520,20 +605,31 @@ export function AbsenteismosManager({
             </p>
           )}
 
-          <div>
-            <label className="label">O que se sabe até agora</label>
-            <textarea
-              className="input" rows={3} value={novo.reasonNote}
-              placeholder="Ex.: não avisou nada até agora; avisou por mensagem que passaria no médico."
-              onChange={(e) => setNovo((n) => (n ? { ...n, reasonNote: e.target.value } : n))}
-            />
-          </div>
+          {!novo.comMotivo && (
+            <div>
+              <label className="label">O que se sabe até agora</label>
+              <textarea
+                className="input" rows={3} value={novo.reasonNote}
+                placeholder="Ex.: não avisou nada até agora; avisou por mensagem que passaria no médico."
+                onChange={(e) => setNovo((n) => (n ? { ...n, reasonNote: e.target.value } : n))}
+              />
+              {/* escreveu que já tem o atestado: o caminho completo poupa a volta pelo Efetivar */}
+              {/\b(atestado|declara[çc][ãa]o)\b/i.test(novo.reasonNote) && (
+                <p style={{ fontSize: "0.78rem", margin: "0.4rem 0 0", display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                  <span className="soft">Já está com o atestado?</span>
+                  <button type="button" className="btn btn-ghost btn-xs" onClick={() => setNovo((n) => (n ? { ...n, comMotivo: true } : n))}>
+                    Lançar já com o motivo
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
 
           {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
 
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={lancar}>
-              {pendente ? "Lançando…" : "Lançar e comunicar"}
+              {pendente ? "Lançando…" : novo.comMotivo ? "Continuar: motivo e documento" : "Lançar e comunicar"}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNovo(null)}>Cancelar</button>
           </div>
@@ -541,16 +637,22 @@ export function AbsenteismosManager({
       )}
 
       {/* ---------------- efetivação ---------------- */}
-      {confirmando && (
-        <Dialogo titulo="Efetivar a ausência" onFechar={() => { setConfirmando(null); setErro(""); }}>
+      {linhaConfirmando && (
+        <Dialogo
+          titulo={linhaConfirmando.id === semComunicado ? "Lançar ausência: motivo e documento" : "Efetivar a ausência"}
+          onFechar={fecharEfetivar}
+        >
           <PainelConfirmacao
-            linha={confirmando}
+            key={linhaConfirmando.id}
+            linha={linhaConfirmando}
             tipos={tiposAtivos}
             kindsComRedutor={kindsComRedutor}
             onErro={setErro}
             erro={erro}
             onAbrirDocumento={abrirDocumento}
-            onFechar={() => { setConfirmando(null); setErro(""); }}
+            // enviado ao RH: o comunicado já saiu no envio, não há aviso pendente
+            onEnviado={() => marcarSemComunicado(null)}
+            onFechar={fecharEfetivar}
           />
         </Dialogo>
       )}
@@ -687,7 +789,7 @@ function BuscaCid({
  * bloco clínico e trava o envio sem o documento.
  */
 function PainelConfirmacao({
-  linha, tipos, kindsComRedutor, erro, onErro, onAbrirDocumento, onFechar,
+  linha, tipos, kindsComRedutor, erro, onErro, onAbrirDocumento, onEnviado, onFechar,
 }: {
   linha: AbsenteismoRow;
   tipos: Tipo[];
@@ -695,6 +797,8 @@ function PainelConfirmacao({
   erro: string;
   onErro: (m: string) => void;
   onAbrirDocumento: (path: string) => void;
+  /** chamado depois do envio ao RH dar certo, antes de fechar */
+  onEnviado?: () => void;
   onFechar: () => void;
 }) {
   const [c, setC] = useState<Confirmacao>({
@@ -809,7 +913,10 @@ function PainelConfirmacao({
       fd.set("id", linha.id);
       const r = await confirmarAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
+      onEnviado?.();
       onFechar();
+      if (r.warning) toast.warning(r.warning);
+      else toast.success("Enviado ao RH.");
       router.refresh();
     });
   };

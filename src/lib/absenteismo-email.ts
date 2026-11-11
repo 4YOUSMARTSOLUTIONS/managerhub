@@ -23,7 +23,12 @@ import { sendMail } from "@/lib/mailer";
  * `absenteismo_atestados` como parâmetro.
  */
 
-export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio";
+/**
+ * `direto`: lançado já com o motivo e enviado ao RH de uma vez, sem o aviso de
+ * abertura antes (LUIZ, 11/11/2026). Quem decide é o próprio envio: um
+ * "confirmado" sem aviso de abertura registrado vira `direto`.
+ */
+export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto";
 
 export type ResultadoComunicado = {
   status: "sent" | "failed" | "skipped";
@@ -84,6 +89,10 @@ function assunto(evento: EventoComunicado, l: Linha): string {
   // Quem saiu duas horas não "não compareceu". O assunto é o que o RH lê na
   // caixa de entrada antes de abrir, então a diferença precisa estar ali.
   const horas = faixaDeHoras(l);
+  if (evento === "direto") {
+    const motivo = l.snap_type_name ? ` (${l.snap_type_name})` : "";
+    return horas ? `Ausência de horas lançada: ${quem} em ${dia}, ${horas}${motivo}` : `Ausência lançada: ${quem} em ${dia}${motivo}`;
+  }
   if (horas) return `Ausência de horas: ${quem} em ${dia}, ${horas}`;
   return `Não comparecimento: ${quem} em ${dia}`;
 }
@@ -117,6 +126,10 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
         : "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
       : evento === "confirmado"
         ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH. Ainda não vale como ausência."
+      : evento === "direto"
+        ? horas
+          ? "Ausência parcial lançada pelo gestor já com o motivo e enviada para aprovação do RH. Ainda não vale como ausência."
+          : "O gestor lançou a ausência já com o motivo e enviou para aprovação do RH. Ainda não vale como ausência."
         : evento === "aprovado"
           ? "O RH aprovou o lançamento, que passa a valer como ausência registrada."
           : "O RH reprovou o lançamento, que não vale como ausência.";
@@ -153,10 +166,15 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
  */
 export async function dispatchComunicadoAbsenteismo(
   lancamentoId: string,
-  evento: EventoComunicado,
+  eventoPedido: EventoComunicado,
   atorId?: string,
 ): Promise<ResultadoComunicado> {
   const admin = createServiceClient();
+  // "confirmado" sem aviso de abertura antes = lançado direto com o motivo: o RH
+  // não sabe da ausência, então o texto não pode falar em "motivo confirmado"
+  const evento: EventoComunicado = eventoPedido === "confirmado" && !(await avisouAbertura(lancamentoId))
+    ? "direto"
+    : eventoPedido;
 
   const registrar = async (
     tenantId: string,
@@ -232,4 +250,29 @@ export async function dispatchComunicadoAbsenteismo(
     console.error("[absenteismo-email] falhou:", (e as Error).message);
     return { status: "failed", destinatarios: 0, error: (e as Error).message };
   }
+}
+
+/** Já saiu (ou se tentou mandar) o aviso de abertura deste lançamento? */
+async function avisouAbertura(lancamentoId: string): Promise<boolean> {
+  const { count } = await createServiceClient()
+    .from("absenteismo_emails")
+    .select("id", { count: "exact", head: true })
+    .eq("lancamento_id", lancamentoId)
+    .eq("event", "aberto");
+  return (count ?? 0) > 0;
+}
+
+/**
+ * O aviso de abertura que ficou para trás: o gestor começou a lançar com o
+ * motivo (sem aviso) e fechou sem enviar ao RH. O lançamento fica em aberto, e
+ * o RH precisa saber da ausência como em qualquer outro. Não repete: só manda
+ * se nenhum comunicado saiu ainda.
+ */
+export async function comunicarAberturaSeFaltar(lancamentoId: string, atorId?: string): Promise<ResultadoComunicado | null> {
+  const { count } = await createServiceClient()
+    .from("absenteismo_emails")
+    .select("id", { count: "exact", head: true })
+    .eq("lancamento_id", lancamentoId);
+  if ((count ?? 0) > 0) return null;
+  return dispatchComunicadoAbsenteismo(lancamentoId, "aberto", atorId);
 }

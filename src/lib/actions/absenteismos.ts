@@ -5,7 +5,7 @@ import { actionContext, dpActionContext } from "./context";
 import { souGestorDe } from "@/lib/team";
 import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import {
-  dispatchComunicadoAbsenteismo, type EventoComunicado, type ResultadoComunicado,
+  comunicarAberturaSeFaltar, dispatchComunicadoAbsenteismo, type EventoComunicado, type ResultadoComunicado,
 } from "@/lib/absenteismo-email";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
@@ -304,6 +304,12 @@ export async function lancarNaoComparecimento(input: {
   /** ausência de horas: entrada e saída no dia. Vazio = o dia inteiro. */
   horaInicio?: string;
   horaFim?: string;
+  /**
+   * false no caminho "já sei o motivo" (LUIZ, 11/11/2026): o comunicado sai uma
+   * vez só, no envio ao RH; se o gestor desistir antes, sai o de abertura
+   * (`comunicarAberturaPendente`).
+   */
+  comunicar?: boolean;
 }): Promise<ActionState & { id?: string }> {
   try {
     const ctx = await actionContext();
@@ -346,11 +352,12 @@ export async function lancarNaoComparecimento(input: {
       .single();
     if (error) return { error: mensagemDoLancamento(error) };
 
+    revalidar();
+    if (input.comunicar === false) return { ok: true, id: data.id };
+
     // O comunicado sai DEPOIS do insert commitado: o lançamento nunca deixa de
     // ser gravado por causa do e-mail, e a falha vira aviso na tela.
     const envio = await dispatchComunicadoAbsenteismo(data.id, "aberto", userId);
-
-    revalidar();
     return { ok: true, id: data.id, ...avisoDoEnvio(envio) };
   } catch (e) {
     return { error: (e as Error).message };
@@ -728,6 +735,35 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
 
     revalidar();
     return { ok: true, message: "Enviado ao RH.", ...avisoDoEnvio(envio) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * O gestor começou o lançamento com o motivo e fechou sem enviar ao RH: o
+ * lançamento ficou em aberto sem aviso nenhum. Manda o de abertura (uma vez).
+ */
+export async function comunicarAberturaPendente(id: string): Promise<ActionState> {
+  try {
+    const { supabase, userId } = await actionContext();
+    if (!id) return { error: "Lançamento inválido." };
+    // a RLS decide se esta pessoa alcança o lançamento (id adivinhado não manda e-mail)
+    const { data: linha } = await supabase
+      .from("absenteismo_lancamentos")
+      .select("id, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (!linha) return { error: "Lançamento não encontrado." };
+    if (linha.status !== "aberto") return { ok: true };
+    const envio = await comunicarAberturaSeFaltar(id, userId);
+    revalidar();
+    if (!envio) return { ok: true };
+    return {
+      ok: true,
+      message: "A ausência ficou em aberto, e o RH foi avisado. Efetive quando tiver o motivo.",
+      ...avisoDoEnvio(envio),
+    };
   } catch (e) {
     return { error: (e as Error).message };
   }
