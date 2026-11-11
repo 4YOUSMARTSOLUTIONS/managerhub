@@ -189,7 +189,17 @@ export function BlitzAnalises({
 
   const mudarFiltro = (f: FiltroPessoa) => setFiltro((atual) => ({ ...atual, ...f }));
 
+  // o item clicado em "Itens que mais falham": filtra os Alertas (LUIZ, 11/11/2026)
+  const [itemAlertas, setItemAlertas] = useState("");
+  const verItem = (pergunta: string) => {
+    setItemAlertas(pergunta);
+    setSituacaoAlertas("");
+    setVersaoAlertas((v) => v + 1);
+    onAba("alertas");
+  };
+
   const verAlertas = (gestor: string) => {
+    setItemAlertas("");
     mudarFiltro({ gestor });
     setSituacaoAlertas("aguardando");
     setVersaoAlertas((v) => v + 1);
@@ -398,7 +408,7 @@ export function BlitzAnalises({
               ? <TratativasPendentesPorGestor alertas={alertas} rotuloPeriodo={periodo} onVer={verAlertas} />
               : null} />
           {/* o que mais falha: perguntas, motivos de bloqueio e meio (LUIZ, 11/11/2026) */}
-          <BlitzFalhas blitz={blitz ?? []} rotuloPeriodo={periodo} />
+          <BlitzFalhas blitz={blitz ?? []} rotuloPeriodo={periodo} onVerItem={verItem} />
         </>,
       ),
     },
@@ -419,7 +429,8 @@ export function BlitzAnalises({
       id: "alertas", label: `Alertas (${alertas.length})`,
       content: painel(
         <BlitzAlertasLista key={versaoAlertas} alertas={alertas} rotuloPeriodo={periodo}
-          chaveArquivo={`${dados.de}_${dados.ate}`} situacaoInicial={situacaoAlertas} />,
+          chaveArquivo={`${dados.de}_${dados.ate}`} situacaoInicial={situacaoAlertas}
+          item={itemAlertas} onItem={setItemAlertas} />,
       ),
     },
   ];

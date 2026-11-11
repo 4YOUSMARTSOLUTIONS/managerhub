@@ -16,8 +16,11 @@ type Linha = { nome: string; n: number; detalhe: string; dica: string };
  * duas linhas), a barra e o número com o detalhe. Mostra as primeiras e abre o
  * resto num clique.
  */
-function Barras({ linhas, cor, rotulo, larguraDoNome = "42%", primeiras = 8 }: {
+function Barras({ linhas, cor, rotulo, larguraDoNome = "42%", primeiras = 8, onEscolher, dicaDoClique }: {
   linhas: Linha[]; cor: { fundo: string; borda: string }; rotulo: string; larguraDoNome?: string; primeiras?: number;
+  /** linha clicável: leva a outra visão filtrada nela */
+  onEscolher?: (nome: string) => void;
+  dicaDoClique?: string;
 }) {
   const [todas, setTodas] = useState(false);
   const max = Math.max(1, ...linhas.map((l) => l.n));
@@ -26,8 +29,15 @@ function Barras({ linhas, cor, rotulo, larguraDoNome = "42%", primeiras = 8 }: {
     <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
       <div role="list" aria-label={rotulo} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {vistas.map((l) => (
-          <div key={l.nome} role="listitem" title={l.dica}
-            style={{ display: "grid", gridTemplateColumns: `minmax(140px, ${larguraDoNome}) 1fr auto`, alignItems: "center", gap: "0.6rem", padding: "2px 0" }}>
+          <div key={l.nome} role="listitem">
+          <button type="button" title={onEscolher ? `${l.dica}. ${dicaDoClique ?? ""}` : l.dica}
+            disabled={!onEscolher} onClick={onEscolher ? () => onEscolher(l.nome) : undefined}
+            className={onEscolher ? "linha-de-barra clicavel" : "linha-de-barra"}
+            style={{
+              display: "grid", gridTemplateColumns: `minmax(140px, ${larguraDoNome}) 1fr auto`, alignItems: "center", gap: "0.6rem",
+              padding: "2px 4px", width: "100%", textAlign: "left", font: "inherit", color: "inherit",
+              background: "none", border: "none", borderRadius: 6, cursor: onEscolher ? "pointer" : "default",
+            }}>
             <span className="soft" style={{
               fontSize: "0.76rem", lineHeight: 1.25, overflow: "hidden",
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
@@ -41,6 +51,7 @@ function Barras({ linhas, cor, rotulo, larguraDoNome = "42%", primeiras = 8 }: {
             <span style={{ fontSize: "0.78rem", textAlign: "right", whiteSpace: "nowrap" }}>
               <strong>{l.n}</strong> <span className="soft">{l.detalhe}</span>
             </span>
+          </button>
           </div>
         ))}
       </div>
@@ -76,7 +87,12 @@ const vazio = (texto: string) => <p className="soft" style={{ fontSize: "0.82rem
  *   - motivos de bloqueio;
  *   - não conformidade por meio de transporte.
  */
-export function BlitzFalhas({ blitz, rotuloPeriodo }: { blitz: BlitzItem[]; rotuloPeriodo: string }) {
+export function BlitzFalhas({ blitz, rotuloPeriodo, onVerItem }: {
+  blitz: BlitzItem[];
+  rotuloPeriodo: string;
+  /** clique num item: os Alertas filtrados nele (LUIZ, 11/11/2026) */
+  onVerItem?: (pergunta: string) => void;
+}) {
   const perguntas = useMemo<Linha[]>(() => {
     const m = new Map<string, { nao: number; perguntada: number }>();
     const de = (p: string) => { const e = m.get(p) ?? { nao: 0, perguntada: 0 }; m.set(p, e); return e; };
@@ -123,9 +139,10 @@ export function BlitzFalhas({ blitz, rotuloPeriodo }: { blitz: BlitzItem[]; rotu
       <h3 style={{ fontSize: "0.98rem", fontWeight: 700, margin: "0.4rem 0 0" }}>Principais falhas</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "1rem", alignItems: "start" }}>
         <Cartao inteiro titulo="Itens que mais falham"
-          subtitulo={`As perguntas da blitz com mais respostas "não" em ${rotuloPeriodo}, e em que parte das vezes em que foram feitas.`}>
+          subtitulo={`As perguntas da blitz com mais respostas "não" em ${rotuloPeriodo}, e em que parte das vezes em que foram feitas.${onVerItem ? " Clique num item para ver os alertas com ele." : ""}`}>
           {perguntas.length === 0 ? vazio("Nenhum item com \"não\" no período.") : (
-            <Barras linhas={perguntas} cor={COR.falha} rotulo="Itens que mais falham" larguraDoNome="46%" />
+            <Barras linhas={perguntas} cor={COR.falha} rotulo="Itens que mais falham" larguraDoNome="46%"
+              onEscolher={onVerItem} dicaDoClique="Clique para ver os alertas com este item" />
           )}
         </Cartao>
         <Cartao titulo="Motivos de bloqueio" subtitulo="Por que as pessoas foram bloqueadas, e quanto cada motivo pesa nos bloqueios.">

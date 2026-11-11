@@ -599,6 +599,10 @@ a {
   }
 }
 
+/* linhas de barra clicáveis (Blitz, Principais falhas) */
+.linha-de-barra.clicavel:hover,
+.linha-de-barra.clicavel:focus-visible { background: var(--mh-surface-2) !important; }
+
 /* ── celular: abaixo de 720px ──
    Utilitários para telas que mudam de forma no telefone (a primeira foi a
    Blitz de trajeto, usada na portaria pelo app instalado):

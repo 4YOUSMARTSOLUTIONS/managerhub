@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
@@ -31,12 +32,15 @@ function ocorrencia(a: BlitzAlertaAnalise): string {
  * Só leitura. Chega já filtrada pelo filtro único das Análises; o resumo de
  * quem está devendo fica no quadro de pendências da aba Análises.
  */
-export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situacaoInicial = "" }: {
+export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situacaoInicial = "", item = "", onItem }: {
   alertas: BlitzAlertaAnalise[];
   rotuloPeriodo: string;
   chaveArquivo: string;
   /** quem usa remonta com `key` quando o quadro de pendências pede "aguardando" */
   situacaoInicial?: Situacao;
+  /** o item (pergunta) clicado em "Itens que mais falham": só os alertas com "não" nele */
+  item?: string;
+  onItem?: (pergunta: string) => void;
 }) {
   const [situacao, setSituacao] = useState<Situacao>(situacaoInicial);
   const [busca, setBusca] = useState("");
@@ -44,10 +48,11 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
 
   const termo = normalizar(busca.trim());
   const lista = alertas.filter((a) =>
-    (!situacao || (situacao === "tratado") === !!a.registrada_em)
+    (!item || a.respostas_nao.includes(item))
+    && (!situacao || (situacao === "tratado") === !!a.registrada_em)
     && (!termo || normalizar([a.colaborador, a.gestor, a.setor].filter(Boolean).join(" ")).includes(termo)));
   const tratados = alertas.filter((a) => a.registrada_em).length;
-  const algumFiltro = !!situacao || !!busca;
+  const algumFiltro = !!situacao || !!busca || !!item;
   const detalhe = alertas.find((a) => a.id === aberto) ?? null;
 
   return (
@@ -82,8 +87,16 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
           <option value="aguardando">Aguardando tratativa</option>
           <option value="tratado">Tratados</option>
         </select>
+        {/* o item que veio do clique em "Itens que mais falham" (LUIZ, 11/11/2026) */}
+        {item && (
+          <button type="button" className="btn btn-ghost btn-sm" title={`Tirar o filtro: ${item}`} onClick={() => onItem?.("")}
+            style={{ maxWidth: 420, display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Item: {item}</span>
+            <X size={13} aria-hidden style={{ flexShrink: 0 }} />
+          </button>
+        )}
         {algumFiltro && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSituacao(""); setBusca(""); }}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSituacao(""); setBusca(""); onItem?.(""); }}>
             Limpar filtros
           </button>
         )}
