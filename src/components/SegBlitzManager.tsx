@@ -15,7 +15,7 @@ import { DetailModal } from "@/components/ui/DetailModal";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import type { Person } from "@/components/PeoplePicker";
 import { BlitzAderencia } from "@/components/BlitzAderencia";
-import type { BlitzAderencia as BlitzAderenciaDados, BlitzPublicoConfig } from "@/lib/blitz-aderencia";
+import type { BlitzAderencia as BlitzAderenciaDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
   SegBlitzDialog, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
@@ -91,13 +91,12 @@ export function SegBlitzManager({
   painel: BlitzPainel | null;
   /** os alertas do usuário logado como gestor */
   alertas: BlitzAlerta[];
-  /** aderência do mês (só para quem tem alçada) e o cadastro do público (owner/admin) */
+  /** aderência do mês (só para quem tem alçada); o público se configura em Configurações */
   aderencia?: {
     inicial: BlitzAderenciaDados;
     unitIds: string[] | null;
     mesAtual: string;
     podeConfigurar: boolean;
-    config: BlitzPublicoConfig | null;
   } | null;
   /** o usuário logado e a empresa: as blitz guardadas sem sinal são dele, nesta empresa */
   dono: string;
@@ -272,19 +271,61 @@ export function SegBlitzManager({
     </div>
   );
 
-  const analises = (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", paddingTop: "0.9rem" }}>
-      <SegBlitzTratativas alertas={alertas} />
-      {aderencia && (
+  // o indicador pedido: quem repete o "não OK", para o acompanhamento sair da
+  // memória e virar conversa. team_lead recebe só a própria cadeia.
+  const recorrencia = painel && painel.recorrencia.length > 0 ? (
+    <div className="card card-pad">
+      <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Recorrência de não conformidade</h3>
+      <p className="soft" style={{ fontSize: "0.76rem", margin: "0 0 0.7rem" }}>
+        Quantas vezes cada colaborador saiu não conforme no ano. Recorrência é conversa de
+        gestor, não de multa.
+      </p>
+      <div style={{ overflowX: "auto" }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Colaborador</th>
+            <th className="so-desktop" style={{ width: 160 }}>Setor</th>
+            <th style={{ width: 120, textAlign: "right" }}>Não conformes</th>
+            <th style={{ width: 80, textAlign: "right" }}>Blitzes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {painel.recorrencia.map((r) => (
+            <tr key={r.user_id}>
+              <td style={{ fontWeight: 600 }}>{shortName(r.nome)}</td>
+              <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
+              <td style={{ textAlign: "right" }}>
+                <Badge tone={r.nao_conformes >= 3 ? "red" : "amber"}>{r.nao_conformes}</Badge>
+              </td>
+              <td className="muted" style={{ textAlign: "right", fontSize: "0.82rem" }}>{r.total}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  ) : null;
+
+  const subabasDeAnalise = [
+    ...(aderencia ? [{
+      id: "aderencia", label: "Aderência",
+      content: (
         <BlitzAderencia
           inicial={aderencia.inicial}
           unitIds={aderencia.unitIds}
           mesAtual={aderencia.mesAtual}
           podeConfigurar={aderencia.podeConfigurar}
-          config={aderencia.config}
-          pessoas={pessoas}
         />
-      )}
+      ),
+    }] : []),
+    ...(recorrencia ? [{ id: "recorrencia", label: `Recorrência (${painel!.recorrencia.length})`, content: recorrencia }] : []),
+  ];
+
+  // Cartões sempre no topo (LUIZ, 11/11/2026); embaixo, as tratativas que o
+  // gestor deve e as subabas de detalhe (aderência e recorrência)
+  const analises = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", paddingTop: "0.9rem" }}>
       {painel && painel.total > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.8rem" }}>
           <StatCard label="Blitzes no ano" value={painel.total} hint={`${painel.colaboradores} colaborador(es) abordado(s)`} />
@@ -309,41 +350,10 @@ export function SegBlitzManager({
           )}
         </div>
       )}
-      {/* o indicador pedido: quem repete o "não OK", para o acompanhamento sair
-          da memória e virar conversa. team_lead recebe só a própria cadeia. */}
-      {painel && painel.recorrencia.length > 0 && (
-        <div className="card card-pad">
-          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Recorrência de não conformidade</h3>
-          <p className="soft" style={{ fontSize: "0.76rem", margin: "0 0 0.7rem" }}>
-            Quantas vezes cada colaborador saiu não conforme no ano. Recorrência é conversa de
-            gestor, não de multa.
-          </p>
-          <div style={{ overflowX: "auto" }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Colaborador</th>
-                <th className="so-desktop" style={{ width: 160 }}>Setor</th>
-                <th style={{ width: 120, textAlign: "right" }}>Não conformes</th>
-                <th style={{ width: 80, textAlign: "right" }}>Blitzes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {painel.recorrencia.map((r) => (
-                <tr key={r.user_id}>
-                  <td style={{ fontWeight: 600 }}>{shortName(r.nome)}</td>
-                  <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <Badge tone={r.nao_conformes >= 3 ? "red" : "amber"}>{r.nao_conformes}</Badge>
-                  </td>
-                  <td className="muted" style={{ textAlign: "right", fontSize: "0.82rem" }}>{r.total}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      )}
+      <SegBlitzTratativas alertas={alertas} />
+      {subabasDeAnalise.length > 1 ? (
+        <Tabs variant="sub" tabs={subabasDeAnalise} />
+      ) : subabasDeAnalise[0]?.content}
     </div>
   );
 

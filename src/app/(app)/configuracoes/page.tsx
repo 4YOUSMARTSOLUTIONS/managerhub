@@ -40,6 +40,7 @@ import { SegProgramaVinculo } from "@/components/SegProgramaVinculo";
 import { SegOcorrenciasManager } from "@/components/SegOcorrenciasManager";
 import { SegBlitzPerguntasManager } from "@/components/SegBlitzPerguntasManager";
 import { SegVeiculosManager } from "@/components/SegVeiculosManager";
+import { BlitzPublicoManager } from "@/components/BlitzPublicoManager";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -76,9 +77,9 @@ import { minhaEquipe } from "@/lib/team";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ aba?: string }>;
+  searchParams: Promise<{ aba?: string; sub?: string }>;
 }) {
-  const { aba } = await searchParams;
+  const { aba, sub } = await searchParams;
   const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh } = await requireContext();
   // acesso por nível: quem não tem Configurações liberada vai para a tela dele
   await exigirTelaBase("configuracoes");
@@ -1002,6 +1003,22 @@ export default async function SettingsPage({
   // em todo pilar, e a pessoa escolheria o errado
   const nomePorUser = new Map(rvMembers.map((m) => [m.userId, m.name]));
 
+  // Público da blitz: funções de fora (com quantas pessoas ativas há em cada
+  // uma) e exceções por pessoa. Só leitura para o Gerencial; owner/admin gravam.
+  const [{ data: blitzForaData }, { data: blitzExcData }] = await Promise.all([
+    supabase.from("seg_blitz_publico_funcoes").select("position_id").eq("tenant_id", tenant.id),
+    supabase.from("seg_blitz_publico_pessoas").select("user_id, participa").eq("tenant_id", tenant.id),
+  ]);
+  const ativosPorFuncao = new Map<string, number>();
+  for (const m of mems) if (m.is_active && m.position_id) ativosPorFuncao.set(m.position_id, (ativosPorFuncao.get(m.position_id) ?? 0) + 1);
+  const blitzPublicoConfig = {
+    funcoes: (positions ?? []).filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, pessoas: ativosPorFuncao.get(p.id) ?? 0 })),
+    funcoesFora: (blitzForaData ?? []).map((f) => f.position_id),
+    excecoes: (blitzExcData ?? [])
+      .map((x) => ({ userId: x.user_id, nome: nomePorUser.get(x.user_id) ?? "—", participa: x.participa }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+  };
+
   const itensDoPrograma = itemOpts
     .filter((i) => i.active)
     .map((i) => {
@@ -1486,6 +1503,7 @@ export default async function SettingsPage({
       content: (
         <Tabs
           variant="sub"
+          initialId={aba === "seguranca" ? sub : undefined}
           tabs={[
             {
               id: "seg-tipos",
@@ -1601,6 +1619,17 @@ export default async function SettingsPage({
                     id: r.id, name: r.name, description: null, image_path: null, active: r.active,
                   }))}
                   canEdit={canEdit}
+                />
+              ),
+            },
+            {
+              id: "seg-blitz-publico",
+              label: "Público da blitz",
+              content: (
+                <BlitzPublicoManager
+                  canEdit={canEdit}
+                  config={blitzPublicoConfig}
+                  pessoas={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code }))}
                 />
               ),
             },

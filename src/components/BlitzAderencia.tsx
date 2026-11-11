@@ -1,18 +1,16 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Users } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { Person } from "@/components/PeoplePicker";
-import { BlitzPublicoDialog } from "./BlitzPublicoDialog";
 import { getBlitzAderencia } from "@/lib/actions/seguranca";
 import { formatDate, normalizar, shortName } from "@/lib/format";
-import { pct, type AderenciaGrupo, type BlitzAderencia, type BlitzPublicoConfig } from "@/lib/blitz-aderencia";
+import { pct, type AderenciaGrupo, type BlitzAderencia } from "@/lib/blitz-aderencia";
 
 const NOME_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const rotuloMes = (ym: string) => { const [a, m] = ym.split("-").map(Number); return `${NOME_MES[m - 1]} de ${a}`; };
@@ -67,22 +65,19 @@ function TabelaGrupos({ grupos, rotulo }: { grupos: AderenciaGrupo[]; rotulo: st
  * própria cadeia (a RPC recorta).
  */
 export function BlitzAderencia({
-  inicial, unitIds, mesAtual, podeConfigurar, config, pessoas,
+  inicial, unitIds, mesAtual, podeConfigurar,
 }: {
   inicial: BlitzAderencia;
   unitIds: string[] | null;
   /** YYYY-MM de hoje: o máximo do seletor */
   mesAtual: string;
+  /** owner/admin: o atalho para o público, que mora em Configurações > Segurança */
   podeConfigurar: boolean;
-  config: BlitzPublicoConfig | null;
-  pessoas: Person[];
 }) {
-  const router = useRouter();
   const [carregando, iniciar] = useTransition();
   const [mes, setMes] = useState(inicial.mes);
   const [dados, setDados] = useState(inicial);
   const [busca, setBusca] = useState("");
-  const [configurando, setConfigurando] = useState(false);
 
   const carregar = (m: string) => {
     setMes(m);
@@ -115,10 +110,10 @@ export function BlitzAderencia({
             type="month" className="input" value={mes} max={mesAtual} aria-label="Mês da aderência"
             onChange={(e) => { if (e.target.value) carregar(e.target.value); }} style={{ width: "auto" }}
           />
-          {podeConfigurar && config && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfigurando(true)}>
+          {podeConfigurar && (
+            <Link href="/configuracoes?aba=seguranca&sub=seg-blitz-publico" className="btn btn-ghost btn-sm">
               <Users size={14} /> Público da blitz
-            </button>
+            </Link>
           )}
         </div>
       </div>
@@ -199,14 +194,6 @@ export function BlitzAderencia({
         )}
       </div>
 
-      {configurando && config && (
-        <BlitzPublicoDialog
-          config={config}
-          pessoas={pessoas}
-          onClose={() => setConfigurando(false)}
-          onSalvo={() => { setConfigurando(false); carregar(mes); router.refresh(); }}
-        />
-      )}
     </div>
   );
 }

@@ -1438,6 +1438,7 @@ export async function salvarPublicoBlitz(input: {
     }
 
     revalidatePath("/seguranca/blitz");
+    revalidatePath("/configuracoes");
     return { ok: true, message: "Público da blitz atualizado." };
   } catch (e) {
     return { error: (e as Error).message };
