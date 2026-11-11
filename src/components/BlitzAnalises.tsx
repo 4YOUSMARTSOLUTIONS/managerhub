@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { BlitzAderenciaDetalhe, BlitzColaboradoresLista, BlitzRecorrenciaLista, type FiltroPessoa, type SituacaoPessoa } from "./BlitzAderencia";
-import { BlitzAlertasLista } from "./BlitzAlertasLista";
+import { BlitzAlertasLista, TratativasPendentesPorGestor } from "./BlitzAlertasLista";
 import { getBlitzAnalise } from "@/lib/actions/seguranca";
 import { formatDate } from "@/lib/format";
 import { pct, type BlitzAnaliseDados } from "@/lib/blitz-aderencia";
@@ -34,7 +34,7 @@ function rotulo(modo: Modo, de: string, ate: string): string {
  * deve entram entre os cartões e o detalhe.
  */
 export function BlitzAnalises({
-  inicial, unitIds, hoje, anos, vagaDoFiltro, tratativas,
+  inicial, unitIds, hoje, anos, vagaDoFiltro, tratativas, onVerRegistros,
 }: {
   /** o mês corrente, já calculado no servidor */
   inicial: BlitzAnaliseDados;
@@ -47,6 +47,8 @@ export function BlitzAnalises({
   /** onde desenhar o filtro (a linha das abas, no computador); sem vaga, fica no topo daqui */
   vagaDoFiltro?: HTMLElement | null;
   tratativas?: React.ReactNode;
+  /** clique nos cartões de desvio e bloqueio: a lista de Registros filtrada no período */
+  onVerRegistros?: (situacao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string }) => void;
 }) {
   const [carregando, iniciar] = useTransition();
   const [modo, setModo] = useState<Modo>("mes");
@@ -64,6 +66,17 @@ export function BlitzAnalises({
   const [situacaoLista, setSituacaoLista] = useState<SituacaoPessoa>("faltam");
   const [versaoFaltam, setVersaoFaltam] = useState(0);
   const topoDasSubabas = useRef<HTMLDivElement>(null);
+  // o quadro de pendências leva à subaba Alertas filtrada no gestor
+  const [gestorAlertas, setGestorAlertas] = useState<string | undefined>(undefined);
+  const [versaoAlertas, setVersaoAlertas] = useState(0);
+
+  const verAlertas = (gestor: string) => {
+    setGestorAlertas(gestor);
+    setVersaoAlertas((v) => v + 1);
+    setSubaba("alertas");
+    // o quadro fica acima das subabas: desce até a lista
+    requestAnimationFrame(() => topoDasSubabas.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   const verFaltam = (f: FiltroPessoa, situacao: SituacaoPessoa) => {
     setFiltroFaltam(f);
@@ -144,24 +157,29 @@ export function BlitzAnalises({
       <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem", opacity: carregando ? 0.6 : 1 }}>
         {/* cartões sempre no topo (LUIZ, 11/11/2026) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))", gap: "0.8rem" }}>
-          <StatCard
-            label="Conformidade"
-            value={conformidade === null ? "—" : `${conformidade}%`}
-            tone={conformidade === null ? "blue" : conformidade >= 80 ? "green" : conformidade >= 50 ? "amber" : "red"}
-            hint={ind.total ? `${ind.conformes} de ${ind.total} blitz conformes` : "Nenhuma blitz no período"}
-          />
+          {/* aderência primeiro, depois conformidade (LUIZ, 11/11/2026) */}
           <StatCard
             label="Aderência"
             value={aderencia === null ? "—" : `${aderencia}%`}
             tone={aderencia === null ? "blue" : aderencia >= 90 ? "green" : aderencia >= 70 ? "amber" : "red"}
             hint={`${ad.passaram} de ${ad.publico} do público passaram`}
           />
+          <StatCard
+            label="Conformidade"
+            value={conformidade === null ? "—" : `${conformidade}%`}
+            tone={conformidade === null ? "blue" : conformidade >= 80 ? "green" : conformidade >= 50 ? "amber" : "red"}
+            hint={ind.total ? `${ind.conformes} de ${ind.total} blitz conformes` : "Nenhuma blitz no período"}
+          />
           <StatCard label="Faltam passar" value={ad.publico - ad.passaram} hint="do público do período" />
           {/* desvio e bloqueio pintados para chamar atenção (LUIZ, 11/11/2026); sem ocorrência, cartão neutro */}
           <StatCard label="Liberadas com desvio" value={ind.com_desvio} tone={ind.com_desvio > 0 ? "amber" : "green"}
-            destaque={ind.com_desvio > 0 ? "amber" : undefined} />
+            destaque={ind.com_desvio > 0 ? "amber" : undefined}
+            onClick={onVerRegistros && ind.com_desvio > 0 ? () => onVerRegistros("desvio", { de: dados.de, ate: dados.ate, rotulo: periodo }) : undefined}
+            acao="Ver as blitz liberadas com desvio" />
           <StatCard label="Bloqueios" value={ind.bloqueios} tone={ind.bloqueios > 0 ? "red" : "green"}
-            destaque={ind.bloqueios > 0 ? "red" : undefined} />
+            destaque={ind.bloqueios > 0 ? "red" : undefined}
+            onClick={onVerRegistros && ind.bloqueios > 0 ? () => onVerRegistros("bloqueado", { de: dados.de, ate: dados.ate, rotulo: periodo }) : undefined}
+            acao="Ver as blitz bloqueadas" />
           {/* o % tratado em destaque; o total de alertas já se lê nos dois cartões ao lado (LUIZ, 11/11/2026) */}
           <StatCard
             label="Alertas com tratativa"
@@ -171,6 +189,8 @@ export function BlitzAnalises({
         </div>
 
         {tratativas}
+
+        <TratativasPendentesPorGestor alertas={dados.alertas ?? []} rotuloPeriodo={periodo} onVer={verAlertas} />
 
         <div ref={topoDasSubabas} style={{ scrollMarginTop: 72 }}>
         <Tabs
@@ -196,7 +216,11 @@ export function BlitzAnalises({
             {
               // a lista dos alertas: quem tratou e quem está devendo (LUIZ, 11/11/2026)
               id: "alertas", label: `Alertas (${(dados.alertas ?? []).length})`,
-              content: <BlitzAlertasLista alertas={dados.alertas ?? []} rotuloPeriodo={periodo} chaveArquivo={`${dados.de}_${dados.ate}`} />,
+              content: (
+                <BlitzAlertasLista key={versaoAlertas} alertas={dados.alertas ?? []} rotuloPeriodo={periodo}
+                  chaveArquivo={`${dados.de}_${dados.ate}`}
+                  gestorInicial={gestorAlertas} situacaoInicial={gestorAlertas ? "aguardando" : ""} />
+              ),
             },
           ]}
         />

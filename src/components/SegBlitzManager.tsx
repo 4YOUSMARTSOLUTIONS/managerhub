@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -117,6 +117,10 @@ export function SegBlitzManager({
   const [busca, setBusca] = useState("");
   const [meio, setMeio] = useState("");
   const [sit, setSit] = useState("");
+  // período vindo do cartão das Análises (desvio/bloqueio): os números batem com o cartão
+  const [periodoRegistros, setPeriodoRegistros] = useState<{ de: string; ate: string; rotulo: string } | null>(null);
+  const [abaTopo, setAbaTopo] = useState<string | undefined>(undefined);
+  const topoDasAbas = useRef<HTMLDivElement>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
@@ -126,6 +130,7 @@ export function SegBlitzManager({
   const lista = useMemo(() => {
     const q = normalizar(busca.trim());
     return rows.filter((r) => {
+      if (periodoRegistros && (r.occurredOn < periodoRegistros.de || r.occurredOn > periodoRegistros.ate)) return false;
       if (meio && r.meioId !== meio) return false;
       if (sit === "conforme" && !(r.liberado && r.conforme)) return false;
       if (sit === "desvio" && !(r.liberado && !r.conforme)) return false;
@@ -134,7 +139,17 @@ export function SegBlitzManager({
       return [r.pessoa, r.setor, r.placa, r.avaliador, r.motivoNome]
         .some((v) => v && normalizar(v).includes(q));
     });
-  }, [rows, busca, meio, sit]);
+  }, [rows, busca, meio, sit, periodoRegistros]);
+
+  /** Do cartão das Análises para a lista de Registros, filtrada (LUIZ, 11/11/2026). */
+  const verRegistros = (situacaoDoCartao: "desvio" | "bloqueado", periodo: { de: string; ate: string; rotulo: string }) => {
+    setSit(situacaoDoCartao);
+    setPeriodoRegistros(periodo);
+    setBusca("");
+    setMeio("");
+    setAbaTopo("registros");
+    requestAnimationFrame(() => topoDasAbas.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   const detalhe = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
 
@@ -189,6 +204,11 @@ export function SegBlitzManager({
           <option value="desvio">Liberado com desvio</option>
           <option value="bloqueado">Bloqueado</option>
         </select>
+        {periodoRegistros && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPeriodoRegistros(null)} title="Tirar o filtro de período">
+            Período: {periodoRegistros.rotulo} <X size={13} aria-hidden />
+          </button>
+        )}
         <div style={{ marginLeft: "auto" }}>
           <ExportButton
             filename="blitz-de-trajeto.xlsx"
@@ -299,6 +319,7 @@ export function SegBlitzManager({
           anos={analise.anos}
           vagaDoFiltro={celular ? null : vagaDoFiltro}
           tratativas={<SegBlitzTratativas alertas={alertas} />}
+          onVerRegistros={verRegistros}
         />
       ) : (
         <SegBlitzTratativas alertas={alertas} />
@@ -332,14 +353,19 @@ export function SegBlitzManager({
         subtitle={
           podeAvaliar
             ? "O deslocamento seguro conferido na porta: veículo, equipamentos e boas práticas, em qualquer meio de transporte."
-            : "As blitzes pelas quais você passou e no que deu cada uma."
+            : "As blitz pelas quais você passou e no que deu cada uma."
         }
       />
 
       {/* a ordem muda com a tela, então a chave remonta as abas e a primeira
           (Análises no computador, "+ Nova blitz" no celular) abre selecionada */}
       {abas.length > 1
-        ? <Tabs key={celular ? "celular" : "computador"} tabs={abas} aside={!celular && temAnalises ? <div ref={setVagaDoFiltro} /> : undefined} />
+        ? (
+          <div ref={topoDasAbas} style={{ scrollMarginTop: 72 }}>
+            <Tabs key={celular ? "celular" : "computador"} tabs={abas} active={abaTopo} onActiveChange={setAbaTopo}
+              aside={!celular && temAnalises ? <div ref={setVagaDoFiltro} /> : undefined} />
+          </div>
+        )
         : registros}
 
       {detalhe && (

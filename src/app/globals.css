@@ -9,6 +9,9 @@
 
 :root,
 [data-theme="light"] {
+  /* texto de cartão pintado (StatCard destaque): no claro o fundo é claro */
+  --mh-texto-destaque: var(--mh-text-1);
+  --mh-texto-destaque-suave: var(--mh-text-2);
   --mh-bg: #f7f8fb;
   --mh-surface-1: #ffffff;
   --mh-surface-2: #f2f4f8;
@@ -55,6 +58,9 @@
 }
 
 [data-theme="dark"] {
+  /* no escuro, branco sobre o cartão pintado (LUIZ, 11/11/2026) */
+  --mh-texto-destaque: #ffffff;
+  --mh-texto-destaque-suave: rgba(255, 255, 255, 0.82);
   --mh-bg: #0a0d14;
   --mh-surface-1: #111621;
   --mh-surface-2: #161c29;

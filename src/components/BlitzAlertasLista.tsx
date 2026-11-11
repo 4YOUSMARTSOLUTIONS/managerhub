@@ -9,7 +9,8 @@ import { ExportButton } from "@/components/ui/ExportButton";
 import { formatDate, formatDateTime, normalizar, shortName } from "@/lib/format";
 import type { BlitzAlertaAnalise } from "@/lib/blitz-aderencia";
 
-type Situacao = "" | "aguardando" | "tratado";
+export type SituacaoAlerta = "" | "aguardando" | "tratado";
+type Situacao = SituacaoAlerta;
 type Campo = "gestor" | "setor" | "unidade";
 
 const CAMPOS: { campo: Campo; rotulo: string; vazio: string }[] = [
@@ -34,13 +35,16 @@ function ocorrencia(a: BlitzAlertaAnalise): string {
  * segurança; o Gestor, a cadeia dele) vê quem já tratou e quem está devendo,
  * com o resumo por gestor para cobrar. Só leitura.
  */
-export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo }: {
+export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, gestorInicial, situacaoInicial = "" }: {
   alertas: BlitzAlertaAnalise[];
   rotuloPeriodo: string;
   chaveArquivo: string;
+  /** vindo do quadro de pendências: abre filtrada no gestor (quem usa remonta com `key`) */
+  gestorInicial?: string;
+  situacaoInicial?: Situacao;
 }) {
-  const [situacao, setSituacao] = useState<Situacao>("");
-  const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>({});
+  const [situacao, setSituacao] = useState<Situacao>(situacaoInicial);
+  const [filtro, setFiltro] = useState<Partial<Record<Campo, string>>>(gestorInicial ? { gestor: gestorInicial } : {});
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState<string | null>(null);
 
@@ -215,5 +219,72 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo }: {
         </DetailModal>
       )}
     </div>
+  );
+}
+
+/**
+ * Tratativas pendentes por gestor (LUIZ, 11/11/2026), no painel das Análises,
+ * logo abaixo dos cartões: quem está devendo conversa com a equipe, do que
+ * mais deve para o que menos deve. Clicar num gestor abre a subaba Alertas
+ * filtrada nele. Some quando não há pendência.
+ */
+export function TratativasPendentesPorGestor({ alertas, rotuloPeriodo, onVer }: {
+  alertas: BlitzAlertaAnalise[];
+  rotuloPeriodo: string;
+  onVer: (gestor: string) => void;
+}) {
+  const [sobre, setSobre] = useState<string | null>(null);
+  const linhas = useMemo(() => {
+    const m = new Map<string, { gestor: string; pendentes: number; total: number }>();
+    for (const a of alertas) {
+      const g = valor(a, CAMPOS[0]);
+      const l = m.get(g) ?? { gestor: g, pendentes: 0, total: 0 };
+      l.total += 1;
+      if (!a.registrada_em) l.pendentes += 1;
+      m.set(g, l);
+    }
+    return [...m.values()].filter((l) => l.pendentes > 0)
+      .sort((x, y) => y.pendentes - x.pendentes || x.gestor.localeCompare(y.gestor, "pt-BR"));
+  }, [alertas]);
+
+  if (linhas.length === 0) return null;
+  const maior = Math.max(...linhas.map((l) => l.pendentes));
+  const totalPendente = linhas.reduce((n, l) => n + l.pendentes, 0);
+
+  return (
+    <section className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.6rem", flexWrap: "wrap" }}>
+        <div>
+          <h4 style={{ fontSize: "0.92rem", fontWeight: 700, margin: 0 }}>Tratativas pendentes por gestor</h4>
+          <p className="soft" style={{ fontSize: "0.74rem", margin: "0.2rem 0 0" }}>
+            {totalPendente} {totalPendente === 1 ? "alerta" : "alertas"} de {rotuloPeriodo} sem tratativa registrada. Clique num gestor para ver os alertas dele.
+          </p>
+        </div>
+      </div>
+      <div role="group" aria-label="Tratativas pendentes por gestor" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {linhas.map((l) => {
+          const ativo = sobre === l.gestor;
+          const ver = () => onVer(l.gestor);
+          return (
+            <div key={l.gestor} role="button" tabIndex={0} aria-label={`${l.gestor}: ${l.pendentes} de ${l.total} alertas sem tratativa. Ver os alertas`}
+              onClick={ver} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ver(); } }}
+              onMouseEnter={() => setSobre(l.gestor)} onMouseLeave={() => setSobre(null)}
+              style={{ display: "grid", gridTemplateColumns: "minmax(120px, 30%) 1fr 92px", alignItems: "center", gap: "0.6rem", padding: "3px 0", cursor: "pointer" }}>
+              <span className="soft" title={l.gestor} style={{ fontSize: "0.76rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.gestor}</span>
+              <div style={{ height: 16, borderLeft: "1px solid var(--border)" }}>
+                {/* pendência é o que pede ação: a cor de atenção do tema */}
+                <div style={{
+                  width: `${(l.pendentes / maior) * 100}%`, minWidth: 3, height: "100%", borderRadius: "0 4px 4px 0",
+                  background: "var(--mh-warning)", opacity: sobre && !ativo ? 0.5 : 1, transition: "opacity 120ms",
+                }} />
+              </div>
+              <span style={{ fontSize: "0.78rem", textAlign: "right", whiteSpace: "nowrap" }}>
+                <strong>{l.pendentes}</strong> <span className="soft">de {l.total}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

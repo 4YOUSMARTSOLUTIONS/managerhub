@@ -564,7 +564,7 @@ export function BlitzRecorrenciaLista({ recorrencia, rotuloPeriodo }: { recorren
                 <th className="so-desktop">Gestor</th>
                 <th className="so-desktop">Unidade</th>
                 <th style={{ width: 120, textAlign: "right" }}>Não conformes</th>
-                <th style={{ width: 80, textAlign: "right" }}>Blitzes</th>
+                <th style={{ width: 80, textAlign: "right" }}>Blitz</th>
               </tr>
             </thead>
             <tbody>

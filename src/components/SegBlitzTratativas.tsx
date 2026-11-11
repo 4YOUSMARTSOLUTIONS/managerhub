@@ -29,7 +29,7 @@ export function SegBlitzTratativas({ alertas }: { alertas: BlitzAlerta[] }) {
   return (
     <div className="card card-pad" style={{ marginBottom: "1.1rem" }}>
       <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <ShieldAlert size={16} aria-hidden /> Blitzes não conformes na sua equipe
+        <ShieldAlert size={16} aria-hidden /> Blitz não conformes na sua equipe
       </h3>
       <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
         {pendentes > 0

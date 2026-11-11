@@ -20,6 +20,8 @@ export function StatCard({
   icon,
   delta,
   destaque,
+  onClick,
+  acao,
 }: {
   label: string;
   /** o número do cartão; um nó quando o cartão mostra mais de um número (ex.: alertas e sem tratativa) */
@@ -35,14 +37,26 @@ export function StatCard({
    * (ex.: bloqueios da blitz). Só para o que pede ação, e só quando há o que ver.
    */
   destaque?: Tone;
+  /** cartão clicável (ex.: leva à lista filtrada); abre também com Enter/espaço */
+  onClick?: () => void;
+  /** o que o clique faz, para o leitor de tela e o title (ex.: "Ver as blitz bloqueadas") */
+  acao?: string;
 }) {
   const c = TONE_VAR[tone];
   const d = destaque ? TONE_VAR[destaque] : null;
+  // no cartão pintado o texto segue o tema: branco no escuro (globals.css)
+  const corTexto = d ? "var(--mh-texto-destaque)" : "var(--mh-text-1)";
+  const corSuave = d ? { color: "var(--mh-texto-destaque-suave)" } : undefined;
   return (
     <div
       className="card card-pad"
+      {...(onClick ? {
+        role: "button", tabIndex: 0, title: acao, "aria-label": acao ? `${label}: ${acao}` : label, onClick,
+        onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } },
+      } : {})}
       style={{
         display: "flex", flexDirection: "column", gap: "0.85rem",
+        ...(onClick ? { cursor: "pointer" } : {}),
         ...(d ? {
           background: `color-mix(in srgb, ${d} 18%, var(--surface))`,
           borderColor: `color-mix(in srgb, ${d} 55%, transparent)`,
@@ -52,7 +66,7 @@ export function StatCard({
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
         <div
           className="soft"
-          style={{ fontSize: "0.69rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}
+          style={{ fontSize: "0.69rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", ...corSuave }}
         >
           {label}
         </div>
@@ -79,7 +93,7 @@ export function StatCard({
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.6rem", flexWrap: "wrap" }}>
         <div
           className="tabular"
-          style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--mh-text-1)", lineHeight: 1, letterSpacing: "-0.02em" }}
+          style={{ fontSize: "1.6rem", fontWeight: 700, color: corTexto, lineHeight: 1, letterSpacing: "-0.02em" }}
         >
           {value}
         </div>
@@ -97,7 +111,7 @@ export function StatCard({
         )}
       </div>
 
-      {hint && <div className="soft" style={{ fontSize: "0.78rem" }}>{hint}</div>}
+      {hint && <div className="soft" style={{ fontSize: "0.78rem", ...corSuave }}>{hint}</div>}
     </div>
   );
 }
