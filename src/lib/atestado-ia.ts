@@ -28,8 +28,9 @@ export type AtestadoLidoPorIA = {
   emitidoEm: string | null;
   acompanhado: string | null;
   /**
-   * Campos que ficaram em branco por falta de certeza: um dos modelos não teve
-   * certeza alta, ou os dois leram diferente. Rótulos como na tela, para o aviso.
+   * Campos que ficaram em branco por falta de certeza: os leitores leram
+   * diferente, algum teve certeza baixa ou faltou maioria com certeza alta.
+   * Rótulos como na tela, para o aviso.
    */
   incertos: string[];
 };
@@ -117,8 +118,8 @@ const comparavel = (v: string) =>
 
 /**
  * Manda o atestado à OpenAI e devolve o que deu para ler, já conferido: só entra
- * o que os dois modelos leram igual e com certeza alta (o resto fica em branco e
- * volta em `incertos`), o CID passa pela tabela oficial (`acharCid`), a data de
+ * o que os três leitores leram igual, com certeza (regra em `certo`; o resto
+ * fica em branco e volta em `incertos`), o CID passa pela tabela oficial (`acharCid`), a data de
  * emissão precisa ser uma data de verdade e não estar no futuro.
  */
 export async function lerAtestadoNaOpenAI(
