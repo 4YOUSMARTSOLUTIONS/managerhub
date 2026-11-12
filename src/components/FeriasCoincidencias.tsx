@@ -15,8 +15,13 @@ import { formatDate, shortName } from "@/lib/format";
  *
  * "Equipe" é o recorte que a tela já usa: a cadeia de quem é só gestor (a RLS
  * já entrega só ela) ou o "Minha equipe" do topo. Em "Toda a empresa" seria a
- * empresa inteira, então ali a comparação é com o setor do colaborador, e a
- * linha do tempo mostra só os setores com pedido aguardando, um por bloco.
+ * empresa inteira, então ali a comparação é dentro do setor, e a linha do
+ * tempo mostra a empresa em blocos, um por setor.
+ *
+ * O alerta da linha do tempo aponta QUALQUER par de pessoas com férias ao
+ * mesmo tempo, não só os pedidos aguardando: dois períodos já aprovados que se
+ * cruzam num dia também são problema (LUIZ, 12/11/2026, SARAH e PAULO em
+ * 02/08/2027 sem alerta nenhum).
  */
 
 /** o que a fila precisa do pedido */
@@ -107,6 +112,41 @@ export function AlertaCoincidencia({ qtd, porSetor }: { qtd: number; porSetor: b
   );
 }
 
+/** dias corridos entre duas datas ISO, contando as duas pontas */
+const diasEntre = (a: string, b: string) =>
+  Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000) + 1;
+
+/** a chave do setor de um item (sem setor é um grupo também) */
+const chaveSetor = (i: AgendaItem) => i.setorId ?? i.setor ?? "";
+
+type Par = { a: AgendaItem; b: AgendaItem; de: string; ate: string; comPedido: boolean };
+
+/**
+ * Todo par de pessoas com férias ao mesmo tempo dentro da janela (no
+ * `porSetor`, só dentro do mesmo setor). Os pares com pedido aguardando
+ * aprovação vêm primeiro; depois, pela data.
+ */
+function paresCoincidentes(
+  itens: AgendaItem[], de: string, ate: string, porSetor: boolean, naFila: (i: AgendaItem) => boolean,
+): Par[] {
+  const pares: Par[] = [];
+  for (let x = 0; x < itens.length; x++) {
+    for (let y = x + 1; y < itens.length; y++) {
+      const [a, b] = itens[x].inicio <= itens[y].inicio ? [itens[x], itens[y]] : [itens[y], itens[x]];
+      if (a.userId === b.userId) continue;
+      if (porSetor && chaveSetor(a) !== chaveSetor(b)) continue;
+      const ini = a.inicio > b.inicio ? a.inicio : b.inicio;
+      const fim = a.fim < b.fim ? a.fim : b.fim;
+      if (ini > fim || fim < de || ini > ate) continue;
+      pares.push({ a, b, de: ini, ate: fim, comPedido: naFila(a) || naFila(b) });
+    }
+  }
+  return pares.sort((p, q) => Number(q.comPedido) - Number(p.comPedido) || p.de.localeCompare(q.de));
+}
+
+/** quantos pares o alerta lista antes de resumir o resto */
+const MAX_PARES = 12;
+
 /** a linha do tempo da equipe inteira, com os pedidos aguardando em destaque e o alerta de quem coincide */
 export function LinhaDoTempoDaEquipe({
   pedidos, itens, carregando, erro, porSetor, hoje, onClose,
@@ -124,15 +164,11 @@ export function LinhaDoTempoDaEquipe({
   const { de, ate } = janelaDaEquipe(hoje, pedidos);
   const naFila = (i: AgendaItem) =>
     i.status === "solicitada" && pedidos.some((p) => p.userId === i.userId && p.startDate === i.inicio && p.endDate === i.fim);
-
-  // Em "Toda a empresa", só os setores que têm pedido aguardando
-  const setores = porSetor ? pedidos.map((p) => setorDoPedido(itens, p)) : [];
-  const entra = (i: AgendaItem) => !porSetor || setores.some((s) => doSetor(i, s));
+  const naJanela = itens.filter((i) => cruza(i, de, ate));
 
   type Linha = TimelineLinha & { primeiro: string; temPedido: boolean };
   const porPessoa = new Map<string, Linha>();
-  for (const i of itens) {
-    if (!cruza(i, de, ate) || !entra(i)) continue;
+  for (const i of naJanela) {
     const pendente = naFila(i);
     const tipo: TipoNaTimeline = pendente ? "pendente" : i.status;
     const l = porPessoa.get(i.userId)
@@ -161,10 +197,10 @@ export function LinhaDoTempoDaEquipe({
     || a.primeiro.localeCompare(b.primeiro)
     || (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
 
-  const conflitos = pedidos
-    .map((p) => ({ p, com: coincidenciasDoPedido(itens, p, porSetor) }))
-    .filter((c) => c.com.length > 0);
-  const quem = porSetor ? "do setor" : "da equipe";
+  const pares = paresCoincidentes(naJanela, de, ate, porSetor, naFila);
+  const quem = porSetor ? "dentro do mesmo setor" : "na equipe";
+  const periodo = (i: AgendaItem) =>
+    `${formatDate(i.inicio)} a ${formatDate(i.fim)}, ${naFila(i) ? "aguardando sua aprovação" : ROTULO_STATUS[i.status]}`;
 
   return (
     <DetailModal open onClose={onClose} width="lg" title={porSetor ? "Férias por setor" : "Férias da equipe"}>
@@ -172,33 +208,43 @@ export function LinhaDoTempoDaEquipe({
         {erro ? (
           <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--mh-danger)" }}>{erro}</p>
         ) : carregando ? (
-          <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>Buscando as férias {quem}…</p>
+          <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>Buscando as férias…</p>
         ) : (
           <>
-            {pedidos.length > 0 && (conflitos.length === 0 ? (
-              <p className="soft" style={{ margin: 0, fontSize: "0.84rem" }}>
-                Nenhum pedido aguardando aprovação coincide com as férias de outra pessoa {quem}.
-              </p>
+            {pares.length === 0 ? (
+              linhas.length > 0 && (
+                <p className="soft" style={{ margin: 0, fontSize: "0.84rem" }}>
+                  Ninguém tem férias ao mesmo tempo {quem} entre {formatDate(de)} e {formatDate(ate)}.
+                </p>
+              )
             ) : (
               <div style={{ background: "var(--mh-warning-soft)", color: "var(--mh-warning)", borderRadius: 8, padding: "0.6rem 0.75rem", fontSize: "0.84rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 700 }}>
                   <AlertTriangle size={15} aria-hidden />
-                  {conflitos.length === 1 ? "1 pedido coincide" : `${conflitos.length} pedidos coincidem`} com as férias de outras pessoas {quem}
+                  {pares.length === 1 ? "1 coincidência" : `${pares.length} coincidências`} de férias {quem}
                 </div>
-                <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.35rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-                  {conflitos.map(({ p, com }) => (
-                    <li key={p.id}>
-                      <strong>{shortName(p.fullName)}</strong> ({formatDate(p.startDate)} a {formatDate(p.endDate)}) coincide
-                      com {com.map(descreverCoincidencia).join("; ")}
-                    </li>
-                  ))}
+                <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.35rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  {pares.slice(0, MAX_PARES).map((c) => {
+                    const dias = diasEntre(c.de, c.ate);
+                    return (
+                      <li key={`${c.a.chave}|${c.b.chave}`}>
+                        <strong>{shortName(c.a.nome)}</strong> ({periodo(c.a)}) e <strong>{shortName(c.b.nome)}</strong> ({periodo(c.b)}):{" "}
+                        {dias === 1
+                          ? `juntos em ${formatDate(c.de)}`
+                          : `juntos de ${formatDate(c.de)} a ${formatDate(c.ate)} (${dias} dias)`}
+                      </li>
+                    );
+                  })}
                 </ul>
+                {pares.length > MAX_PARES && (
+                  <p style={{ margin: "0.35rem 0 0" }}>e mais {pares.length - MAX_PARES}, na linha do tempo abaixo.</p>
+                )}
               </div>
-            ))}
+            )}
 
             {linhas.length === 0 ? (
               <p className="soft" style={{ margin: 0, fontSize: "0.84rem" }}>
-                Ninguém {quem} tem férias entre {formatDate(de)} e {formatDate(ate)}.
+                Ninguém tem férias entre {formatDate(de)} e {formatDate(ate)}.
               </p>
             ) : (
               <FeriasTimeline linhas={linhas} janelaInicio={de} janelaFim={ate} hoje={hoje} semCartao alturaMax="55vh" />
@@ -208,7 +254,7 @@ export function LinhaDoTempoDaEquipe({
 
         <p className="soft" style={{ margin: 0, fontSize: "0.74rem" }}>
           {porSetor
-            ? "Em Toda a empresa, aparecem só os setores com pedido aguardando aprovação, e a comparação é dentro do setor."
+            ? "Em Toda a empresa, as pessoas aparecem por setor, e a coincidência é contada dentro do setor."
             : "A equipe é a mesma do topo da tela."}
           {" "}Entram as férias efetivadas, as aprovadas pelo gestor e as que aguardam aprovação.
         </p>
