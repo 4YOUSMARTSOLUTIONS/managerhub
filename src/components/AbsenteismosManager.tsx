@@ -8,19 +8,21 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
+import { DetailModal } from "@/components/ui/DetailModal";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { formatDate, normalizar, shortName } from "@/lib/format";
+import { formatCpf } from "@/lib/cpf";
 import {
   ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE,
   ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO,
 } from "@/lib/constants";
 import {
   anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, comunicarAberturaPendente, confirmarAbsenteismo,
-  decidirAbsenteismo, getAlertaInss, getAtestado, getDocumentoAbsenteismoUrl,
+  decidirAbsenteismo, getAlertaInss, getAtestado, getCpfDoLancamento, getDocumentoAbsenteismoUrl,
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
   lerAtestadoComIA,
@@ -231,6 +233,8 @@ export function AbsenteismosManager({
   const semComunicadoRef = useRef<string | null>(null);
   const marcarSemComunicado = (id: string | null) => { semComunicadoRef.current = id; setSemComunicado(id); };
   const [aberto, setAberto] = useState<AbsenteismoRow | null>(null);
+  // cancelar um lançamento em aberto direto da lista (LUIZ, 12/11/2026)
+  const [cancelando, setCancelando] = useState<AbsenteismoRow | null>(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   const [pendente, iniciar] = useTransition();
@@ -437,6 +441,17 @@ export function AbsenteismosManager({
               onClick={() => { setErro(""); setConfirmando(r); }}
             >
               <Pencil size={14} /> Efetivar
+            </button>
+          )}
+          {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
+              horas): cancela e pede ao RH para desconsiderar o comunicado */}
+          {r.status === "aberto" && podeMexer(r) && (
+            <button
+              type="button" className="btn btn-ghost btn-sm"
+              title="A ausência não se confirmou (o colaborador chegou depois, por exemplo)"
+              onClick={() => { setErro(""); setCancelando(r); }}
+            >
+              <Ban size={14} /> Cancelar
             </button>
           )}
         </span>
@@ -763,7 +778,74 @@ export function AbsenteismosManager({
           />
         </Dialogo>
       )}
+
+      {cancelando && <CancelarAberto linha={cancelando} onFechar={() => setCancelando(null)} />}
     </div>
+  );
+}
+
+/**
+ * Cancelar um lançamento em aberto (LUIZ, 12/11/2026): o colaborador não veio
+ * nas primeiras horas, o gestor comunicou, e depois ele chegou. O lançamento
+ * fica como cancelado e, se o comunicado tinha saído, os mesmos destinatários
+ * recebem o pedido para desconsiderá-lo.
+ */
+function CancelarAberto({ linha, onFechar }: { linha: AbsenteismoRow; onFechar: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const [erro, setErro] = useState("");
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  const comunicou = linha.emailStatus === "sent";
+
+  const cancelar = () => {
+    if (!motivo.trim()) { setErro("Informe o motivo do cancelamento."); return; }
+    setErro("");
+    const fd = new FormData();
+    fd.set("id", linha.id);
+    fd.set("nota", motivo);
+    iniciar(async () => {
+      const r = await cancelarAbsenteismo(fd);
+      if (r.error) { setErro(r.error); return; }
+      if (r.warning) toast.warning(r.warning);
+      else toast.success(r.message ?? "Lançamento cancelado.");
+      onFechar();
+      router.refresh();
+    });
+  };
+
+  return (
+    <DetailModal
+      open onClose={onFechar} width="sm" title="Cancelar o lançamento"
+      footer={
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" className="btn btn-danger btn-sm" disabled={pendente} onClick={cancelar}>
+            <Ban size={14} /> {pendente ? "Cancelando…" : "Cancelar o lançamento"}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={onFechar}>Voltar</button>
+        </div>
+      }
+    >
+      <p style={{ margin: 0, fontSize: "0.88rem" }}>
+        <strong title={linha.fullName ?? undefined}>{shortName(linha.fullName)}</strong>, ausência comunicada
+        em {formatDate(linha.occurredOn)}.
+      </p>
+      <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>
+        Use quando a ausência não se confirmou, por exemplo quando o colaborador chegou depois das
+        primeiras horas. O lançamento fica registrado como cancelado.
+        {comunicou
+          ? " Quem recebeu o comunicado recebe um e-mail pedindo para desconsiderá-lo."
+          : " Nenhum comunicado tinha saído, então nenhum e-mail é enviado."}
+      </p>
+      <div>
+        <label className="label">Motivo do cancelamento <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+        <textarea
+          className="input" rows={2} value={motivo} autoFocus
+          placeholder="O colaborador chegou às 10h; não houve ausência."
+          onChange={(e) => setMotivo(e.target.value)}
+        />
+      </div>
+      {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
+    </DetailModal>
   );
 }
 
@@ -1701,6 +1783,16 @@ function Ficha({
     if (!medico) setMedico(await getAtestado(linha.id));
   };
 
+  // CPF só no "Ver" (LUIZ, 12/11/2026): vem por RPC com a guarda de quem vê o
+  // lançamento, porque o CPF não é legível direto da tabela de perfis
+  const [cpf, setCpf] = useState<{ id: string; valor: string | null } | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    getCpfDoLancamento(linha.id).then((v) => { if (vivo) setCpf({ id: linha.id, valor: v }); });
+    return () => { vivo = false; };
+  }, [linha.id]);
+  const cpfDaLinha = cpf?.id === linha.id ? cpf.valor : undefined;
+
   const decidir = (aprovar: boolean) => {
     onErro("");
     const fd = new FormData();
@@ -1737,7 +1829,9 @@ function Ficha({
       confirmLabel: "Cancelar o lançamento",
       message: linha.status === "aprovado"
         ? `Cancelar ${(linha.typeName ?? "a ausência").toLowerCase()} de ${linha.fullName ?? "colaborador"}? Ela deixa de contar para a remuneração variável, e o lançamento fica registrado como cancelado.`
-        : "O lançamento fica registrado como cancelado. O comunicado já enviado não é apagado.",
+        : linha.status === "aberto" && linha.emailStatus === "sent"
+          ? "O lançamento fica registrado como cancelado, e quem recebeu o comunicado recebe um e-mail pedindo para desconsiderá-lo."
+          : "O lançamento fica registrado como cancelado.",
     });
     if (!ok) return;
     onErro("");
@@ -1747,6 +1841,8 @@ function Ficha({
     iniciar(async () => {
       const r = await cancelarAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
+      if (r.warning) toast.warning(r.warning);
+      else if (r.message) toast.success(r.message);
       onFechar();
       router.refresh();
     });
@@ -1767,6 +1863,7 @@ function Ficha({
         <FieldGrid min={150}>
         <Campo rotulo="Colaborador" valor={linha.fullName} />
         <Campo rotulo="Matrícula" valor={linha.employeeCode} />
+        <Campo rotulo="CPF" valor={cpfDaLinha === undefined ? "…" : cpfDaLinha ? formatCpf(cpfDaLinha) : null} />
         <Campo rotulo="Setor" valor={linha.departmentName} />
         <Campo rotulo="Subsetor" valor={linha.subdepartmentName} />
         <Campo rotulo="Função" valor={linha.positionName} />
@@ -1895,8 +1992,9 @@ function Ficha({
             {linha.emailStatus === "skipped" && "Sem destinatário configurado, nenhum comunicado saiu"}
           </span>
         )}
-        {/* Sem fila e sem retry automático, reenviar é a única recuperação. */}
-        <button
+        {/* Sem fila e sem retry automático, reenviar é a única recuperação. O
+            cancelado não reenvia: o e-mail de "desconsidere" já saiu no cancelamento. */}
+        {linha.status !== "cancelado" && <button
           type="button" className="btn btn-ghost btn-sm" disabled={pendente}
           onClick={() => {
             onErro("");
@@ -1912,7 +2010,7 @@ function Ficha({
           }}
         >
           <Mail size={15} /> Reenviar comunicado
-        </button>
+        </button>}
       </div>
       {avisoEmail && (
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>{avisoEmail}</p>

@@ -27,8 +27,12 @@ import { sendMail } from "@/lib/mailer";
  * `direto`: lançado já com o motivo e enviado ao RH de uma vez, sem o aviso de
  * abertura antes (LUIZ, 11/11/2026). Quem decide é o próprio envio: um
  * "confirmado" sem aviso de abertura registrado vira `direto`.
+ *
+ * `cancelado`: o lançamento em aberto foi cancelado (a pessoa chegou depois
+ * das primeiras horas) e o RH precisa desconsiderar o comunicado anterior
+ * (LUIZ, 12/11/2026). Só sai quando um comunicado já tinha saído.
  */
-export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto";
+export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto" | "cancelado";
 
 export type ResultadoComunicado = {
   status: "sent" | "failed" | "skipped";
@@ -78,6 +82,7 @@ type Linha = {
   snap_unit_name: string | null;
   created_by: string;
   decision_note: string | null;
+  cancel_note: string | null;
 };
 
 /** "09:00 às 11:00", ou vazio quando o lançamento não é de horas. */
@@ -94,6 +99,7 @@ function diasEntre(inicio: string, fim: string): number {
 function assunto(evento: EventoComunicado, l: Linha): string {
   const quem = l.snap_full_name ?? "Colaborador";
   const dia = dataBr(l.occurred_on);
+  if (evento === "cancelado") return `Desconsiderar o comunicado: ${quem} em ${dia}`;
   if (evento === "aprovado") return `Absenteísmo aprovado: ${quem} em ${dia}`;
   if (evento === "reprovado") return `Absenteísmo reprovado: ${quem} em ${dia}`;
   if (evento === "confirmado") return `Motivo confirmado: ${quem} em ${dia}`;
@@ -112,7 +118,7 @@ function assunto(evento: EventoComunicado, l: Linha): string {
   return `Não comparecimento: ${quem} em ${dia}`;
 }
 
-function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: string, appUrl: string): string {
+function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: string, appUrl: string, quemCancelou?: string): string {
   const linhas: [string, string][] = [
     ["Colaborador", l.snap_full_name ?? "-"],
     ["Matrícula", l.snap_employee_code ?? "-"],
@@ -128,7 +134,8 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
   if (horas) linhas.push(["Horário", horas]);
   else if (parcial) linhas.push(["Horário", "a confirmar"]);
 
-  if (evento !== "aberto") {
+  // cancelado em aberto: nunca houve motivo nem período informado
+  if (evento !== "aberto" && evento !== "cancelado") {
     linhas.push(["Motivo informado", l.snap_type_name ?? "-"]);
     if (l.start_date && l.end_date) {
       const primeiro = l.primeiro_dia === "trabalhou" || l.primeiro_dia === "parcial" ? l.primeiro_dia : null;
@@ -150,9 +157,15 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
     }
   }
   linhas.push(["Lançado por", autor]);
+  if (evento === "cancelado") {
+    linhas.push(["Cancelado por", quemCancelou ?? autor]);
+    if (l.cancel_note) linhas.push(["Motivo do cancelamento", l.cancel_note]);
+  }
 
   const situacao =
-    evento === "aberto"
+    evento === "cancelado"
+      ? "Desconsidere o comunicado anterior sobre esta ausência: o lançamento foi cancelado, porque a ausência não se confirmou."
+      : evento === "aberto"
       ? parcial
         ? "Ausência parcial: o colaborador trabalhou no restante do dia. Situação ainda não confirmada, e o motivo será informado quando o gestor confirmar o lançamento."
         : "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
@@ -223,10 +236,13 @@ export async function dispatchComunicadoAbsenteismo(
       error: error ?? null,
       sent_by: atorId ?? null,
     });
-    await admin
-      .from("absenteismo_lancamentos")
-      .update({ email_status: status, email_at: new Date().toISOString() })
-      .eq("id", lancamentoId);
+    // o lançamento cancelado é imutável (guarda do banco): o envio fica só no log
+    if (evento !== "cancelado") {
+      await admin
+        .from("absenteismo_lancamentos")
+        .update({ email_status: status, email_at: new Date().toISOString() })
+        .eq("id", lancamentoId);
+    }
   };
 
   try {
@@ -239,7 +255,7 @@ export async function dispatchComunicadoAbsenteismo(
 
     const linha = l as unknown as Linha;
 
-    const [{ data: destinos }, { data: empresa }, { data: autor }, { apiKey }] = await Promise.all([
+    const [{ data: destinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }] = await Promise.all([
       admin
         .from("absenteismo_email_recipients")
         .select("email, unit_id")
@@ -248,6 +264,10 @@ export async function dispatchComunicadoAbsenteismo(
       admin.from("tenants").select("name").eq("id", linha.tenant_id).maybeSingle(),
       admin.from("profiles").select("full_name, email").eq("id", linha.created_by).maybeSingle(),
       getPlatformResend(),
+      // quem cancelou pode não ser quem lançou (o RH, o gestor da pessoa)
+      evento === "cancelado" && atorId
+        ? admin.from("profiles").select("full_name").eq("id", atorId).maybeSingle()
+        : Promise.resolve({ data: null as { full_name: string | null } | null }),
     ]);
 
     // Sem unidade cadastrada, recebe de todas; com unidade, só o que bate com a
@@ -272,7 +292,7 @@ export async function dispatchComunicadoAbsenteismo(
       apiKey,
       to: emails,
       subject: assunto(evento, linha),
-      html: corpo(evento, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl),
+      html: corpo(evento, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined),
       replyTo: autor?.email ?? undefined,
     });
 
@@ -282,6 +302,16 @@ export async function dispatchComunicadoAbsenteismo(
     console.error("[absenteismo-email] falhou:", (e as Error).message);
     return { status: "failed", destinatarios: 0, error: (e as Error).message };
   }
+}
+
+/** Algum comunicado deste lançamento chegou a sair? (o cancelamento só avisa quem foi avisado) */
+export async function jaComunicou(lancamentoId: string): Promise<boolean> {
+  const { count } = await createServiceClient()
+    .from("absenteismo_emails")
+    .select("id", { count: "exact", head: true })
+    .eq("lancamento_id", lancamentoId)
+    .eq("status", "sent");
+  return (count ?? 0) > 0;
 }
 
 /** Já saiu (ou se tentou mandar) o aviso de abertura deste lançamento? */

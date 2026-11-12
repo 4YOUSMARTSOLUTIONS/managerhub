@@ -5,7 +5,7 @@ import { actionContext, dpActionContext } from "./context";
 import { souGestorDe } from "@/lib/team";
 import { MIMES_ANEXO, TAMANHO_ANEXO, recusaDeUpload } from "@/lib/uploads";
 import {
-  comunicarAberturaSeFaltar, dispatchComunicadoAbsenteismo, type EventoComunicado, type ResultadoComunicado,
+  comunicarAberturaSeFaltar, dispatchComunicadoAbsenteismo, jaComunicou, type EventoComunicado, type ResultadoComunicado,
 } from "@/lib/absenteismo-email";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
@@ -713,6 +713,13 @@ export async function lerAtestadoComIA(formData: FormData): Promise<{ data?: Ate
   }
 }
 
+/** O CPF do colaborador do lançamento, para o "Ver" (o banco confere quem pode ver). */
+export async function getCpfDoLancamento(id: string): Promise<string | null> {
+  const { supabase } = await actionContext();
+  const { data } = await supabase.rpc("absenteismo_cpf", { p_id: id });
+  return data ?? null;
+}
+
 export async function getAtestado(id: string): Promise<AtestadoLido | null> {
   const { supabase } = await actionContext();
   const { data } = await supabase.rpc("absenteismo_atestado", { p_id: id });
@@ -931,16 +938,37 @@ export async function decidirAbsenteismo(formData: FormData): Promise<ActionStat
 
 export async function cancelarAbsenteismo(formData: FormData): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase, userId } = await actionContext();
     const id = String(formData.get("id") ?? "");
     const nota = String(formData.get("nota") ?? "").trim();
     if (!id) return { error: "Lançamento inválido." };
     if (!nota) return { error: "Informe o motivo do cancelamento." };
 
+    // a situação ANTES de cancelar: só o que estava em aberto pede o e-mail de
+    // "desconsidere" (a RLS decide se esta pessoa alcança o lançamento)
+    const { data: antes } = await supabase
+      .from("absenteismo_lancamentos").select("status").eq("id", id).maybeSingle();
+
     const { error } = await supabase.rpc("absenteismo_cancelar", { p_id: id, p_nota: nota });
     if (error) return { error: error.message };
 
     revalidarComRv();
+
+    // Cancelado em aberto (LUIZ, 12/11/2026): a pessoa chegou depois e a
+    // ausência não se confirmou. Quem recebeu o comunicado recebe o pedido para
+    // desconsiderá-lo; se nenhum comunicado saiu, não há o que desfazer.
+    if (antes?.status === "aberto" && (await jaComunicou(id))) {
+      const envio = await dispatchComunicadoAbsenteismo(id, "cancelado", userId);
+      if (envio.status === "sent") {
+        return { ok: true, message: "Lançamento cancelado. Quem recebeu o comunicado recebeu o pedido para desconsiderá-lo." };
+      }
+      // o "Reenviar comunicado" não serve aqui (o lançamento cancelado não reenvia)
+      return {
+        ok: true,
+        message: "Lançamento cancelado.",
+        warning: "Lançamento cancelado, mas o e-mail pedindo para desconsiderar o comunicado não saiu. Avise o RH.",
+      };
+    }
     return { ok: true, message: "Lançamento cancelado." };
   } catch (e) {
     return { error: (e as Error).message };

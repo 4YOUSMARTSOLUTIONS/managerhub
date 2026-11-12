@@ -2098,6 +2098,8 @@ export type Database = {
       absenteismo_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
       absenteismo_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
       absenteismo_atestado: { Args: { p_id: string }; Returns: Json }
+      // CPF do colaborador do lançamento, para o "Ver" (mesma guarda de quem vê o lançamento)
+      absenteismo_cpf: { Args: { p_id: string }; Returns: string | null }
       // Férias. Os períodos viajam em jsonb [{inicio, fim, abono, decimo}];
       // `p_hoje` vem do cliente porque o servidor está em UTC (lição do
       // occurred_on do absenteísmo). Só a efetivação escreve em
