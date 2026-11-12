@@ -57,7 +57,7 @@ const FUNDO = "var(--surface)";
  * `alturaMax` limita a altura e rola na vertical também.
  */
 export function FeriasTimeline({
-  linhas, janelaInicio, janelaFim, hoje, semCartao = false, alturaMax,
+  linhas, janelaInicio, janelaFim, hoje, semCartao = false, alturaMax, aviso,
 }: {
   linhas: TimelineLinha[];
   janelaInicio: string;
@@ -67,6 +67,8 @@ export function FeriasTimeline({
   semCartao?: boolean;
   /** altura máxima da área das linhas: passa disso, rola na vertical com a régua presa */
   alturaMax?: number | string;
+  /** entre o título e as barras (o alerta de coincidência do painel) */
+  aviso?: React.ReactNode;
 }) {
   if (linhas.length === 0) return null;
 
@@ -111,6 +113,8 @@ export function FeriasTimeline({
           ))}
         </span>
       </div>
+
+      {aviso && <div style={{ marginTop: "0.7rem" }}>{aviso}</div>}
 
       <div style={{ overflow: "auto", maxHeight: alturaMax, marginTop: "0.7rem" }}>
         <div style={{ minWidth: COLUNA_NOME + trilho, display: "flex", flexDirection: "column", gap: "0.3rem" }}>

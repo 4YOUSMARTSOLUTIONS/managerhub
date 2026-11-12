@@ -116,36 +116,90 @@ export function AlertaCoincidencia({ qtd, porSetor }: { qtd: number; porSetor: b
 const diasEntre = (a: string, b: string) =>
   Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000) + 1;
 
-/** a chave do setor de um item (sem setor é um grupo também) */
-const chaveSetor = (i: AgendaItem) => i.setorId ?? i.setor ?? "";
+/**
+ * Um período de férias para a conta de coincidência. Vem da agenda (linha do
+ * tempo de Aprovações) ou do painel (Visão geral), cada um com o seu rótulo.
+ */
+export type PeriodoParaCoincidencia = {
+  chave: string;
+  userId: string;
+  nome: string | null;
+  inicio: string;
+  fim: string;
+  /** como o período aparece no alerta: "efetivada", "aprovada pelo gestor"... */
+  situacao: string;
+  /** o setor, quando a conta é por setor (sem setor, a pessoa fica fora da conta) */
+  setor?: string | null;
+  /** pedido aguardando a decisão de quem olha: os pares dele vêm primeiro */
+  destaque?: boolean;
+};
 
-type Par = { a: AgendaItem; b: AgendaItem; de: string; ate: string; comPedido: boolean };
+export type ParCoincidente = {
+  a: PeriodoParaCoincidencia;
+  b: PeriodoParaCoincidencia;
+  de: string;
+  ate: string;
+  destaque: boolean;
+};
 
 /**
  * Todo par de pessoas com férias ao mesmo tempo dentro da janela (no
  * `porSetor`, só dentro do mesmo setor). Os pares com pedido aguardando
  * aprovação vêm primeiro; depois, pela data.
  */
-function paresCoincidentes(
-  itens: AgendaItem[], de: string, ate: string, porSetor: boolean, naFila: (i: AgendaItem) => boolean,
-): Par[] {
-  const pares: Par[] = [];
-  for (let x = 0; x < itens.length; x++) {
-    for (let y = x + 1; y < itens.length; y++) {
-      const [a, b] = itens[x].inicio <= itens[y].inicio ? [itens[x], itens[y]] : [itens[y], itens[x]];
+export function paresCoincidentes(
+  periodos: PeriodoParaCoincidencia[], de: string, ate: string, porSetor: boolean,
+): ParCoincidente[] {
+  const pares: ParCoincidente[] = [];
+  for (let x = 0; x < periodos.length; x++) {
+    for (let y = x + 1; y < periodos.length; y++) {
+      const [a, b] = periodos[x].inicio <= periodos[y].inicio ? [periodos[x], periodos[y]] : [periodos[y], periodos[x]];
       if (a.userId === b.userId) continue;
-      if (porSetor && chaveSetor(a) !== chaveSetor(b)) continue;
+      if (porSetor && (!a.setor || a.setor !== b.setor)) continue;
       const ini = a.inicio > b.inicio ? a.inicio : b.inicio;
       const fim = a.fim < b.fim ? a.fim : b.fim;
       if (ini > fim || fim < de || ini > ate) continue;
-      pares.push({ a, b, de: ini, ate: fim, comPedido: naFila(a) || naFila(b) });
+      pares.push({ a, b, de: ini, ate: fim, destaque: Boolean(a.destaque || b.destaque) });
     }
   }
-  return pares.sort((p, q) => Number(q.comPedido) - Number(p.comPedido) || p.de.localeCompare(q.de));
+  return pares.sort((p, q) => Number(q.destaque) - Number(p.destaque) || p.de.localeCompare(q.de));
 }
 
 /** quantos pares o alerta lista antes de resumir o resto */
 const MAX_PARES = 12;
+
+/**
+ * O alerta amarelo das coincidências: quem fica de férias junto com quem, e
+ * quando. Sem par nenhum, não aparece.
+ */
+export function AlertaDeCoincidencias({ pares, quem }: { pares: ParCoincidente[]; quem: string }) {
+  if (pares.length === 0) return null;
+  const periodo = (x: PeriodoParaCoincidencia) => `${formatDate(x.inicio)} a ${formatDate(x.fim)}, ${x.situacao}`;
+  return (
+    <div style={{ background: "var(--mh-warning-soft)", color: "var(--mh-warning)", borderRadius: 8, padding: "0.6rem 0.75rem", fontSize: "0.84rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 700 }}>
+        <AlertTriangle size={15} aria-hidden />
+        {pares.length === 1 ? "1 coincidência" : `${pares.length} coincidências`} de férias {quem}
+      </div>
+      <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.35rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        {pares.slice(0, MAX_PARES).map((c) => {
+          const dias = diasEntre(c.de, c.ate);
+          return (
+            <li key={`${c.a.chave}|${c.b.chave}`}>
+              <strong>{shortName(c.a.nome)}</strong> ({periodo(c.a)}) e <strong>{shortName(c.b.nome)}</strong> ({periodo(c.b)}):{" "}
+              {dias === 1
+                ? `juntos em ${formatDate(c.de)}`
+                : `juntos de ${formatDate(c.de)} a ${formatDate(c.ate)} (${dias} dias)`}
+            </li>
+          );
+        })}
+      </ul>
+      {pares.length > MAX_PARES && (
+        <p style={{ margin: "0.35rem 0 0" }}>e mais {pares.length - MAX_PARES}, na linha do tempo abaixo.</p>
+      )}
+    </div>
+  );
+}
 
 /** a linha do tempo da equipe inteira, com os pedidos aguardando em destaque e o alerta de quem coincide */
 export function LinhaDoTempoDaEquipe({
@@ -197,10 +251,14 @@ export function LinhaDoTempoDaEquipe({
     || a.primeiro.localeCompare(b.primeiro)
     || (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
 
-  const pares = paresCoincidentes(naJanela, de, ate, porSetor, naFila);
+  const pares = paresCoincidentes(
+    naJanela.map((i) => ({
+      chave: i.chave, userId: i.userId, nome: i.nome, inicio: i.inicio, fim: i.fim,
+      situacao: naFila(i) ? "aguardando sua aprovação" : ROTULO_STATUS[i.status],
+      setor: i.setorId ?? i.setor, destaque: naFila(i),
+    })),
+    de, ate, porSetor);
   const quem = porSetor ? "dentro do mesmo setor" : "na equipe";
-  const periodo = (i: AgendaItem) =>
-    `${formatDate(i.inicio)} a ${formatDate(i.fim)}, ${naFila(i) ? "aguardando sua aprovação" : ROTULO_STATUS[i.status]}`;
 
   return (
     <DetailModal open onClose={onClose} width="lg" title={porSetor ? "Férias por setor" : "Férias da equipe"}>
@@ -218,28 +276,7 @@ export function LinhaDoTempoDaEquipe({
                 </p>
               )
             ) : (
-              <div style={{ background: "var(--mh-warning-soft)", color: "var(--mh-warning)", borderRadius: 8, padding: "0.6rem 0.75rem", fontSize: "0.84rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 700 }}>
-                  <AlertTriangle size={15} aria-hidden />
-                  {pares.length === 1 ? "1 coincidência" : `${pares.length} coincidências`} de férias {quem}
-                </div>
-                <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.35rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                  {pares.slice(0, MAX_PARES).map((c) => {
-                    const dias = diasEntre(c.de, c.ate);
-                    return (
-                      <li key={`${c.a.chave}|${c.b.chave}`}>
-                        <strong>{shortName(c.a.nome)}</strong> ({periodo(c.a)}) e <strong>{shortName(c.b.nome)}</strong> ({periodo(c.b)}):{" "}
-                        {dias === 1
-                          ? `juntos em ${formatDate(c.de)}`
-                          : `juntos de ${formatDate(c.de)} a ${formatDate(c.ate)} (${dias} dias)`}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {pares.length > MAX_PARES && (
-                  <p style={{ margin: "0.35rem 0 0" }}>e mais {pares.length - MAX_PARES}, na linha do tempo abaixo.</p>
-                )}
-              </div>
+              <AlertaDeCoincidencias pares={pares} quem={quem} />
             )}
 
             {linhas.length === 0 ? (

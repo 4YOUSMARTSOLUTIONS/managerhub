@@ -26,7 +26,8 @@ import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import {
-  AlertaCoincidencia, LinhaDoTempoDaEquipe, coincidenciasDoPedido, descreverCoincidencia, janelaDaEquipe,
+  AlertaCoincidencia, AlertaDeCoincidencias, LinhaDoTempoDaEquipe, coincidenciasDoPedido, descreverCoincidencia,
+  janelaDaEquipe, paresCoincidentes,
 } from "@/components/FeriasCoincidencias";
 import { useAgendaFerias } from "@/lib/ferias-agenda";
 import { SituacaoBadge, rotuloSituacao, type SituacaoColaborador } from "@/components/SituacaoColaborador";
@@ -346,7 +347,8 @@ export function FeriasManager({
       subabas.push({ id: "visao", label: "Visão geral", content: (
         // importar períodos mora só no menu Ações (LUIZ, 06/11/2026): aqui
         // fica a leitura, com a data da última importação
-        <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null} />
+        <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
+          porSetor={vejoEmpresa && !soEquipe} />
       ) });
     }
     subabas.push(
@@ -1707,12 +1709,14 @@ function EfetivarDialog({
 // ============================================================================
 
 function VisaoGeral({
-  painel, hoje, ultimaImportacao,
+  painel, hoje, ultimaImportacao, porSetor,
 }: {
   painel: FeriasPainel;
   hoje: string;
   /** só o DP recebe */
   ultimaImportacao: UltimaImportacaoFolha | null;
+  /** "Toda a empresa": a coincidência de férias é contada dentro do setor */
+  porSetor: boolean;
 }) {
   const temPrazo = (s: FeriasPainel["saldos"][number]) => s.situacao === "vencida" || s.situacao === "a_vencer";
   // o afastado com prazo vencido ou vencendo sai das pendências e vira observação
@@ -1721,6 +1725,21 @@ function VisaoGeral({
   const semFolhaQtd = painel.saldos.filter((s) => s.semFolha).length;
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const listaSaldos = mostrarTodos ? painel.saldos : comPendencia;
+
+  // Quem fica de férias junto com quem na linha do tempo (LUIZ, 12/11/2026),
+  // o mesmo alerta de Aprovações. O setor de cada um vem dos saldos.
+  const pares = useMemo(() => {
+    const setorDe = new Map<string, string | null>();
+    for (const s of painel.saldos) setorDe.set(s.userId, s.setor);
+    for (const a of painel.agora) if (!setorDe.has(a.userId)) setorDe.set(a.userId, a.setor);
+    return paresCoincidentes(
+      painel.timeline.flatMap((l) => l.itens.map((it, k) => ({
+        chave: `${l.userId}|${k}`, userId: l.userId, nome: l.nome, inicio: it.inicio, fim: it.fim,
+        situacao: it.tipo === "efetivada" ? "efetivada" : "prevista",
+        setor: setorDe.get(l.userId) ?? null,
+      }))),
+      painel.janelaInicio, painel.janelaFim, porSetor);
+  }, [painel, porSetor]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.9rem" }}>
@@ -1776,18 +1795,13 @@ function VisaoGeral({
         hoje={hoje}
         // um ano de janela (rola para o lado); a empresa toda passa de cem linhas
         alturaMax={520}
+        aviso={pares.length > 0 && <AlertaDeCoincidencias pares={pares} quem={porSetor ? "dentro do mesmo setor" : "na equipe"} />}
       />
 
       <div className="card card-pad">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
           <div>
             <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>Saldos e prazos de concessão</h3>
-            <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
-              O próximo período aquisitivo a programar de cada colaborador. Vencida = a
-              concessão passou do prazo e agora é em dobro (art. 137).
-              {painel.usaFolha && " Os períodos, os dias de direito e os já gozados vêm da importação de períodos aquisitivos."}
-              {" "}O status do colaborador vem dos afastamentos e licenças em vigor, lançados em Configurações.
-            </p>
             {ultimaImportacao && (
               <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
                 Última importação: dados de {formatDate(ultimaImportacao.referencia)}, importados
