@@ -379,11 +379,22 @@ export function FeriasManager({
     );
   })() : null;
 
-  // Abas num nível só (LUIZ, 12/11/2026): o Painel sem subabas, a Programação
-  // (que juntou o Acompanhamento), as filas, Todas as previsões e, por último,
-  // Minhas férias. Quem não gere vê só Minhas férias.
+  // Abas num nível só (LUIZ, 12/11/2026): Minhas férias primeiro, para todos
+  // (é a que abre), depois o Painel sem subabas, a Programação (que juntou o
+  // Acompanhamento), as filas e Todas as previsões. Quem não gere vê só
+  // Minhas férias.
   const porSetor = vejoEmpresa && !soEquipe;
   const abas: Tab[] = [];
+  abas.push({ id: "minhas", label: "Minhas férias", content: (
+    <MinhasFerias
+      minhas={minhas} aquisitivos={meusAquisitivos} avisoSolicitar={avisoSolicitar}
+      podeSolicitar={podeSolicitar} onSolicitar={() => setDialogo("solicitar")}
+      onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
+      onReagendar={setReagendando}
+      hoje={hoje}
+      escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo} prazoDecimo={prazos.decimoAte}
+    />
+  ) });
   if (podeGerir) {
     abas.push(
       { id: "painel", label: "Painel", content: (
@@ -430,16 +441,6 @@ export function FeriasManager({
       <TabelaGeral rows={rowsNoEscopo} onDetalhe={setDetalhe} />
     ) });
   }
-  abas.push({ id: "minhas", label: "Minhas férias", content: (
-    <MinhasFerias
-      minhas={minhas} aquisitivos={meusAquisitivos} avisoSolicitar={avisoSolicitar}
-      podeSolicitar={podeSolicitar} onSolicitar={() => setDialogo("solicitar")}
-      onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
-      onReagendar={setReagendando}
-      hoje={hoje}
-      escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo} prazoDecimo={prazos.decimoAte}
-    />
-  ) });
 
   // As ações da tela num menu só, no espaço de ação do cabeçalho: quatro botões
   // soltos disputavam a linha com o subtítulo e passavam por cima dele. Quem
