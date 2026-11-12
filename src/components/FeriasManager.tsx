@@ -389,6 +389,79 @@ export function FeriasManager({
     ) });
   }
 
+  // Cinco cartões (LUIZ, 12/11/2026): aprovação e efetivação num só, os dois
+  // prazos de concessão num só, e cada número leva ao detalhe. Ficam abaixo das
+  // abas e só nas de gestão: "Minhas férias" é da própria pessoa, e os números
+  // da equipe ali misturavam o pessoal com a gestão.
+  const cartoes = podeGerir ? (() => {
+    const aguardandoGestor = rowsNoEscopo.filter((r) => r.status === "solicitada").length;
+    const afastados = aVencerAfastados + vencidasAfastados;
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.8rem" }}>
+        <CartaoResumo
+          titulo="De férias agora"
+          principal={{
+            valor: emGozoQtd,
+            hint: painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje",
+            acao: "Ver quem está de férias, no Painel", onClick: () => irPara("painel", "visao", "ferias-agora"),
+          }}
+        />
+        <CartaoResumo
+          titulo="Próximas saídas"
+          principal={{
+            valor: proximasQtd, hint: "nos próximos 60 dias",
+            acao: "Ver as próximas saídas, no Painel", onClick: () => irPara("painel", "visao", "ferias-proximas"),
+          }}
+        />
+        <CartaoResumo
+          titulo="Aguardando"
+          linhas={[
+            { valor: aguardandoGestor, rotulo: "aprovação do gestor", pendencia: true,
+              acao: "Ver na aba Aprovações", onClick: () => irPara("fila") },
+            { valor: filaDp.length, rotulo: "efetivação do DP", pendencia: true,
+              // o gestor não tem a aba Efetivação: vê as aprovadas em Todas as previsões
+              acao: ehDp ? "Ver na aba Efetivação" : "Ver em Todas as previsões",
+              onClick: () => irPara(ehDp ? "efetivacao" : "todas") },
+          ]}
+        />
+        {painelDecimo && decimoNoEscopo.length > 0 && (
+          <CartaoResumo
+            titulo={`Escolha do 13º de ${painelDecimo.ano}`}
+            principal={{
+              valor: `${decimoNoEscopo.length - decimoPendentes}/${decimoNoEscopo.length}`,
+              cor: decimoPendentes > 0 ? "var(--mh-warning)" : undefined,
+              hint: decimoPendentes > 0 ? `${decimoPendentes} sem escolher` : "todos já escolheram",
+              acao: "Ver na aba Escolha do 13º", onClick: () => irPara("decimo"),
+            }}
+          />
+        )}
+        {painel && (
+          <CartaoResumo
+            titulo="Prazo de concessão"
+            linhas={[
+              { valor: aVencerQtd, rotulo: "vencendo em 90 dias", pendencia: true,
+                acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
+              { valor: vencidasQtd, rotulo: "vencidas (em dobro)", cor: vencidasQtd > 0 ? "var(--mh-danger)" : undefined,
+                acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
+            ]}
+            nota={afastados > 0 ? foraDaConta(afastados) : undefined}
+          />
+        )}
+      </div>
+    );
+  })() : null;
+  const abasDaTela: Tab[] = cartoes
+    ? abas.map((t) => (t.id === "minhas" ? t : {
+        ...t,
+        content: (
+          <>
+            <div style={{ paddingTop: "0.9rem" }}>{cartoes}</div>
+            {t.content}
+          </>
+        ),
+      }))
+    : abas;
+
   // As ações da tela num menu só, no espaço de ação do cabeçalho: quatro botões
   // soltos disputavam a linha com o subtítulo e passavam por cima dele. Quem
   // tem uma ação só (o colaborador, que só solicita) vê um botão direto.
@@ -465,67 +538,7 @@ export function FeriasManager({
     />
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
 
-      {/* Cinco cartões (LUIZ, 12/11/2026): aprovação e efetivação num só, os
-          dois prazos de concessão num só, e cada número leva ao detalhe. */}
-      {podeGerir && (() => {
-        const aguardandoGestor = rowsNoEscopo.filter((r) => r.status === "solicitada").length;
-        const afastados = aVencerAfastados + vencidasAfastados;
-        return (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.8rem" }}>
-            <CartaoResumo
-              titulo="De férias agora"
-              principal={{
-                valor: emGozoQtd,
-                hint: painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje",
-                acao: "Ver quem está de férias, no Painel", onClick: () => irPara("painel", "visao", "ferias-agora"),
-              }}
-            />
-            <CartaoResumo
-              titulo="Próximas saídas"
-              principal={{
-                valor: proximasQtd, hint: "nos próximos 60 dias",
-                acao: "Ver as próximas saídas, no Painel", onClick: () => irPara("painel", "visao", "ferias-proximas"),
-              }}
-            />
-            <CartaoResumo
-              titulo="Aguardando"
-              linhas={[
-                { valor: aguardandoGestor, rotulo: "aprovação do gestor", pendencia: true,
-                  acao: "Ver na aba Aprovações", onClick: () => irPara("fila") },
-                { valor: filaDp.length, rotulo: "efetivação do DP", pendencia: true,
-                  // o gestor não tem a aba Efetivação: vê as aprovadas em Todas as previsões
-                  acao: ehDp ? "Ver na aba Efetivação" : "Ver em Todas as previsões",
-                  onClick: () => irPara(ehDp ? "efetivacao" : "todas") },
-              ]}
-            />
-            {painelDecimo && decimoNoEscopo.length > 0 && (
-              <CartaoResumo
-                titulo={`Escolha do 13º de ${painelDecimo.ano}`}
-                principal={{
-                  valor: `${decimoNoEscopo.length - decimoPendentes}/${decimoNoEscopo.length}`,
-                  cor: decimoPendentes > 0 ? "var(--mh-warning)" : undefined,
-                  hint: decimoPendentes > 0 ? `${decimoPendentes} sem escolher` : "todos já escolheram",
-                  acao: "Ver na aba Escolha do 13º", onClick: () => irPara("decimo"),
-                }}
-              />
-            )}
-            {painel && (
-              <CartaoResumo
-                titulo="Prazo de concessão"
-                linhas={[
-                  { valor: aVencerQtd, rotulo: "vencendo em 90 dias", pendencia: true,
-                    acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
-                  { valor: vencidasQtd, rotulo: "vencidas (em dobro)", cor: vencidasQtd > 0 ? "var(--mh-danger)" : undefined,
-                    acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
-                ]}
-                nota={afastados > 0 ? foraDaConta(afastados) : undefined}
-              />
-            )}
-          </div>
-        );
-      })()}
-
-      <Tabs tabs={abas} active={aba} onActiveChange={setAba} />
+      <Tabs tabs={abasDaTela} active={aba} onActiveChange={setAba} />
 
       {importando && (
         <FeriasImportarFolhaDialog ultima={ultimaImportacao} onFechar={() => setImportando(false)} />
