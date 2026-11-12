@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Ban, CalendarPlus, CalendarRange, Check, FileSpreadsheet, Pencil, Plane, Send, Settings, Trash2, Undo2, Upload,
+  Ban, CalendarPlus, CalendarRange, Check, ChevronRight, FileSpreadsheet, Pencil, Plane, Send, Settings, Trash2, Undo2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
@@ -15,7 +15,6 @@ import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
-import { StatCard } from "@/components/ui/StatCard";
 import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
 import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
@@ -194,8 +193,21 @@ export function FeriasManager({
   /** quem acompanha equipe: os operacionais e a escolha do 13º de cada um no ano */
   painelDecimo: { ano: number; pessoas: EscolhaDecimoDaEquipe[] } | null;
 }) {
-  // aba aberta (o cartão do 13º leva à aba dele)
+  // aba aberta e subaba do Painel: os cartões do topo levam aos detalhes
   const [aba, setAba] = useState<string | undefined>(undefined);
+  const [subaba, setSubaba] = useState<string | undefined>(undefined);
+  /**
+   * Leva à aba (e à subaba do Painel) do detalhe de um cartão e, quando há,
+   * rola até o bloco certo (LUIZ, 12/11/2026). O bloco só existe depois que a
+   * aba monta, por isso a rolagem espera o próximo quadro.
+   */
+  const irPara = (destino: string, sub?: string, ancora?: string) => {
+    setAba(destino);
+    if (sub) setSubaba(sub);
+    if (ancora) {
+      setTimeout(() => document.getElementById(ancora)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    }
+  };
   const [dialogo, setDialogo] = useState<"solicitar" | "lancar" | null>(null);
   const [importando, setImportando] = useState(false);
   const [loteAberto, setLoteAberto] = useState(false);
@@ -364,7 +376,7 @@ export function FeriasManager({
     );
     abas.push({ id: "painel", label: "Painel", content: (
       <div style={{ paddingTop: "0.6rem" }}>
-        <Tabs variant="sub" tabs={subabas} />
+        <Tabs variant="sub" tabs={subabas} active={subaba} onActiveChange={setSubaba} />
       </div>
     ) });
   }
@@ -453,40 +465,65 @@ export function FeriasManager({
     />
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
 
-      {podeGerir && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>
-          <StatCard label="De férias agora" value={emGozoQtd} tone="green"
-            hint={painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje"} />
-          <StatCard label="Próximas saídas (60 dias)" value={proximasQtd} tone="blue" />
-          <StatCard label="Aguardando aprovação do gestor" value={rowsNoEscopo.filter((r) => r.status === "solicitada").length}
-            tone={fila.length > 0 ? "amber" : "gray"} />
-          <StatCard label="Aguardando efetivação" value={filaDp.length} tone={filaDp.length > 0 ? "amber" : "gray"}
-            hint={ehDp ? "o DP confirma o cálculo na folha" : undefined} />
-          {painelDecimo && decimoNoEscopo.length > 0 && (
-            <button
-              type="button" onClick={() => setAba("decimo")} title="Ver na aba Escolha do 13º"
-              style={{ background: "none", border: 0, padding: 0, textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit" }}
-            >
-              <StatCard
-                label={`Escolha do 13º de ${painelDecimo.ano}`}
-                value={`${decimoNoEscopo.length - decimoPendentes}/${decimoNoEscopo.length}`}
-                tone={decimoPendentes > 0 ? "amber" : "green"}
-                hint={decimoPendentes > 0 ? `${decimoPendentes} operacional(is) sem escolher` : "todos já escolheram"}
+      {/* Cinco cartões (LUIZ, 12/11/2026): aprovação e efetivação num só, os
+          dois prazos de concessão num só, e cada número leva ao detalhe. */}
+      {podeGerir && (() => {
+        const aguardandoGestor = rowsNoEscopo.filter((r) => r.status === "solicitada").length;
+        const afastados = aVencerAfastados + vencidasAfastados;
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.8rem" }}>
+            <CartaoResumo
+              titulo="De férias agora"
+              principal={{
+                valor: emGozoQtd,
+                hint: painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje",
+                acao: "Ver quem está de férias, no Painel", onClick: () => irPara("painel", "visao", "ferias-agora"),
+              }}
+            />
+            <CartaoResumo
+              titulo="Próximas saídas"
+              principal={{
+                valor: proximasQtd, hint: "nos próximos 60 dias",
+                acao: "Ver as próximas saídas, no Painel", onClick: () => irPara("painel", "visao", "ferias-proximas"),
+              }}
+            />
+            <CartaoResumo
+              titulo="Aguardando"
+              linhas={[
+                { valor: aguardandoGestor, rotulo: "aprovação do gestor", pendencia: true,
+                  acao: "Ver na aba Aprovações", onClick: () => irPara("fila") },
+                { valor: filaDp.length, rotulo: "efetivação do DP", pendencia: true,
+                  // o gestor não tem a aba Efetivação: vê as aprovadas em Todas as previsões
+                  acao: ehDp ? "Ver na aba Efetivação" : "Ver em Todas as previsões",
+                  onClick: () => irPara(ehDp ? "efetivacao" : "todas") },
+              ]}
+            />
+            {painelDecimo && decimoNoEscopo.length > 0 && (
+              <CartaoResumo
+                titulo={`Escolha do 13º de ${painelDecimo.ano}`}
+                principal={{
+                  valor: `${decimoNoEscopo.length - decimoPendentes}/${decimoNoEscopo.length}`,
+                  cor: decimoPendentes > 0 ? "var(--mh-warning)" : undefined,
+                  hint: decimoPendentes > 0 ? `${decimoPendentes} sem escolher` : "todos já escolheram",
+                  acao: "Ver na aba Escolha do 13º", onClick: () => irPara("decimo"),
+                }}
               />
-            </button>
-          )}
-          {painel && (
-            <StatCard label="A vencer (90 dias)" value={aVencerQtd} tone={aVencerQtd > 0 ? "amber" : "gray"}
-              hint={aVencerAfastados > 0 ? foraDaConta(aVencerAfastados) : "período concessivo terminando"} />
-          )}
-          {painel && (
-            <StatCard label="Vencidas" value={vencidasQtd} tone={vencidasQtd > 0 ? "red" : "green"}
-              hint={vencidasAfastados > 0
-                ? (vencidasQtd > 0 ? `em dobro (art. 137); ${foraDaConta(vencidasAfastados)}` : foraDaConta(vencidasAfastados))
-                : vencidasQtd > 0 ? "concessão em dobro (art. 137)" : "nenhum estouro"} />
-          )}
-        </div>
-      )}
+            )}
+            {painel && (
+              <CartaoResumo
+                titulo="Prazo de concessão"
+                linhas={[
+                  { valor: aVencerQtd, rotulo: "vencendo em 90 dias", pendencia: true,
+                    acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
+                  { valor: vencidasQtd, rotulo: "vencidas (em dobro)", cor: vencidasQtd > 0 ? "var(--mh-danger)" : undefined,
+                    acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
+                ]}
+                nota={afastados > 0 ? foraDaConta(afastados) : undefined}
+              />
+            )}
+          </div>
+        );
+      })()}
 
       <Tabs tabs={abas} active={aba} onActiveChange={setAba} />
 
@@ -1031,6 +1068,80 @@ function SituacaoDoMeuPedido({ status }: { status: FeriasRow["status"] }) {
 // ============================================================================
 // Fila do gestor
 // ============================================================================
+
+// ============================================================================
+// Cartões do topo
+// ============================================================================
+
+type LinhaDoCartao = {
+  valor: number;
+  rotulo: string;
+  /** número acima de zero é pendência: amarelo */
+  pendencia?: boolean;
+  /** cor própria (vencidas em vermelho), no lugar da regra de pendência */
+  cor?: string;
+  /** o que o clique faz (title e leitor de tela) */
+  acao: string;
+  onClick: () => void;
+};
+
+/**
+ * Um cartão do topo de Férias (LUIZ, 12/11/2026). Com `principal`, o cartão
+ * inteiro é o botão; com `linhas`, cada linha leva ao seu detalhe (aprovação
+ * e efetivação; vencendo e vencidas). Zero fica apagado; pendência, amarela.
+ */
+function CartaoResumo({
+  titulo, principal, linhas, nota,
+}: {
+  titulo: string;
+  principal?: { valor: React.ReactNode; hint?: string; cor?: string; acao: string; onClick: () => void };
+  linhas?: LinhaDoCartao[];
+  nota?: string;
+}) {
+  const rotuloTitulo = (
+    <span className="soft" style={{ fontSize: "0.69rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+      {titulo}
+    </span>
+  );
+  if (principal) {
+    const zero = principal.valor === 0;
+    return (
+      <button type="button" className="card card-pad cartao-resumo" onClick={principal.onClick}
+        title={principal.acao} aria-label={`${titulo}: ${principal.acao}`}>
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+          {rotuloTitulo}
+          <ChevronRight size={15} aria-hidden style={{ color: "var(--mh-text-3)", flexShrink: 0 }} />
+        </span>
+        <span className="tabular" style={{
+          fontSize: "1.6rem", fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em",
+          color: principal.cor ?? (zero ? "var(--mh-text-3)" : "var(--mh-text-1)"),
+        }}>
+          {principal.valor}
+        </span>
+        {principal.hint && <span className="soft" style={{ fontSize: "0.78rem" }}>{principal.hint}</span>}
+      </button>
+    );
+  }
+  return (
+    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+      {rotuloTitulo}
+      {(linhas ?? []).map((l) => (
+        <button key={l.rotulo} type="button" className="cartao-resumo-linha" onClick={l.onClick}
+          title={l.acao} aria-label={`${l.rotulo}: ${l.acao}`}>
+          <span className="tabular" style={{
+            fontSize: "1.35rem", fontWeight: 700, lineHeight: 1.1, minWidth: "1.6ch",
+            color: l.cor ?? (l.valor === 0 ? "var(--mh-text-3)" : l.pendencia ? "var(--mh-warning)" : "var(--mh-text-1)"),
+          }}>
+            {l.valor}
+          </span>
+          <span className="soft" style={{ fontSize: "0.8rem" }}>{l.rotulo}</span>
+          <ChevronRight size={14} aria-hidden style={{ marginLeft: "auto", color: "var(--mh-text-3)", flexShrink: 0 }} />
+        </button>
+      ))}
+      {nota && <span className="soft" style={{ fontSize: "0.74rem" }}>{nota}</span>}
+    </div>
+  );
+}
 
 function FilaGestor({
   fila, onDetalhe, onDevolver, soEquipe, anteriorDe, hoje, unidades, soUsuarios, porSetor,
@@ -1744,7 +1855,7 @@ function VisaoGeral({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.9rem" }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "0.8rem" }}>
-        <div className="card card-pad">
+        <div id="ferias-agora" className="card card-pad" style={{ scrollMarginTop: 90 }}>
           <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.6rem" }}>De férias agora</h3>
           {painel.agora.length === 0 ? (
             <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém em gozo hoje.</p>
@@ -1761,7 +1872,7 @@ function VisaoGeral({
           )}
         </div>
 
-        <div className="card card-pad">
+        <div id="ferias-proximas" className="card card-pad" style={{ scrollMarginTop: 90 }}>
           <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.6rem" }}>Próximas saídas (60 dias)</h3>
           {painel.proximas.length === 0 ? (
             <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma saída marcada para os próximos 60 dias.</p>
@@ -1798,7 +1909,7 @@ function VisaoGeral({
         aviso={pares.length > 0 && <AlertaDeCoincidencias pares={pares} quem={porSetor ? "dentro do mesmo setor" : "na equipe"} />}
       />
 
-      <div className="card card-pad">
+      <div id="ferias-saldos" className="card card-pad" style={{ scrollMarginTop: 90 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
           <div>
             <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>Saldos e prazos de concessão</h3>

@@ -592,6 +592,14 @@ a {
 .painel-secao::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 .painel-cartao { display: flex; flex-direction: column; gap: 0.9rem; }
 .painel-numero.clicavel:hover, .painel-numero.clicavel:focus-visible { background: var(--mh-surface-2) !important; }
+/* cartões do topo de Férias que levam ao detalhe (o cartão inteiro ou cada linha) */
+.cartao-resumo { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.cartao-resumo:hover, .cartao-resumo:focus-visible { border-color: var(--mh-border-strong); }
+.cartao-resumo-linha {
+  display: flex; align-items: center; gap: 0.55rem; width: calc(100% + 0.8rem); margin: 0 -0.4rem; padding: 0.2rem 0.4rem;
+  background: none; border: 0; border-radius: 6px; font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.cartao-resumo-linha:hover, .cartao-resumo-linha:focus-visible { background: var(--mh-surface-2); }
 .lista-barras { display: flex; flex-direction: column; gap: 2px; }
 /* duas colunas só na tela larga (o @container acima liga o column-count) */
 .lista-barras.duas-colunas { display: block; column-gap: 2.5rem; }
