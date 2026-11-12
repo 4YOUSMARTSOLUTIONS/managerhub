@@ -49,15 +49,28 @@ export function periodoValido(f: FiltrosFerias): string | null {
  * As três situações de férias como botões de ligar e desligar, com a amostra do
  * traço que o calendário usa e quantas há de cada uma. Substitui as caixas de
  * seleção soltas (LUIZ, 09/11/2026): é ao mesmo tempo filtro e legenda.
- * Usado no Calendário, no Acompanhamento e na Programação.
+ * Usado no Calendário e na Programação.
+ *
+ * `porCor` (LUIZ, 12/11/2026) pinta cada situação com a cor dela, a mesma das
+ * etiquetas de situação das tabelas: efetivada verde, aprovada laranja,
+ * solicitada azul. Fica de fora no Calendário, onde a cor das barras é a do
+ * setor e a situação se lê pelo preenchimento.
  */
+const COR_DA_SITUACAO: Record<StatusAgenda, string> = {
+  efetivada: "var(--mh-success)",
+  aprovada: "var(--mh-warning)",
+  solicitada: "var(--mh-info)",
+};
+
 export function FiltroDeSituacoes({
-  ligadas, onMudar, contagem,
+  ligadas, onMudar, contagem, porCor = false,
 }: {
   ligadas: Record<StatusAgenda, boolean>;
   onMudar: (s: Record<StatusAgenda, boolean>) => void;
   /** quantos períodos de cada situação passam pelos outros filtros (omitido = sem número) */
   contagem?: Record<StatusAgenda, number>;
+  /** cada situação na sua cor (sem barras de setor por perto) */
+  porCor?: boolean;
 }) {
   return (
     <div role="group" aria-label="Situações mostradas" style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap" }}>
@@ -82,7 +95,10 @@ export function FiltroDeSituacoes({
           >
             <span aria-hidden style={{
               display: "inline-block", width: 18, height: 11, borderRadius: 3,
-              ...estiloDaSituacao(s, "var(--mh-primary-500)"),
+              // com cor própria a situação já se distingue: o quadrinho vai cheio
+              ...(porCor
+                ? { background: `color-mix(in srgb, ${COR_DA_SITUACAO[s]} 75%, transparent)`, border: `1px solid ${COR_DA_SITUACAO[s]}` }
+                : estiloDaSituacao(s, "var(--mh-primary-500)")),
               opacity: ligado ? 1 : 0.35,
             }} />
             {STATUS_AGENDA_CURTO[s]}
@@ -213,7 +229,7 @@ export function BarraFiltrosFerias({
       </select>
 
       <div style={{ marginLeft: "auto" }}>
-        <FiltroDeSituacoes ligadas={filtros.status} onMudar={(status) => set({ status })} contagem={contagem} />
+        <FiltroDeSituacoes ligadas={filtros.status} onMudar={(status) => set({ status })} contagem={contagem} porCor />
       </div>
     </div>
   );

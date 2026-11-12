@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IconExport } from "@/components/ui/ImpExpIcons";
@@ -87,6 +87,10 @@ export function FeriasProgramacao({
   const totalPeriodos = pessoas.reduce((s, p) => s + p.periodos.length, 0);
   const totalDias = pessoas.reduce((s, p) => s + p.dias, 0);
 
+  // expandir ou recolher todos de uma vez (LUIZ, 12/11/2026)
+  const todosAbertos = pessoas.length > 0 && pessoas.every((p) => abertos.has(p.userId));
+  const alternarTodos = () => setAbertos(todosAbertos ? new Set() : new Set(pessoas.map((p) => p.userId)));
+
   const alternar = (id: string) => setAbertos((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id); else n.add(id);
@@ -144,12 +148,19 @@ export function FeriasProgramacao({
             </>
           )}
         </span>
-        <button
-          type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}
-          disabled={pessoas.length === 0 || gerando || carregando} onClick={baixar}
-        >
-          <IconExport /> {gerando ? "Gerando..." : "Baixar programação"}
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pessoas.length === 0 || carregando} onClick={alternarTodos}>
+            {todosAbertos
+              ? <><ChevronsDownUp size={14} aria-hidden /> Recolher tudo</>
+              : <><ChevronsUpDown size={14} aria-hidden /> Expandir tudo</>}
+          </button>
+          <button
+            type="button" className="btn btn-ghost btn-sm"
+            disabled={pessoas.length === 0 || gerando || carregando} onClick={baixar}
+          >
+            <IconExport /> {gerando ? "Gerando..." : "Baixar programação"}
+          </button>
+        </div>
       </div>
 
       {!carregando && pessoas.length === 0 ? (
