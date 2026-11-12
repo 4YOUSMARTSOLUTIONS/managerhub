@@ -1031,11 +1031,18 @@ function PainelConfirmacao({
     if (d.acompanhado && tipo?.requiresCompanion) { campos.acompanhado = d.acompanhado; lidos.add("acompanhado"); }
     setC((x) => ({ ...x, ...campos }));
     setCamposIA(lidos);
-    setAvisoIA(d.cidNaoEncontrado
-      ? `A IA leu o CID "${d.cidNaoEncontrado}", que não existe na tabela oficial, e o campo ficou vazio. Busque o CID certo.`
-      : "");
+    // o que a IA leu sem certeza não entra: fica em branco, com o aviso de onde olhar
+    const incertos = d.acompanhado || tipo?.requiresCompanion ? d.incertos : d.incertos.filter((r) => r !== "Acompanhado");
+    setAvisoIA([
+      incertos.length
+        ? `A IA não teve certeza e deixou em branco: ${incertos.join(", ")}. Preencha olhando o atestado.`
+        : "",
+      d.cidNaoEncontrado
+        ? `A IA leu o CID "${d.cidNaoEncontrado}", que não existe na tabela oficial, e o campo ficou vazio. Busque o CID certo.`
+        : "",
+    ].filter(Boolean).join(" "));
     if (lidos.size === 0) {
-      toast.warning("A IA não conseguiu ler os dados deste documento. Preencha manualmente.");
+      if (!incertos.length && !d.cidNaoEncontrado) toast.warning("A IA não conseguiu ler os dados deste documento. Preencha manualmente.");
       return;
     }
     setUsouIA(true);
@@ -1264,8 +1271,9 @@ function PainelConfirmacao({
           <p className="soft" style={{ fontSize: "0.74rem", margin: "0 0 0.7rem" }}>
             Ficam guardados à parte, com acesso restrito a você e ao RH. Não saem em e-mail, não
             entram na planilha exportada e não aparecem em Logs do sistema. O &quot;Preencher com IA&quot;
-            é opcional: ele envia a foto ou o PDF do atestado à OpenAI só para a leitura e completa o
-            que conseguir ler{temArquivoParaIA ? "" : "; a foto escolhida vira também o documento comprobatório"}.
+            é opcional: ele envia a foto ou o PDF do atestado à OpenAI só para a leitura, e só preenche
+            o que três leituras confirmarem; o que ficar em dúvida fica em branco
+            {temArquivoParaIA ? "" : ". A foto escolhida vira também o documento comprobatório"}.
           </p>
 
           {usouIA && (
