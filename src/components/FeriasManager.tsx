@@ -1169,8 +1169,9 @@ function FilaGestor({
   // busca só, que serve ao alerta de cada linha e à linha do tempo da equipe.
   const janela = useMemo(() => janelaDaEquipe(hoje, fila), [fila, hoje]);
   const agenda = useAgendaFerias(janela.de, janela.ate, unidades, soUsuarios);
+  // em "Toda a empresa" o alerta não aparece (LUIZ, 12/11/2026): virava ruído
   const coincidencias = useMemo(
-    () => new Map(fila.map((r) => [r.id, coincidenciasDoPedido(agenda.itens, r, porSetor)])),
+    () => new Map(porSetor ? [] : fila.map((r) => [r.id, coincidenciasDoPedido(agenda.itens, r, false)])),
     [fila, agenda.itens, porSetor]);
 
   const aprovar = async (r: FeriasRow) => {
@@ -1838,19 +1839,17 @@ function VisaoGeral({
   const listaSaldos = mostrarTodos ? painel.saldos : comPendencia;
 
   // Quem fica de férias junto com quem na linha do tempo (LUIZ, 12/11/2026),
-  // o mesmo alerta de Aprovações. O setor de cada um vem dos saldos.
+  // o mesmo alerta de Aprovações: só na equipe (em "Toda a empresa" virava
+  // ruído) e de hoje em diante (o que já passou não pede decisão).
   const pares = useMemo(() => {
-    const setorDe = new Map<string, string | null>();
-    for (const s of painel.saldos) setorDe.set(s.userId, s.setor);
-    for (const a of painel.agora) if (!setorDe.has(a.userId)) setorDe.set(a.userId, a.setor);
+    if (porSetor) return [];
     return paresCoincidentes(
       painel.timeline.flatMap((l) => l.itens.map((it, k) => ({
         chave: `${l.userId}|${k}`, userId: l.userId, nome: l.nome, inicio: it.inicio, fim: it.fim,
         situacao: it.tipo === "efetivada" ? "efetivada" : "prevista",
-        setor: setorDe.get(l.userId) ?? null,
       }))),
-      painel.janelaInicio, painel.janelaFim, porSetor);
-  }, [painel, porSetor]);
+      hoje > painel.janelaInicio ? hoje : painel.janelaInicio, painel.janelaFim);
+  }, [painel, porSetor, hoje]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.9rem" }}>
@@ -1906,7 +1905,7 @@ function VisaoGeral({
         hoje={hoje}
         // um ano de janela (rola para o lado); a empresa toda passa de cem linhas
         alturaMax={520}
-        aviso={pares.length > 0 && <AlertaDeCoincidencias pares={pares} quem={porSetor ? "dentro do mesmo setor" : "na equipe"} />}
+        aviso={pares.length > 0 && <AlertaDeCoincidencias pares={pares} quem="na equipe" />}
       />
 
       <div id="ferias-saldos" className="card card-pad" style={{ scrollMarginTop: 90 }}>
