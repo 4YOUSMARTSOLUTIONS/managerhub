@@ -36,3 +36,30 @@ export async function fetchAll<T>(
     if (linhas.length < TAMANHO) return { data: tudo, error: null };
   }
 }
+
+/**
+ * Roda uma consulta com `.in()` em lotes e junta as respostas.
+ *
+ * A lista do `.in()` vai inteira na URL, e o gateway do Supabase recusa a
+ * requisição quando ela fica grande: medido em 12/11/2026, 600 uuids (23 mil
+ * caracteres) passam e 800 voltam 400. Uma lista tirada da empresa inteira,
+ * desligados incluídos, já passa disso. Lote de 200 fica longe do limite.
+ *
+ * Cada lote ainda está sujeito ao teto de 1000 linhas. Se a consulta pode
+ * devolver várias linhas por id, a fábrica usa `fetchAll` por dentro.
+ *
+ * Lista vazia não faz requisição nenhuma e devolve `[]`.
+ */
+export async function emLotes<T>(
+  ids: readonly string[],
+  ler: (lote: string[]) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  tamanho = 200,
+): Promise<{ data: T[] | null; error: { message: string } | null }> {
+  const tudo: T[] = [];
+  for (let i = 0; i < ids.length; i += tamanho) {
+    const { data, error } = await ler(ids.slice(i, i + tamanho));
+    if (error) return { data: null, error };
+    tudo.push(...(data ?? []));
+  }
+  return { data: tudo, error: null };
+}

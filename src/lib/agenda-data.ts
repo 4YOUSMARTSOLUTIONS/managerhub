@@ -45,7 +45,10 @@ export async function loadAgendaData(): Promise<AgendaData> {
       const q = supabase.from("agendas").select("*, agenda_tasks(*)").eq("tenant_id", tenant.id);
       return (agendaUnitOr ? q.or(agendaUnitOr) : q).order("created_at", { ascending: false });
     })(),
-    supabase.from("agenda_logs").select("id, agenda_id, task_id, log_date, status, note, actual_minutes").eq("tenant_id", tenant.id).gte("log_date", from),
+    // fetchAll: 90 dias de logs já passam de 2 mil linhas (12/11/2026), e o
+    // PostgREST entregava só 1000, sem ordem, a quem enxerga a empresa toda.
+    // A aderência e o histórico saíam com dias faltando, sem aviso.
+    fetchAll(() => supabase.from("agenda_logs").select("id, agenda_id, task_id, log_date, status, note, actual_minutes").eq("tenant_id", tenant.id).gte("log_date", from).order("id")),
     supabase.from("checklist_schedules").select("id, frequency, fixed_date, weekday, day_of_month, run_time, active, checklist_id, checklists!inner(name, active), checklist_schedule_targets(kind, ref_id)").eq("active", true),
     supabase.from("checklist_runs").select("checklist_id, executor_id, period_key").not("completed_at", "is", null).gte("created_at", fromIso),
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),

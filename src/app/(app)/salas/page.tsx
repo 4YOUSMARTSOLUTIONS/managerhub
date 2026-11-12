@@ -1,5 +1,6 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { MeetingsBoard } from "@/components/MeetingsBoard";
 import type { CalMeeting } from "@/components/RoomCalendar";
 import type { Person } from "@/components/PeoplePicker";
@@ -39,7 +40,7 @@ export default async function MeetingsPage() {
     supabase.from("rooms").select("id, name, color, capacity, location, resources").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     // mesma ideia nas series: os participantes vem junto, ja escopados
     supabase.from("meeting_series").select("id, name, meeting_series_participants(user_id)").eq("tenant_id", tenant.id).eq("is_active", true).is("deleted_at", null).order("name"),
-    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true),
+    fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true).order("id")),
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
     // escopo de unidade: depende do unitScope (que ja veio do requireContext), nao
     // do resultado das consultas acima. Estava numa segunda onda sem precisar.

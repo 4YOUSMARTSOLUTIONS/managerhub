@@ -1,5 +1,6 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { ActionsManager, type ActionRow, type FilterOptions } from "@/components/ActionsManager";
 // de um módulo neutro, NÃO de ActionsManager: constante exportada de arquivo
 // "use client" chega aqui como proxy de referência, e `.includes` estoura
@@ -87,7 +88,9 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
     // UMA consulta só, com is_active junto: os ativos alimentam o seletor de
     // pessoas e a lista inteira resolve o nome de autores já desligados. Antes
     // eram duas consultas quase idênticas, e a segunda repetia ~84 KB de nomes.
-    supabase.from("memberships").select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id),
+    // fetchAll: com os desligados a empresa passa de 1000 vínculos, e o
+    // PostgREST cortava o resto calado (gente ativa sumia do seletor).
+    fetchAll(() => supabase.from("memberships").select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).order("id")),
     // opções dos selects a partir da base inteira (não só da página)
     supabase.rpc("action_filter_options"),
   ]);

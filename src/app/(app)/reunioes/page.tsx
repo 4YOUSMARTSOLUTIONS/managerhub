@@ -1,5 +1,6 @@
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { MeetingRecords, type SeriesRow, type OccurrenceRow } from "@/components/MeetingRecords";
 import type { OccurrenceDraft } from "@/lib/actions/meeting-records";
 import type { Person } from "@/components/PeoplePicker";
@@ -27,11 +28,12 @@ export default async function MeetingRecordsPage() {
       .order("name"),
     supabase.from("meeting_series_participants").select("series_id, user_id"),
     supabase.from("meeting_series_units").select("series_id, unit_id"),
-    supabase
+    fetchAll(() => supabase
       .from("memberships")
       .select("user_id, profiles!memberships_user_id_fkey(full_name)")
       .eq("tenant_id", tenant.id)
-      .eq("is_active", true),
+      .eq("is_active", true)
+      .order("id")),
     supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     supabase
       .from("meeting_occurrences")

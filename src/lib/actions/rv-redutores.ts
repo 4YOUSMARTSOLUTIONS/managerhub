@@ -158,7 +158,8 @@ export async function importSanctions(rows: SanctionImportRow[]): Promise<Sancti
     const [{ data: membros }, { data: tipos }, { data: existentes }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
       fetchAll(() => supabase.from("memberships").select("id, user_id, is_active, employee_code").eq("tenant_id", tenantId).order("id")),
       supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenantId),
-      supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
+      // existentes, para não duplicar na reimportação: várias por pessoa
+      fetchAll(() => supabase.from("employee_sanctions").select("id, user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId).order("id")),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
       fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),

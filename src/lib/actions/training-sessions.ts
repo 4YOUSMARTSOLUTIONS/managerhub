@@ -5,6 +5,7 @@ import { actionContext } from "./context";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { fetchAll, emLotes } from "@/lib/supabase/fetch-all";
 
 /**
  * Turmas de treinamento: programação, convocação, liberação e presença.
@@ -146,34 +147,35 @@ export async function convocar(
       }
     }
 
-    // matrículas vivas que já existem para este curso
-    const { data: existentes } = await supabase
+    // matrículas vivas que já existem para este curso. Em lotes: a convocação
+    // pode trazer centenas de pessoas, e a lista do `.in()` vai na URL
+    const { data: existentes } = await emLotes(userIds, (lote) => supabase
       .from("training_enrollments")
       .select("id, user_id")
       .eq("training_id", sessao.training_id)
-      .in("user_id", userIds)
-      .not("status", "in", "(cancelado,nao_aplicavel)");
+      .in("user_id", lote)
+      .not("status", "in", "(cancelado,nao_aplicavel)"));
 
     const porUsuario = new Map((existentes ?? []).map((e) => [e.user_id, e.id]));
 
     // quem já tem matrícula: só aponta para a turma
     const paraVincular = (existentes ?? []).map((e) => e.id);
     if (paraVincular.length > 0) {
-      const { error } = await supabase
+      const { error } = await emLotes(paraVincular, (lote) => supabase
         .from("training_enrollments")
         .update({ session_id: sessionId, updated_at: new Date().toISOString() })
-        .in("id", paraVincular);
+        .in("id", lote));
       if (error) return { error: error.message };
     }
 
     // quem não tinha: matrícula nova já apontando para a turma, com o carimbo
     const novos = userIds.filter((u) => !porUsuario.has(u));
     if (novos.length > 0) {
-      const { data: vinculos } = await supabase
+      const { data: vinculos } = await emLotes(novos, (lote) => supabase
         .from("memberships")
         .select("user_id, position_id, department_id, subdepartment_id")
         .eq("tenant_id", tenantId)
-        .in("user_id", novos);
+        .in("user_id", lote));
       const org = new Map((vinculos ?? []).map((m) => [m.user_id, m]));
 
       const { error } = await supabase.from("training_enrollments").insert(
@@ -498,21 +500,24 @@ export type CandidatoConvocacao = {
 export async function getCandidatos(trainingId: string): Promise<CandidatoConvocacao[]> {
   try {
     const { supabase, tenantId } = await actionContext();
-    const { data } = await supabase
+    // um curso obrigatório para a empresa toda tem uma matrícula pendente por
+    // pessoa: fetchAll pelo teto de 1000, e os nomes em lotes pela URL do `.in()`
+    const { data } = await fetchAll(() => supabase
       .from("training_enrollments")
       .select("user_id, session_id, status")
       .eq("training_id", trainingId)
-      .in("status", ["nao_iniciado", "em_andamento", "no_show"]);
+      .in("status", ["nao_iniciado", "em_andamento", "no_show"])
+      .order("id"));
     if (!data || data.length === 0) return [];
 
     const userIds = data.map((e) => e.user_id);
     const [{ data: perfis }, { data: vinculos }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, email").in("id", userIds),
-      supabase
+      emLotes(userIds, (lote) => supabase.from("profiles").select("id, full_name, email").in("id", lote)),
+      emLotes(userIds, (lote) => supabase
         .from("memberships")
         .select("user_id, department_id, departments(name), positions(name)")
         .eq("tenant_id", tenantId)
-        .in("user_id", userIds),
+        .in("user_id", lote)),
     ]);
 
     const nome = new Map((perfis ?? []).map((p) => [p.id, p.full_name ?? p.email ?? "—"]));

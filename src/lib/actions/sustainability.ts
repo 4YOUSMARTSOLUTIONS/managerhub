@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 function isAdminRole(role: Enums<"member_role">) {
   return role === "owner" || role === "admin";
@@ -152,7 +153,14 @@ export async function importSust(rows: SustImportRow[]): Promise<SustImportResul
     const { supabase, tenantId, userId, role } = await actionContext();
     if (!isAdminRole(role)) return { ...base, error: "Apenas owner/admin podem importar." };
 
-    const { data: mems } = await supabase.from("memberships").select("user_id, profiles(full_name)").eq("tenant_id", tenantId);
+    // fetchAll: a empresa passa de 1000 vínculos e o resto sumia calado. O hint
+    // é obrigatório: memberships tem duas FKs para profiles (user_id e
+    // manager_id), e sem ele o embed volta PGRST201 e nenhum dono é achado.
+    const { data: mems } = await fetchAll(() => supabase
+      .from("memberships")
+      .select("user_id, profiles!memberships_user_id_fkey(full_name)")
+      .eq("tenant_id", tenantId)
+      .order("id"));
     const ownerByName = new Map<string, string>();
     for (const m of mems ?? []) {
       const nm = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;

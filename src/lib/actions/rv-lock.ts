@@ -54,8 +54,10 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   ] = await Promise.all([
     fetchAll(() => admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at, department_id, subdepartment_id, manager_id").eq("tenant_id", tenantId).order("id")),
     admin.from("individual_rv_config").select("scope, position_id, user_id, effective_from, value").eq("tenant_id", tenantId),
-    admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenantId),
-    admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId),
+    // afastamentos e punições crescem com o tempo, várias por pessoa: o corte em
+    // 1000 do PostgREST tiraria descontos do fechamento sem avisar
+    fetchAll(() => admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenantId).order("id")),
+    fetchAll(() => admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId).order("id")),
     admin.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenantId).eq("active", true).order("sort"),
     admin.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenantId).order("min_qtd"),
   ]);

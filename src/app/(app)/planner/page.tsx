@@ -1,5 +1,6 @@
 import { requireContext } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PlannerManager, type BoardListItem } from "@/components/PlannerManager";
@@ -33,9 +34,9 @@ export default async function PlannerPage({ searchParams }: { searchParams: Prom
     supabase.from("planner_boards").select("id, name, description, created_by, created_at")
       .eq("tenant_id", tenant.id).order("created_at"),
     supabase.from("planner_board_members").select("board_id, user_id").eq("tenant_id", tenant.id),
-    supabase.from("memberships")
+    fetchAll(() => supabase.from("memberships")
       .select("user_id, is_active, profiles!memberships_user_id_fkey(full_name)")
-      .eq("tenant_id", tenant.id).eq("is_active", true),
+      .eq("tenant_id", tenant.id).eq("is_active", true).order("id")),
     // a cadeia inteira abaixo de mim; vazia para quem não é gestor
     supabase.rpc("my_managed_memberships"),
   ]);

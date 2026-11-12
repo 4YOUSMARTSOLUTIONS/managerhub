@@ -77,11 +77,12 @@ export default async function TreinamentosPage() {
       .limit(5000),
     // lotação de quem está ativo: é o que permite oferecer, em "quem deve
     // fazer", só cargos e pessoas que existem dentro do escopo do treinamento
-    supabase
+    fetchAll(() => supabase
       .from("memberships")
       .select("id, user_id, position_id, department_id, subdepartment_id, profiles!memberships_user_id_fkey(full_name, email)")
       .eq("tenant_id", tenant.id)
-      .eq("is_active", true),
+      .eq("is_active", true)
+      .order("id")),
     fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).eq("active", true).order("name"),

@@ -90,11 +90,14 @@ export default async function PunicoesPage() {
       .order("sort")
       .order("name"),
     // a ficha que o formulário mostra em leitura. Sem CPF: ele só aparece no
-    // documento, por RPC (ver AGENTS.md).
-    supabase
+    // documento, por RPC (ver AGENTS.md). fetchAll: a empresa passa de 1000
+    // vínculos (ativos e desligados) e o PostgREST cortava o resto calado,
+    // deixando o cadastro de quem ficou de fora em branco no formulário.
+    fetchAll(() => supabase
       .from("memberships")
       .select("id, user_id, employee_code, department_id, subdepartment_id, position_id, manager_id")
-      .eq("tenant_id", tenant.id),
+      .eq("tenant_id", tenant.id)
+      .order("id")),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),

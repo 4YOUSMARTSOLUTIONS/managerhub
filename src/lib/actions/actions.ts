@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
 const BUCKET = "action-attachments";
@@ -155,7 +156,8 @@ export async function importActions(rows: ActionImportRow[]): Promise<ActionImpo
     const [{ data: mems }, { data: units }, { data: kpis }, { data: tools }, { data: pilares }, { data: secoesData }, { data: blocos }, { data: itens }, { data: series }, { data: programas }] = await Promise.all([
       // hint obrigatório: memberships tem 2 FKs para profiles (user_id e manager_id).
       // Sem ele o embed é ambíguo, a consulta falha e nenhum nome é resolvido.
-      supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
+      // fetchAll: a empresa passa de 1000 vínculos e o resto sumia calado.
+      fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).order("id")),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
       supabase.from("action_kpis").select("id, name").eq("tenant_id", tenantId),
       supabase.from("action_tools").select("id, name").eq("tenant_id", tenantId),
@@ -454,7 +456,9 @@ export async function getDemandaTimeline(demandaId: string): Promise<{ events: T
   const [{ data: events }, { data: reqs }, { data: profs }, { data: dem }] = await Promise.all([
     supabase.from("demanda_events").select("id, type, actor_id, body, meta, created_at").eq("demanda_id", demandaId).order("created_at", { ascending: true }),
     supabase.from("demanda_requests").select("id, type, new_due_date, note, requested_by, created_at").eq("demanda_id", demandaId).eq("status", "pending"),
-    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
+    // fetchAll: a empresa passa de 1000 vínculos e o autor que ficasse de fora
+    // aparecia sem nome na linha do tempo
+    fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).order("id")),
     supabase.from("action_demandas").select("status, due_date").eq("id", demandaId).single(),
   ]);
   const nameById = new Map((profs ?? []).map((m) => [m.user_id, (m.profiles as { full_name: string | null } | null)?.full_name ?? "—"]));
@@ -623,7 +627,8 @@ export async function exportActions(
       supabase.from("departments").select("id, name").eq("tenant_id", tenantId),
       supabase.from("subdepartments").select("id, name").eq("tenant_id", tenantId),
       supabase.from("meeting_series").select("id, name").eq("tenant_id", tenantId),
-      supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
+      // fetchAll: a empresa passa de 1000 vínculos e o resto sairia sem nome
+      fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).order("id")),
     ]);
     const nameMap = (list: { id: string; name: string }[] | null) => new Map((list ?? []).map((x) => [x.id, x.name]));
     const mProg = nameMap(programas), mPilar = nameMap(pilares), mSecao = nameMap(secoes);
@@ -757,7 +762,7 @@ export async function getActionFormOptions(): Promise<ActionFormOptions> {
     { data: itens }, { data: kpis }, { data: tools }, { data: series }, { data: occ },
     { data: deps }, { data: subs },
   ] = await Promise.all([
-    supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).eq("is_active", true),
+    fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).eq("is_active", true).order("id")),
     supabase.from("sdpo_pilares").select("id, name, active").eq("tenant_id", tenantId).order("name"),
     supabase.from("sdpo_secoes").select("id, name, active").eq("tenant_id", tenantId).order("name"),
     supabase.from("sdpo_blocos").select("id, name, pilar_id, secao_id, active").eq("tenant_id", tenantId).order("name"),

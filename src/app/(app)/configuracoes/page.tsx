@@ -199,12 +199,14 @@ export default async function SettingsPage({
     // contratos encerrados: as importações aceitam lançar histórico pela
     // matrícula antiga, e a PRÉVIA precisa reconhecê-la igual ao servidor
     supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenant.id),
-    // férias e afastamentos: a RLS é owner/admin, e esta tela já é
-    supabase
+    // férias e afastamentos: a RLS é owner/admin, e esta tela já é. fetchAll:
+    // são várias por pessoa e crescem com o tempo; o id desempata a ordem
+    fetchAll(() => supabase
       .from("employee_absences")
       .select("id, user_id, kind, start_date, end_date, discounts_rv, note, motivo")
       .eq("tenant_id", tenant.id)
-      .order("start_date", { ascending: false }),
+      .order("start_date", { ascending: false })
+      .order("id")),
     // Redutores da RV. Catálogo e regras são configuração (qualquer membro lê);
     // a punição em si é disciplinar, e a RLS é owner/admin/manager.
     supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
@@ -216,11 +218,12 @@ export default async function SettingsPage({
       .select("id, code, name, description, severity, active")
       .eq("tenant_id", tenant.id)
       .order("sort").order("code"),
-    supabase
+    fetchAll(() => supabase
       .from("employee_sanctions")
       .select("id, user_id, sanction_type_id, occurred_on, note")
       .eq("tenant_id", tenant.id)
-      .order("occurred_on", { ascending: false }),
+      .order("occurred_on", { ascending: false })
+      .order("id")),
     supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("rv_reducer_bands").select("id, rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
     // quais punições nasceram de um lançamento aprovado: essas não se editam nem

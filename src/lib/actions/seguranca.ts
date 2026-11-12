@@ -10,6 +10,7 @@ import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
 import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { lerRegistrosDaBlitz } from "@/lib/blitz-registros";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import type { BlitzResposta, BlitzRow } from "@/components/SegBlitzManager";
 import type { Enums, Json } from "@/types/database";
@@ -1760,11 +1761,14 @@ export async function setSegEquipe(input: { user_ids: string[] }): Promise<Actio
   try {
     const { supabase, tenantId, userId } = await adminActionContext();
 
-    const { data: membros } = await supabase
+    // fetchAll: se a lista de ativos viesse cortada em 1000, quem ficasse de
+    // fora sairia da equipe sem aviso
+    const { data: membros } = await fetchAll(() => supabase
       .from("memberships")
       .select("user_id")
       .eq("tenant_id", tenantId)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .order("id"));
     const validos = new Set((membros ?? []).map((m) => m.user_id));
     const ids = [...new Set(input.user_ids.filter((id) => validos.has(id)))];
 

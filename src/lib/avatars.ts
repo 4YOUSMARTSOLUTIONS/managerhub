@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
  * Mapa `user_id -> caminho da foto` da empresa, carregado uma vez por request no
@@ -14,11 +15,12 @@ export const getAvatarMap = cache(async (tenantId: string): Promise<Record<strin
   const supabase = await createClient();
   // o hint !memberships_user_id_fkey é OBRIGATÓRIO: memberships tem duas FKs para
   // profiles e, sem ele, a consulta falha calada e todo mundo volta para as iniciais
-  const { data } = await supabase
+  const { data } = await fetchAll(() => supabase
     .from("memberships")
     .select("user_id, profiles!memberships_user_id_fkey(avatar_url)")
     .eq("tenant_id", tenantId)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("id"));
 
   const out: Record<string, string> = {};
   for (const row of data ?? []) {

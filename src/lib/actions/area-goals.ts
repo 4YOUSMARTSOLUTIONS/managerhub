@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Database, Enums } from "@/types/database";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 function isAdminRole(role: Enums<"member_role">) {
   return role === "owner" || role === "admin";
@@ -249,7 +250,8 @@ export async function importAreaGoals(
     const [{ data: deps }, { data: subs }, { data: mems }, { data: existing }, { data: unitsList }] = await Promise.all([
       supabase.from("departments").select("id, name").eq("tenant_id", tenantId),
       supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenantId),
-      supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId),
+      // fetchAll: a empresa passa de 1000 vínculos e o resto sumia calado
+      fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenantId).order("id")),
       supabase.from("area_goals").select("name, department_id, unit_id").eq("tenant_id", tenantId),
       supabase.from("units").select("id, name").eq("tenant_id", tenantId),
     ]);

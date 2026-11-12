@@ -7,6 +7,7 @@ import type { Enums } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
+import { fetchAll, emLotes } from "@/lib/supabase/fetch-all";
 
 const BUCKET = "agenda-attachments";
 type Ctx = { supabase: SupabaseClient<Database>; tenantId: string; userId: string; role: Enums<"member_role"> };
@@ -160,9 +161,12 @@ export async function deleteAgenda(formData: FormData): Promise<ActionState> {
     const ctx = await actionContext();
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Agenda inválida." };
-    // limpa anexos do storage antes de remover (cascade apaga as linhas)
-    const { data: atts } = await ctx.supabase.from("agenda_log_attachments").select("path")
-      .in("log_id", (await ctx.supabase.from("agenda_logs").select("id").eq("agenda_id", id)).data?.map((l) => l.id) ?? []);
+    // limpa anexos do storage antes de remover (cascade apaga as linhas). Uma
+    // agenda de meses tem milhares de logs: fetchAll pelo teto de 1000 e o
+    // `.in()` em lotes pela URL, senão os arquivos ficavam órfãos no storage
+    const { data: logsDaAgenda } = await fetchAll(() => ctx.supabase.from("agenda_logs").select("id").eq("agenda_id", id).order("id"));
+    const { data: atts } = await emLotes((logsDaAgenda ?? []).map((l) => l.id), (lote) =>
+      ctx.supabase.from("agenda_log_attachments").select("path").in("log_id", lote));
     const paths = (atts ?? []).map((a) => a.path);
     if (paths.length) { const rm = await ctx.supabase.storage.from(BUCKET).remove(paths); if (rm.error) console.error("agenda att cleanup:", rm.error.message); }
     const { error } = await ctx.supabase.from("agendas").delete().eq("id", id);

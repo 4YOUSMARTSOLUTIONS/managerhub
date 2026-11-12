@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { emLotes } from "@/lib/supabase/fetch-all";
 
 /**
  * Catálogo de treinamentos, matriz de atribuição e matrículas.
@@ -180,24 +181,25 @@ export async function enrollPeople(
     const { supabase, tenantId } = await actionContext();
     if (userIds.length === 0) return { error: "Selecione ao menos um colaborador." };
 
-    // quem já tem matrícula viva não recebe outra
-    const { data: existentes } = await supabase
+    // quem já tem matrícula viva não recebe outra. Em lotes: a seleção pode ser
+    // um setor inteiro, e a lista do `.in()` vai na URL (ver emLotes)
+    const { data: existentes } = await emLotes(userIds, (lote) => supabase
       .from("training_enrollments")
       .select("user_id")
       .eq("training_id", trainingId)
-      .in("user_id", userIds)
-      .not("status", "in", "(cancelado,nao_aplicavel)");
+      .in("user_id", lote)
+      .not("status", "in", "(cancelado,nao_aplicavel)"));
     const jaTem = new Set((existentes ?? []).map((e) => e.user_id));
     const novos = userIds.filter((u) => !jaTem.has(u));
     if (novos.length === 0) return { ok: true, criadas: 0 };
 
     // carimbo de época: o vínculo de agora, para o relatório do ciclo não ser
     // reescrito por uma transferência futura
-    const { data: vinculos } = await supabase
+    const { data: vinculos } = await emLotes(novos, (lote) => supabase
       .from("memberships")
       .select("user_id, position_id, department_id, subdepartment_id")
       .eq("tenant_id", tenantId)
-      .in("user_id", novos);
+      .in("user_id", lote));
     const org = new Map((vinculos ?? []).map((m) => [m.user_id, m]));
 
     const { error } = await supabase.from("training_enrollments").insert(

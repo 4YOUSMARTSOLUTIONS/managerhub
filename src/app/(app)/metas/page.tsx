@@ -6,7 +6,7 @@ import { linhaDoTempoRv, trechosDeFuncao, type HistoricoFuncaoRow } from "@/lib/
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type RvCongeladoRow } from "@/components/IndividualGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
-import { fetchAll } from "@/lib/supabase/fetch-all";
+import { fetchAll, emLotes } from "@/lib/supabase/fetch-all";
 
 export default async function GoalsPage() {
   const gate = await moduleGate("metas");
@@ -98,16 +98,19 @@ export default async function GoalsPage() {
     .eq("tenant_id", tenant.id);
 
   // `manager_id` entra para o escopo padrão (subordinados DIRETOS). Quem não tem
-  // equipe nem pode ampliar lê só a própria linha.
-  let memQuery = supabase
-    .from("memberships")
-    .select("user_id, manager_id, department_id, subdepartment_id")
-    .eq("tenant_id", tenant.id);
-  if (!canSeeMultiple) memQuery = memQuery.eq("user_id", user.id);
+  // equipe nem pode ampliar lê só a própria linha. fetchAll: a empresa passa de
+  // 1000 vínculos, e quem vê várias pessoas perdia o resto calado.
+  const memsP = fetchAll(() => {
+    const q = supabase
+      .from("memberships")
+      .select("user_id, manager_id, department_id, subdepartment_id")
+      .eq("tenant_id", tenant.id);
+    return (canSeeMultiple ? q : q.eq("user_id", user.id)).order("id");
+  });
 
   const [{ data: goals }, { data: mems }] = await Promise.all([
     goalsQuery.order("name"),
-    memQuery,
+    memsP,
   ]);
 
   // ---------- ONDA 3: o que depende da onda 2 ----------
@@ -121,12 +124,13 @@ export default async function GoalsPage() {
   const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }, { data: ausencias },
          { data: sancoes }, { data: regrasRaw }, { data: faixasRaw },
          { data: cadeados }, { data: retratos }] = await Promise.all([
-    goalIds.length
-      ? supabase
-          .from("individual_goal_entries")
-          .select("id, goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
-          .in("goal_id", goalIds)
-      : Promise.resolve({ data: [] as { id: string; goal_id: string; period: string; target_value: number; actual_value: number | null; weight: number; note: string | null; partial_value: number | null; rv_value: number | null; approval_status: "aberta" | "aprovada" | "reprovada"; approved_at: string | null; reproval_note: string | null }[] }),
+    // um lançamento por meta por mês: já são ~500 e passam de 1000 com o
+    // tempo, e o PostgREST cortaria o histórico calado. Lista vazia não consulta.
+    emLotes(goalIds, (lote) => fetchAll(() => supabase
+      .from("individual_goal_entries")
+      .select("id, goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
+      .in("goal_id", lote)
+      .order("id"))),
     // RV configurada em Configuracoes (vigencias por funcao/colaborador). Leitura via
     // service client (a RLS da config e owner/admin) - escopo restrito aos owners visiveis.
     admin
