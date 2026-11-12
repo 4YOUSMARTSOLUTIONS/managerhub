@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Ban, CalendarPlus, Check, FileSpreadsheet, Pencil, Plane, Send, Settings, Trash2, Undo2, Upload,
+  Ban, CalendarPlus, CalendarRange, Check, FileSpreadsheet, Pencil, Plane, Send, Settings, Trash2, Undo2, Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
@@ -25,6 +25,10 @@ import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDia
 import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
+import {
+  AlertaCoincidencia, LinhaDoTempoDoPedido, coincidenciasDoPedido, descreverCoincidencia, janelaDoPedido,
+} from "@/components/FeriasCoincidencias";
+import { useAgendaFerias } from "@/lib/ferias-agenda";
 import { SituacaoBadge, rotuloSituacao, type SituacaoColaborador } from "@/components/SituacaoColaborador";
 import { formatDate, formatDateTime, normalizar, shortName, somarDias } from "@/lib/format";
 import {
@@ -316,7 +320,10 @@ export function FeriasManager({
       // o aviso de "as outras estão em Toda a empresa" só vale para o DP: o
       // Gerencial não decide as outras equipes, então elas nunca entram na fila dele
       <FilaGestor fila={fila} soEquipe={soEquipe && ehDp} anteriorDe={anteriorDe}
-        onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
+        onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })}
+        hoje={hoje} unidades={unidades} soUsuarios={pessoasNoEscopo}
+        // em "Toda a empresa" a equipe seria a empresa inteira: compara com o setor
+        porSetor={vejoEmpresa && !soEquipe} />
     ) });
   }
   if (ehDp) {
@@ -1024,9 +1031,16 @@ function SituacaoDoMeuPedido({ status }: { status: FeriasRow["status"] }) {
 // ============================================================================
 
 function FilaGestor({
-  fila, onDetalhe, onDevolver, soEquipe, anteriorDe,
+  fila, onDetalhe, onDevolver, soEquipe, anteriorDe, hoje, unidades, soUsuarios, porSetor,
 }: {
   fila: FeriasRow[];
+  hoje: string;
+  /** unidades do seletor do topo (null = todas) */
+  unidades: string[] | null;
+  /** o "Minha equipe" do topo (null = sem recorte) */
+  soUsuarios: Set<string> | null;
+  /** compara com o setor do colaborador, e não com a equipe toda */
+  porSetor: boolean;
   /** o período que um reagendamento troca (null se não for reagendamento) */
   anteriorDe: (r: FeriasRow) => FeriasRow | null;
   onDetalhe: (r: FeriasRow) => void;
@@ -1036,10 +1050,30 @@ function FilaGestor({
 }) {
   const [decidindo, iniciar] = useTransition();
   const router = useRouter();
+  const [vendo, setVendo] = useState<FeriasRow | null>(null);
+
+  // Quem mais estará fora no período de cada pedido (LUIZ, 12/11/2026): uma
+  // busca só, cobrindo a janela de todos os pedidos da fila.
+  const janela = useMemo(() => {
+    if (fila.length === 0) return { de: hoje, ate: hoje };
+    let de = "9999-12-31";
+    let ate = "0000-01-01";
+    for (const r of fila) {
+      const j = janelaDoPedido(r.startDate, r.endDate);
+      if (j.de < de) de = j.de;
+      if (j.ate > ate) ate = j.ate;
+    }
+    return { de, ate };
+  }, [fila, hoje]);
+  const agenda = useAgendaFerias(janela.de, janela.ate, unidades, soUsuarios);
+  const coincidencias = useMemo(
+    () => new Map(fila.map((r) => [r.id, coincidenciasDoPedido(agenda.itens, r, porSetor)])),
+    [fila, agenda.itens, porSetor]);
 
   const aprovar = async (r: FeriasRow) => {
     const fora = rotuloForaPrazo(r);
     const antes = anteriorDe(r);
+    const coincide = coincidencias.get(r.id) ?? [];
     const novo = `${formatDate(r.startDate)} a ${formatDate(r.endDate)} (${r.dias} dias${r.abonoDias ? ` + ${r.abonoDias} de abono` : ""})`;
     if (!(await confirmDialog({
       title: r.reagendadaDe ? "Aprovar o reagendamento" : "Aprovar a previsão",
@@ -1047,7 +1081,10 @@ function FilaGestor({
         ? `${shortName(r.fullName)}: ${antes ? `de ${formatDate(antes.startDate)} a ${formatDate(antes.endDate)} ` : ""}para ${novo}. `
           + "Segue para o departamento pessoal. Quando ele efetivar, o período novo substitui o anterior, que até lá continua valendo."
         : `${shortName(r.fullName)}: ${novo}. A previsão segue para a efetivação do departamento pessoal.`)
-        + (fora ? ` Atenção: ${fora.toLowerCase()} legal, a empresa pode recusar. Aprovar é aceitar.` : ""),
+        + (fora ? ` Atenção: ${fora.toLowerCase()} legal, a empresa pode recusar. Aprovar é aceitar.` : "")
+        + (coincide.length
+          ? ` Atenção: coincide com ${coincide.length} ${coincide.length === 1 ? "pessoa" : "pessoas"} ${porSetor ? "do setor" : "da equipe"}: ${coincide.map(descreverCoincidencia).join("; ")}.`
+          : ""),
       confirmLabel: "Aprovar",
     }))) return;
     iniciar(async () => {
@@ -1074,7 +1111,7 @@ function FilaGestor({
               <tr>
                 <th>Colaborador</th>
                 <th style={{ width: 150 }}>Setor</th>
-                <th style={{ width: 190 }}>Período</th>
+                <th style={{ width: 240 }}>Período</th>
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 80, textAlign: "right" }}>Abono</th>
                 <th style={{ width: 190 }}>Prazo legal</th>
@@ -1092,8 +1129,21 @@ function FilaGestor({
                   </td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
                   <td>
-                    {formatDate(r.startDate)} a {formatDate(r.endDate)}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                      {formatDate(r.startDate)} a {formatDate(r.endDate)}
+                      <button
+                        type="button" className="btn btn-ghost btn-xs"
+                        title={`Ver as férias ${porSetor ? "do setor" : "da equipe"} na linha do tempo`}
+                        aria-label={`Ver as férias ${porSetor ? "do setor" : "da equipe"} na linha do tempo`}
+                        onClick={(e) => { e.stopPropagation(); setVendo(r); }}
+                        style={{ padding: "0.15rem 0.3rem" }}
+                      >
+                        <CalendarRange size={14} aria-hidden />
+                      </button>
+                    </span>
                     <PeriodoAnterior anterior={anteriorDe(r)} />
+                    {/* o alerta amarelo (LUIZ, 12/11/2026): o detalhe está no ícone */}
+                    <div><AlertaCoincidencia qtd={coincidencias.get(r.id)?.length ?? 0} porSetor={porSetor} compacto /></div>
                   </td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
@@ -1117,6 +1167,23 @@ function FilaGestor({
             </tbody>
           </table>
         </div>
+      )}
+
+      {vendo && (
+        <LinhaDoTempoDoPedido
+          pedido={vendo} itens={agenda.itens} carregando={agenda.carregando} erro={agenda.erro}
+          porSetor={porSetor} hoje={hoje} onClose={() => setVendo(null)}
+          footer={
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-warning btn-sm" onClick={() => { setVendo(null); onDevolver(vendo); }}>
+                <Undo2 size={13} aria-hidden /> Devolver
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => { const r = vendo; setVendo(null); aprovar(r); }}>
+                <Check size={13} aria-hidden /> Aprovar
+              </button>
+            </div>
+          }
+        />
       )}
     </div>
   );

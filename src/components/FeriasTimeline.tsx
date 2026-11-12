@@ -1,13 +1,34 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { shortName, formatDate } from "@/lib/format";
 import { dataLocal, diasDoPeriodo } from "@/lib/ferias";
+
+/**
+ * O tipo de cada barra. "prevista" é a do painel (aprovada ou solicitada, sem
+ * distinguir); a linha do tempo de um pedido em Aprovações separa "aprovada" e
+ * "solicitada" e destaca o "pedido" que está sendo decidido.
+ */
+export type TipoNaTimeline = "efetivada" | "prevista" | "aprovada" | "solicitada" | "pedido";
 
 export type TimelineLinha = {
   userId: string;
   nome: string | null;
-  itens: { inicio: string; fim: string; tipo: "efetivada" | "prevista" | string }[];
+  itens: { inicio: string; fim: string; tipo: TipoNaTimeline | string }[];
 };
+
+const INFO_CHEIO = "color-mix(in srgb, var(--mh-info) 45%, transparent)";
+
+/** visual e rótulo de cada tipo, na ordem em que entram na legenda */
+const TIPOS: { tipo: TipoNaTimeline; rotulo: string; estilo: CSSProperties }[] = [
+  { tipo: "pedido", rotulo: "este pedido", estilo: { background: "var(--mh-primary-500)", border: "1px solid var(--mh-primary-500)" } },
+  { tipo: "efetivada", rotulo: "efetivada", estilo: { background: "var(--mh-success)", border: "1px solid transparent" } },
+  { tipo: "aprovada", rotulo: "aprovada pelo gestor", estilo: { background: INFO_CHEIO, border: "1px solid var(--mh-info)" } },
+  { tipo: "prevista", rotulo: "prevista", estilo: { background: INFO_CHEIO, border: "1px solid var(--mh-info)" } },
+  { tipo: "solicitada", rotulo: "aguardando aprovação", estilo: { background: "color-mix(in srgb, var(--mh-info) 12%, transparent)", border: "1px dashed var(--mh-info)" } },
+];
+const PREVISTA = TIPOS.find((t) => t.tipo === "prevista")!;
+const tipoDe = (tipo: string) => TIPOS.find((t) => t.tipo === tipo) ?? PREVISTA;
 
 /**
  * A linha do tempo das férias: os próximos meses em colunas, uma linha por
@@ -17,25 +38,38 @@ export type TimelineLinha = {
  *
  * CSS puro, sem lib: a conta é (dias desde o início da janela) / (dias da
  * janela), e só.
+ *
+ * Em Aprovações (LUIZ, 12/11/2026) a mesma régua mostra um pedido: `destaque`
+ * pinta a faixa do período pedido em todas as linhas, para quem coincide
+ * aparecer dentro dela, e `semCartao` a deixa entrar num modal.
  */
 export function FeriasTimeline({
-  linhas, janelaInicio, janelaFim, hoje,
+  linhas, janelaInicio, janelaFim, hoje, destaque, semCartao = false,
 }: {
   linhas: TimelineLinha[];
   janelaInicio: string;
   janelaFim: string;
   hoje: string;
+  /** o período pedido, pintado de leve em todas as linhas */
+  destaque?: { inicio: string; fim: string };
+  /** sem o cartão e sem o título (dentro de um modal) */
+  semCartao?: boolean;
 }) {
   if (linhas.length === 0) return null;
 
   const totalDias = diasDoPeriodo(janelaInicio, janelaFim);
+  // começo do dia (para o início da barra) e fim do dia (para o término)
   const pct = (iso: string) =>
     Math.min(100, Math.max(0, ((diasDoPeriodo(janelaInicio, iso) - 1) / totalDias) * 100));
+  const pctFim = (iso: string) =>
+    Math.min(100, Math.max(0, (diasDoPeriodo(janelaInicio, iso) / totalDias) * 100));
 
   const meses: { label: string; leftPct: number }[] = [];
   const cursor = dataLocal(janelaInicio);
+  cursor.setDate(1);
   const fim = dataLocal(janelaFim);
   while (cursor <= fim) {
+    // o mês em que a janela começa entra encostado no 0% (o pct satura)
     const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-01`;
     meses.push({
       label: cursor.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
@@ -44,19 +78,20 @@ export function FeriasTimeline({
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
-  const hojePct = pct(hoje);
+  const hojePct = hoje >= janelaInicio && hoje <= janelaFim ? pct(hoje) : null;
+  const presentes = new Set(linhas.flatMap((l) => l.itens.map((i) => tipoDe(i.tipo).tipo)));
+  const legenda = TIPOS.filter((t) => presentes.has(t.tipo));
 
-  return (
-    <div className="card card-pad">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>Linha do tempo</h3>
-        <span className="soft" style={{ fontSize: "0.74rem", display: "flex", gap: "0.9rem", alignItems: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-            <span style={{ width: 14, height: 8, borderRadius: 3, background: "var(--mh-success)" }} /> efetivada
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-            <span style={{ width: 14, height: 8, borderRadius: 3, background: "color-mix(in srgb, var(--mh-info) 45%, transparent)", border: "1px solid var(--mh-info)" }} /> prevista
-          </span>
+  const conteudo = (
+    <>
+      <div style={{ display: "flex", justifyContent: semCartao ? "flex-end" : "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+        {!semCartao && <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>Linha do tempo</h3>}
+        <span className="soft" style={{ fontSize: "0.74rem", display: "flex", gap: "0.9rem", alignItems: "center", flexWrap: "wrap" }}>
+          {legenda.map((t) => (
+            <span key={t.tipo} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+              <span style={{ width: 14, height: 8, borderRadius: 3, ...t.estilo }} /> {t.rotulo}
+            </span>
+          ))}
         </span>
       </div>
 
@@ -81,10 +116,23 @@ export function FeriasTimeline({
           <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             {linhas.map((l) => (
               <div key={l.userId} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ width: 132, flexShrink: 0, fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span
+                  title={l.nome ?? undefined}
+                  style={{ width: 132, flexShrink: 0, fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
                   {shortName(l.nome)}
                 </span>
                 <div style={{ position: "relative", flex: 1, height: 20, background: "var(--surface-2)", borderRadius: 6 }}>
+                  {destaque && (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "absolute", left: `${pct(destaque.inicio)}%`,
+                        width: `${Math.max(pctFim(destaque.fim) - pct(destaque.inicio), 0.8)}%`,
+                        top: 0, bottom: 0, background: "color-mix(in srgb, var(--mh-primary-500) 14%, transparent)",
+                      }}
+                    />
+                  )}
                   {meses.map((m) => (
                     <span
                       key={`g${m.leftPct}`}
@@ -92,25 +140,23 @@ export function FeriasTimeline({
                       style={{ position: "absolute", left: `${m.leftPct}%`, top: 0, bottom: 0, borderLeft: "1px solid var(--border)" }}
                     />
                   ))}
-                  <span
-                    aria-hidden
-                    style={{ position: "absolute", left: `${hojePct}%`, top: -2, bottom: -2, borderLeft: "2px solid var(--mh-danger)", opacity: 0.55 }}
-                  />
+                  {hojePct !== null && (
+                    <span
+                      aria-hidden
+                      style={{ position: "absolute", left: `${hojePct}%`, top: -2, bottom: -2, borderLeft: "2px solid var(--mh-danger)", opacity: 0.55 }}
+                    />
+                  )}
                   {l.itens.map((it, i) => {
                     const left = pct(it.inicio);
-                    const right = pct(it.fim);
-                    const width = Math.max(right - left, 0.8);
+                    const width = Math.max(pctFim(it.fim) - left, 0.8);
+                    const t = tipoDe(it.tipo);
                     return (
                       <span
                         key={i}
-                        title={`${formatDate(it.inicio)} a ${formatDate(it.fim)} (${it.tipo === "efetivada" ? "efetivada" : "prevista"})`}
+                        title={`${formatDate(it.inicio)} a ${formatDate(it.fim)} (${t.rotulo})`}
                         style={{
                           position: "absolute", left: `${left}%`, width: `${width}%`,
-                          top: 4, height: 12, borderRadius: 5,
-                          background: it.tipo === "efetivada"
-                            ? "var(--mh-success)"
-                            : "color-mix(in srgb, var(--mh-info) 45%, transparent)",
-                          border: it.tipo === "efetivada" ? "none" : "1px solid var(--mh-info)",
+                          top: 4, height: 12, borderRadius: 5, boxSizing: "border-box", ...t.estilo,
                         }}
                       />
                     );
@@ -121,6 +167,8 @@ export function FeriasTimeline({
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
+
+  return semCartao ? <div>{conteudo}</div> : <div className="card card-pad">{conteudo}</div>;
 }
