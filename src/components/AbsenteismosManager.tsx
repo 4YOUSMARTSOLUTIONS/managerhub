@@ -447,7 +447,7 @@ export function AbsenteismosManager({
               horas): cancela e pede ao RH para desconsiderar o comunicado */}
           {r.status === "aberto" && podeMexer(r) && (
             <button
-              type="button" className="btn btn-ghost btn-sm"
+              type="button" className="btn btn-danger btn-sm"
               title="A ausência não se confirmou (o colaborador chegou depois, por exemplo)"
               onClick={() => { setErro(""); setCancelando(r); }}
             >
