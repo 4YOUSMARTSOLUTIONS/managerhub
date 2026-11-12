@@ -12,6 +12,7 @@ export async function setOpenAISettings(_prev: ActionState, formData: FormData):
     const key = String(formData.get("openai_api_key") ?? "").trim();
     const model = String(formData.get("openai_model") ?? "").trim();
     const transcribeModel = String(formData.get("openai_transcribe_model") ?? "").trim();
+    const visionModel = String(formData.get("openai_vision_model") ?? "").trim();
     const clear = String(formData.get("clear") ?? "") === "1";
 
     if (!clear && key && !key.startsWith("sk-")) {
@@ -23,6 +24,7 @@ export async function setOpenAISettings(_prev: ActionState, formData: FormData):
       p_model: model,
       p_transcribe_model: transcribeModel,
       p_clear: clear,
+      p_vision_model: visionModel,
     });
     if (error) return { error: error.message };
 

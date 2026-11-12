@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
-import { formatDate, normalizar } from "@/lib/format";
+import { formatDate, normalizar, shortName } from "@/lib/format";
 import {
   ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE,
   ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO,
@@ -119,6 +119,27 @@ type Confirmacao = {
   horaFim: string;
   acompanhado: string;
 };
+
+/**
+ * Reduz a foto para a leitura com IA (o anexo guardado continua o original):
+ * foto de celular passa de 4000 px e vários MB, e a IA lê bem com 2000 px.
+ * PDF e o que o navegador não abre (HEIC fora do Safari) seguem como vieram.
+ */
+async function reduzirParaLeitura(f: File): Promise<File> {
+  if (!f.type.startsWith("image/") || f.size < 1_500_000) return f;
+  try {
+    const img = await createImageBitmap(f);
+    const escala = Math.min(1, 2000 / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(img.width * escala);
+    cv.height = Math.round(img.height * escala);
+    cv.getContext("2d")?.drawImage(img, 0, 0, cv.width, cv.height);
+    const blob: Blob | null = await new Promise((r) => cv.toBlob(r, "image/jpeg", 0.85));
+    return blob ? new File([blob], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : f;
+  } catch {
+    return f;
+  }
+}
 
 /** Dias corridos do período, contando os dois extremos. */
 function diasDoPeriodo(inicio: string, fim: string): number | null {
@@ -290,7 +311,8 @@ export function AbsenteismosManager({
           debaixo do nome eles quebravam em quatro linhas e faziam a linha
           inteira crescer, sem ficarem alinhados entre si para comparar. */}
       <td>
-        <span style={{ fontWeight: 600 }}>{r.fullName ?? "Sem nome"}</span>
+        {/* na tabela, o nome reduzido (LUIZ, 12/11/2026); e-mail, planilha e relatório levam o completo */}
+        <span style={{ fontWeight: 600 }} title={r.fullName ?? undefined}>{r.fullName ? shortName(r.fullName) : "Sem nome"}</span>
         {r.employeeCode && (
           <div className="soft" style={{ fontSize: "0.74rem" }}>{r.employeeCode}</div>
         )}
@@ -332,7 +354,7 @@ export function AbsenteismosManager({
           </>
         ) : <span className="soft">–</span>}
       </td>
-      {comAutor && <td>{r.createdByName ?? <span className="soft">–</span>}</td>}
+      {comAutor && <td title={r.createdByName ?? undefined}>{r.createdByName ? shortName(r.createdByName) : <span className="soft">–</span>}</td>}
       <td><Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge></td>
       <td style={{ textAlign: "center" }}>
         {/* Os três estados do comunicado se leem pela cor, sem abrir nada:
@@ -1027,12 +1049,14 @@ function PainelConfirmacao({
   const lerComIA = (escolhido?: File) => {
     onErro("");
     const fd = new FormData();
-    if (escolhido) fd.set("file", escolhido);
-    else if (ehNovo && arquivo) fd.set("file", arquivo);
-    else if (!ehNovo && temDoc && linha) fd.set("id", linha.id);
-    else { seletorIA.current?.click(); return; }
+    const local = escolhido ?? (ehNovo ? arquivo : null);
+    if (!local && !(!ehNovo && temDoc && linha)) { seletorIA.current?.click(); return; }
     setLendoIA(true);
-    void lerAtestadoComIA(fd).then((r) => {
+    void (async () => {
+      if (local) fd.set("file", await reduzirParaLeitura(local));
+      else if (linha) fd.set("id", linha.id);
+      return lerAtestadoComIA(fd);
+    })().then((r) => {
       setLendoIA(false);
       if (r.error || !r.data) { onErro(r.error ?? "A leitura falhou. Preencha manualmente."); return; }
       aplicarLeitura(r.data);

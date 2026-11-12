@@ -21,6 +21,9 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
  * `absenteismo_atestado`. Sem isso, o diagnóstico de dezenas de pessoas viajaria
  * no payload da listagem mesmo sem a tela mostrar.
  */
+// a leitura do atestado com IA (foto, modelo maior) passa fácil dos 15 s padrão
+export const maxDuration = 60;
+
 export default async function AbsenteismosPage() {
   const gate = await moduleGate("absenteismos");
   if (gate) return gate;

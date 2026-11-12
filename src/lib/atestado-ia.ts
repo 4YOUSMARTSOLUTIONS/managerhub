@@ -32,9 +32,12 @@ export const MIMES_LEITURA_IA = ["image/jpeg", "image/png", "image/webp", "image
 export async function lerAtestadoNaOpenAI(
   arquivo: { bytes: ArrayBuffer; tipo: string; nome: string },
   acharCid: (codigo: string) => Promise<{ code: string; description: string } | null>,
+  /** outro modelo no lugar do configurado (para comparar modelos sem mexer na configuração) */
+  modeloForcado?: string,
 ): Promise<{ data?: AtestadoLidoPorIA; error?: string }> {
   const { bytes, tipo, nome } = arquivo;
-    const { apiKey, model } = await getPlatformOpenAI();
+    const { apiKey, visionModel } = await getPlatformOpenAI();
+    const model = modeloForcado || visionModel;
     if (!apiKey) return { error: "IA não configurada. Peça ao proprietário do sistema para configurar a chave da OpenAI." };
 
     const base64 = Buffer.from(bytes).toString("base64");
@@ -59,7 +62,8 @@ export async function lerAtestadoNaOpenAI(
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,
-        temperature: 0,
+        // os modelos de raciocínio (gpt-5.x, o*) só aceitam a temperatura padrão
+        ...(/^gpt-4/.test(model) ? { temperature: 0 } : {}),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },

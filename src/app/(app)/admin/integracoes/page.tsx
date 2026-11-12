@@ -23,6 +23,7 @@ export default async function AdminIntegracoesPage() {
             hasKey={flags.hasOpenAI}
             model={flags.openaiModel}
             transcribeModel={flags.openaiTranscribeModel}
+            visionModel={flags.openaiVisionModel}
             canEdit
           />
         </Section>

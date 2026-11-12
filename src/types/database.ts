@@ -494,8 +494,8 @@ export type Database = {
         Relationships: []
       }
       platform_settings: {
-        Row: { id: boolean; openai_api_key: string | null; resend_api_key: string | null; openai_model: string; openai_transcribe_model: string; updated_at: string }
-        Insert: { id?: boolean; openai_api_key?: string | null; resend_api_key?: string | null; openai_model?: string; openai_transcribe_model?: string; updated_at?: string }
+        Row: { id: boolean; openai_api_key: string | null; resend_api_key: string | null; openai_model: string; openai_transcribe_model: string; openai_vision_model: string; updated_at: string }
+        Insert: { id?: boolean; openai_api_key?: string | null; resend_api_key?: string | null; openai_model?: string; openai_transcribe_model?: string; openai_vision_model?: string; updated_at?: string }
         Update: { id?: boolean; openai_api_key?: string | null; resend_api_key?: string | null; openai_model?: string; openai_transcribe_model?: string; updated_at?: string }
         Relationships: []
       }
@@ -2416,7 +2416,7 @@ export type Database = {
       platform_admins_list: { Args: Record<PropertyKey, never>; Returns: { user_id: string; email: string; full_name: string | null; created_at: string }[] }
       notify_users: { Args: { p_tenant: string; p_users: string[]; p_type: string; p_title: string; p_body: string; p_demanda: string | null; p_planner_board?: string | null }; Returns: undefined }
       set_resend_key: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
-      platform_set_openai: { Args: { p_key: string; p_model: string; p_transcribe_model: string; p_clear?: boolean }; Returns: undefined }
+      platform_set_openai: { Args: { p_key: string; p_model: string; p_transcribe_model: string; p_clear?: boolean; p_vision_model?: string }; Returns: undefined }
       platform_set_resend: { Args: { p_key: string; p_clear?: boolean }; Returns: undefined }
       platform_integration_flags: { Args: Record<PropertyKey, never>; Returns: Json }
       ticket_request_conclusion: { Args: { p_ticket: string }; Returns: undefined }

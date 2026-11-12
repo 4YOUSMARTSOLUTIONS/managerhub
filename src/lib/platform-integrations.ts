@@ -8,17 +8,19 @@ import { createClient } from "@/lib/supabase/server";
  */
 
 /** Lê a chave/modelo da OpenAI (valor sensível — SOMENTE no servidor). */
-export async function getPlatformOpenAI(): Promise<{ apiKey: string; model: string; transcribeModel: string }> {
+export async function getPlatformOpenAI(): Promise<{ apiKey: string; model: string; transcribeModel: string; visionModel: string }> {
   const admin = createServiceClient();
   const { data } = await admin
     .from("platform_settings")
-    .select("openai_api_key, openai_model, openai_transcribe_model")
+    .select("openai_api_key, openai_model, openai_transcribe_model, openai_vision_model")
     .eq("id", true)
     .maybeSingle();
   return {
     apiKey: (data?.openai_api_key ?? "").trim(),
     model: (data?.openai_model ?? "gpt-4.1-mini").trim(),
     transcribeModel: (data?.openai_transcribe_model ?? "gpt-4o-mini-transcribe").trim(),
+    /** leitura de imagens (atestados): separado do modelo de texto */
+    visionModel: (data?.openai_vision_model ?? "gpt-4.1").trim(),
   };
 }
 
@@ -38,6 +40,7 @@ export type PlatformIntegrationFlags = {
   hasResend: boolean;
   openaiModel: string;
   openaiTranscribeModel: string;
+  openaiVisionModel: string;
 };
 
 /**
@@ -49,12 +52,13 @@ export async function getPlatformIntegrationFlags(): Promise<PlatformIntegration
   const { data } = await supabase.rpc("platform_integration_flags");
   const f = (data ?? {}) as {
     has_openai_key?: boolean; has_resend_key?: boolean;
-    openai_model?: string; openai_transcribe_model?: string;
+    openai_model?: string; openai_transcribe_model?: string; openai_vision_model?: string;
   };
   return {
     hasOpenAI: !!f.has_openai_key,
     hasResend: !!f.has_resend_key,
     openaiModel: f.openai_model ?? "gpt-4.1-mini",
     openaiTranscribeModel: f.openai_transcribe_model ?? "gpt-4o-mini-transcribe",
+    openaiVisionModel: f.openai_vision_model ?? "gpt-4.1",
   };
 }
