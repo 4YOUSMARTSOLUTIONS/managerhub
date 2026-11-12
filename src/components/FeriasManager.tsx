@@ -390,9 +390,9 @@ export function FeriasManager({
   }
 
   // Cinco cartões (LUIZ, 12/11/2026): aprovação e efetivação num só, os dois
-  // prazos de concessão num só, e cada número leva ao detalhe. Ficam abaixo das
-  // abas e só nas de gestão: "Minhas férias" é da própria pessoa, e os números
-  // da equipe ali misturavam o pessoal com a gestão.
+  // prazos de concessão num só, e cada número leva ao detalhe. Ficam só no
+  // Painel, acima das subabas (LUIZ, 12/11/2026): nas filas e em "Minhas
+  // férias" eles empurravam o conteúdo de cada aba para baixo.
   const cartoes = podeGerir ? (() => {
     const aguardandoGestor = rowsNoEscopo.filter((r) => r.status === "solicitada").length;
     const afastados = aVencerAfastados + vencidasAfastados;
@@ -451,7 +451,7 @@ export function FeriasManager({
     );
   })() : null;
   const abasDaTela: Tab[] = cartoes
-    ? abas.map((t) => (t.id === "minhas" ? t : {
+    ? abas.map((t) => (t.id !== "painel" ? t : {
         ...t,
         content: (
           <>
