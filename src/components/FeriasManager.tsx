@@ -450,7 +450,7 @@ export function FeriasManager({
       </div>
     );
   })() : null;
-  const abasDaTela: Tab[] = cartoes
+  const comCartoes: Tab[] = cartoes
     ? abas.map((t) => (t.id !== "painel" ? t : {
         ...t,
         content: (
@@ -461,6 +461,11 @@ export function FeriasManager({
         ),
       }))
     : abas;
+  // o Painel é a primeira aba, e a que abre, para quem gere (LUIZ, 12/11/2026)
+  const abasDaTela: Tab[] = [
+    ...comCartoes.filter((t) => t.id === "painel"),
+    ...comCartoes.filter((t) => t.id !== "painel"),
+  ];
 
   // As ações da tela num menu só, no espaço de ação do cabeçalho: quatro botões
   // soltos disputavam a linha com o subtítulo e passavam por cima dele. Quem
