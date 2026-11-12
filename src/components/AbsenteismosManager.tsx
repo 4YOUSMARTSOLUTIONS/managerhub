@@ -54,6 +54,13 @@ export type AbsenteismoRow = {
   hoursEnd: string | null;
   /** trabalhou parte do dia, com ou sem horário ainda (LUIZ, 12/11/2026) */
   partialDay: boolean;
+  /**
+   * Primeiro dia do atestado (LUIZ, 12/11/2026): "trabalhou" o dia todo ou
+   * "parcial" (horas em hoursStart/hoursEnd). O período segue o documento.
+   */
+  primeiroDia: PrimeiroDia;
+  /** primeiro dia INTEIRO de ausência, calculado no banco */
+  ausenciaInicio: string | null;
   fullName: string | null;
   employeeCode: string | null;
   departmentName: string | null;
@@ -99,6 +106,8 @@ type Tipo = {
   active: boolean;
 };
 
+type PrimeiroDia = "integral" | "trabalhou" | "parcial";
+
 type Confirmacao = {
   absenceTypeId: string;
   startDate: string;
@@ -117,6 +126,8 @@ type Confirmacao = {
   emHoras: boolean;
   horaInicio: string;
   horaFim: string;
+  /** só vale em período de 2 dias ou mais, fora da ausência de horas */
+  primeiroDia: PrimeiroDia;
   acompanhado: string;
 };
 
@@ -146,6 +157,24 @@ function diasDoPeriodo(inicio: string, fim: string): number | null {
   if (!inicio || !fim) return null;
   const n = Math.round((Date.parse(fim) - Date.parse(inicio)) / 86400000) + 1;
   return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
+/** O dia seguinte de uma data ISO (AAAA-MM-DD), sem passar por fuso. */
+function diaSeguinte(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "09/11" de uma data ISO. */
+const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/**
+ * O primeiro dia que vale de fato: só em período de 2 dias ou mais, e nunca
+ * na ausência de horas (que é de um dia só).
+ */
+function primeiroDiaQueVale(c: Pick<Confirmacao, "emHoras" | "startDate" | "endDate" | "primeiroDia">): PrimeiroDia {
+  return !c.emHoras && (diasDoPeriodo(c.startDate, c.endDate) ?? 0) >= 2 ? c.primeiroDia : "integral";
 }
 
 /** O dia de HOJE do navegador. No servidor, em UTC, viraria amanhã às 21h. */
@@ -283,6 +312,18 @@ export function AbsenteismosManager({
     inicio ? `${inicio.slice(0, 5)} às ${fim?.slice(0, 5) ?? "?"}` : "";
 
   /**
+   * O horário da linha: o da ausência de horas, ou o do primeiro dia parcial
+   * (com o dia na frente, porque os dias inteiros começam no seguinte).
+   */
+  const horarioDaLinha = (r: AbsenteismoRow): string => {
+    if (r.partialDay) return faixaDeHoras(r.hoursStart, r.hoursEnd) || "Parcial, a confirmar";
+    if (r.primeiroDia === "parcial" && r.startDate && r.hoursStart) {
+      return `${diaMes(r.startDate)}, ${faixaDeHoras(r.hoursStart, r.hoursEnd)}`;
+    }
+    return "";
+  };
+
+  /**
    * Quanto durou: horas quando é ausência parcial, dias quando cobre o período.
    *
    * As duas unidades na mesma coluna porque a pergunta é uma só, e porque
@@ -290,16 +331,17 @@ export function AbsenteismosManager({
    * precedência: existindo horário, o período é sempre o mesmo dia.
    */
   const duracao = (r: AbsenteismoRow): string => {
-    if (r.hoursStart && r.hoursEnd) {
+    if (r.partialDay) {
+      if (!r.hoursStart || !r.hoursEnd) return "Parcial";
       const minutos = Math.round((Date.parse(`1970-01-01T${r.hoursEnd}`) - Date.parse(`1970-01-01T${r.hoursStart}`)) / 60000);
       if (!Number.isFinite(minutos) || minutos <= 0) return "";
       const h = Math.floor(minutos / 60);
       const m = minutos % 60;
       return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
     }
-    if (r.partialDay) return "Parcial";
     if (r.startDate && r.endDate) {
-      const d = diasDoPeriodo(r.startDate, r.endDate);
+      // os dias que valem: o primeiro dia trabalhado (todo ou parte) não conta
+      const d = diasDoPeriodo(r.ausenciaInicio ?? r.startDate, r.endDate);
       return d === null ? "" : `${d} dia${d === 1 ? "" : "s"}`;
     }
     return "";
@@ -346,10 +388,16 @@ export function AbsenteismosManager({
         {duracao(r) ? (
           <>
             <span>{duracao(r)}</span>
-            {r.hoursStart ? (
-              <div className="soft" style={{ fontSize: "0.74rem" }}>{faixaDeHoras(r.hoursStart, r.hoursEnd)}</div>
-            ) : r.partialDay ? (
-              <div className="soft" style={{ fontSize: "0.74rem" }}>Parcial, horário a confirmar</div>
+            {r.partialDay ? (
+              <div className="soft" style={{ fontSize: "0.74rem" }}>
+                {r.hoursStart ? faixaDeHoras(r.hoursStart, r.hoursEnd) : "Parcial, horário a confirmar"}
+              </div>
+            ) : r.primeiroDia === "trabalhou" && r.startDate ? (
+              <div className="soft" style={{ fontSize: "0.74rem" }}>Trabalhou em {diaMes(r.startDate)}</div>
+            ) : r.primeiroDia === "parcial" && r.startDate ? (
+              <div className="soft" style={{ fontSize: "0.74rem" }}>
+                {r.hoursStart ? `+ ${faixaDeHoras(r.hoursStart, r.hoursEnd)} em ${diaMes(r.startDate)}` : `+ horas em ${diaMes(r.startDate)}`}
+              </div>
             ) : null}
           </>
         ) : <span className="soft">–</span>}
@@ -473,7 +521,7 @@ export function AbsenteismosManager({
             headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
             rows={rows.map((r) => [
               r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
-              r.unitName ?? "", r.occurredOn, faixaDeHoras(r.hoursStart, r.hoursEnd) || (r.partialDay ? "Parcial, a confirmar" : ""), r.typeName ?? "",
+              r.unitName ?? "", r.occurredOn, horarioDaLinha(r), r.typeName ?? "",
               r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
               r.startDate ?? "", r.endDate ?? "", duracao(r),
               r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
@@ -864,9 +912,11 @@ function PainelConfirmacao({
     tipoAtestado: linha?.certificateKind ?? "medico",
     abonada: linha?.waived ?? false,
     cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
-    emHoras: Boolean(linha?.partialDay || linha?.hoursStart),
+    // só o marcador: com o primeiro dia parcial há horário sem o lançamento ser de horas
+    emHoras: Boolean(linha?.partialDay),
     horaInicio: linha?.hoursStart?.slice(0, 5) ?? "",
     horaFim: linha?.hoursEnd?.slice(0, 5) ?? "",
+    primeiroDia: linha?.primeiroDia ?? "integral",
     acompanhado: "",
   });
   const [inss, setInss] = useState<AlertaInss | null>(null);
@@ -887,6 +937,10 @@ function PainelConfirmacao({
   const ehNovo = !linha;
 
   const tipo = tipos.find((t) => t.id === c.absenceTypeId) ?? null;
+  const primeiroDia = primeiroDiaQueVale(c);
+  const diasNoDocumento = diasDoPeriodo(c.startDate, c.endDate);
+  // o horário vai ao servidor na ausência de horas e no primeiro dia parcial
+  const levaHoras = c.emHoras || primeiroDia === "parcial";
 
   // O dado clínico já gravado vem pela RPC, uma vez, ao abrir. Não viaja na
   // listagem justamente para isso.
@@ -926,9 +980,10 @@ function PainelConfirmacao({
     acidenteTrabalho: c.acidenteTrabalho,
     tipoAtestado: c.tipoAtestado,
     abonada: c.abonada,
-    horaInicio: c.emHoras ? c.horaInicio : "",
-    horaFim: c.emHoras ? c.horaFim : "",
+    horaInicio: levaHoras ? c.horaInicio : "",
+    horaFim: levaHoras ? c.horaFim : "",
     parcial: c.emHoras,
+    primeiroDia,
     atestado: tipo?.requiresMedical ? {
       cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
       local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
@@ -964,7 +1019,8 @@ function PainelConfirmacao({
       if (!id) {
         const r = await lancarNaoComparecimento({
           userId,
-          occurredOn: c.startDate,
+          // trabalhou no primeiro dia: a ausência começa no seguinte
+          occurredOn: primeiroDia === "trabalhou" ? diaSeguinte(c.startDate) : c.startDate,
           reasonNote: "",
           horaInicio: c.emHoras ? c.horaInicio : "",
           horaFim: c.emHoras ? c.horaFim : "",
@@ -1138,7 +1194,12 @@ function PainelConfirmacao({
           <div className="input" style={{ display: "flex", alignItems: "center", background: "var(--surface-2)" }}>
             {c.emHoras
               ? "Em horas"
-              : (() => { const d = diasDoPeriodo(c.startDate, c.endDate); return d === null ? "…" : `${d} dia${d === 1 ? "" : "s"}`; })()}
+              : (() => {
+                  if (diasNoDocumento === null) return "…";
+                  // o primeiro dia trabalhado (todo ou parte) não conta como dia inteiro
+                  const d = diasNoDocumento - (primeiroDia === "integral" ? 0 : 1);
+                  return `${d} dia${d === 1 ? "" : "s"}`;
+                })()}
           </div>
         </div>
         {tipo?.requiresKinship && (
@@ -1166,25 +1227,87 @@ function PainelConfirmacao({
         </div>
       )}
 
+      {/* Primeiro dia (LUIZ, 12/11/2026): atestado de 09 a 11 de quem foi ao
+          médico depois do expediente do dia 09 descontava um dia trabalhado.
+          O período segue o documento; a resposta decide a ausência que vale.
+          "Não trabalhou" vem marcado: é o caso comum, e o RH revisa. */}
+      {!c.emHoras && (diasNoDocumento ?? 0) >= 2 && (
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.7rem 0.8rem", display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+          <span className="label" style={{ margin: 0 }}>
+            {tipo?.requiresMedical ? "No primeiro dia do atestado" : "No primeiro dia"} ({formatDate(c.startDate)}), o colaborador:
+          </span>
+          {([
+            ["integral", "Não trabalhou"],
+            ["trabalhou", tipo?.requiresMedical ? "Trabalhou o dia todo e foi ao médico depois do expediente" : "Trabalhou o dia todo"],
+            ["parcial", "Trabalhou parte do dia"],
+          ] as [PrimeiroDia, string][]).map(([v, rotulo]) => (
+            <label key={v} style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
+              <input
+                type="radio" name={`primeiro-dia-${linha?.id ?? "novo"}`} value={v}
+                checked={c.primeiroDia === v}
+                onChange={() => setC((x) => ({ ...x, primeiroDia: v }))}
+              />
+              {rotulo}
+            </label>
+          ))}
+          {c.primeiroDia === "parcial" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 160px))", gap: "0.8rem", paddingLeft: "1.4rem" }}>
+              <div>
+                <label className="label">Ausente das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                <input
+                  type="time" className="input" value={c.horaInicio}
+                  onChange={(e) => setC((x) => ({ ...x, horaInicio: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                <input
+                  type="time" className="input" value={c.horaFim}
+                  onChange={(e) => setC((x) => ({ ...x, horaFim: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+          {primeiroDia !== "integral" && c.endDate && (
+            <p style={{ fontSize: "0.8rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
+              {(() => {
+                const inicio = diaSeguinte(c.startDate);
+                const d = diasNoDocumento! - 1;
+                const inteiros = `${formatDate(inicio)} a ${formatDate(c.endDate)} (${d} dia${d === 1 ? "" : "s"})`;
+                if (primeiroDia === "trabalhou") {
+                  return <>Conta como ausência: <strong>{inteiros}</strong>. O dia {formatDate(c.startDate)} não é descontado.</>;
+                }
+                const faixa = c.horaInicio && c.horaFim ? `das ${c.horaInicio} às ${c.horaFim}` : "(horário a informar)";
+                return (
+                  <>
+                    Conta como ausência: <strong>{formatDate(c.startDate)} {faixa}</strong> e <strong>{inteiros}</strong>.
+                    As horas do primeiro dia não entram no cálculo da remuneração variável: saem no relatório do RH, com o horário, para o desconto ser feito na folha.
+                  </>
+                );
+              })()}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* A ausência de horas vale para QUALQUER motivo: no atestado ela é o
           meio período no consultório; na falta, é o horário que a folha vai
           descontar. Por isso ela mora aqui, e não no bloco clínico. */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem", alignItems: "end" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
-          <input
-            type="checkbox" checked={c.emHoras}
-            onChange={(e) => {
-              const emHoras = e.target.checked;
-              setC((x) => ({
-                ...x, emHoras,
-                endDate: emHoras ? x.startDate : x.endDate,
-                horaInicio: emHoras ? x.horaInicio : "",
-                horaFim: emHoras ? x.horaFim : "",
-              }));
-            }}
-          />
-          O colaborador trabalhou parte do dia (chegou atrasado ou saiu mais cedo)
-        </label>
+        {(c.emHoras || (diasNoDocumento ?? 1) <= 1) && (
+          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
+            <input
+              type="checkbox" checked={c.emHoras}
+              onChange={(e) => {
+                const emHoras = e.target.checked;
+                // o horário fica guardado ao desmarcar: se o atestado tiver mais
+                // dias, ele vira o horário do primeiro dia parcial
+                setC((x) => ({ ...x, emHoras, endDate: emHoras ? x.startDate : x.endDate }));
+              }}
+            />
+            O colaborador trabalhou parte do dia (chegou atrasado ou saiu mais cedo)
+          </label>
+        )}
         {c.emHoras && (
           <>
             <div>
@@ -1659,15 +1782,32 @@ function Ficha({
         <FieldGrid min={150}>
         <Campo rotulo="Motivo" valor={linha.typeName} />
         <Campo
-          rotulo="Período"
+          rotulo={linha.primeiroDia === "integral" ? "Período" : "Período do atestado"}
           valor={linha.startDate && linha.endDate ? `${formatDate(linha.startDate)} a ${formatDate(linha.endDate)}` : null}
         />
+        {linha.primeiroDia !== "integral" && linha.startDate && linha.endDate && linha.ausenciaInicio && (
+          <>
+            <Campo
+              rotulo="Primeiro dia"
+              valor={linha.primeiroDia === "trabalhou"
+                ? `Trabalhou normalmente em ${formatDate(linha.startDate)}`
+                : `Trabalhou parte de ${formatDate(linha.startDate)}, ausente ${linha.hoursStart ? `das ${linha.hoursStart.slice(0, 5)} às ${linha.hoursEnd?.slice(0, 5) ?? "?"}` : "(horário a informar)"}`}
+            />
+            <Campo
+              rotulo="Ausência considerada"
+              valor={(() => {
+                const d = diasDoPeriodo(linha.ausenciaInicio!, linha.endDate!) ?? 0;
+                return `${formatDate(linha.ausenciaInicio)} a ${formatDate(linha.endDate)} (${d} dia${d === 1 ? "" : "s"})`;
+              })()}
+            />
+          </>
+        )}
         <Campo
           rotulo="Desconta remuneração variável"
           valor={linha.discountsRv === null ? null : linha.discountsRv ? "Sim" : "Não"}
         />
         {linha.kinship && <Campo rotulo="Parentesco do falecido" valor={linha.kinship} />}
-        {(linha.hoursStart || linha.partialDay) && (
+        {linha.partialDay && (
           <Campo
             rotulo="Horário da ausência"
             valor={linha.hoursStart

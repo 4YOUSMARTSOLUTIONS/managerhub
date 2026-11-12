@@ -60,6 +60,10 @@ type Linha = {
   hours_end: string | null;
   /** trabalhou parte do dia, com ou sem horário ainda */
   partial_day: boolean | null;
+  /** primeiro dia do atestado: integral, trabalhou (o dia todo) ou parcial (horas) */
+  primeiro_dia: string | null;
+  /** primeiro dia inteiro de ausência, calculado no banco */
+  ausencia_inicio: string | null;
   reason_note: string | null;
   snap_type_name: string | null;
   start_date: string | null;
@@ -76,10 +80,15 @@ type Linha = {
   decision_note: string | null;
 };
 
-/** "09:00 às 11:00", ou vazio quando a ausência cobre o dia inteiro. */
+/** "09:00 às 11:00", ou vazio quando o lançamento não é de horas. */
 function faixaDeHoras(l: Linha): string {
-  if (!l.hours_start) return "";
+  if (!l.hours_start || !l.partial_day) return "";
   return `${l.hours_start.slice(0, 5)} às ${l.hours_end?.slice(0, 5) ?? "?"}`;
+}
+
+/** Dias corridos entre duas datas ISO, contando as duas pontas. */
+function diasEntre(inicio: string, fim: string): number {
+  return Math.round((Date.parse(fim) - Date.parse(inicio)) / 86400000) + 1;
 }
 
 function assunto(evento: EventoComunicado, l: Linha): string {
@@ -91,7 +100,7 @@ function assunto(evento: EventoComunicado, l: Linha): string {
   // Quem saiu duas horas não "não compareceu". O assunto é o que o RH lê na
   // caixa de entrada antes de abrir, então a diferença precisa estar ali.
   const horas = faixaDeHoras(l);
-  const parcial = Boolean(l.partial_day) || Boolean(horas);
+  const parcial = Boolean(l.partial_day);
   if (evento === "direto") {
     const motivo = l.snap_type_name ? ` (${l.snap_type_name})` : "";
     return parcial
@@ -115,14 +124,29 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
   ];
 
   const horas = faixaDeHoras(l);
-  const parcial = Boolean(l.partial_day) || Boolean(horas);
+  const parcial = Boolean(l.partial_day);
   if (horas) linhas.push(["Horário", horas]);
   else if (parcial) linhas.push(["Horário", "a confirmar"]);
 
   if (evento !== "aberto") {
     linhas.push(["Motivo informado", l.snap_type_name ?? "-"]);
     if (l.start_date && l.end_date) {
-      linhas.push(["Período", `${dataBr(l.start_date)} a ${dataBr(l.end_date)}`]);
+      const primeiro = l.primeiro_dia === "trabalhou" || l.primeiro_dia === "parcial" ? l.primeiro_dia : null;
+      // Primeiro dia trabalhado (LUIZ, 12/11/2026): o período é o do documento,
+      // e a ausência que vale vem logo abaixo, para o RH não descontar a mais.
+      linhas.push([primeiro ? "Período do atestado" : "Período", `${dataBr(l.start_date)} a ${dataBr(l.end_date)}`]);
+      if (primeiro && l.ausencia_inicio) {
+        const dias = diasEntre(l.ausencia_inicio, l.end_date);
+        const inteiros = `${dataBr(l.ausencia_inicio)} a ${dataBr(l.end_date)} (${dias} dia${dias === 1 ? "" : "s"})`;
+        const faixa = l.hours_start ? `das ${l.hours_start.slice(0, 5)} às ${l.hours_end?.slice(0, 5) ?? "?"}` : "horário a confirmar";
+        if (primeiro === "trabalhou") {
+          linhas.push(["Primeiro dia", `Trabalhou normalmente em ${dataBr(l.start_date)} (consulta depois do expediente)`]);
+          linhas.push(["Ausência considerada", inteiros]);
+        } else {
+          linhas.push(["Primeiro dia", `Trabalhou parte de ${dataBr(l.start_date)}, ausente ${faixa}`]);
+          linhas.push(["Ausência considerada", `${dataBr(l.start_date)} ${faixa} e ${inteiros}`]);
+        }
+      }
     }
   }
   linhas.push(["Lançado por", autor]);

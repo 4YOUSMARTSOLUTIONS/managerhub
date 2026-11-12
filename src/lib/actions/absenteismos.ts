@@ -408,6 +408,14 @@ export type ConfirmacaoInput = {
   horaFim?: string;
   /** trabalhou parte do dia; o horário pode ficar para depois até o envio ao RH */
   parcial?: boolean;
+  /**
+   * Primeiro dia do atestado (LUIZ, 12/11/2026), só em período de 2 dias ou
+   * mais: "integral" não trabalhou; "trabalhou" o dia todo (consulta depois do
+   * expediente); "parcial" trabalhou parte, com o horário ausente em
+   * horaInicio/horaFim. O período segue o documento; a ausência que vale é
+   * calculada no banco (`ausencia_inicio`).
+   */
+  primeiroDia?: "integral" | "trabalhou" | "parcial";
   /** só quando o tipo exige */
   atestado?: {
     cid: string;
@@ -446,9 +454,30 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
       .maybeSingle();
     if (!tipo) return { error: "Tipo de absenteísmo não encontrado." };
 
+    const diasDoDocumento =
+      Math.round((Date.parse(input.endDate) - Date.parse(input.startDate)) / 86400000) + 1;
+
+    // O primeiro dia só se aplica a período de dois dias ou mais, e nunca ao
+    // lançamento que é todo de horas (um dia só).
+    const primeiroDia = !input.parcial && diasDoDocumento >= 2
+      && (input.primeiroDia === "trabalhou" || input.primeiroDia === "parcial")
+      ? input.primeiroDia
+      : "integral";
+
     // A ausência de horas vale para qualquer motivo: é assim que a falta
-    // parcial informa o horário que a folha vai descontar.
-    const emHoras = Boolean(input.horaInicio?.trim() && input.horaFim?.trim());
+    // parcial informa o horário que a folha vai descontar. No primeiro dia
+    // parcial, as mesmas colunas guardam o horário ausente daquele dia.
+    const horaIni = input.horaInicio?.trim() ?? "";
+    const horaFim = input.horaFim?.trim() ?? "";
+    const comHoras = Boolean(horaIni && horaFim);
+    if (Boolean(horaIni) !== Boolean(horaFim)) {
+      return { error: "Informe os dois horários: das e até." };
+    }
+    if (comHoras && horaFim <= horaIni) {
+      return { error: "O horário final precisa ser maior que o inicial." };
+    }
+    const emHoras = Boolean(input.parcial) || (primeiroDia === "integral" && comHoras);
+    const gravaHoras = comHoras && (emHoras || primeiroDia === "parcial");
 
     const { error } = await supabase
       .from("absenteismo_lancamentos")
@@ -470,9 +499,10 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         certificate_kind: tipo.requires_medical ? (input.tipoAtestado || null) : null,
         // abono só existe para falta: nas demais o motivo já diz o efeito
         waived: tipo.kind === "falta" ? Boolean(input.abonada) : false,
-        hours_start: emHoras ? input.horaInicio! : null,
-        hours_end: emHoras ? input.horaFim! : null,
-        partial_day: emHoras || Boolean(input.parcial),
+        hours_start: gravaHoras ? horaIni : null,
+        hours_end: gravaHoras ? horaFim : null,
+        partial_day: emHoras,
+        primeiro_dia: primeiroDia,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.id);
@@ -487,9 +517,9 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
       if (temAlgo) {
         // Os dias de afastamento são CALCULADOS do período, nunca digitados: o
         // número na filha não pode divergir das datas que o RH vai aprovar.
-        // Ausência de horas não conta dia nenhum.
-        const diasCorridos =
-          Math.round((Date.parse(input.endDate) - Date.parse(input.startDate)) / 86400000) + 1;
+        // Ausência de horas não conta dia nenhum, e o primeiro dia trabalhado
+        // (todo ou parte) também não.
+        const diasCorridos = diasDoDocumento - (primeiroDia === "integral" ? 0 : 1);
         const { error: e2 } = await supabase
           .from("absenteismo_atestados")
           .upsert({
