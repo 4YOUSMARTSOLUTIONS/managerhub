@@ -82,10 +82,14 @@ export default async function AbsenteismosPage() {
       .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, active")
       .eq("tenant_id", tenant.id)
       .order("sort").order("name"),
-    supabase
+    // fetchAll: a empresa passa de 1000 vínculos (ativos e desligados) e o
+    // PostgREST cortava o resto calado, deixando o cadastro de quem ficou de
+    // fora em branco no lançamento
+    fetchAll(() => supabase
       .from("memberships")
       .select("id, user_id, employee_code, department_id, subdepartment_id, position_id, manager_id")
-      .eq("tenant_id", tenant.id),
+      .eq("tenant_id", tenant.id)
+      .order("id")),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
     supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
