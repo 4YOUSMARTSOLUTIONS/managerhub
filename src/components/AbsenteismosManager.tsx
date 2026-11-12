@@ -24,9 +24,11 @@ import {
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
   lerAtestadoComIA,
-  type AlertaInss, type AtestadoLido, type AtestadoLidoPorIA, type ConfirmacaoInput,
+  type AlertaInss, type AtestadoLido, type ConfirmacaoInput,
 } from "@/lib/actions/absenteismos";
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
+// só o tipo: o módulo é de servidor, e "use server" não pode reexportar tipo (quebra o arquivo de actions inteiro)
+import type { AtestadoLidoPorIA } from "@/lib/atestado-ia";
 import type { Enums } from "@/types/database";
 
 export type AbsenteismoRow = {
@@ -50,6 +52,8 @@ export type AbsenteismoRow = {
   waived: boolean;
   hoursStart: string | null;
   hoursEnd: string | null;
+  /** trabalhou parte do dia, com ou sem horário ainda (LUIZ, 12/11/2026) */
+  partialDay: boolean;
   fullName: string | null;
   employeeCode: string | null;
   departmentName: string | null;
@@ -212,6 +216,7 @@ export function AbsenteismosManager({
         reasonNote: n.reasonNote,
         horaInicio: n.emHoras ? n.horaInicio : "",
         horaFim: n.emHoras ? n.horaFim : "",
+        parcial: n.emHoras,
       });
       if (r.error) { setErro(r.error); return; }
       setNovo(null);
@@ -271,6 +276,7 @@ export function AbsenteismosManager({
       const m = minutos % 60;
       return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
     }
+    if (r.partialDay) return "Parcial";
     if (r.startDate && r.endDate) {
       const d = diasDoPeriodo(r.startDate, r.endDate);
       return d === null ? "" : `${d} dia${d === 1 ? "" : "s"}`;
@@ -318,9 +324,11 @@ export function AbsenteismosManager({
         {duracao(r) ? (
           <>
             <span>{duracao(r)}</span>
-            {r.hoursStart && (
+            {r.hoursStart ? (
               <div className="soft" style={{ fontSize: "0.74rem" }}>{faixaDeHoras(r.hoursStart, r.hoursEnd)}</div>
-            )}
+            ) : r.partialDay ? (
+              <div className="soft" style={{ fontSize: "0.74rem" }}>Parcial, horário a confirmar</div>
+            ) : null}
           </>
         ) : <span className="soft">–</span>}
       </td>
@@ -443,7 +451,7 @@ export function AbsenteismosManager({
             headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
             rows={rows.map((r) => [
               r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
-              r.unitName ?? "", r.occurredOn, faixaDeHoras(r.hoursStart, r.hoursEnd), r.typeName ?? "",
+              r.unitName ?? "", r.occurredOn, faixaDeHoras(r.hoursStart, r.hoursEnd) || (r.partialDay ? "Parcial, a confirmar" : ""), r.typeName ?? "",
               r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
               r.startDate ?? "", r.endDate ?? "", duracao(r),
               r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
@@ -504,7 +512,7 @@ export function AbsenteismosManager({
               ? "Preencha o motivo, o período e o documento. O lançamento é gravado no envio, e um comunicado só sai para o RH."
               : <>
                   {novo.emHoras
-                    ? "Use quando o colaborador se ausentou por algumas horas, chegou atrasado ou saiu mais cedo, e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
+                    ? "Use quando o colaborador trabalhou parte do dia (chegou atrasado ou saiu mais cedo) e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
                     : "Use quando o colaborador não apareceu e o motivo ainda não é conhecido, ou o atestado ainda não foi entregue."}{" "}
                   O comunicado por e-mail sai na hora, para os endereços definidos em Configurações.
                   Quando o motivo estiver confirmado, volte na aba Em aberto e use Efetivar.
@@ -571,7 +579,10 @@ export function AbsenteismosManager({
           {/* Dia e horário juntos, porque são a mesma pergunta: QUANDO.
               A marcação usa a mesma frase do Efetivar de propósito: quem lança
               aqui vai reencontrá-la lá, já preenchida, e duas palavras diferentes
-              para a mesma coisa fariam parecer que são duas coisas. */}
+              para a mesma coisa fariam parecer que são duas coisas. Aqui o
+              horário é opcional (LUIZ, 12/11/2026): o gestor sabe que a pessoa
+              trabalhou parte do dia, nem sempre as horas; no Efetivar ele vira
+              obrigatório. */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem", alignItems: "end" }}>
             <div>
               <label className="label">Dia <span style={{ color: "var(--mh-danger)" }}>*</span></label>
@@ -583,14 +594,14 @@ export function AbsenteismosManager({
             {novo.emHoras && (
               <>
                 <div>
-                  <label className="label">Das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <label className="label">Das <span className="soft" style={{ textTransform: "none", fontWeight: 400 }}>(se souber)</span></label>
                   <input
                     type="time" className="input" value={novo.horaInicio}
                     onChange={(e) => setNovo((n) => (n ? { ...n, horaInicio: e.target.value } : n))}
                   />
                 </div>
                 <div>
-                  <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <label className="label">Até <span className="soft" style={{ textTransform: "none", fontWeight: 400 }}>(se souber)</span></label>
                   <input
                     type="time" className="input" value={novo.horaFim}
                     onChange={(e) => setNovo((n) => (n ? { ...n, horaFim: e.target.value } : n))}
@@ -608,14 +619,14 @@ export function AbsenteismosManager({
                 setNovo((n) => (n ? { ...n, emHoras, horaInicio: emHoras ? n.horaInicio : "", horaFim: emHoras ? n.horaFim : "" } : n));
               }}
             />
-            Ausência de horas (não cobre o dia inteiro)
+            O colaborador trabalhou parte do dia (chegou atrasado ou saiu mais cedo)
           </label>
 
           {novo.emHoras && (
             <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
-              O horário segue para a efetivação já preenchido e sai no relatório do RH, para o
-              desconto ser feito na folha. Ausência de horas não entra no cálculo da remuneração
-              variável.
+              Se souber o horário, informe; senão, ele entra no Efetivar, onde passa a ser obrigatório.
+              O horário sai no relatório do RH, para o desconto ser feito na folha. Ausência parcial
+              não entra no cálculo da remuneração variável.
             </p>
           )}
 
@@ -831,7 +842,7 @@ function PainelConfirmacao({
     tipoAtestado: linha?.certificateKind ?? "medico",
     abonada: linha?.waived ?? false,
     cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
-    emHoras: Boolean(linha?.hoursStart),
+    emHoras: Boolean(linha?.partialDay || linha?.hoursStart),
     horaInicio: linha?.hoursStart?.slice(0, 5) ?? "",
     horaFim: linha?.hoursEnd?.slice(0, 5) ?? "",
     acompanhado: "",
@@ -895,6 +906,7 @@ function PainelConfirmacao({
     abonada: c.abonada,
     horaInicio: c.emHoras ? c.horaInicio : "",
     horaFim: c.emHoras ? c.horaFim : "",
+    parcial: c.emHoras,
     atestado: tipo?.requiresMedical ? {
       cid: c.cid, cidDescricao: c.cidDescricao, medico: c.medico, crm: c.crm,
       local: c.local, emitidoEm: c.emitidoEm, acompanhado: c.acompanhado,
@@ -934,6 +946,7 @@ function PainelConfirmacao({
           reasonNote: "",
           horaInicio: c.emHoras ? c.horaInicio : "",
           horaFim: c.emHoras ? c.horaFim : "",
+          parcial: c.emHoras,
           comunicar: false,
         });
         if (r.error || !r.id) { onErro(r.error ?? "Não foi possível lançar a ausência."); return; }
@@ -1139,7 +1152,7 @@ function PainelConfirmacao({
               }));
             }}
           />
-          Ausência de horas (não cobre o dia inteiro)
+          O colaborador trabalhou parte do dia (chegou atrasado ou saiu mais cedo)
         </label>
         {c.emHoras && (
           <>
@@ -1622,10 +1635,12 @@ function Ficha({
           valor={linha.discountsRv === null ? null : linha.discountsRv ? "Sim" : "Não"}
         />
         {linha.kinship && <Campo rotulo="Parentesco do falecido" valor={linha.kinship} />}
-        {linha.hoursStart && (
+        {(linha.hoursStart || linha.partialDay) && (
           <Campo
             rotulo="Horário da ausência"
-            valor={`${linha.hoursStart.slice(0, 5)} às ${linha.hoursEnd?.slice(0, 5) ?? "?"}`}
+            valor={linha.hoursStart
+              ? `${linha.hoursStart.slice(0, 5)} às ${linha.hoursEnd?.slice(0, 5) ?? "?"}`
+              : "Parcial, horário a confirmar"}
           />
         )}
         {linha.certificateKind && (

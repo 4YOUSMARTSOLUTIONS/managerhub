@@ -149,6 +149,7 @@ export default async function AbsenteismosPage() {
     waived: l.waived,
     hoursStart: l.hours_start,
     hoursEnd: l.hours_end,
+    partialDay: l.partial_day,
     fullName: l.snap_full_name,
     employeeCode: l.snap_employee_code,
     departmentName: l.snap_department_name,

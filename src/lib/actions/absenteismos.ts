@@ -302,9 +302,14 @@ export async function lancarNaoComparecimento(input: {
   userId: string;
   occurredOn: string;
   reasonNote: string;
-  /** ausência de horas: entrada e saída no dia. Vazio = o dia inteiro. */
+  /** ausência de horas: entrada e saída no dia. Vazio = o dia inteiro, ou parcial sem horário ainda. */
   horaInicio?: string;
   horaFim?: string;
+  /**
+   * Trabalhou parte do dia (LUIZ, 12/11/2026): no "Ainda não sei o motivo" o
+   * horário é opcional; ele passa a ser exigido no envio ao RH.
+   */
+  parcial?: boolean;
   /**
    * false no caminho "já sei o motivo" (LUIZ, 11/11/2026): o comunicado sai uma
    * vez só, no envio ao RH; se o gestor desistir antes, sai o de abertura
@@ -348,6 +353,7 @@ export async function lancarNaoComparecimento(input: {
         reason_note: input.reasonNote.trim() || null,
         hours_start: inicio || null,
         hours_end: fim || null,
+        partial_day: Boolean(input.parcial) || Boolean(inicio),
       })
       .select("id")
       .single();
@@ -400,6 +406,8 @@ export type ConfirmacaoInput = {
    */
   horaInicio?: string;
   horaFim?: string;
+  /** trabalhou parte do dia; o horário pode ficar para depois até o envio ao RH */
+  parcial?: boolean;
   /** só quando o tipo exige */
   atestado?: {
     cid: string;
@@ -464,6 +472,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         waived: tipo.kind === "falta" ? Boolean(input.abonada) : false,
         hours_start: emHoras ? input.horaInicio! : null,
         hours_end: emHoras ? input.horaFim! : null,
+        partial_day: emHoras || Boolean(input.parcial),
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.id);
@@ -632,8 +641,6 @@ export type AtestadoLido = {
  * plataforma, só para a leitura, e nada do que volta é gravado aqui: quem grava
  * é o "Salvar"/"Enviar" de sempre, depois da revisão.
  */
-export type { AtestadoLidoPorIA };
-
 export async function lerAtestadoComIA(formData: FormData): Promise<{ data?: AtestadoLidoPorIA; error?: string }> {
   try {
     const { supabase } = await actionContext();
