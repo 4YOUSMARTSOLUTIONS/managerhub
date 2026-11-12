@@ -9,12 +9,14 @@ import { formatDate, shortName } from "@/lib/format";
 /*
  * Coincidência de férias na aprovação (LUIZ, 12/11/2026): quem decide um
  * pedido precisa ver se mais alguém da equipe estará fora no mesmo período.
- * A fila mostra o alerta em amarelo; o ícone de calendário abre a linha do
- * tempo da equipe em volta do pedido.
+ * Cada pedido da fila mostra o alerta em amarelo, e um ícone só, no topo de
+ * Aprovações, abre a linha do tempo da equipe inteira com os pedidos que
+ * aguardam aprovação em destaque.
  *
  * "Equipe" é o recorte que a tela já usa: a cadeia de quem é só gestor (a RLS
  * já entrega só ela) ou o "Minha equipe" do topo. Em "Toda a empresa" seria a
- * empresa inteira, então ali vale o setor do colaborador.
+ * empresa inteira, então ali a comparação é com o setor do colaborador, e a
+ * linha do tempo mostra só os setores com pedido aguardando, um por bloco.
  */
 
 /** o que a fila precisa do pedido */
@@ -31,37 +33,45 @@ export type PedidoParaCoincidencia = {
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-/** do 1º dia do mês anterior ao início até o último dia do mês seguinte ao término */
-export function janelaDoPedido(inicio: string, fim: string): { de: string; ate: string } {
-  const a = new Date(`${inicio}T12:00:00`);
-  const b = new Date(`${fim}T12:00:00`);
-  return {
-    de: iso(new Date(a.getFullYear(), a.getMonth() - 1, 1, 12)),
-    ate: iso(new Date(b.getFullYear(), b.getMonth() + 2, 0, 12)),
-  };
+/**
+ * A janela da linha do tempo da equipe: do 1º dia do mês atual até o fim do
+ * quinto mês seguinte, esticada até o fim do mês do último pedido aguardando.
+ */
+export function janelaDaEquipe(hoje: string, pedidos: { startDate: string; endDate: string }[]): { de: string; ate: string } {
+  const h = new Date(`${hoje}T12:00:00`);
+  let de = iso(new Date(h.getFullYear(), h.getMonth(), 1, 12));
+  let ate = iso(new Date(h.getFullYear(), h.getMonth() + 6, 0, 12));
+  for (const p of pedidos) {
+    const a = new Date(`${p.startDate}T12:00:00`);
+    const b = new Date(`${p.endDate}T12:00:00`);
+    const ini = iso(new Date(a.getFullYear(), a.getMonth(), 1, 12));
+    const fim = iso(new Date(b.getFullYear(), b.getMonth() + 1, 0, 12));
+    if (ini < de) de = ini;
+    if (fim > ate) ate = fim;
+  }
+  return { de, ate };
 }
 
 const cruza = (i: { inicio: string; fim: string }, de: string, ate: string) => i.inicio <= ate && i.fim >= de;
 
-/**
- * As férias dos outros que contam para o pedido: fora o próprio colaborador e,
- * em `porSetor`, só quem é do setor dele (pelo id quando a agenda traz o
- * pedido; senão pelo nome do setor da linha).
- */
-function daEquipe(itens: AgendaItem[], p: PedidoParaCoincidencia, porSetor: boolean): AgendaItem[] {
-  if (!porSetor) return itens;
-  const setorId = itens.find((i) => i.userId === p.userId)?.setorId ?? null;
-  return itens.filter((i) =>
-    i.userId === p.userId || (setorId ? i.setorId === setorId : Boolean(p.departmentName) && i.setor === p.departmentName));
+/** o setor do colaborador do pedido: pelo id quando a agenda traz o pedido, senão pelo nome */
+function setorDoPedido(itens: AgendaItem[], p: PedidoParaCoincidencia): { id: string | null; nome: string | null } {
+  const doPedido = itens.find((i) => i.userId === p.userId);
+  return { id: doPedido?.setorId ?? null, nome: doPedido?.setor ?? p.departmentName };
 }
+
+const doSetor = (i: AgendaItem, s: { id: string | null; nome: string | null }) =>
+  s.id ? i.setorId === s.id : Boolean(s.nome) && i.setor === s.nome;
 
 /** quem mais estará de férias (efetivada, aprovada ou pedida) dentro do período pedido */
 export function coincidenciasDoPedido(
   itens: AgendaItem[], p: PedidoParaCoincidencia, porSetor: boolean,
 ): { userId: string; nome: string | null; periodos: AgendaItem[] }[] {
+  const setor = porSetor ? setorDoPedido(itens, p) : null;
   const porPessoa = new Map<string, { userId: string; nome: string | null; periodos: AgendaItem[] }>();
-  for (const i of daEquipe(itens, p, porSetor)) {
+  for (const i of itens) {
     if (i.userId === p.userId || !cruza(i, p.startDate, p.endDate)) continue;
+    if (setor && !doSetor(i, setor)) continue;
     const atual = porPessoa.get(i.userId) ?? { userId: i.userId, nome: i.nome, periodos: [] };
     atual.periodos.push(i);
     porPessoa.set(i.userId, atual);
@@ -83,108 +93,126 @@ export function descreverCoincidencia(c: { nome: string | null; periodos: Agenda
   return `${shortName(c.nome)} (${periodos})`;
 }
 
-/** o alerta amarelo: quantas pessoas coincidem */
-export function AlertaCoincidencia({ qtd, porSetor, compacto = false }: { qtd: number; porSetor: boolean; compacto?: boolean }) {
+/** o alerta amarelo de um pedido: quantas pessoas coincidem */
+export function AlertaCoincidencia({ qtd, porSetor }: { qtd: number; porSetor: boolean }) {
   if (qtd === 0) return null;
-  const quem = porSetor ? "do setor" : "da equipe";
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: "0.3rem", color: "var(--mh-warning)",
-      fontSize: compacto ? "0.75rem" : "0.82rem", fontWeight: 600, whiteSpace: "nowrap",
+      fontSize: "0.75rem", fontWeight: 600,
     }}>
-      <AlertTriangle size={compacto ? 12 : 14} aria-hidden />
-      Coincide com {qtd} {qtd === 1 ? "pessoa" : "pessoas"} {quem}
+      <AlertTriangle size={12} aria-hidden style={{ flexShrink: 0 }} />
+      Coincide com {qtd} {qtd === 1 ? "pessoa" : "pessoas"} {porSetor ? "do setor" : "da equipe"}
     </span>
   );
 }
 
-/** a linha do tempo da equipe em volta de um pedido, com o alerta e quem coincide */
-export function LinhaDoTempoDoPedido({
-  pedido, itens, carregando, erro, porSetor, hoje, onClose, footer,
+/** a linha do tempo da equipe inteira, com os pedidos aguardando em destaque e o alerta de quem coincide */
+export function LinhaDoTempoDaEquipe({
+  pedidos, itens, carregando, erro, porSetor, hoje, onClose,
 }: {
-  pedido: PedidoParaCoincidencia;
-  /** a agenda já buscada pela fila (cobre a janela de todos os pedidos) */
+  /** a fila de Aprovações */
+  pedidos: PedidoParaCoincidencia[];
+  /** a agenda já buscada pela fila (cobre a janela) */
   itens: AgendaItem[];
   carregando: boolean;
   erro: string;
   porSetor: boolean;
   hoje: string;
   onClose: () => void;
-  footer?: React.ReactNode;
 }) {
-  const { de, ate } = janelaDoPedido(pedido.startDate, pedido.endDate);
-  const coincidem = coincidenciasDoPedido(itens, pedido, porSetor);
-  const coincideSet = new Set(coincidem.map((c) => c.userId));
+  const { de, ate } = janelaDaEquipe(hoje, pedidos);
+  const naFila = (i: AgendaItem) =>
+    i.status === "solicitada" && pedidos.some((p) => p.userId === i.userId && p.startDate === i.inicio && p.endDate === i.fim);
 
-  // uma linha por pessoa: o colaborador do pedido primeiro, depois quem
-  // coincide, depois o resto da equipe com férias na janela
-  const porPessoa = new Map<string, TimelineLinha & { primeiro: string }>();
-  for (const i of daEquipe(itens, pedido, porSetor)) {
-    if (!cruza(i, de, ate)) continue;
-    const tipo: TipoNaTimeline =
-      i.userId === pedido.userId && i.status === "solicitada" && i.inicio === pedido.startDate && i.fim === pedido.endDate
-        ? "pedido"
-        : i.status;
-    const l = porPessoa.get(i.userId) ?? { userId: i.userId, nome: i.nome, itens: [], primeiro: i.inicio };
+  // Em "Toda a empresa", só os setores que têm pedido aguardando
+  const setores = porSetor ? pedidos.map((p) => setorDoPedido(itens, p)) : [];
+  const entra = (i: AgendaItem) => !porSetor || setores.some((s) => doSetor(i, s));
+
+  type Linha = TimelineLinha & { primeiro: string; temPedido: boolean };
+  const porPessoa = new Map<string, Linha>();
+  for (const i of itens) {
+    if (!cruza(i, de, ate) || !entra(i)) continue;
+    const pendente = naFila(i);
+    const tipo: TipoNaTimeline = pendente ? "pendente" : i.status;
+    const l = porPessoa.get(i.userId)
+      ?? { userId: i.userId, nome: i.nome, itens: [], primeiro: i.inicio, temPedido: false, grupo: porSetor ? (i.setor ?? "Sem setor") : undefined };
     l.itens.push({ inicio: i.inicio, fim: i.fim, tipo });
     if (i.inicio < l.primeiro) l.primeiro = i.inicio;
+    if (pendente) l.temPedido = true;
     porPessoa.set(i.userId, l);
   }
-  // o próprio pedido, mesmo que a agenda não o traga (unidade fora do filtro do topo)
-  const dono = porPessoa.get(pedido.userId) ?? { userId: pedido.userId, nome: pedido.fullName, itens: [], primeiro: pedido.startDate };
-  if (!dono.itens.some((i) => i.tipo === "pedido")) dono.itens.push({ inicio: pedido.startDate, fim: pedido.endDate, tipo: "pedido" });
-  porPessoa.delete(pedido.userId);
-  const ordem = (a: { primeiro: string; nome: string | null }, b: { primeiro: string; nome: string | null }) =>
-    a.primeiro.localeCompare(b.primeiro) || (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR");
-  const outros = [...porPessoa.values()];
-  const linhas: TimelineLinha[] = [
-    dono,
-    ...outros.filter((l) => coincideSet.has(l.userId)).sort(ordem),
-    ...outros.filter((l) => !coincideSet.has(l.userId)).sort(ordem),
-  ];
+  // o pedido aparece mesmo que a agenda não o traga (unidade fora do filtro do topo)
+  for (const p of pedidos) {
+    const l = porPessoa.get(p.userId)
+      ?? { userId: p.userId, nome: p.fullName, itens: [], primeiro: p.startDate, temPedido: true, grupo: porSetor ? (p.departmentName ?? "Sem setor") : undefined };
+    if (!l.itens.some((i) => i.tipo === "pendente" && i.inicio === p.startDate && i.fim === p.endDate)) {
+      l.itens.push({ inicio: p.startDate, fim: p.endDate, tipo: "pendente" });
+    }
+    l.temPedido = true;
+    if (p.startDate < l.primeiro) l.primeiro = p.startDate;
+    porPessoa.set(p.userId, l);
+  }
 
-  const quem = porSetor ? `do setor${pedido.departmentName ? ` ${pedido.departmentName}` : ""}` : "da equipe";
+  // por setor (quando há), quem tem pedido aguardando primeiro, depois pela data
+  const linhas: TimelineLinha[] = [...porPessoa.values()].sort((a, b) =>
+    (a.grupo ?? "").localeCompare(b.grupo ?? "", "pt-BR")
+    || Number(b.temPedido) - Number(a.temPedido)
+    || a.primeiro.localeCompare(b.primeiro)
+    || (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
+
+  const conflitos = pedidos
+    .map((p) => ({ p, com: coincidenciasDoPedido(itens, p, porSetor) }))
+    .filter((c) => c.com.length > 0);
+  const quem = porSetor ? "do setor" : "da equipe";
 
   return (
-    <DetailModal open onClose={onClose} width="lg" title={`Férias ${porSetor ? "do setor" : "da equipe"}`} footer={footer}>
+    <DetailModal open onClose={onClose} width="lg" title={porSetor ? "Férias por setor" : "Férias da equipe"}>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
-        <p style={{ margin: 0, fontSize: "0.88rem" }}>
-          <strong>{shortName(pedido.fullName)}</strong> pediu {formatDate(pedido.startDate)} a {formatDate(pedido.endDate)} ({pedido.dias} dias).
-        </p>
-
         {erro ? (
           <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--mh-danger)" }}>{erro}</p>
         ) : carregando ? (
           <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>Buscando as férias {quem}…</p>
-        ) : coincidem.length === 0 ? (
-          <p className="soft" style={{ margin: 0, fontSize: "0.84rem" }}>
-            Ninguém {quem} tem férias nesse período.
-          </p>
         ) : (
-          <div style={{ background: "var(--mh-warning-soft)", color: "var(--mh-warning)", borderRadius: 8, padding: "0.6rem 0.75rem", fontSize: "0.84rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 700 }}>
-              <AlertTriangle size={15} aria-hidden />
-              Coincide com {coincidem.length} {coincidem.length === 1 ? "pessoa" : "pessoas"} {quem}
-            </div>
-            <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.35rem" }}>
-              {coincidem.map((c) => <li key={c.userId}>{descreverCoincidencia(c)}</li>)}
-            </ul>
-          </div>
-        )}
+          <>
+            {pedidos.length > 0 && (conflitos.length === 0 ? (
+              <p className="soft" style={{ margin: 0, fontSize: "0.84rem" }}>
+                Nenhum pedido aguardando aprovação coincide com as férias de outra pessoa {quem}.
+              </p>
+            ) : (
+              <div style={{ background: "var(--mh-warning-soft)", color: "var(--mh-warning)", borderRadius: 8, padding: "0.6rem 0.75rem", fontSize: "0.84rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 700 }}>
+                  <AlertTriangle size={15} aria-hidden />
+                  {conflitos.length === 1 ? "1 pedido coincide" : `${conflitos.length} pedidos coincidem`} com as férias de outras pessoas {quem}
+                </div>
+                <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.35rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                  {conflitos.map(({ p, com }) => (
+                    <li key={p.id}>
+                      <strong>{shortName(p.fullName)}</strong> ({formatDate(p.startDate)} a {formatDate(p.endDate)}) coincide
+                      com {com.map(descreverCoincidencia).join("; ")}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
 
-        {!carregando && !erro && (
-          <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
-            <FeriasTimeline
-              linhas={linhas} janelaInicio={de} janelaFim={ate} hoje={hoje}
-              destaque={{ inicio: pedido.startDate, fim: pedido.endDate }} semCartao
-            />
-          </div>
+            {linhas.length === 0 ? (
+              <p className="soft" style={{ margin: 0, fontSize: "0.84rem" }}>
+                Ninguém {quem} tem férias entre {formatDate(de)} e {formatDate(ate)}.
+              </p>
+            ) : (
+              <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+                <FeriasTimeline linhas={linhas} janelaInicio={de} janelaFim={ate} hoje={hoje} semCartao />
+              </div>
+            )}
+          </>
         )}
 
         <p className="soft" style={{ margin: 0, fontSize: "0.74rem" }}>
           {porSetor
-            ? "Em Toda a empresa, a comparação é com o setor do colaborador. A faixa clara marca o período pedido."
-            : "A comparação é com a sua equipe, a mesma do topo da tela. A faixa clara marca o período pedido."}
+            ? "Em Toda a empresa, aparecem só os setores com pedido aguardando aprovação, e a comparação é dentro do setor."
+            : "A equipe é a mesma do topo da tela."}
+          {" "}Entram as férias efetivadas, as aprovadas pelo gestor e as que aguardam aprovação.
         </p>
       </div>
     </DetailModal>

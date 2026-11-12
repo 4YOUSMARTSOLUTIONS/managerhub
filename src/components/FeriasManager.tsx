@@ -26,7 +26,7 @@ import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import {
-  AlertaCoincidencia, LinhaDoTempoDoPedido, coincidenciasDoPedido, descreverCoincidencia, janelaDoPedido,
+  AlertaCoincidencia, LinhaDoTempoDaEquipe, coincidenciasDoPedido, descreverCoincidencia, janelaDaEquipe,
 } from "@/components/FeriasCoincidencias";
 import { useAgendaFerias } from "@/lib/ferias-agenda";
 import { SituacaoBadge, rotuloSituacao, type SituacaoColaborador } from "@/components/SituacaoColaborador";
@@ -1050,21 +1050,11 @@ function FilaGestor({
 }) {
   const [decidindo, iniciar] = useTransition();
   const router = useRouter();
-  const [vendo, setVendo] = useState<FeriasRow | null>(null);
+  const [vendoEquipe, setVendoEquipe] = useState(false);
 
   // Quem mais estará fora no período de cada pedido (LUIZ, 12/11/2026): uma
-  // busca só, cobrindo a janela de todos os pedidos da fila.
-  const janela = useMemo(() => {
-    if (fila.length === 0) return { de: hoje, ate: hoje };
-    let de = "9999-12-31";
-    let ate = "0000-01-01";
-    for (const r of fila) {
-      const j = janelaDoPedido(r.startDate, r.endDate);
-      if (j.de < de) de = j.de;
-      if (j.ate > ate) ate = j.ate;
-    }
-    return { de, ate };
-  }, [fila, hoje]);
+  // busca só, que serve ao alerta de cada linha e à linha do tempo da equipe.
+  const janela = useMemo(() => janelaDaEquipe(hoje, fila), [fila, hoje]);
   const agenda = useAgendaFerias(janela.de, janela.ate, unidades, soUsuarios);
   const coincidencias = useMemo(
     () => new Map(fila.map((r) => [r.id, coincidenciasDoPedido(agenda.itens, r, porSetor)])),
@@ -1095,8 +1085,16 @@ function FilaGestor({
     });
   };
 
+  const rotuloEquipe = `Ver as férias ${porSetor ? "por setor" : "da equipe"} na linha do tempo`;
+
   return (
     <div style={{ paddingTop: "0.9rem" }}>
+      {/* um ícone só para a equipe inteira (LUIZ, 12/11/2026), não um por pedido */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.6rem" }}>
+        <button type="button" className="btn btn-ghost btn-sm" title={rotuloEquipe} aria-label={rotuloEquipe} onClick={() => setVendoEquipe(true)}>
+          <CalendarRange size={16} aria-hidden />
+        </button>
+      </div>
       {fila.length === 0 ? (
         <EmptyState
           title="Nada aguardando você"
@@ -1111,7 +1109,7 @@ function FilaGestor({
               <tr>
                 <th>Colaborador</th>
                 <th style={{ width: 150 }}>Setor</th>
-                <th style={{ width: 240 }}>Período</th>
+                <th style={{ width: 210 }}>Período</th>
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 80, textAlign: "right" }}>Abono</th>
                 <th style={{ width: 190 }}>Prazo legal</th>
@@ -1129,21 +1127,10 @@ function FilaGestor({
                   </td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
                   <td>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-                      {formatDate(r.startDate)} a {formatDate(r.endDate)}
-                      <button
-                        type="button" className="btn btn-ghost btn-xs"
-                        title={`Ver as férias ${porSetor ? "do setor" : "da equipe"} na linha do tempo`}
-                        aria-label={`Ver as férias ${porSetor ? "do setor" : "da equipe"} na linha do tempo`}
-                        onClick={(e) => { e.stopPropagation(); setVendo(r); }}
-                        style={{ padding: "0.15rem 0.3rem" }}
-                      >
-                        <CalendarRange size={14} aria-hidden />
-                      </button>
-                    </span>
+                    {formatDate(r.startDate)} a {formatDate(r.endDate)}
                     <PeriodoAnterior anterior={anteriorDe(r)} />
-                    {/* o alerta amarelo (LUIZ, 12/11/2026): o detalhe está no ícone */}
-                    <div><AlertaCoincidencia qtd={coincidencias.get(r.id)?.length ?? 0} porSetor={porSetor} compacto /></div>
+                    {/* o alerta amarelo (LUIZ, 12/11/2026): quem é está no ícone da linha do tempo */}
+                    <div><AlertaCoincidencia qtd={coincidencias.get(r.id)?.length ?? 0} porSetor={porSetor} /></div>
                   </td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.dias}</td>
                   <td className="tabular" style={{ textAlign: "right" }}>{r.abonoDias || "—"}</td>
@@ -1169,20 +1156,10 @@ function FilaGestor({
         </div>
       )}
 
-      {vendo && (
-        <LinhaDoTempoDoPedido
-          pedido={vendo} itens={agenda.itens} carregando={agenda.carregando} erro={agenda.erro}
-          porSetor={porSetor} hoje={hoje} onClose={() => setVendo(null)}
-          footer={
-            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-warning btn-sm" onClick={() => { setVendo(null); onDevolver(vendo); }}>
-                <Undo2 size={13} aria-hidden /> Devolver
-              </button>
-              <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => { const r = vendo; setVendo(null); aprovar(r); }}>
-                <Check size={13} aria-hidden /> Aprovar
-              </button>
-            </div>
-          }
+      {vendoEquipe && (
+        <LinhaDoTempoDaEquipe
+          pedidos={fila} itens={agenda.itens} carregando={agenda.carregando} erro={agenda.erro}
+          porSetor={porSetor} hoje={hoje} onClose={() => setVendoEquipe(false)}
         />
       )}
     </div>
