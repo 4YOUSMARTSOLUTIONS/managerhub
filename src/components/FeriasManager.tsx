@@ -1774,6 +1774,8 @@ function VisaoGeral({
         janelaInicio={painel.janelaInicio}
         janelaFim={painel.janelaFim}
         hoje={hoje}
+        // um ano de janela (rola para o lado); a empresa toda passa de cem linhas
+        alturaMax={520}
       />
 
       <div className="card card-pad">

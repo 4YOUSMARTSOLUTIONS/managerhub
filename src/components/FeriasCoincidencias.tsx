@@ -34,13 +34,13 @@ const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /**
- * A janela da linha do tempo da equipe: do 1º dia do mês atual até o fim do
- * quinto mês seguinte, esticada até o fim do mês do último pedido aguardando.
+ * A janela da linha do tempo da equipe: um ano a partir do 1º dia do mês atual
+ * (a tela rola para o lado), esticada até o fim do mês do último pedido aguardando.
  */
 export function janelaDaEquipe(hoje: string, pedidos: { startDate: string; endDate: string }[]): { de: string; ate: string } {
   const h = new Date(`${hoje}T12:00:00`);
   let de = iso(new Date(h.getFullYear(), h.getMonth(), 1, 12));
-  let ate = iso(new Date(h.getFullYear(), h.getMonth() + 6, 0, 12));
+  let ate = iso(new Date(h.getFullYear(), h.getMonth() + 12, 0, 12));
   for (const p of pedidos) {
     const a = new Date(`${p.startDate}T12:00:00`);
     const b = new Date(`${p.endDate}T12:00:00`);
@@ -201,9 +201,7 @@ export function LinhaDoTempoDaEquipe({
                 Ninguém {quem} tem férias entre {formatDate(de)} e {formatDate(ate)}.
               </p>
             ) : (
-              <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
-                <FeriasTimeline linhas={linhas} janelaInicio={de} janelaFim={ate} hoje={hoje} semCartao />
-              </div>
+              <FeriasTimeline linhas={linhas} janelaInicio={de} janelaFim={ate} hoje={hoje} semCartao alturaMax="55vh" />
             )}
           </>
         )}

@@ -32,6 +32,13 @@ const TIPOS: { tipo: TipoNaTimeline; rotulo: string; estilo: CSSProperties }[] =
 const PREVISTA = TIPOS.find((t) => t.tipo === "prevista")!;
 const tipoDe = (tipo: string) => TIPOS.find((t) => t.tipo === tipo) ?? PREVISTA;
 
+/** largura de cada mês na régua; a janela de um ano passa da tela e rola */
+const LARGURA_MES = 110;
+/** a coluna dos nomes, presa à esquerda */
+const COLUNA_NOME = 140;
+/** o fundo do cartão e do modal: o que fica preso precisa cobrir o que rola por baixo */
+const FUNDO = "var(--surface)";
+
 /**
  * A linha do tempo das férias: os próximos meses em colunas, uma linha por
  * colaborador, barras posicionadas por porcentagem. Efetivada sai cheia,
@@ -43,9 +50,14 @@ const tipoDe = (tipo: string) => TIPOS.find((t) => t.tipo === tipo) ?? PREVISTA;
  *
  * Em Aprovações (LUIZ, 12/11/2026) a mesma régua mostra a equipe inteira num
  * modal (`semCartao`), agrupada por setor quando a linha traz `grupo`.
+ *
+ * Rolagem (LUIZ, 12/11/2026): cada mês tem largura fixa e a janela é de um
+ * ano, então os meses seguintes aparecem rolando para o lado, com os nomes e a
+ * régua presos. Abre no começo da janela (o mês atual). Com muita gente,
+ * `alturaMax` limita a altura e rola na vertical também.
  */
 export function FeriasTimeline({
-  linhas, janelaInicio, janelaFim, hoje, semCartao = false,
+  linhas, janelaInicio, janelaFim, hoje, semCartao = false, alturaMax,
 }: {
   linhas: TimelineLinha[];
   janelaInicio: string;
@@ -53,10 +65,14 @@ export function FeriasTimeline({
   hoje: string;
   /** sem o cartão e sem o título (dentro de um modal) */
   semCartao?: boolean;
+  /** altura máxima da área das linhas: passa disso, rola na vertical com a régua presa */
+  alturaMax?: number | string;
 }) {
   if (linhas.length === 0) return null;
 
   const totalDias = diasDoPeriodo(janelaInicio, janelaFim);
+  // o trilho mede LARGURA_MES por mês; numa tela mais larga ele estica (flex)
+  const trilho = Math.round((totalDias / 30.44) * LARGURA_MES);
   // começo do dia (para o início da barra) e fim do dia (para o término)
   const pct = (iso: string) =>
     Math.min(100, Math.max(0, ((diasDoPeriodo(janelaInicio, iso) - 1) / totalDias) * 100));
@@ -68,10 +84,12 @@ export function FeriasTimeline({
   cursor.setDate(1);
   const fim = dataLocal(janelaFim);
   while (cursor <= fim) {
-    // o mês em que a janela começa entra encostado no 0% (o pct satura)
+    // o mês em que a janela começa entra encostado no 0% (o pct satura); em
+    // janeiro o ano vai junto, para a régua de um ano não repetir nomes
     const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-01`;
+    const mes = cursor.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
     meses.push({
-      label: cursor.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+      label: cursor.getMonth() === 0 ? `${mes} ${String(cursor.getFullYear()).slice(2)}` : mes,
       leftPct: pct(iso),
     });
     cursor.setMonth(cursor.getMonth() + 1);
@@ -94,40 +112,53 @@ export function FeriasTimeline({
         </span>
       </div>
 
-      <div style={{ overflowX: "auto", marginTop: "0.7rem" }}>
-        <div style={{ minWidth: 640 }}>
-          {/* régua dos meses */}
-          <div style={{ position: "relative", height: 18, marginLeft: 140 }}>
-            {meses.map((m) => (
-              <span
-                key={m.label + m.leftPct}
-                className="soft"
-                style={{
-                  position: "absolute", left: `${m.leftPct}%`, fontSize: "0.68rem",
-                  fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em",
-                }}
-              >
-                {m.label}
-              </span>
-            ))}
+      <div style={{ overflow: "auto", maxHeight: alturaMax, marginTop: "0.7rem" }}>
+        <div style={{ minWidth: COLUNA_NOME + trilho, display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+          {/* régua dos meses, presa no topo; o canto fica preso nos dois sentidos */}
+          <div style={{ display: "flex", position: "sticky", top: 0, zIndex: 2, background: FUNDO, height: 20 }}>
+            <span aria-hidden style={{ width: COLUNA_NOME, flexShrink: 0, position: "sticky", left: 0, zIndex: 3, background: FUNDO }} />
+            <div style={{ position: "relative", flex: 1, minWidth: trilho }}>
+              {meses.map((m) => (
+                <span
+                  key={m.label + m.leftPct}
+                  className="soft"
+                  style={{
+                    position: "absolute", left: `${m.leftPct}%`, top: 2, fontSize: "0.68rem", whiteSpace: "nowrap",
+                    fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em",
+                  }}
+                >
+                  {m.label}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-            {linhas.map((l, idx) => (
-              <div key={l.userId} style={{ display: "contents" }}>
+          {linhas.map((l, idx) => (
+            <div key={l.userId} style={{ display: "contents" }}>
               {l.grupo !== undefined && l.grupo !== linhas[idx - 1]?.grupo && (
-                <span className="soft" style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginTop: idx === 0 ? 0 : "0.45rem" }}>
+                <span
+                  className="soft"
+                  style={{
+                    position: "sticky", left: 0, alignSelf: "flex-start", fontSize: "0.7rem", fontWeight: 600,
+                    textTransform: "uppercase", letterSpacing: "0.04em", marginTop: idx === 0 ? 0 : "0.45rem",
+                  }}
+                >
                   {l.grupo}
                 </span>
               )}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {/* o nome fica preso à esquerda enquanto os meses rolam */}
                 <span
                   title={l.nome ?? undefined}
-                  style={{ width: 132, flexShrink: 0, fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  style={{
+                    width: COLUNA_NOME, flexShrink: 0, paddingRight: "0.5rem", boxSizing: "border-box",
+                    position: "sticky", left: 0, zIndex: 1, background: FUNDO, alignSelf: "stretch",
+                    display: "flex", alignItems: "center", fontSize: "0.8rem", fontWeight: 600,
+                  }}
                 >
-                  {shortName(l.nome)}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortName(l.nome)}</span>
                 </span>
-                <div style={{ position: "relative", flex: 1, height: 20, background: "var(--surface-2)", borderRadius: 6 }}>
+                <div style={{ position: "relative", flex: 1, minWidth: trilho, height: 20, background: "var(--surface-2)", borderRadius: 6 }}>
                   {meses.map((m) => (
                     <span
                       key={`g${m.leftPct}`}
@@ -138,12 +169,12 @@ export function FeriasTimeline({
                   {hojePct !== null && (
                     <span
                       aria-hidden
-                      style={{ position: "absolute", left: `${hojePct}%`, top: -2, bottom: -2, borderLeft: "2px solid var(--mh-danger)", opacity: 0.55 }}
+                      style={{ position: "absolute", left: `${hojePct}%`, top: 0, bottom: 0, borderLeft: "2px solid var(--mh-danger)", opacity: 0.55 }}
                     />
                   )}
                   {l.itens.map((it, i) => {
                     const left = pct(it.inicio);
-                    const width = Math.max(pctFim(it.fim) - left, 0.8);
+                    const width = Math.max(pctFim(it.fim) - left, 0.3);
                     const t = tipoDe(it.tipo);
                     return (
                       <span
@@ -158,9 +189,8 @@ export function FeriasTimeline({
                   })}
                 </div>
               </div>
-              </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </>
