@@ -21,7 +21,6 @@ import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
 import { FeriasImportarFolhaDialog } from "@/components/FeriasImportarFolhaDialog";
 import { FeriasCalendario } from "@/components/FeriasCalendario";
 import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDialog";
-import { FeriasAcompanhamento } from "@/components/FeriasAcompanhamento";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import {
@@ -193,17 +192,17 @@ export function FeriasManager({
   /** quem acompanha equipe: os operacionais e a escolha do 13º de cada um no ano */
   painelDecimo: { ano: number; pessoas: EscolhaDecimoDaEquipe[] } | null;
 }) {
-  // aba aberta e subaba do Painel: os cartões do topo levam aos detalhes
+  // aba aberta: os cartões do Painel levam aos detalhes
   const [aba, setAba] = useState<string | undefined>(undefined);
-  const [subaba, setSubaba] = useState<string | undefined>(undefined);
+  // a lista inteira de um cartão do Painel (de férias agora, próximas saídas)
+  const [lista, setLista] = useState<"agora" | "proximas" | null>(null);
   /**
-   * Leva à aba (e à subaba do Painel) do detalhe de um cartão e, quando há,
-   * rola até o bloco certo (LUIZ, 12/11/2026). O bloco só existe depois que a
-   * aba monta, por isso a rolagem espera o próximo quadro.
+   * Leva à aba do detalhe de um cartão e, quando há, rola até o bloco certo
+   * (LUIZ, 12/11/2026). O bloco só existe depois que a aba monta, por isso a
+   * rolagem espera o próximo quadro.
    */
-  const irPara = (destino: string, sub?: string, ancora?: string) => {
+  const irPara = (destino: string, ancora?: string) => {
     setAba(destino);
-    if (sub) setSubaba(sub);
     if (ancora) {
       setTimeout(() => document.getElementById(ancora)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     }
@@ -316,83 +315,11 @@ export function FeriasManager({
   );
   const decimoPendentes = decimoNoEscopo.filter((p) => p.quer === null).length;
 
-  const abas: Tab[] = [
-    { id: "minhas", label: "Minhas férias", content: (
-      <MinhasFerias
-        minhas={minhas} aquisitivos={meusAquisitivos} avisoSolicitar={avisoSolicitar}
-        podeSolicitar={podeSolicitar} onSolicitar={() => setDialogo("solicitar")}
-        onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
-        onReagendar={setReagendando}
-        hoje={hoje}
-        escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo} prazoDecimo={prazos.decimoAte}
-      />
-    ) },
-  ];
-  if (podeGerir) {
-    abas.push({ id: "fila", label: `Aprovações${fila.length ? ` (${fila.length})` : ""}`, content: (
-      // o aviso de "as outras estão em Toda a empresa" só vale para o DP: o
-      // Gerencial não decide as outras equipes, então elas nunca entram na fila dele
-      <FilaGestor fila={fila} soEquipe={soEquipe && ehDp} anteriorDe={anteriorDe}
-        onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })}
-        hoje={hoje} unidades={unidades} soUsuarios={pessoasNoEscopo}
-        // em "Toda a empresa" a equipe seria a empresa inteira: compara com o setor
-        porSetor={vejoEmpresa && !soEquipe} />
-    ) });
-  }
-  if (ehDp) {
-    abas.push({ id: "efetivacao", label: `Efetivação${filaDp.length ? ` (${filaDp.length})` : ""}`, content: (
-      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
-        onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
-    ) });
-  }
-  if (podeGerir) {
-    abas.push({ id: "todas", label: "Todas as previsões", content: (
-      <TabelaGeral rows={rowsNoEscopo} onDetalhe={setDetalhe} />
-    ) });
-  }
-  if (podeGerir) {
-    // As leituras de gestão moram juntas: visão geral, calendário do mês, quem
-    // está fora num período e a programação por pessoa. Cada subaba busca o
-    // próprio período quando é aberta (o Tabs só monta a aba visível).
-    const subabas: Tab[] = [];
-    if (painelNoEscopo) {
-      subabas.push({ id: "visao", label: "Visão geral", content: (
-        // importar períodos mora só no menu Ações (LUIZ, 06/11/2026): aqui
-        // fica a leitura, com a data da última importação
-        <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
-          porSetor={vejoEmpresa && !soEquipe} />
-      ) });
-    }
-    subabas.push(
-      { id: "calendario", label: "Calendário", content: (
-        <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
-      ) },
-      { id: "acompanhamento", label: "Acompanhamento", content: (
-        <FeriasAcompanhamento setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
-      ) },
-      { id: "programacao", label: "Programação", content: (
-        <FeriasProgramacao setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
-      ) },
-    );
-    abas.push({ id: "painel", label: "Painel", content: (
-      <div style={{ paddingTop: "0.6rem" }}>
-        <Tabs variant="sub" tabs={subabas} active={subaba} onActiveChange={setSubaba} />
-      </div>
-    ) });
-  }
-  if (podeGerir && painelDecimo && decimoNoEscopo.length > 0) {
-    abas.push({ id: "decimo", label: `Escolha do 13º${decimoPendentes ? ` (${decimoPendentes})` : ""}`, content: (
-      <EscolhasDoDecimo
-        ano={painelDecimo.ano} prazo={dataDoPrazoDecimo(painelDecimo.ano, prazos.decimoAte)}
-        pessoas={decimoNoEscopo} ehDp={ehDp}
-      />
-    ) });
-  }
-
   // Cinco cartões (LUIZ, 12/11/2026): aprovação e efetivação num só, os dois
   // prazos de concessão num só, e cada número leva ao detalhe. Ficam só no
-  // Painel, acima das subabas (LUIZ, 12/11/2026): nas filas e em "Minhas
-  // férias" eles empurravam o conteúdo de cada aba para baixo.
+  // Painel: nas filas e em "Minhas férias" empurravam o conteúdo para baixo.
+  // "De férias agora" e "Próximas saídas" abrem a lista inteira numa janela
+  // (os blocos com a mesma lista saíram do Painel).
   const cartoes = podeGerir ? (() => {
     const aguardandoGestor = rowsNoEscopo.filter((r) => r.status === "solicitada").length;
     const afastados = aVencerAfastados + vencidasAfastados;
@@ -402,15 +329,16 @@ export function FeriasManager({
           titulo="De férias agora"
           principal={{
             valor: emGozoQtd,
-            hint: painelNoEscopo?.agora.slice(0, 3).map((r) => shortName(r.nome)).join(", ") || "ninguém em gozo hoje",
-            acao: "Ver quem está de férias, no Painel", onClick: () => irPara("painel", "visao", "ferias-agora"),
+            hint: resumoDeNomes((painelNoEscopo?.agora ?? []).map((r) => r.nome)) || "ninguém em gozo hoje",
+            acao: "Ver a lista de quem está de férias", onClick: () => setLista("agora"),
           }}
         />
         <CartaoResumo
           titulo="Próximas saídas"
           principal={{
-            valor: proximasQtd, hint: "nos próximos 60 dias",
-            acao: "Ver as próximas saídas, no Painel", onClick: () => irPara("painel", "visao", "ferias-proximas"),
+            valor: proximasQtd,
+            hint: resumoDeNomes((painelNoEscopo?.proximas ?? []).map((r) => r.nome)) || "ninguém nos próximos 60 dias",
+            acao: "Ver a lista das próximas saídas", onClick: () => setLista("proximas"),
           }}
         />
         <CartaoResumo
@@ -440,9 +368,9 @@ export function FeriasManager({
             titulo="Prazo de concessão"
             linhas={[
               { valor: aVencerQtd, rotulo: "vencendo em 90 dias", pendencia: true,
-                acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
+                acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "ferias-saldos") },
               { valor: vencidasQtd, rotulo: "vencidas (em dobro)", cor: vencidasQtd > 0 ? "var(--mh-danger)" : undefined,
-                acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "visao", "ferias-saldos") },
+                acao: "Ver os saldos e prazos, no Painel", onClick: () => irPara("painel", "ferias-saldos") },
             ]}
             nota={afastados > 0 ? foraDaConta(afastados) : undefined}
           />
@@ -450,22 +378,68 @@ export function FeriasManager({
       </div>
     );
   })() : null;
-  const comCartoes: Tab[] = cartoes
-    ? abas.map((t) => (t.id !== "painel" ? t : {
-        ...t,
-        content: (
-          <>
-            <div style={{ paddingTop: "0.9rem" }}>{cartoes}</div>
-            {t.content}
-          </>
-        ),
-      }))
-    : abas;
-  // o Painel é a primeira aba, e a que abre, para quem gere (LUIZ, 12/11/2026)
-  const abasDaTela: Tab[] = [
-    ...comCartoes.filter((t) => t.id === "painel"),
-    ...comCartoes.filter((t) => t.id !== "painel"),
-  ];
+
+  // Abas num nível só (LUIZ, 12/11/2026): o Painel sem subabas, a Programação
+  // (que juntou o Acompanhamento), as filas, Todas as previsões e, por último,
+  // Minhas férias. Quem não gere vê só Minhas férias.
+  const porSetor = vejoEmpresa && !soEquipe;
+  const abas: Tab[] = [];
+  if (podeGerir) {
+    abas.push(
+      { id: "painel", label: "Painel", content: (
+        <>
+          <div style={{ paddingTop: "0.9rem" }}>{cartoes}</div>
+          {painelNoEscopo ? (
+            // importar períodos mora só no menu Ações (LUIZ, 06/11/2026): aqui
+            // fica a leitura, com a data da última importação
+            <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
+              porSetor={porSetor} setores={setores} unidades={unidades} soUsuarios={pessoasNoEscopo} />
+          ) : (
+            <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
+          )}
+        </>
+      ) },
+      { id: "programacao", label: "Programação", content: (
+        <FeriasProgramacao setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
+      ) },
+      { id: "fila", label: `Aprovações${fila.length ? ` (${fila.length})` : ""}`, content: (
+        // o aviso de "as outras estão em Toda a empresa" só vale para o DP: o
+        // Gerencial não decide as outras equipes, então elas nunca entram na fila dele
+        <FilaGestor fila={fila} soEquipe={soEquipe && ehDp} anteriorDe={anteriorDe}
+          onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })}
+          hoje={hoje} unidades={unidades} soUsuarios={pessoasNoEscopo} porSetor={porSetor} />
+      ) },
+    );
+  }
+  if (ehDp) {
+    abas.push({ id: "efetivacao", label: `Efetivação${filaDp.length ? ` (${filaDp.length})` : ""}`, content: (
+      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
+        onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
+    ) });
+  }
+  if (podeGerir && painelDecimo && decimoNoEscopo.length > 0) {
+    abas.push({ id: "decimo", label: `Escolha do 13º${decimoPendentes ? ` (${decimoPendentes})` : ""}`, content: (
+      <EscolhasDoDecimo
+        ano={painelDecimo.ano} prazo={dataDoPrazoDecimo(painelDecimo.ano, prazos.decimoAte)}
+        pessoas={decimoNoEscopo} ehDp={ehDp}
+      />
+    ) });
+  }
+  if (podeGerir) {
+    abas.push({ id: "todas", label: "Todas as previsões", content: (
+      <TabelaGeral rows={rowsNoEscopo} onDetalhe={setDetalhe} />
+    ) });
+  }
+  abas.push({ id: "minhas", label: "Minhas férias", content: (
+    <MinhasFerias
+      minhas={minhas} aquisitivos={meusAquisitivos} avisoSolicitar={avisoSolicitar}
+      podeSolicitar={podeSolicitar} onSolicitar={() => setDialogo("solicitar")}
+      onReenviar={setReenvio} onDetalhe={setDetalhe} onCancelar={(r) => setNota({ row: r, acao: "cancelar" })}
+      onReagendar={setReagendando}
+      hoje={hoje}
+      escolhasDecimo={escolhasDecimo} modoDecimo={prazos.decimo} prazoDecimo={prazos.decimoAte}
+    />
+  ) });
 
   // As ações da tela num menu só, no espaço de ação do cabeçalho: quatro botões
   // soltos disputavam a linha com o subtítulo e passavam por cima dele. Quem
@@ -543,7 +517,11 @@ export function FeriasManager({
     />
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
 
-      <Tabs tabs={abasDaTela} active={aba} onActiveChange={setAba} />
+      <Tabs tabs={abas} active={aba} onActiveChange={setAba} />
+
+      {lista && painelNoEscopo && (
+        <ListaDoPainel tipo={lista} painel={painelNoEscopo} onClose={() => setLista(null)} />
+      )}
 
       {importando && (
         <FeriasImportarFolhaDialog ultima={ultimaImportacao} onFechar={() => setImportando(false)} />
@@ -1090,6 +1068,69 @@ function SituacaoDoMeuPedido({ status }: { status: FeriasRow["status"] }) {
 // ============================================================================
 // Cartões do topo
 // ============================================================================
+
+/** "Tuany Nobre, Paulo Brant e mais 3": os nomes no rodapé de um cartão */
+function resumoDeNomes(nomes: (string | null)[], max = 2): string {
+  const curtos = nomes.map((n) => shortName(n)).filter(Boolean);
+  if (curtos.length === 0) return "";
+  const vistos = curtos.slice(0, max).join(", ");
+  return curtos.length > max ? `${vistos} e mais ${curtos.length - max}` : vistos;
+}
+
+/** a lista inteira de "De férias agora" ou "Próximas saídas", aberta pelo cartão */
+function ListaDoPainel({ tipo, painel, onClose }: {
+  tipo: "agora" | "proximas";
+  painel: FeriasPainel;
+  onClose: () => void;
+}) {
+  const agora = tipo === "agora";
+  const linhas = agora ? painel.agora : painel.proximas;
+  return (
+    <DetailModal open onClose={onClose} width="md"
+      title={agora ? `De férias agora (${linhas.length})` : `Próximas saídas, 60 dias (${linhas.length})`}>
+      {linhas.length === 0 ? (
+        <p className="soft" style={{ margin: 0, fontSize: "0.86rem" }}>
+          {agora ? "Ninguém em gozo hoje." : "Nenhuma saída marcada para os próximos 60 dias."}
+        </p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                {agora && <th style={{ width: 170 }}>Setor</th>}
+                <th style={{ width: 190 }}>Período</th>
+                <th style={{ width: 110 }}>{agora ? "Volta" : "Situação"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agora
+                ? painel.agora.map((a) => (
+                    <tr key={`${a.userId}${a.inicio}`}>
+                      <td style={{ fontWeight: 600 }} title={a.nome ?? undefined}>{shortName(a.nome)}</td>
+                      <td className="muted" style={{ fontSize: "0.82rem" }}>{a.setor ?? "—"}</td>
+                      <td>{formatDate(a.inicio)} a {formatDate(a.fim)}</td>
+                      <td>{formatDate(somarDias(a.fim, 1))}</td>
+                    </tr>
+                  ))
+                : painel.proximas.map((p) => (
+                    <tr key={`${p.userId}${p.inicio}`}>
+                      <td style={{ fontWeight: 600 }} title={p.nome ?? undefined}>{shortName(p.nome)}</td>
+                      <td>{formatDate(p.inicio)} a {formatDate(p.fim)}</td>
+                      <td>
+                        <Badge variant="quiet" tone={p.origem === "efetivada" ? "green" : "blue"}>
+                          {p.origem === "efetivada" ? "Efetivada" : "Prevista"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </DetailModal>
+  );
+}
 
 type LinhaDoCartao = {
   valor: number;
@@ -1839,15 +1880,21 @@ function EfetivarDialog({
 // ============================================================================
 
 function VisaoGeral({
-  painel, hoje, ultimaImportacao, porSetor,
+  painel, hoje, ultimaImportacao, porSetor, setores, unidades, soUsuarios,
 }: {
   painel: FeriasPainel;
   hoje: string;
   /** só o DP recebe */
   ultimaImportacao: UltimaImportacaoFolha | null;
-  /** "Toda a empresa": a coincidência de férias é contada dentro do setor */
+  /** "Toda a empresa": sem o alerta de coincidência */
   porSetor: boolean;
+  /** para o calendário do mês (a chave "Mês" de "Quem está fora") */
+  setores: { id: string; name: string }[];
+  unidades: string[] | null;
+  soUsuarios: Set<string> | null;
 }) {
+  // "Quem está fora" em ano (linha do tempo) ou mês (calendário), no mesmo lugar
+  const [visao, setVisao] = useState<"ano" | "mes">("ano");
   const temPrazo = (s: FeriasPainel["saldos"][number]) => s.situacao === "vencida" || s.situacao === "a_vencer";
   // o afastado com prazo vencido ou vencendo sai das pendências e vira observação
   const comPendencia = painel.saldos.filter((s) => (temPrazo(s) && !s.statusColaborador) || s.semFolha);
@@ -1871,60 +1918,42 @@ function VisaoGeral({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.9rem" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "0.8rem" }}>
-        <div id="ferias-agora" className="card card-pad" style={{ scrollMarginTop: 90 }}>
-          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.6rem" }}>De férias agora</h3>
-          {painel.agora.length === 0 ? (
-            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Ninguém em gozo hoje.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              {painel.agora.map((a) => (
-                <div key={`${a.userId}${a.inicio}`} style={{ display: "flex", gap: "0.5rem", alignItems: "baseline", fontSize: "0.84rem" }}>
-                  <span style={{ fontWeight: 600 }}>{shortName(a.nome)}</span>
-                  <span className="soft" style={{ fontSize: "0.76rem" }}>{a.setor ?? ""}</span>
-                  <span className="soft" style={{ marginLeft: "auto", fontSize: "0.78rem" }}>volta {formatDate(somarDias(a.fim, 1))}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Quem está fora (LUIZ, 12/11/2026): a linha do tempo de um ano e o
+          calendário do mês no mesmo cartão, em vez de duas subabas. */}
+      <div className="card card-pad">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>Quem está fora</h3>
+          <div role="group" aria-label="Ver por"
+            style={{ display: "inline-flex", gap: "0.25rem", padding: "0.2rem", background: "var(--mh-surface-2)", borderRadius: "var(--mh-radius-full)", border: "1px solid var(--mh-border)" }}>
+            {([["ano", "Ano"], ["mes", "Mês"]] as const).map(([v, r]) => (
+              <button key={v} type="button" aria-pressed={visao === v}
+                className={`btn btn-xs ${visao === v ? "btn-primary" : "btn-ghost"}`} onClick={() => setVisao(v)}>
+                {r}
+              </button>
+            ))}
+          </div>
         </div>
-
-        <div id="ferias-proximas" className="card card-pad" style={{ scrollMarginTop: 90 }}>
-          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 0.6rem" }}>Próximas saídas (60 dias)</h3>
-          {painel.proximas.length === 0 ? (
-            <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Nenhuma saída marcada para os próximos 60 dias.</p>
+        {visao === "ano" ? (
+          painel.timeline.length === 0 ? (
+            <p className="soft" style={{ fontSize: "0.82rem", margin: "0.7rem 0 0" }}>Ninguém de férias nos próximos 12 meses.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              {painel.proximas.slice(0, 8).map((p) => (
-                <div key={`${p.userId}${p.inicio}`} style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.84rem" }}>
-                  <span style={{ fontWeight: 600 }}>{shortName(p.nome)}</span>
-                  <Badge variant="quiet" tone={p.origem === "efetivada" ? "green" : "blue"}>
-                    {p.origem === "efetivada" ? "Efetivada" : "Prevista"}
-                  </Badge>
-                  <span className="soft" style={{ marginLeft: "auto", fontSize: "0.78rem" }}>
-                    {formatDate(p.inicio)} a {formatDate(p.fim)}
-                  </span>
-                </div>
-              ))}
-              {painel.proximas.length > 8 && (
-                <p className="soft" style={{ fontSize: "0.76rem", margin: "0.2rem 0 0" }}>
-                  e mais {painel.proximas.length - 8} na linha do tempo abaixo.
-                </p>
-              )}
+            <div style={{ marginTop: "0.6rem" }}>
+              <FeriasTimeline
+                linhas={painel.timeline}
+                janelaInicio={painel.janelaInicio}
+                janelaFim={painel.janelaFim}
+                hoje={hoje}
+                semCartao
+                // um ano de janela (rola para o lado); a empresa toda passa de cem linhas
+                alturaMax={520}
+                aviso={pares.length > 0 && <AlertaDeCoincidencias pares={pares} quem="na equipe" />}
+              />
             </div>
-          )}
-        </div>
+          )
+        ) : (
+          <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} soUsuarios={soUsuarios} />
+        )}
       </div>
-
-      <FeriasTimeline
-        linhas={painel.timeline}
-        janelaInicio={painel.janelaInicio}
-        janelaFim={painel.janelaFim}
-        hoje={hoje}
-        // um ano de janela (rola para o lado); a empresa toda passa de cem linhas
-        alturaMax={520}
-        aviso={pares.length > 0 && <AlertaDeCoincidencias pares={pares} quem="na equipe" />}
-      />
 
       <div id="ferias-saldos" className="card card-pad" style={{ scrollMarginTop: 90 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>

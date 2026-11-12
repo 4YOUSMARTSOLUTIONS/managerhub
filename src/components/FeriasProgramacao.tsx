@@ -8,7 +8,7 @@ import { IconExport } from "@/components/ui/ImpExpIcons";
 import { FERIAS_STATUS, FERIAS_STATUS_TONE } from "@/lib/constants";
 import { formatDate, shortName, somarDias } from "@/lib/format";
 import { downloadSheets } from "@/lib/export-xlsx";
-import { corDe, coresDosSetores, useAgendaFerias, type AgendaItem } from "@/lib/ferias-agenda";
+import { corDe, coresDosSetores, diasNoPeriodo, useAgendaFerias, type AgendaItem } from "@/lib/ferias-agenda";
 import {
   aplicarFiltros, BarraFiltrosFerias, periodoValido, TODOS_OS_STATUS, type FiltrosFerias,
 } from "@/components/FeriasFiltros";
@@ -24,6 +24,8 @@ type Pessoa = {
   unidade: string | null;
   periodos: AgendaItem[];
   dias: number;
+  /** dias dos períodos que caem dentro do intervalo buscado */
+  noPeriodo: number;
   abono: number;
 };
 
@@ -31,6 +33,10 @@ type Pessoa = {
  * A programação de férias por colaborador: quem tem férias marcadas no
  * período, quando e quantos dias, somando os períodos de cada pessoa. A
  * planilha sai com duas abas: uma linha por período e o resumo por pessoa.
+ *
+ * Desde 12/11/2026 (LUIZ) é também o antigo Acompanhamento ("quem está fora
+ * num período"): os atalhos curtos (hoje, 7 dias), a contagem por situação e
+ * os dias que caem dentro do período, numa aba só em vez de duas parecidas.
  */
 export function FeriasProgramacao({
   setores, unidades, hoje, soUsuarios = null,
@@ -61,17 +67,22 @@ export function FeriasProgramacao({
     for (const i of aplicarFiltros(itens, filtros)) {
       const p = porPessoa.get(i.userId) ?? {
         userId: i.userId, nome: i.nome, matricula: i.matricula, setorId: i.setorId, setor: i.setor,
-        subsetor: i.subsetor, cargo: i.cargo, unidade: i.unidade, periodos: [], dias: 0, abono: 0,
+        subsetor: i.subsetor, cargo: i.cargo, unidade: i.unidade, periodos: [], dias: 0, noPeriodo: 0, abono: 0,
       };
       p.periodos.push(i);
       p.dias += i.dias;
+      p.noPeriodo += diasNoPeriodo(i, buscado.de, buscado.ate);
       p.abono += i.abono;
       porPessoa.set(i.userId, p);
     }
     return [...porPessoa.values()]
       .map((p) => ({ ...p, periodos: p.periodos.sort((a, b) => a.inicio.localeCompare(b.inicio)) }))
       .sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
-  }, [itens, filtros]);
+  }, [itens, filtros, buscado]);
+
+  // quantas pessoas em cada situação (o que era o Acompanhamento)
+  const porSituacao = (status: AgendaItem["status"]) =>
+    pessoas.filter((p) => p.periodos.some((i) => i.status === status)).length;
 
   const totalPeriodos = pessoas.reduce((s, p) => s + p.periodos.length, 0);
   const totalDias = pessoas.reduce((s, p) => s + p.dias, 0);
@@ -88,20 +99,20 @@ export function FeriasProgramacao({
       await downloadSheets(`programacao_de_ferias_${buscado.de}_a_${buscado.ate}.xlsx`, [
         {
           name: "Períodos",
-          headers: ["Colaborador", "Matrícula", "Setor", "Subsetor", "Cargo", "Unidade", "Início", "Término", "Dias", "Abono", "Situação", "Em dobro", "Origem"],
+          headers: ["Colaborador", "Matrícula", "Setor", "Subsetor", "Cargo", "Unidade", "Início", "Término", "Dias", "Dias no período", "Abono", "Situação", "Em dobro", "Origem"],
           rows: pessoas.flatMap((p) => p.periodos.map((i) => [
             i.nome, i.matricula, i.setor, i.subsetor, i.cargo, i.unidade,
-            formatDate(i.inicio), formatDate(i.fim), i.dias, i.abono,
+            formatDate(i.inicio), formatDate(i.fim), i.dias, diasNoPeriodo(i, buscado.de, buscado.ate), i.abono,
             FERIAS_STATUS[i.status], i.emDobro ? "Sim" : "Não",
             i.origem === "registro" ? "Registro direto" : "Módulo Férias",
           ])),
         },
         {
           name: "Por colaborador",
-          headers: ["Colaborador", "Matrícula", "Setor", "Subsetor", "Cargo", "Unidade", "Períodos", "Dias de férias", "Dias de abono", "Primeiro início", "Último término"],
+          headers: ["Colaborador", "Matrícula", "Setor", "Subsetor", "Cargo", "Unidade", "Períodos", "Dias de férias", "Dias no período", "Dias de abono", "Primeiro início", "Último término"],
           rows: pessoas.map((p) => [
             p.nome, p.matricula, p.setor, p.subsetor, p.cargo, p.unidade,
-            p.periodos.length, p.dias, p.abono,
+            p.periodos.length, p.dias, p.noPeriodo, p.abono,
             formatDate(p.periodos[0].inicio), formatDate(p.periodos[p.periodos.length - 1].fim),
           ]),
         },
@@ -115,7 +126,7 @@ export function FeriasProgramacao({
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
       <BarraFiltrosFerias
         filtros={filtros} onChange={mudar} setores={setores} hoje={hoje} itens={itens}
-        atalhos={["30d", "mes", "proximoMes", "12m", "ano"]}
+        atalhos={["hoje", "7d", "30d", "mes", "proximoMes", "12m", "ano"]}
       />
       {invalido && <p style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: 0 }}>{invalido}</p>}
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
@@ -125,6 +136,13 @@ export function FeriasProgramacao({
           {carregando
             ? "Carregando…"
             : `${pessoas.length} colaborador(es) com ${totalPeriodos} período(s), ${totalDias} dias de férias entre ${formatDate(buscado.de)} e ${formatDate(buscado.ate)}`}
+          {!carregando && pessoas.length > 0 && (
+            <>
+              <br />
+              {porSituacao("efetivada")} com férias efetivadas, {porSituacao("aprovada")} aguardando efetivação
+              e {porSituacao("solicitada")} aguardando aprovação do gestor
+            </>
+          )}
         </span>
         <button
           type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}
@@ -148,6 +166,7 @@ export function FeriasProgramacao({
                 <th style={{ width: 110 }}>Unidade</th>
                 <th style={{ width: 80, textAlign: "right" }}>Períodos</th>
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
+                <th style={{ width: 96, textAlign: "right" }} title="Dias que caem dentro do período buscado">No período</th>
                 <th style={{ width: 200 }}>Primeiro período</th>
               </tr>
             </thead>
@@ -168,6 +187,7 @@ export function FeriasProgramacao({
                       <td className="muted" style={{ fontSize: "0.82rem" }}>{p.unidade ?? "—"}</td>
                       <td className="tabular" style={{ textAlign: "right" }}>{p.periodos.length}</td>
                       <td className="tabular" style={{ textAlign: "right" }}>{p.dias}</td>
+                      <td className="tabular" style={{ textAlign: "right" }}>{p.noPeriodo}</td>
                       <td>{formatDate(primeiro.inicio)} a {formatDate(primeiro.fim)}</td>
                     </tr>
                     {aberto && p.periodos.map((i) => (
@@ -181,6 +201,7 @@ export function FeriasProgramacao({
                         <td />
                         <td />
                         <td className="tabular" style={{ textAlign: "right", fontSize: "0.82rem" }}>{i.dias}</td>
+                        <td className="tabular" style={{ textAlign: "right", fontSize: "0.82rem" }}>{diasNoPeriodo(i, buscado.de, buscado.ate)}</td>
                         <td><Badge tone={FERIAS_STATUS_TONE[i.status]}>{FERIAS_STATUS[i.status]}</Badge></td>
                       </tr>
                     ))}
