@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { confirmDialog } from "@/components/ui/confirm";
 import { normalizar } from "@/lib/format";
-import { deleteSegCatalogo, saveBlitzPergunta, setSegCatalogoAtivo } from "@/lib/actions/seguranca";
+import { ativarBlitzPergunta, deleteSegCatalogo, incluirBlitzPergunta, saveBlitzPergunta } from "@/lib/actions/seguranca";
 
 export type BlitzPerguntaRow = {
   id: string;
@@ -31,13 +31,19 @@ type Rascunho = { id?: string; name: string; meioIds: string[] };
  *
  * O texto respondido é CARIMBADO na resposta: editar a pergunta aqui muda as
  * blitzes futuras, nunca o que já foi respondido.
+ *
+ * Duas alçadas (LUIZ, 13/11/2026): `canGerir` (equipe de segurança, proprietário
+ * e administrador) inclui e desativa/reativa; `canEdit` (só proprietário e
+ * administrador) também edita o texto e os meios e exclui. Excluir pergunta já
+ * respondida é recusado pelo banco e vira desativar.
  */
 export function SegBlitzPerguntasManager({
-  rows, meios, canEdit,
+  rows, meios, canEdit, canGerir,
 }: {
   rows: BlitzPerguntaRow[];
   meios: Opcao[];
   canEdit: boolean;
+  canGerir: boolean;
 }) {
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
   const [busca, setBusca] = useState("");
@@ -57,7 +63,9 @@ export function SegBlitzPerguntasManager({
     if (!rascunho) return;
     setErro("");
     iniciar(async () => {
-      const r = await saveBlitzPergunta({ id: rascunho.id, name: rascunho.name, meioIds: rascunho.meioIds });
+      const r = rascunho.id
+        ? await saveBlitzPergunta({ id: rascunho.id, name: rascunho.name, meioIds: rascunho.meioIds })
+        : await incluirBlitzPergunta({ name: rascunho.name, meioIds: rascunho.meioIds });
       if (r.error) { setErro(r.error); return; }
       setRascunho(null);
       router.refresh();
@@ -79,11 +87,12 @@ export function SegBlitzPerguntasManager({
   };
 
   const alternar = (i: BlitzPerguntaRow) => {
-    const fd = new FormData();
-    fd.set("tabela", "seg_blitz_perguntas");
-    fd.set("id", i.id);
-    fd.set("active", i.active ? "0" : "1");
-    iniciar(async () => { await setSegCatalogoAtivo(fd); router.refresh(); });
+    setErro("");
+    iniciar(async () => {
+      const r = await ativarBlitzPergunta(i.id, !i.active);
+      if (r.error) { setErro(r.error); return; }
+      router.refresh();
+    });
   };
 
   const alternarMeio = (id: string) =>
@@ -118,7 +127,7 @@ export function SegBlitzPerguntasManager({
               i.active ? "Ativa" : "Inativa",
             ])}
           />
-          {canEdit && (
+          {canGerir && (
             <button
               type="button" className="btn btn-primary btn-sm"
               onClick={() => { setErro(""); setRascunho({ name: "", meioIds: [] }); }}
@@ -189,7 +198,7 @@ export function SegBlitzPerguntasManager({
               <th>Pergunta</th>
               <th style={{ width: 260 }}>Meios</th>
               <th style={{ width: 100 }}>Situação</th>
-              {canEdit && <th style={{ textAlign: "right" }}></th>}
+              {canGerir && <th style={{ textAlign: "right" }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -202,27 +211,31 @@ export function SegBlitzPerguntasManager({
                     : i.meioIds.map((id) => nomeMeio.get(id)).filter(Boolean).join(" · ")}
                 </td>
                 <td><Badge variant="quiet" tone={i.active ? "green" : "gray"}>{i.active ? "Ativa" : "Inativa"}</Badge></td>
-                {canEdit && (
+                {canGerir && (
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <span style={{ display: "inline-flex", gap: "0.3rem" }}>
-                      <button
-                        type="button" className="icon-btn" title="Editar"
-                        onClick={() => { setErro(""); setRascunho({ id: i.id, name: i.name, meioIds: i.meioIds }); }}
-                      >
-                        <Pencil size={15} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button" className="icon-btn" title="Editar"
+                          onClick={() => { setErro(""); setRascunho({ id: i.id, name: i.name, meioIds: i.meioIds }); }}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                      )}
                       <button
                         type="button" className="icon-btn" disabled={pendente}
                         title={i.active ? "Desativar" : "Reativar"} onClick={() => alternar(i)}
                       >
                         {i.active ? <Power size={15} /> : <RotateCcw size={15} />}
                       </button>
-                      <button
-                        type="button" className="icon-btn icon-btn-danger" title="Excluir"
-                        disabled={pendente} onClick={() => excluir(i)}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button" className="icon-btn icon-btn-danger" title="Excluir"
+                          disabled={pendente} onClick={() => excluir(i)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </span>
                   </td>
                 )}

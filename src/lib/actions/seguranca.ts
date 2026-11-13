@@ -1227,6 +1227,41 @@ export async function saveBlitzPergunta(input: BlitzPerguntaInput): Promise<Acti
   }
 }
 
+/**
+ * Incluir pergunta da blitz: equipe de segurança, proprietário e administrador
+ * (LUIZ, 13/11/2026). Vai pela RPC, que tem a trava no corpo: a policy de
+ * escrita da tabela continua só owner/admin, então a equipe inclui e liga/desliga
+ * sem poder editar o texto, trocar os meios de pergunta existente ou excluir.
+ */
+export async function incluirBlitzPergunta(input: { name: string; meioIds: string[] }): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const name = input.name.trim();
+    if (!name) return { error: "Escreva a pergunta." };
+    const { error } = await supabase.rpc("seg_blitz_pergunta_incluir", {
+      p_name: name, p_meio_ids: [...new Set(input.meioIds)],
+    });
+    if (error) return { error: mensagem(error) };
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Desativar ou reativar pergunta da blitz, com a mesma alçada de incluir. */
+export async function ativarBlitzPergunta(id: string, active: boolean): Promise<ActionState> {
+  try {
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_blitz_pergunta_ativar", { p_id: id, p_active: active });
+    if (error) return { error: mensagem(error) };
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function saveBlitzMotivo(input: { id?: string; name: string }): Promise<ActionState> {
   try {
     const { supabase, tenantId } = await adminActionContext();

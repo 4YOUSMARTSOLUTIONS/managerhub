@@ -2431,6 +2431,9 @@ export type Database = {
       pode_avaliar_blitz: { Args: { p_tenant: string }; Returns: boolean }
       seg_criar_blitz: { Args: { p_data: Json }; Returns: string }
       seg_excluir_blitz: { Args: { p_id: string }; Returns: undefined }
+      // perguntas da blitz: a equipe de segurança inclui e liga/desliga (owner/admin também)
+      seg_blitz_pergunta_incluir: { Args: { p_name: string; p_meio_ids?: string[] }; Returns: string }
+      seg_blitz_pergunta_ativar: { Args: { p_id: string; p_active: boolean }; Returns: undefined }
       seg_blitz_meus_alertas: { Args: Record<PropertyKey, never>; Returns: Json }
       seg_blitz_ja_passaram_no_mes: { Args: Record<PropertyKey, never>; Returns: Json }
       seg_blitz_registrar_tratativa: { Args: { p_alerta: string; p_em: string; p_resumo: string; p_acordo?: string | null }; Returns: undefined }

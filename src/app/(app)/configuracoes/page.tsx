@@ -297,6 +297,10 @@ export default async function SettingsPage({
     isGestor ? minhaEquipe(supabase, tenant.id) : Promise.resolve(null),
   ]);
   const equipe = equipeDoGestor ? new Set(equipeDoGestor) : null;
+  // Equipe de segurança inclui e desativa/reativa perguntas da blitz (LUIZ,
+  // 13/11/2026); editar e excluir seguem com proprietário e administrador. A
+  // trava de verdade está nas RPCs seg_blitz_pergunta_incluir/_ativar.
+  const souDaEquipeSeg = (segEquipeData ?? []).some((e) => e.user_id === user.id);
 
   // ids já usados — excluir só é permitido quando nunca usado (senão: desativar).
   // Antes esta tela baixava a tabela de AÇÕES INTEIRA (7.522 linhas) e todos os
@@ -1604,6 +1608,7 @@ export default async function SettingsPage({
               content: (
                 <SegBlitzPerguntasManager
                   canEdit={canEdit}
+                  canGerir={canEdit || souDaEquipeSeg}
                   rows={(blitzPerguntasData ?? []).map((q) => ({
                     id: q.id, name: q.name, active: q.active,
                     meioIds: (blitzPerguntaMeios ?? []).filter((v) => v.pergunta_id === q.id).map((v) => v.meio_id),
