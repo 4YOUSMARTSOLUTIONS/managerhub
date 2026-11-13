@@ -47,6 +47,8 @@ export type AgendaInput = {
   unit_id?: string | null;
   responsible_id: string;
   can_responsible_edit?: boolean;
+  /** a partir de quando as alterações nas tarefas valem (YYYY-MM-DD; vazio = hoje) */
+  desde?: string;
   tasks: AgendaTaskInput[];
 };
 
@@ -69,20 +71,23 @@ function taskRow(ctx: Ctx, agendaId: string, t: AgendaTaskInput, sort: number) {
   };
 }
 
-/** Sincroniza as tarefas preservando as existentes (mantém o histórico de logs). */
-async function syncTasks(ctx: Ctx, agendaId: string, tasks: AgendaTaskInput[]) {
-  const { data: existing } = await ctx.supabase.from("agenda_tasks").select("id").eq("agenda_id", agendaId);
-  const keepIds = new Set(tasks.map((t) => t.id).filter(Boolean) as string[]);
-  const toDelete = (existing ?? []).map((x) => x.id).filter((id) => !keepIds.has(id));
-  if (toDelete.length) await ctx.supabase.from("agenda_tasks").delete().in("id", toDelete);
-
-  for (let i = 0; i < tasks.length; i++) {
-    const t = tasks[i];
-    if (!t.title?.trim()) continue;
-    const row = taskRow(ctx, agendaId, t, i);
-    if (t.id) await ctx.supabase.from("agenda_tasks").update(row).eq("id", t.id);
-    else await ctx.supabase.from("agenda_tasks").insert(row);
-  }
+/**
+ * Grava as tarefas com vigência, numa transação só (`agenda_salvar_tarefas`,
+ * 13/11/2026): mudar a recorrência encerra a versão antiga na data e abre uma
+ * nova, remover encerra (o histórico fica) e a tarefa nova vale da data em
+ * diante. Antes, remover APAGAVA a tarefa com todos os registros dela, e o resto
+ * reescrevia o passado. Devolve a mensagem de erro, ou null.
+ */
+async function syncTasks(ctx: Ctx, agendaId: string, tasks: AgendaTaskInput[], desde?: string): Promise<string | null> {
+  const lista = tasks.map((t, i) => {
+    const { tenant_id: _tenant, agenda_id: _agenda, ...campos } = taskRow(ctx, agendaId, t, i);
+    void _tenant; void _agenda;
+    return { id: t.id ?? null, ...campos };
+  }).filter((t) => t.title);
+  const { error } = await ctx.supabase.rpc("agenda_salvar_tarefas", {
+    p_agenda: agendaId, p_tarefas: lista, p_desde: desde || null,
+  });
+  return error ? error.message : null;
 }
 
 export async function createAgenda(input: AgendaInput): Promise<ActionState> {
@@ -101,8 +106,9 @@ export async function createAgenda(input: AgendaInput): Promise<ActionState> {
       created_by: ctx.userId,
     }).select("id").single();
     if (error) return { error: mensagemDeAgenda(error) };
-    await syncTasks(ctx, ag.id, input.tasks ?? []);
+    const erroTarefas = await syncTasks(ctx, ag.id, input.tasks ?? []);
     revalidatePath("/agenda");
+    if (erroTarefas) return { error: `A agenda foi criada, mas as tarefas não: ${erroTarefas}` };
     return { ok: true };
   } catch (e) { return { error: (e as Error).message }; }
 }
@@ -121,8 +127,9 @@ export async function updateAgenda(input: AgendaInput): Promise<ActionState> {
       updated_at: new Date().toISOString(),
     }).eq("id", input.id);
     if (error) return { error: mensagemDeAgenda(error) };
-    await syncTasks(ctx, input.id, input.tasks ?? []);
+    const erroTarefas = await syncTasks(ctx, input.id, input.tasks ?? [], input.desde);
     revalidatePath("/agenda");
+    if (erroTarefas) return { error: erroTarefas };
     return { ok: true };
   } catch (e) { return { error: (e as Error).message }; }
 }
@@ -265,6 +272,8 @@ export async function registrarDemandaNaoPrevista(input: DemandaNaoPrevistaInput
       weekdays: [],
       day_of_month: null,
       fixed_date: input.date,
+      // vale no dia da própria demanda, mesmo registrada para trás
+      vigente_de: input.date,
       sort: 0,
       active: true,
       flexible: false,

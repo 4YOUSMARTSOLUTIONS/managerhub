@@ -92,6 +92,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
     responsibleId: a.responsible_id, responsibleName: nameById[a.responsible_id] ?? "Usuário",
     canResponsibleEdit: a.can_responsible_edit, active: a.active, createdDate: (a.created_at ?? "").slice(0, 10),
     imprevistos: a.imprevistos ?? false,
+    periodosInativa: (a.periodos_inativa as { de: string; ate: string | null }[] | null) ?? [],
     responsaveis: (periodosPorAgenda.get(a.id) ?? []).map((p) => ({
       userId: p.user_id, nome: nameById[p.user_id] ?? "Usuário", de: p.de, ate: p.ate,
     })),
@@ -99,6 +100,7 @@ export async function loadAgendaData(): Promise<AgendaData> {
       id: t.id, title: t.title, description: t.description, scheduledTime: t.scheduled_time,
       durationMinutes: t.duration_minutes, frequency: t.frequency, weekdays: t.weekdays ?? [],
       dayOfMonth: t.day_of_month, fixedDate: t.fixed_date, active: t.active, flexible: t.flexible ?? false,
+      vigenteDe: t.vigente_de, vigenteAte: t.vigente_ate,
     })),
   }));
 

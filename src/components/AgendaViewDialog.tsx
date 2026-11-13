@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { AGENDA_FREQUENCY_LABEL, WEEKDAYS_PT } from "@/lib/constants";
 import { formatDate, shortName } from "@/lib/format";
 import type { AgendaFull, AgendaTaskFull } from "@/lib/agenda-types";
+import { tarefasAtuais } from "@/lib/agenda-vigencia";
 
 /**
  * Ficha da agenda, só para ler.
@@ -50,7 +51,9 @@ function diaAnterior(ymd: string): string {
 export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | null; onClose: () => void }) {
   if (!agenda) return null;
 
-  const ativas = agenda.tasks.filter((t) => t.active).length;
+  // só as tarefas em vigor: as versões encerradas guardam o histórico, não a rotina de hoje
+  const atuais = tarefasAtuais(agenda);
+  const ativas = atuais.filter((t) => t.active).length;
 
   /**
    * Do começo do dia para o fim, que é a ordem em que o dia acontece.
@@ -62,7 +65,7 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
    *
    * `scheduledTime` é texto `HH:MM:SS`, que ordena igual à hora.
    */
-  const tarefas = [...agenda.tasks].sort((a, b) => {
+  const tarefas = [...atuais].sort((a, b) => {
     const ha = a.flexible ? null : a.scheduledTime;
     const hb = b.flexible ? null : b.scheduledTime;
     if (ha && hb) return ha.localeCompare(hb) || a.title.localeCompare(b.title, "pt-BR");
@@ -72,7 +75,7 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
   });
   // carga só das diárias: é a única frequência que vale para TODO dia útil, e
   // somar semanal com mensal daria um número que não acontece em dia nenhum
-  const cargaDiaria = agenda.tasks
+  const cargaDiaria = atuais
     .filter((t) => t.active && t.frequency === "diaria")
     .reduce((s, t) => s + t.durationMinutes, 0);
 
@@ -90,7 +93,7 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
             <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>{agenda.name}</h2>
             <div className="soft" style={{ fontSize: "0.78rem", marginTop: 2 }}>
               {ativas} {ativas === 1 ? "tarefa ativa" : "tarefas ativas"}
-              {agenda.tasks.length !== ativas && <> · {agenda.tasks.length - ativas} inativa(s)</>}
+              {atuais.length !== ativas && <> · {atuais.length - ativas} inativa(s)</>}
               {cargaDiaria > 0 && <> · {cargaDiaria} min por dia nas diárias</>}
             </div>
           </div>
@@ -139,7 +142,7 @@ export function AgendaViewDialog({ agenda, onClose }: { agenda: AgendaFull | nul
 
           <div>
             <div className="soft" style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.4rem" }}>Tarefas</div>
-            {agenda.tasks.length === 0 ? (
+            {atuais.length === 0 ? (
               <p className="soft" style={{ fontSize: "0.82rem", margin: 0 }}>Esta agenda ainda não tem tarefas.</p>
             ) : (
               <div style={{ overflowX: "auto" }}>

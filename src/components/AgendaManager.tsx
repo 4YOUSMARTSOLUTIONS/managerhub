@@ -20,6 +20,7 @@ import { AgendaViewDialog } from "./AgendaViewDialog";
 import { AgendaLogDetail, type LogDetailCtx } from "./AgendaLogDetail";
 import { DemandaNaoPrevistaDialog } from "./DemandaNaoPrevistaDialog";
 import { AgendaTransferDialog } from "./AgendaTransferDialog";
+import { agendaAtivaEm, tarefaVigenteEm, tarefasAtuais } from "@/lib/agenda-vigencia";
 import { responsavelEm, responsaveisDaAgenda } from "@/lib/agenda-responsavel";
 import { AGENDA_STATUS_LABEL, AGENDA_STATUS_TONE } from "@/lib/constants";
 import { formatDate, shortName } from "@/lib/format";
@@ -123,12 +124,13 @@ export function AgendaManager(props: {
     let reserved = 0;
     for (const a of agendas) {
       // de quem era a agenda NESTE dia: a transferência com data não reescreve o passado
-      if (!a.active || responsavelEm(a, dateStr) !== subjectUserId) continue;
+      // como a agenda era NESTE dia: ativa, e só as tarefas em vigor nele
+      if (!agendaAtivaEm(a, dateStr) || responsavelEm(a, dateStr) !== subjectUserId) continue;
       // a de demandas não previstas nasce no primeiro uso, e a demanda pode ser
       // de dias antes disso: lá quem manda é a data da própria tarefa
       if (!a.imprevistos && dateStr < a.createdDate) continue; // agenda ainda não existia nessa data
       for (const t of a.tasks) {
-        if (!t.active) continue;
+        if (!tarefaVigenteEm(t, dateStr)) continue;
         if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, date)) continue;
         const log = logByTaskDate.get(`${t.id}|${dateStr}`);
         const otimista = statusOtimista[chaveStatus(t.id, dateStr)];
@@ -197,11 +199,11 @@ export function AgendaManager(props: {
         const ds = ymd(cur);
         const isPast = ds < todayStr;
         for (const a of agendas) {
-          if (!a.active || responsavelEm(a, ds) !== subjectUserId) continue;
+          if (!agendaAtivaEm(a, ds) || responsavelEm(a, ds) !== subjectUserId) continue;
           if (a.imprevistos) continue; // fora da aderência e das "tarefas planejadas"
           if (ds < a.createdDate) continue; // não cobra dias anteriores à criação da agenda
           for (const t of a.tasks) {
-            if (!t.active) continue;
+            if (!tarefaVigenteEm(t, ds)) continue;
             if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, cur)) continue;
             if (t.flexible) { feito++; statuses.push("feito"); continue; } // tempo médio: realizada automaticamente
             const log = logByTaskDate.get(`${t.id}|${ds}`);
@@ -386,7 +388,7 @@ export function AgendaManager(props: {
                 <tr key={a.id} style={{ opacity: a.active ? 1 : 0.55 }}>
                   <td style={{ fontWeight: 600 }}>{a.name}</td>
                   <td className="muted">{shortName(a.responsibleName)}{a.responsibleId !== a.ownerId && <span className="soft"> · de {shortName(a.ownerName)}</span>}</td>
-                  <td className="muted">{a.tasks.length}</td>
+                  <td className="muted">{tarefasAtuais(a).length}</td>
                   <td><Badge tone={a.active ? "green" : "gray"}>{a.active ? "Ativa" : "Inativa"}</Badge></td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
@@ -433,7 +435,7 @@ export function AgendaManager(props: {
                 .map((a) => (
                   <tr key={a.id}>
                     <td style={{ fontWeight: 600 }}>{shortName(a.responsibleName)}</td>
-                    <td className="muted">{a.tasks.length}</td>
+                    <td className="muted">{tarefasAtuais(a).length}</td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <div style={{ display: "inline-flex", gap: "0.3rem", justifyContent: "flex-end" }}>
                         <button className="icon-btn" title="Visualizar demandas" aria-label="Visualizar demandas" onClick={() => setViewing(a)}><Eye size={14} /></button>

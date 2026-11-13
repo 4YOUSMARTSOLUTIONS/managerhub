@@ -8,6 +8,7 @@ import { SearchSelect } from "./SearchSelect";
 import { AGENDA_FREQUENCY_LABEL, WEEKDAYS_PT } from "@/lib/constants";
 import { createAgenda, updateAgenda, type AgendaInput, type AgendaTaskInput } from "@/lib/actions/agenda";
 import type { AgendaFull } from "@/lib/agenda-types";
+import { tarefasAtuais } from "@/lib/agenda-vigencia";
 import type { Enums } from "@/types/database";
 
 type Opt = { id: string; name: string };
@@ -102,6 +103,9 @@ export function AgendaBuilderDialog({
   const [responsibleId, setResponsibleId] = useState("");
   const [canEdit, setCanEdit] = useState(false);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
+  // a partir de quando as alterações nas tarefas valem (LUIZ, 13/11/2026): o
+  // passado antes dessa data fica como era
+  const [desde, setDesde] = useState(hojeLocal());
   const [error, setError] = useState<string | null>(null);
   /**
    * Tarefa com a descrição aberta para edição, num diálogo à frente do
@@ -118,12 +122,14 @@ export function AgendaBuilderDialog({
     if (!open) return;
     setError(null);
     setDescEditando(null);
+    setDesde(hojeLocal());
     if (agenda) {
       setName(agenda.name);
       setDescription(agenda.description ?? "");
       setResponsibleId(agenda.responsibleId);
       setCanEdit(agenda.canResponsibleEdit);
-      setTasks(agenda.tasks.map((t) => ({
+      // só as em vigor: as encerradas guardam o passado e não se editam
+      setTasks(tarefasAtuais(agenda).map((t) => ({
         key: newKey(), id: t.id, title: t.title, description: t.description ?? "",
         scheduled_time: t.scheduledTime ?? "", duration_minutes: t.durationMinutes,
         frequency: t.frequency, weekdays: t.weekdays ?? [], day_of_month: t.dayOfMonth ?? 1,
@@ -170,11 +176,13 @@ export function AgendaBuilderDialog({
     const cleanTasks = tasks.filter((t) => t.title.trim());
     if (cleanTasks.length === 0) { setError("Adicione ao menos uma tarefa."); return; }
     if (overlaps.length > 0) { setError("Há tarefas com horários sobrepostos. Ajuste os horários ou a duração antes de salvar."); return; }
+    if (agenda && (!desde || desde > hojeLocal())) { setError("Escolha hoje ou uma data passada para as alterações valerem."); return; }
     const input: AgendaInput = {
       id: agenda?.id,
       name, description, unit_id: null,
       responsible_id: responsibleId,
       can_responsible_edit: canEdit,
+      desde: agenda ? desde : undefined,
       tasks: cleanTasks.map((t) => ({
         id: t.id, title: t.title, description: t.description, scheduled_time: t.scheduled_time,
         duration_minutes: t.duration_minutes, frequency: t.frequency, weekdays: t.weekdays,
@@ -368,6 +376,23 @@ export function AgendaBuilderDialog({
               </ul>
             </div>
           )}
+          {/* A data das alterações (LUIZ, 13/11/2026): mudar dias, frequência ou
+              duração, acrescentar ou remover tarefa vale daqui em diante; antes
+              dela a agenda fica como era, e a aderência do passado não muda. */}
+          {agenda && !imprevistos && (
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "0.8rem", flexWrap: "wrap", background: "var(--mh-surface-2)", borderRadius: 8, padding: "0.7rem 0.8rem" }}>
+              <div>
+                <label className="label">Alterações valem a partir de</label>
+                <input type="date" className="input" value={desde} max={hojeLocal()}
+                  onChange={(e) => setDesde(e.target.value)} style={{ width: 170 }} />
+              </div>
+              <p className="soft" style={{ fontSize: "0.78rem", margin: 0, flex: "1 1 260px" }}>
+                Tarefas novas, removidas ou com dias, frequência ou duração alterados passam a valer nesta data.
+                Antes dela a agenda fica como era, e a aderência dos dias passados não muda.
+              </p>
+            </div>
+          )}
+
           {error && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0, background: "var(--mh-danger-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>{error}</p>}
         </div>
 
@@ -423,4 +448,10 @@ export function AgendaBuilderDialog({
       )}
     </div>
   );
+}
+
+/** O dia de hoje do navegador (YYYY-MM-DD), sem passar por UTC. */
+function hojeLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

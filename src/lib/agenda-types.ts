@@ -12,6 +12,9 @@ export type AgendaTaskFull = {
   fixedDate: string | null;
   active: boolean;
   flexible: boolean; // sem horário fixo, duração média (conta na carga do dia)
+  /** vigência: `vigenteDe` incluso, `vigenteAte` exclusivo (null = em vigor). Ver `lib/agenda-vigencia.ts` */
+  vigenteDe: string;
+  vigenteAte: string | null;
 };
 
 /** Um período de responsabilidade pela agenda: `de` incluso, `ate` exclusivo (null = em vigor). */
@@ -34,6 +37,8 @@ export type AgendaFull = {
   imprevistos: boolean;
   /** quem foi responsável em cada período (ver `lib/agenda-responsavel.ts`) */
   responsaveis: AgendaResponsavel[];
+  /** períodos em que a agenda esteve inativa (`de` incluso, `ate` exclusivo) */
+  periodosInativa: { de: string; ate: string | null }[];
   tasks: AgendaTaskFull[];
 };
 

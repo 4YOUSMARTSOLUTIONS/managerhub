@@ -11,6 +11,7 @@ import { shortName } from "@/lib/format";
 import { taskOccursOn, nonWorkingReason, dateFromYMD, ymd, fmtMinutes } from "@/lib/agenda-schedule";
 import type { AgendaFull } from "@/lib/agenda-types";
 import { responsavelEm } from "@/lib/agenda-responsavel";
+import { agendaAtivaEm, tarefaVigenteEm, tarefasAtuais } from "@/lib/agenda-vigencia";
 
 type Opt = { id: string; name: string };
 const BUDGET = AGENDA_WORKDAY_MINUTES;
@@ -55,10 +56,10 @@ export function TimeMotionManager(props: {
           const ds = ymd(cur);
           let dayMin = 0;
           for (const a of agendas) {
-            if (!a.active || responsavelEm(a, ds) !== subjectId) continue;
+            if (!agendaAtivaEm(a, ds) || responsavelEm(a, ds) !== subjectId) continue;
             if (ds < a.createdDate) continue;
             for (const t of a.tasks) {
-              if (!t.active) continue;
+              if (!tarefaVigenteEm(t, ds)) continue;
               if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, cur)) continue;
               dayMin += t.durationMinutes;
             }
@@ -73,7 +74,8 @@ export function TimeMotionManager(props: {
       }
       const avg = workingDays ? totalMin / workingDays : 0;
       const byWeekday = byWeekdaySum.map((s, i) => (byWeekdayCount[i] ? s / byWeekdayCount[i] : 0));
-      const taskCount = agendas.filter((a) => a.active && a.responsibleId === subjectId).reduce((n, a) => n + a.tasks.filter((t) => t.active).length, 0);
+      const taskCount = agendas.filter((a) => a.active && a.responsibleId === subjectId)
+        .reduce((n, a) => n + tarefasAtuais(a).filter((t) => t.active).length, 0);
       return { totalMin, workingDays, avg, peak, overDays, byWeekday, taskCount };
     };
   }, [range, agendas, holidays]);
@@ -89,10 +91,10 @@ export function TimeMotionManager(props: {
           workingDays++;
           const ds = ymd(cur);
           for (const a of agendas) {
-            if (!a.active || responsavelEm(a, ds) !== subjectId) continue;
+            if (!agendaAtivaEm(a, ds) || responsavelEm(a, ds) !== subjectId) continue;
             if (ds < a.createdDate) continue;
             for (const t of a.tasks) {
-              if (!t.active) continue;
+              if (!tarefaVigenteEm(t, ds)) continue;
               if (!taskOccursOn({ frequency: t.frequency, weekdays: t.weekdays, dayOfMonth: t.dayOfMonth, fixedDate: t.fixedDate }, cur)) continue;
               const e = map.get(t.id) ?? { title: t.title, agendaName: a.name, freq: AGENDA_FREQUENCY_LABEL[t.frequency], min: 0, occ: 0, flexible: t.flexible };
               e.min += t.durationMinutes; e.occ++;

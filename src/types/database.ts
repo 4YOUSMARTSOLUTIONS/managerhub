@@ -21,15 +21,15 @@ export type Database = {
         Relationships: []
       }
       agendas: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; owner_id: string; responsible_id: string; can_responsible_edit: boolean; active: boolean; imprevistos: boolean; created_by: string | null; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; owner_id: string; responsible_id: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; unit_id?: string | null; name?: string; description?: string | null; owner_id?: string; responsible_id?: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; created_by?: string | null; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; unit_id: string | null; name: string; description: string | null; owner_id: string; responsible_id: string; can_responsible_edit: boolean; active: boolean; imprevistos: boolean; periodos_inativa: Json; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; name: string; description?: string | null; owner_id: string; responsible_id: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; periodos_inativa?: Json; created_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string | null; name?: string; description?: string | null; owner_id?: string; responsible_id?: string; can_responsible_edit?: boolean; active?: boolean; imprevistos?: boolean; periodos_inativa?: Json; created_by?: string | null; created_at?: string; updated_at?: string }
         Relationships: []
       }
       agenda_tasks: {
-        Row: { id: string; tenant_id: string; agenda_id: string; title: string; description: string | null; scheduled_time: string | null; duration_minutes: number; frequency: Database["public"]["Enums"]["agenda_frequency"]; weekdays: number[]; day_of_month: number | null; fixed_date: string | null; sort: number; active: boolean; flexible: boolean; created_at: string }
-        Insert: { id?: string; tenant_id: string; agenda_id: string; title: string; description?: string | null; scheduled_time?: string | null; duration_minutes?: number; frequency?: Database["public"]["Enums"]["agenda_frequency"]; weekdays?: number[]; day_of_month?: number | null; fixed_date?: string | null; sort?: number; active?: boolean; flexible?: boolean; created_at?: string }
-        Update: { id?: string; tenant_id?: string; agenda_id?: string; title?: string; description?: string | null; scheduled_time?: string | null; duration_minutes?: number; frequency?: Database["public"]["Enums"]["agenda_frequency"]; weekdays?: number[]; day_of_month?: number | null; fixed_date?: string | null; sort?: number; active?: boolean; flexible?: boolean; created_at?: string }
+        Row: { id: string; tenant_id: string; agenda_id: string; title: string; description: string | null; scheduled_time: string | null; duration_minutes: number; frequency: Database["public"]["Enums"]["agenda_frequency"]; weekdays: number[]; day_of_month: number | null; fixed_date: string | null; sort: number; active: boolean; flexible: boolean; vigente_de: string; vigente_ate: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; agenda_id: string; title: string; description?: string | null; scheduled_time?: string | null; duration_minutes?: number; frequency?: Database["public"]["Enums"]["agenda_frequency"]; weekdays?: number[]; day_of_month?: number | null; fixed_date?: string | null; sort?: number; active?: boolean; flexible?: boolean; vigente_de?: string; vigente_ate?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; agenda_id?: string; title?: string; description?: string | null; scheduled_time?: string | null; duration_minutes?: number; frequency?: Database["public"]["Enums"]["agenda_frequency"]; weekdays?: number[]; day_of_month?: number | null; fixed_date?: string | null; sort?: number; active?: boolean; flexible?: boolean; vigente_de?: string; vigente_ate?: string | null; created_at?: string }
         Relationships: []
       }
       agenda_logs: {
@@ -1976,6 +1976,8 @@ export type Database = {
       }
       my_active_tenant: { Args: Record<PropertyKey, never>; Returns: string }
       agenda_transferir: { Args: { p_agenda: string; p_novo: string; p_data: string }; Returns: undefined }
+      // grava as tarefas com vigência: a edição vale de p_desde em diante (13/11/2026)
+      agenda_salvar_tarefas: { Args: { p_agenda: string; p_tarefas: Json; p_desde?: string | null }; Returns: undefined }
       /**
        * Minha equipe: a cadeia INTEIRA abaixo de mim, e vazia se eu não tiver
        * papel de Gestor (`team_lead`) ou acima. É a mesma função que as policies
