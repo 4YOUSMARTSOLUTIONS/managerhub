@@ -231,7 +231,7 @@ export default async function SettingsPage({
       .eq("tenant_id", tenant.id)
       .order("occurred_on", { ascending: false })
       .order("id")),
-    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
+    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
     supabase.from("rv_reducer_bands").select("id, rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
     // quais punições nasceram de um lançamento aprovado: essas não se editam nem
     // se excluem por aqui, para o processo e o fato não passarem a divergir
@@ -564,6 +564,7 @@ export default async function SettingsPage({
   }
   const reducerRules: RegraRow[] = (reducerRulesData ?? []).map((r) => ({
     id: r.id, nome: r.name, fonte: r.source, absenceKind: r.absence_kind,
+    absenceKinds: r.absence_kinds?.length ? r.absence_kinds : r.absence_kind ? [r.absence_kind] : [],
     sanctionTypeId: r.sanction_type_id, ativa: r.active,
     faixas: faixasPorRegra.get(r.id) ?? [],
   }));
@@ -573,8 +574,8 @@ export default async function SettingsPage({
   // absenteísmos avisa que o desconto por dia não se acumula com eles
   const kindsComRedutorAtivo = [...new Set(
     reducerRules
-      .filter((r) => r.ativa && r.fonte === "absence" && r.absenceKind && r.faixas.length > 0)
-      .map((r) => r.absenceKind as NonNullable<typeof r.absenceKind>),
+      .filter((r) => r.ativa && r.fonte === "absence" && r.faixas.length > 0)
+      .flatMap((r) => r.absenceKinds),
   )];
 
   const ausenciasDeLancamento = new Set(

@@ -26,8 +26,14 @@ export type RegraRedutor = {
   id: string;
   nome: string;
   fonte: "absence" | "sanction";
-  /** quando `fonte === "absence"`: o tipo de ausência que a regra observa */
+  /** quando `fonte === "absence"`: o tipo de ausência principal da regra */
   absenceKind: string | null;
+  /**
+   * Todos os tipos cujos dias SOMAM nesta regra (inclui o principal). LUIZ,
+   * 16/11/2026: qualquer ausência conta na mesma faixa do atestado, então 3
+   * dias de atestado + 2 de afastamento no mês são 5 dias, uma faixa só.
+   */
+  absenceKinds: string[];
   /** quando `fonte === "sanction"`: o tipo de punição, ou null para "qualquer" */
   sanctionTypeId: string | null;
   faixas: FaixaRedutor[];
@@ -62,19 +68,19 @@ function limitesDoMes(period: string): { primeiro: string; ultimo: string; dias:
 }
 
 /**
- * Quantos dias daquele tipo de ausência caem DENTRO do mês.
+ * Quantos dias daqueles tipos de ausência caem DENTRO do mês.
  *
  * Marca os dias num conjunto em vez de somar os períodos, pela mesma razão de
  * `fatorRv`: dois lançamentos que se cruzam marcam o mesmo dia duas vezes e ele
  * continua valendo um. E um afastamento que começa em junho e termina em agosto
  * contribui só com os dias de julho.
  */
-function diasNoMes(period: string, ausencias: AusenciaTipada[], kind: string): number {
+function diasNoMes(period: string, ausencias: AusenciaTipada[], kinds: string[]): number {
   const lim = limitesDoMes(period);
   if (!lim) return 0;
   const marcados = new Set<string>();
   for (const a of ausencias) {
-    if (a.kind !== kind) continue;
+    if (!kinds.includes(a.kind)) continue;
     const de = a.inicio > lim.primeiro ? a.inicio : lim.primeiro;
     const ate = a.fim < lim.ultimo ? a.fim : lim.ultimo;
     if (de > ate) continue;
@@ -120,7 +126,7 @@ export function redutoresDoMes(
   const aplicados: RedutorAplicado[] = [];
   for (const r of regras) {
     const qtd = r.fonte === "absence"
-      ? (r.absenceKind ? diasNoMes(period, ausencias, r.absenceKind) : 0)
+      ? diasNoMes(period, ausencias, tiposDaRegra(r))
       : ocorrenciasNoMes(period, sancoes, r.sanctionTypeId);
     if (qtd <= 0) continue;
     const faixa = faixaPara(qtd, r.faixas);
@@ -142,6 +148,12 @@ export function redutoresDoMes(
  */
 export function kindsComRedutor(regras: RegraRedutor[]): Set<string> {
   const s = new Set<string>();
-  for (const r of regras) if (r.fonte === "absence" && r.absenceKind) s.add(r.absenceKind);
+  for (const r of regras) if (r.fonte === "absence") for (const k of tiposDaRegra(r)) s.add(k);
   return s;
+}
+
+/** Os tipos que a regra soma; regra antiga sem a lista vale pelo principal. */
+export function tiposDaRegra(r: { absenceKind: string | null; absenceKinds?: string[] | null }): string[] {
+  if (r.absenceKinds && r.absenceKinds.length > 0) return r.absenceKinds;
+  return r.absenceKind ? [r.absenceKind] : [];
 }

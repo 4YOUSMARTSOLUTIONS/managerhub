@@ -960,9 +960,9 @@ export type Database = {
         Relationships: []
       }
       rv_reducer_rules: {
-        Row: { id: string; tenant_id: string; name: string; source: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind: Database["public"]["Enums"]["absence_kind"] | null; sanction_type_id: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; name: string; source: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind?: Database["public"]["Enums"]["absence_kind"] | null; sanction_type_id?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; name?: string; source?: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind?: Database["public"]["Enums"]["absence_kind"] | null; sanction_type_id?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Row: { id: string; tenant_id: string; name: string; source: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind: Database["public"]["Enums"]["absence_kind"] | null; absence_kinds: Database["public"]["Enums"]["absence_kind"][]; sanction_type_id: string | null; active: boolean; sort: number; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; name: string; source: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind?: Database["public"]["Enums"]["absence_kind"] | null; absence_kinds?: Database["public"]["Enums"]["absence_kind"][]; sanction_type_id?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; name?: string; source?: Database["public"]["Enums"]["rv_reducer_source"]; absence_kind?: Database["public"]["Enums"]["absence_kind"] | null; absence_kinds?: Database["public"]["Enums"]["absence_kind"][]; sanction_type_id?: string | null; active?: boolean; sort?: number; created_at?: string; updated_at?: string }
         Relationships: []
       }
       rv_reducer_bands: {

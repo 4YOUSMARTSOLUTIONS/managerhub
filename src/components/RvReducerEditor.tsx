@@ -10,7 +10,7 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { ABSENCE_KIND_LABEL } from "@/lib/constants";
 import {
   createReducerRule, toggleReducerRule, deleteReducerRule,
-  addReducerBand, deleteReducerBand,
+  addReducerBand, deleteReducerBand, updateReducerRuleKinds,
 } from "@/lib/actions/rv-redutores";
 import type { Enums } from "@/types/database";
 
@@ -34,13 +34,46 @@ export type RegraRow = {
   nome: string;
   fonte: Enums<"rv_reducer_source">;
   absenceKind: Enums<"absence_kind"> | null;
+  /** todos os tipos cujos dias somam no motivo (inclui o principal) */
+  absenceKinds: Enums<"absence_kind">[];
   sanctionTypeId: string | null;
   ativa: boolean;
   faixas: FaixaRow[];
 };
 type TipoPunicao = { id: string; name: string };
 
-const KINDS: Enums<"absence_kind">[] = ["ferias", "licenca", "afastamento", "atestado", "falta"];
+const KINDS: Enums<"absence_kind">[] = ["atestado", "afastamento", "licenca", "falta", "ferias"];
+
+/** "atestado, afastamento e licença" */
+const listaDeTipos = (kinds: Enums<"absence_kind">[]) => {
+  const nomes = kinds.map((k) => (ABSENCE_KIND_LABEL[k] ?? k).toLowerCase());
+  return nomes.length <= 1 ? nomes.join("") : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+};
+
+/**
+ * Os tipos cujos dias somam no motivo (LUIZ, 16/11/2026): 3 dias de atestado +
+ * 2 de afastamento no mês são 5 dias, uma faixa só. Um tipo só pode estar em um
+ * motivo; o banco recusa o repetido.
+ */
+function TiposDoMotivo({ valor, onChange, disabled }: {
+  valor: Enums<"absence_kind">[];
+  onChange: (v: Enums<"absence_kind">[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem 0.9rem" }}>
+      {KINDS.map((k) => (
+        <label key={k} style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", fontSize: "0.84rem", cursor: disabled ? "default" : "pointer" }}>
+          <input
+            type="checkbox" disabled={disabled} checked={valor.includes(k)}
+            onChange={(e) => onChange(e.target.checked ? [...valor, k] : valor.filter((x) => x !== k))}
+          />
+          {ABSENCE_KIND_LABEL[k]}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 export function RvReducerEditor({
   regras, tiposPunicao, canEdit = true,
@@ -54,7 +87,7 @@ export function RvReducerEditor({
   const [novoAberto, setNovoAberto] = useState(false);
   const [nome, setNome] = useState("");
   const [fonte, setFonte] = useState<Enums<"rv_reducer_source">>("absence");
-  const [kind, setKind] = useState<Enums<"absence_kind">>("atestado");
+  const [kinds, setKinds] = useState<Enums<"absence_kind">[]>(["atestado"]);
   const [tipoId, setTipoId] = useState("");
   const [erro, setErro] = useState("");
 
@@ -64,7 +97,7 @@ export function RvReducerEditor({
       const r = await createReducerRule({
         name: nome,
         source: fonte,
-        absence_kind: fonte === "absence" ? kind : null,
+        absence_kinds: fonte === "absence" ? kinds : null,
         sanction_type_id: fonte === "sanction" ? (tipoId || null) : null,
       });
       if (r.error) { setErro(r.error); return; }
@@ -109,10 +142,8 @@ export function RvReducerEditor({
               </div>
               {fonte === "absence" ? (
                 <div>
-                  <label className="label">Tipo de ausência</label>
-                  <select className="select" value={kind} onChange={(e) => setKind(e.target.value as Enums<"absence_kind">)} style={{ width: "auto" }}>
-                    {KINDS.map((k) => <option key={k} value={k}>{ABSENCE_KIND_LABEL[k]}</option>)}
-                  </select>
+                  <label className="label">Soma os dias de</label>
+                  <TiposDoMotivo valor={kinds} onChange={setKinds} />
                 </div>
               ) : (
                 <div>
@@ -142,7 +173,7 @@ export function RvReducerEditor({
               key={r.id}
               regra={r}
               origem={r.fonte === "absence"
-                ? `Dias de ${(ABSENCE_KIND_LABEL[r.absenceKind ?? "ferias"] ?? "").toLowerCase()} no mês`
+                ? `Dias de ${listaDeTipos(r.absenceKinds)} no mês${r.absenceKinds.length > 1 ? ", somados numa faixa só" : ""}`
                 : `Ocorrências de ${nomeTipo(r.sanctionTypeId)} no mês`}
               canEdit={canEdit}
             />
@@ -160,6 +191,18 @@ function Motivo({ regra, origem, canEdit }: { regra: RegraRow; origem: string; c
   const [max, setMax] = useState("");
   const [pct, setPct] = useState("");
   const [erro, setErro] = useState("");
+  const [tipos, setTipos] = useState<Enums<"absence_kind">[]>(regra.absenceKinds);
+  const tiposMudaram = [...tipos].sort().join() !== [...regra.absenceKinds].sort().join();
+
+  const salvarTipos = () => {
+    setErro("");
+    start(async () => {
+      const r = await updateReducerRuleKinds(regra.id, tipos);
+      if (r.error) { setErro(r.error); return; }
+      toast.success("Tipos do motivo atualizados.");
+      router.refresh();
+    });
+  };
 
   const somar = () => {
     setErro("");
@@ -217,6 +260,18 @@ function Motivo({ regra, origem, canEdit }: { regra: RegraRow; origem: string; c
       </div>
 
       <div style={{ padding: "0.7rem 0.95rem" }}>
+        {regra.fonte === "absence" && canEdit && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 0.9rem", alignItems: "center", marginBottom: "0.7rem" }}>
+            <span className="label" style={{ margin: 0 }}>Soma os dias de</span>
+            <TiposDoMotivo valor={tipos} onChange={setTipos} disabled={pending} />
+            {tiposMudaram && (
+              <>
+                <button type="button" className="btn btn-primary btn-sm" disabled={pending || tipos.length === 0} onClick={salvarTipos}>Salvar tipos</button>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={pending} onClick={() => setTipos(regra.absenceKinds)}>Desfazer</button>
+              </>
+            )}
+          </div>
+        )}
         {regra.faixas.length === 0 ? (
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
             Sem faixas: este motivo não corta nada até você definir pelo menos uma.

@@ -58,7 +58,7 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
     // 1000 do PostgREST tiraria descontos do fechamento sem avisar
     fetchAll(() => admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenantId).order("id")),
     fetchAll(() => admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenantId).order("id")),
-    admin.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenantId).eq("active", true).order("sort"),
+    admin.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id").eq("tenant_id", tenantId).eq("active", true).order("sort"),
     admin.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenantId).order("min_qtd"),
   ]);
 
@@ -106,7 +106,7 @@ async function retratoDaCompetencia(tenantId: string, period: string) {
   const regras: RegraRedutor[] = (regrasRaw ?? [])
     .map((r) => ({
       id: r.id, nome: r.name, fonte: r.source as "absence" | "sanction",
-      absenceKind: r.absence_kind, sanctionTypeId: r.sanction_type_id,
+      absenceKind: r.absence_kind, absenceKinds: r.absence_kinds ?? [], sanctionTypeId: r.sanction_type_id,
       faixas: faixasPorRegra.get(r.id) ?? [],
     }))
     .filter((r) => r.faixas.length > 0);

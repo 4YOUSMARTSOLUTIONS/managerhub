@@ -98,7 +98,7 @@ export default async function AbsenteismosPage() {
     // para a tela dizer o efeito REAL do tipo escolhido na remuneração
     // variável: um comportamento com faixa de redutor ativa corta por faixa e
     // não desconta os dias de novo na proporcionalidade
-    supabase.from("rv_reducer_rules").select("id, absence_kind").eq("tenant_id", tenant.id).eq("source", "absence").eq("active", true),
+    supabase.from("rv_reducer_rules").select("id, absence_kind, absence_kinds").eq("tenant_id", tenant.id).eq("source", "absence").eq("active", true),
     supabase.from("rv_reducer_bands").select("rule_id").eq("tenant_id", tenant.id),
   ]);
 
@@ -184,10 +184,11 @@ export default async function AbsenteismosPage() {
   // Regra sem faixa não corta nada, então só conta quem tem as duas coisas. É o
   // mesmo recorte que /metas faz antes de calcular.
   const regrasComFaixa = new Set((faixasRedutor ?? []).map((f) => f.rule_id));
+  // todos os tipos que a regra soma, não só o principal (LUIZ, 16/11/2026)
   const kindsComRedutor = [...new Set(
     (regrasRedutor ?? [])
-      .filter((r) => regrasComFaixa.has(r.id) && r.absence_kind)
-      .map((r) => r.absence_kind as NonNullable<typeof r.absence_kind>),
+      .filter((r) => regrasComFaixa.has(r.id))
+      .flatMap((r) => (r.absence_kinds?.length ? r.absence_kinds : r.absence_kind ? [r.absence_kind] : [])),
   )];
 
   return (

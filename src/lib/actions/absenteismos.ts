@@ -830,13 +830,15 @@ export async function gerarRelatorioAbsenteismo(
         p_units: unidades && unidades.length ? unidades : null,
       }),
       // o mesmo recorte da tela: regra de ausência ativa e COM faixa
-      supabase.from("rv_reducer_rules").select("id, absence_kind").eq("tenant_id", tenantId).eq("source", "absence").eq("active", true),
+      supabase.from("rv_reducer_rules").select("id, absence_kind, absence_kinds").eq("tenant_id", tenantId).eq("source", "absence").eq("active", true),
       supabase.from("rv_reducer_bands").select("rule_id").eq("tenant_id", tenantId),
     ]);
     if (error) return { error: error.message };
     const comFaixa = new Set((faixasRedutor ?? []).map((f) => f.rule_id));
     const kindsComRedutor = [...new Set(
-      (regrasRedutor ?? []).filter((r) => comFaixa.has(r.id) && r.absence_kind).map((r) => r.absence_kind as string),
+      (regrasRedutor ?? [])
+        .filter((r) => comFaixa.has(r.id))
+        .flatMap((r) => (r.absence_kinds?.length ? r.absence_kinds : r.absence_kind ? [r.absence_kind] : []) as string[]),
     )];
     const STATUS_DA_SITUACAO: Record<string, Enums<"absenteismo_status">> = {
       "Não comparecimento": "aberto", "Aguardando o RH": "pendente", Aprovado: "aprovado", Reprovado: "reprovado",

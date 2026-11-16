@@ -160,7 +160,7 @@ export default async function GoalsPage() {
       ? admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenant.id).in("user_id", ownerIds)
       : Promise.resolve({ data: [] as { user_id: string; sanction_type_id: string; occurred_on: string }[] }),
     // Regras e faixas são configuração: leitura de membro, então cliente normal.
-    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, sanction_type_id").eq("tenant_id", tenant.id).eq("active", true).order("sort"),
+    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id").eq("tenant_id", tenant.id).eq("active", true).order("sort"),
     supabase.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
     // Competências fechadas e o retrato de cada uma. Leitura de membro nas duas,
     // de propósito: se só o administrador enxergasse o cadeado, o colaborador
@@ -244,7 +244,7 @@ export default async function GoalsPage() {
   const regrasRedutor: RegraRedutor[] = (regrasRaw ?? [])
     .map((r) => ({
       id: r.id, nome: r.name, fonte: r.source as "absence" | "sanction",
-      absenceKind: r.absence_kind, sanctionTypeId: r.sanction_type_id,
+      absenceKind: r.absence_kind, absenceKinds: r.absence_kinds ?? [], sanctionTypeId: r.sanction_type_id,
       faixas: faixasPorRegra.get(r.id) ?? [],
     }))
     .filter((r) => r.faixas.length > 0); // motivo sem faixa não corta nada

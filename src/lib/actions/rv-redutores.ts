@@ -272,6 +272,8 @@ export type RuleInput = {
   name: string;
   source: Enums<"rv_reducer_source">;
   absence_kind?: Enums<"absence_kind"> | null;
+  /** todos os tipos cujos dias somam no motivo; o primeiro vira o principal */
+  absence_kinds?: Enums<"absence_kind">[] | null;
   /** null com source `sanction` = qualquer punição */
   sanction_type_id?: string | null;
 };
@@ -281,16 +283,43 @@ export async function createReducerRule(input: RuleInput): Promise<ActionState> 
     const { supabase, tenantId } = await dpActionContext();
     const name = (input.name ?? "").trim();
     if (!name) return { error: "Dê um nome ao motivo." };
-    if (input.source === "absence" && !input.absence_kind) {
-      return { error: "Escolha o tipo de ausência que este motivo observa." };
+    const kinds = [...new Set([...(input.absence_kinds ?? []), ...(input.absence_kind ? [input.absence_kind] : [])])];
+    if (input.source === "absence" && kinds.length === 0) {
+      return { error: "Escolha pelo menos um tipo de ausência para este motivo." };
     }
     const { error } = await supabase.from("rv_reducer_rules").insert({
       tenant_id: tenantId,
       name,
       source: input.source,
-      absence_kind: input.source === "absence" ? input.absence_kind ?? null : null,
+      absence_kind: input.source === "absence" ? kinds[0] : null,
+      absence_kinds: input.source === "absence" ? kinds : [],
       sanction_type_id: input.source === "sanction" ? input.sanction_type_id ?? null : null,
     });
+    if (error) return { error: mensagem(error) };
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Os tipos de ausência cujos dias somam num motivo (LUIZ, 16/11/2026). Um tipo
+ * só pode estar em um motivo: o banco recusa (gatilho `guard_rv_reducer_tipos`)
+ * para o mesmo dia não cortar duas vezes, e a frase dele chega à tela.
+ */
+export async function updateReducerRuleKinds(id: string, kindsBrutos: Enums<"absence_kind">[]): Promise<ActionState> {
+  try {
+    const { supabase } = await dpActionContext();
+    const kinds = [...new Set(kindsBrutos ?? [])];
+    if (kinds.length === 0) return { error: "Escolha pelo menos um tipo de ausência." };
+    const { data: atual } = await supabase
+      .from("rv_reducer_rules").select("source, absence_kind").eq("id", id).maybeSingle();
+    if (!atual || atual.source !== "absence") return { error: "Motivo não encontrado." };
+    // o principal continua o mesmo se ainda estiver na lista
+    const principal = atual.absence_kind && kinds.includes(atual.absence_kind) ? atual.absence_kind : kinds[0];
+    const { error } = await supabase
+      .from("rv_reducer_rules").update({ absence_kind: principal, absence_kinds: kinds }).eq("id", id);
     if (error) return { error: mensagem(error) };
     revalidar();
     return { ok: true };
