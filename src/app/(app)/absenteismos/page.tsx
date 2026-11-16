@@ -178,6 +178,7 @@ export default async function AbsenteismosPage() {
     cancelNote: l.cancel_note,
     emailStatus: l.email_status,
     emailAt: l.email_at,
+    importado: l.importado,
   }));
 
   // Regra sem faixa não corta nada, então só conta quem tem as duas coisas. É o
@@ -211,6 +212,8 @@ export default async function AbsenteismosPage() {
         meuId={user.id}
         podeDecidir={ehDp}
         podeCancelarAprovado={role === "owner" || role === "admin"}
+        // só o proprietário (LUIZ, 16/11/2026); a action e a RPC conferem de novo
+        podeImportarHistorico={role === "owner"}
       />
     </div>
   );
