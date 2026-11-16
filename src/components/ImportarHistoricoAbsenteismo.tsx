@@ -27,8 +27,18 @@ import {
  * no servidor em modo simulação (faz tudo e desfaz). Assim o "ficam de fora"
  * inclui o que só o banco sabe, como o período que cruza com férias.
  */
-export function ImportarHistoricoAbsenteismo() {
-  const [aberto, setAberto] = useState(false);
+export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }: {
+  /** aberto pelo menu Planilhas: sem botão próprio */
+  aberto?: boolean;
+  onFechar?: () => void;
+} = {}) {
+  const controlado = abertoDeFora !== undefined;
+  const [abertoAqui, setAbertoAqui] = useState(false);
+  const aberto = controlado ? abertoDeFora : abertoAqui;
+  const setAberto = (v: boolean) => {
+    if (controlado) { if (!v) onFechar?.(); }
+    else setAbertoAqui(v);
+  };
   const { lendo, ler } = useLeituraDePlanilha();
   const [linhas, setLinhas] = useState<LinhaHistorico[]>([]);
   const [ignoradas, setIgnoradas] = useState(0);
@@ -238,9 +248,11 @@ export function ImportarHistoricoAbsenteismo() {
 
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAberto(true)}>
-        <IconImport /> Importar histórico
-      </button>
+      {!controlado && (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAberto(true)}>
+          <IconImport /> Importar histórico
+        </button>
+      )}
       <DetailModal
         open={aberto}
         onClose={fechar}

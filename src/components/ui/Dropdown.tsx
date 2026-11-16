@@ -23,6 +23,7 @@ export function Dropdown({
   largura = 260,
   alinharDireita = false,
   variante = "ghost",
+  pequeno = false,
   titulo,
   children,
 }: {
@@ -33,6 +34,8 @@ export function Dropdown({
   largura?: number;
   alinharDireita?: boolean;
   variante?: "ghost" | "primary";
+  /** `btn-sm`, para alinhar com barras que já usam botões pequenos */
+  pequeno?: boolean;
   titulo?: string;
   children: React.ReactNode | ((fechar: () => void) => React.ReactNode);
 }) {
@@ -60,7 +63,7 @@ export function Dropdown({
     <div ref={ref} style={{ position: "relative" }}>
       <button
         type="button"
-        className={`btn btn-${variante}`}
+        className={`btn btn-${variante}${pequeno ? " btn-sm" : ""}`}
         aria-expanded={aberto}
         aria-haspopup="true"
         title={titulo}

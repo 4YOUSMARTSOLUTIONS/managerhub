@@ -13,11 +13,23 @@ import { gerarRelatorioAbsenteismo } from "@/lib/actions/absenteismos";
  * é o mesmo do resto do sistema a partir daí (`downloadSheet`).
  */
 export function RelatorioAbsenteismoDialog({
-  unidades,
+  unidades, aberto: abertoDeFora, onFechar,
 }: {
   unidades: { id: string; name: string }[];
+  /**
+   * Aberto por fora (o menu Planilhas): sem botão próprio. O diálogo fica fora
+   * do menu porque fechar o menu desmontaria o que ele acabou de abrir.
+   */
+  aberto?: boolean;
+  onFechar?: () => void;
 }) {
-  const [aberto, setAberto] = useState(false);
+  const controlado = abertoDeFora !== undefined;
+  const [abertoAqui, setAbertoAqui] = useState(false);
+  const aberto = controlado ? abertoDeFora : abertoAqui;
+  const setAberto = (v: boolean) => {
+    if (controlado) { if (!v) onFechar?.(); }
+    else setAbertoAqui(v);
+  };
   const [de, setDe] = useState(inicioDoMes);
   const [ate, setAte] = useState(hoje);
   const [unidade, setUnidade] = useState("");
@@ -37,12 +49,14 @@ export function RelatorioAbsenteismoDialog({
 
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErro(""); setAberto(true); }}>
-        <FileSpreadsheet size={15} /> Relatório completo
-      </button>
+      {!controlado && (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErro(""); setAberto(true); }}>
+          <FileSpreadsheet size={15} /> Relatório completo
+        </button>
+      )}
 
       {aberto && (
-        <Dialogo titulo="Relatório de absenteísmo" onFechar={() => setAberto(false)}>
+        <Dialogo titulo="Relatório de absenteísmo" onFechar={() => { setErro(""); setAberto(false); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
               A planilha traz o lançamento inteiro, com CPF, CID e dados do atestado, para a folha e
@@ -75,7 +89,7 @@ export function RelatorioAbsenteismoDialog({
               <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={gerar}>
                 {pendente ? "Gerando…" : "Baixar planilha"}
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAberto(false)}>Fechar</button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setErro(""); setAberto(false); }}>Fechar</button>
             </div>
           </div>
         </Dialogo>

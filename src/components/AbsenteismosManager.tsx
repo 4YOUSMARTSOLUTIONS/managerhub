@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Ban, Check, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
+  AlertTriangle, Ban, Check, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
@@ -12,6 +12,8 @@ import { DetailModal } from "@/components/ui/DetailModal";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
+import { Dropdown } from "@/components/ui/Dropdown";
+import { IconImport } from "@/components/ui/ImpExpIcons";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
 import { formatDate, normalizar, shortName } from "@/lib/format";
@@ -242,6 +244,9 @@ export function AbsenteismosManager({
   const [cancelando, setCancelando] = useState<AbsenteismoRow | null>(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
+  // os diálogos do menu Planilhas moram fora dele: fechar o menu os desmontaria
+  const [relatorioAberto, setRelatorioAberto] = useState(false);
+  const [importarAberto, setImportarAberto] = useState(false);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
 
@@ -535,26 +540,54 @@ export function AbsenteismosManager({
           value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 340 }}
         />
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
-          {/* Sem CID nem médico na planilha: o arquivo sai do sistema e vai
-              parar em pasta compartilhada, e-mail e pen drive. */}
-          <ExportButton
-            filename="absenteismos.xlsx"
-            sheetName="Absenteísmos"
-            headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
-            rows={rows.map((r) => [
-              r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
-              r.unitName ?? "", r.occurredOn, horarioDaLinha(r), r.typeName ?? "",
-              r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
-              r.startDate ?? "", r.endDate ?? "", duracao(r),
-              r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
-              ABSENTEISMO_STATUS[r.status], r.importado ? "Importação" : r.createdByName ?? "",
-              r.decidedByName ?? "", r.decisionNote ?? "",
-            ])}
-          />
-          {/* O relatório completo (CPF, CID, médico) é de quem decide: a
-              exportação acima continua sendo a do gestor, sem esses campos. */}
-          {podeDecidir && <RelatorioAbsenteismoDialog unidades={unidades} />}
-          {podeImportarHistorico && <ImportarHistoricoAbsenteismo />}
+          {(() => {
+            /* Sem CID nem médico na planilha: o arquivo sai do sistema e vai
+               parar em pasta compartilhada, e-mail e pen drive. */
+            const exportar = (
+              <ExportButton
+                filename="absenteismos.xlsx"
+                sheetName="Absenteísmos"
+                headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
+                rows={rows.map((r) => [
+                  r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
+                  r.unitName ?? "", r.occurredOn, horarioDaLinha(r), r.typeName ?? "",
+                  r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
+                  r.startDate ?? "", r.endDate ?? "", duracao(r),
+                  r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
+                  ABSENTEISMO_STATUS[r.status], r.importado ? "Importação" : r.createdByName ?? "",
+                  r.decidedByName ?? "", r.decisionNote ?? "",
+                ])}
+              />
+            );
+            // o gestor só exporta: um menu de um item só seria um clique a mais
+            if (!podeDecidir && !podeImportarHistorico) return exportar;
+            // Planilhas num menu só (LUIZ, 16/11/2026): três botões lado a lado
+            // pesavam na barra
+            return (
+              <Dropdown rotulo="Planilhas" pequeno alinharDireita largura={250}>
+                {(fechar) => (
+                  <>
+                    {exportar}
+                    {/* O relatório completo (CPF, CID, médico) é de quem decide: a
+                        exportação acima continua sendo a do gestor, sem esses campos. */}
+                    {podeDecidir && (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRelatorioAberto(true); fechar(); }}>
+                        <FileSpreadsheet size={15} /> Relatório completo
+                      </button>
+                    )}
+                    {podeImportarHistorico && (
+                      <>
+                        <div style={{ borderTop: "1px solid var(--border)", margin: "0.15rem 0" }} />
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setImportarAberto(true); fechar(); }}>
+                          <IconImport /> Importar histórico
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </Dropdown>
+            );
+          })()}
           <button
             type="button" className="btn btn-primary btn-sm"
             onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "", emHoras: false, horaInicio: "", horaFim: "", comMotivo: false }); }}
@@ -563,6 +596,13 @@ export function AbsenteismosManager({
           </button>
         </div>
       </div>
+
+      {podeDecidir && (
+        <RelatorioAbsenteismoDialog unidades={unidades} aberto={relatorioAberto} onFechar={() => setRelatorioAberto(false)} />
+      )}
+      {podeImportarHistorico && (
+        <ImportarHistoricoAbsenteismo aberto={importarAberto} onFechar={() => setImportarAberto(false)} />
+      )}
 
       {erro && !novo && !confirmando && !aberto && (
         <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>
