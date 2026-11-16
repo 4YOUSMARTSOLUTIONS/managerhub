@@ -848,8 +848,8 @@ export async function gerarRelatorioAbsenteismo(
     // datas e "Horas" traz o total da ausência de horas, que "Dias" não mostra.
     //
     // A ORDEM é a do LUIZ (16/11/2026), até "Situação"; depois, Horas, Efeito na
-    // RV e Observação da decisão. Comportamento, Lançado por e Decidido por
-    // saíram a pedido dele (o comportamento repetia o tipo de afastamento).
+    // RV e o trâmite. Comportamento saiu a pedido dele: repetia o tipo de
+    // afastamento.
     const headers = [
       "Unidade", "Código do colaborador", "Nome do colaborador", "CPF", "Setor", "Subsetor", "Função",
       "Data", "Mês", "Data início", "Data fim", "Dias de atestado", "Data retorno",
@@ -857,7 +857,7 @@ export async function gerarRelatorioAbsenteismo(
       "CID", "Descrição do CID", "Categoria CID", "Descrição da categoria",
       "Nome do médico", "CRM", "Hospital", "Acidente de trabalho", "Falta abonada", "Acompanhado",
       "Parentesco do falecido", "Alerta INSS", "Situação",
-      "Horas", "Efeito na RV", "Observação da decisão",
+      "Horas", "Efeito na RV", "Lançado por", "Decidido por", "Observação da decisão",
     ];
     const rows = (data ?? []).map((r) => [
       r.unidade, r.matricula, r.colaborador, r.cpf, r.setor, r.subsetor, r.funcao,
@@ -875,7 +875,7 @@ export async function gerarRelatorioAbsenteismo(
         // com motivo, "dias" vazio só acontece na ausência de horas
         horas: r.dias == null,
       }, kindsComRedutor),
-      r.observacao_decisao,
+      r.lancado_por, r.decidido_por, r.observacao_decisao,
     ]);
     return { headers, rows };
   } catch (e) {
