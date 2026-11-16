@@ -547,19 +547,17 @@ export function AbsenteismosManager({
                 colunasDeData={["Dia", "Início", "Término"]}
                 // mesma sequência do Relatório completo (LUIZ, 16/11/2026), com
                 // as colunas que o gestor pode ver
-                headers={["Unidade", "Matrícula", "Colaborador", "Setor", "Função", "Dia", "Início", "Término", "Duração", "Horário inicial", "Horário final", "Motivo", "Situação", "Comportamento", "Efeito na RV", "Lançado por", "Decidido por", "Observação da decisão"]}
+                headers={["Unidade", "Matrícula", "Colaborador", "Setor", "Função", "Dia", "Início", "Término", "Duração", "Horário inicial", "Horário final", "Motivo", "Situação", "Efeito na RV", "Observação da decisão"]}
                 rows={rows.map((r) => {
                   const [horaIni, horaFim] = horariosDaLinha(r);
                   return [
                     r.unitName ?? "", r.employeeCode ?? "", r.fullName ?? "", r.departmentName ?? "", r.positionName ?? "",
                     r.occurredOn, r.startDate ?? "", r.endDate ?? "", duracao(r), horaIni, horaFim,
                     r.typeName ?? "", ABSENTEISMO_STATUS[r.status],
-                    r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
                     efeitoNaRv({
                       status: r.status, kind: r.kind, descontaRv: r.discountsRv, abonada: r.waived, horas: r.partialDay,
                     }, kindsComRedutor),
-                    r.importado ? "Importação" : r.createdByName ?? "",
-                    r.decidedByName ?? "", r.decisionNote ?? "",
+                    r.decisionNote ?? "",
                   ];
                 })}
               />
