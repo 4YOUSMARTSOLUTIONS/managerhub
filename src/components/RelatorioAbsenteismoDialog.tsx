@@ -42,7 +42,9 @@ export function RelatorioAbsenteismoDialog({
       const r = await gerarRelatorioAbsenteismo(de, ate, unidade ? [unidade] : undefined);
       if (r.error || !r.headers || !r.rows) { setErro(r.error ?? "Não foi possível gerar."); return; }
       if (r.rows.length === 0) { setErro("Nenhum lançamento no período escolhido."); return; }
-      await downloadSheet(`absenteismo_${de}_a_${ate}.xlsx`, "Absenteísmo", r.headers, r.rows);
+      await downloadSheet(`absenteismo_${de}_a_${ate}.xlsx`, "Absenteísmo", r.headers, r.rows, {
+        colunasDeData: ["Data", "Data início", "Data fim", "Data retorno"],
+      });
       setAberto(false);
     });
   };
@@ -60,7 +62,8 @@ export function RelatorioAbsenteismoDialog({
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
               A planilha traz o lançamento inteiro, com CPF, CID e dados do atestado, para a folha e
-              o eSocial. Ela sai do sistema: guarde em pasta com acesso restrito.
+              o eSocial. Ela sai do sistema: guarde em pasta com acesso restrito. Entra todo lançamento
+              em curso em algum dia do período, inclusive o que começou antes dele.
             </p>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.8rem" }}>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { IconExport } from "@/components/ui/ImpExpIcons";
-import { downloadSheet } from "@/lib/export-xlsx";
+import { downloadSheet, type OpcoesDaPlanilha } from "@/lib/export-xlsx";
 
 /** Botão de exportação em .xlsx dos dados já cadastrados (colunas espelham o modelo de importação). */
 export function ExportButton({
@@ -12,6 +12,7 @@ export function ExportButton({
   rows,
   label = "Exportar planilha",
   small = true,
+  colunasDeData,
 }: {
   filename: string;
   sheetName?: string;
@@ -19,6 +20,8 @@ export function ExportButton({
   rows: (string | number | null)[][];
   label?: string;
   small?: boolean;
+  /** colunas com data AAAA-MM-DD que saem como data DD/MM/AAAA (ver OpcoesDaPlanilha) */
+  colunasDeData?: OpcoesDaPlanilha["colunasDeData"];
 }) {
   const empty = rows.length === 0;
   // a geração da planilha virou assíncrona (a lib só é buscada no clique), então
@@ -27,7 +30,7 @@ export function ExportButton({
   async function exportar() {
     setGerando(true);
     try {
-      await downloadSheet(filename, sheetName, headers, rows);
+      await downloadSheet(filename, sheetName, headers, rows, { colunasDeData });
     } finally {
       setGerando(false);
     }

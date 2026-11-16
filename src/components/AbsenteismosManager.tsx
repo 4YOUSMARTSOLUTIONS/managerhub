@@ -541,6 +541,7 @@ export function AbsenteismosManager({
               <ExportButton
                 filename="absenteismos.xlsx"
                 sheetName="Absenteísmos"
+                colunasDeData={["Dia", "Início", "Término"]}
                 headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
                 rows={rows.map((r) => [
                   r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
