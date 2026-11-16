@@ -554,17 +554,17 @@ export function AbsenteismosManager({
                 ])}
               />
             );
-            // o gestor só exporta: um menu de um item só seria um clique a mais
-            if (!podeDecidir && !podeImportarHistorico) return exportar;
-            // Planilhas num menu só (LUIZ, 16/11/2026): três botões lado a lado
+            // A exportação simples é a do GESTOR, que não vê CPF nem dado de
+            // saúde. Quem decide (proprietário, administrador, RH) usa só o
+            // Relatório completo, que tem tudo o que a simples tinha (LUIZ,
+            // 16/11/2026): as duas lado a lado só confundiam.
+            if (!podeDecidir) return exportar;
+            // Planilhas num menu só (LUIZ, 16/11/2026): botões lado a lado
             // pesavam na barra
             return (
               <Dropdown rotulo="Planilhas" pequeno alinharDireita largura={250}>
                 {(fechar) => (
                   <>
-                    {exportar}
-                    {/* O relatório completo (CPF, CID, médico) é de quem decide: a
-                        exportação acima continua sendo a do gestor, sem esses campos. */}
                     {podeDecidir && (
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRelatorioAberto(true); fechar(); }}>
                         <FileSpreadsheet size={15} /> Relatório completo

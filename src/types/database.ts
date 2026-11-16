@@ -2245,6 +2245,9 @@ export type Database = {
           horario: string | null; primeiro_dia: string | null; acidente_trabalho: string; tipo_atestado: string | null
           abonada: string; acompanhado: string | null; parentesco: string | null
           alerta_inss: string | null; situacao: string
+          funcao: string | null; comportamento: Database["public"]["Enums"]["absence_kind"] | null
+          desconta_rv: string | null; horas: string | null
+          lancado_por: string | null; decidido_por: string | null; observacao_decisao: string | null
         }[]
       }
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }

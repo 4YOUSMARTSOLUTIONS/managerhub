@@ -9,6 +9,7 @@ import {
 } from "@/lib/absenteismo-email";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import { ABSENCE_KIND_LABEL } from "@/lib/constants";
 import { wantsActive } from "@/lib/catalogGuard";
 import { lerAtestadoNaOpenAI, MIMES_LEITURA_IA, type AtestadoLidoPorIA } from "@/lib/atestado-ia";
 
@@ -829,21 +830,28 @@ export async function gerarRelatorioAbsenteismo(
     });
     if (error) return { error: error.message };
 
+    // A planilha única do DP (LUIZ, 16/11/2026): ganhou as colunas que só a
+    // exportação simples tinha (função, comportamento, desconta RV, lançado e
+    // decidido por, observação da decisão), o "Horário" foi para perto das
+    // datas e "Horas" traz o total da ausência de horas, que "Dias" não mostra.
     const headers = [
-      "Unidade", "Setor", "Subsetor", "Data", "Mês", "Código do colaborador", "CPF",
-      "Nome do colaborador", "Data início", "Data fim", "Dias de atestado", "Data retorno",
-      "Tipo de afastamento", "Observação", "CID", "Descrição do CID", "Categoria CID",
-      "Descrição da categoria", "Nome do médico", "CRM", "Hospital", "Horário",
+      "Unidade", "Setor", "Subsetor", "Função", "Data", "Mês", "Código do colaborador", "CPF",
+      "Nome do colaborador", "Data início", "Data fim", "Horário", "Horas", "Dias de atestado", "Data retorno",
+      "Tipo de afastamento", "Comportamento", "Desconta RV", "Observação", "CID", "Descrição do CID", "Categoria CID",
+      "Descrição da categoria", "Nome do médico", "CRM", "Hospital",
       "Acidente de trabalho", "Tipo de atestado", "Falta abonada", "Acompanhado",
       "Parentesco do falecido", "Alerta INSS", "Situação",
+      "Lançado por", "Decidido por", "Observação da decisão",
     ];
     const rows = (data ?? []).map((r) => [
-      r.unidade, r.setor, r.subsetor, r.data, r.mes, r.matricula, r.cpf, r.colaborador,
-      r.inicio, r.fim, r.dias, r.retorno, r.tipo, r.observacao,
+      r.unidade, r.setor, r.subsetor, r.funcao, r.data, r.mes, r.matricula, r.cpf, r.colaborador,
+      r.inicio, r.fim, r.horario, r.horas, r.dias, r.retorno,
+      r.tipo, r.comportamento ? ABSENCE_KIND_LABEL[r.comportamento] : null, r.desconta_rv, r.observacao,
       r.cid, r.cid_descricao, r.cid_categoria, r.cid_categoria_descricao,
-      r.medico, r.crm, r.hospital, r.horario,
+      r.medico, r.crm, r.hospital,
       r.acidente_trabalho, r.tipo_atestado, r.abonada, r.acompanhado,
       r.parentesco, r.alerta_inss, r.situacao,
+      r.lancado_por, r.decidido_por, r.observacao_decisao,
     ]);
     return { headers, rows };
   } catch (e) {
