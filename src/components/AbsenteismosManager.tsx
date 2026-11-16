@@ -376,17 +376,11 @@ export function AbsenteismosManager({
       <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? <span className="soft">–</span>}</td>
       <td className="muted" style={{ fontSize: "0.82rem" }}>{r.positionName ?? <span className="soft">–</span>}</td>
 
+      {/* Só o motivo (LUIZ, 16/11/2026): o comportamento embaixo repetia o
+          nome ("Atestado / Atestado") e quebrava a regra de uma informação por
+          coluna. Ele continua na ficha e na planilha exportada. */}
       <td>
-        {r.typeName ? (
-          <>
-            <span>{r.typeName}</span>
-            {r.kind && (
-              <div style={{ marginTop: "0.2rem" }}>
-                <Badge variant="quiet" tone={ABSENCE_KIND_TONE[r.kind]}>{ABSENCE_KIND_LABEL[r.kind]}</Badge>
-              </div>
-            )}
-          </>
-        ) : <span className="soft">Motivo não confirmado</span>}
+        {r.typeName ? <span>{r.typeName}</span> : <span className="soft">Motivo não confirmado</span>}
       </td>
       {/* Sem efetivação ainda não há período, e a coluna ficaria vazia numa
           linha que TEM data: o dia do lançamento entra aqui, apagado, para a
