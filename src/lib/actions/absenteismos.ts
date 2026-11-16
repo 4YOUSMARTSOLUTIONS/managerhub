@@ -62,6 +62,8 @@ function mensagem(e: { code?: string; message?: string }): string {
   if (msg.includes("absenteismo_dest_geral_uk") || msg.includes("absenteismo_dest_unidade_uk")) {
     return "Este e-mail já está na lista para essa unidade.";
   }
+  if (msg.includes("absenteismo_dest_hierarquia_uk")) return "Essa hierarquia, com esse alcance, já está na lista para essa unidade.";
+  if (msg.includes("absenteismo_dest_cargo_uk")) return "Esse cargo já está na lista para essa unidade.";
   return msg || "Não foi possível salvar.";
 }
 
@@ -150,11 +152,20 @@ export async function deleteAbsenceType(formData: FormData): Promise<void> {
 // Destinatários do comunicado
 // ============================================================================
 
+/**
+ * Uma regra do comunicado (LUIZ, 16/11/2026): um e-mail avulso, um nível de
+ * hierarquia (só o superior do colaborador ou todos da unidade do lançamento)
+ * ou um cargo. O gestor e quem lançou recebem sempre, fora das regras.
+ */
 export type DestinatarioInput = {
   id?: string;
+  tipo: "email" | "hierarquia" | "cargo";
   email: string;
   name: string;
-  /** vazio = recebe de todas as unidades */
+  hierarchyLevelId: string;
+  alcance: "cadeia" | "unidade";
+  positionId: string;
+  /** vazio = vale para os lançamentos de todas as unidades */
   unitId: string;
 };
 
@@ -163,12 +174,31 @@ export async function saveEmailRecipient(input: DestinatarioInput): Promise<Acti
     const { supabase, tenantId } = await dpActionContext();
 
     const email = input.email.trim().toLowerCase();
-    if (!email) return { error: "Informe o e-mail." };
+    if (input.tipo === "email" && !email) return { error: "Informe o e-mail." };
+    if (input.tipo === "hierarquia" && !input.hierarchyLevelId) return { error: "Escolha a hierarquia." };
+    if (input.tipo === "cargo" && !input.positionId) return { error: "Escolha o cargo." };
+    if (input.tipo === "hierarquia" && input.alcance !== "cadeia" && input.alcance !== "unidade") {
+      return { error: "Escolha quem da hierarquia recebe." };
+    }
+
+    // o catálogo escolhido precisa ser desta empresa (a RLS da regra só olha o tenant dela)
+    if (input.tipo === "hierarquia") {
+      const { data } = await supabase.from("hierarchy_levels").select("id").eq("id", input.hierarchyLevelId).eq("tenant_id", tenantId).maybeSingle();
+      if (!data) return { error: "Hierarquia não encontrada." };
+    }
+    if (input.tipo === "cargo") {
+      const { data } = await supabase.from("positions").select("id").eq("id", input.positionId).eq("tenant_id", tenantId).maybeSingle();
+      if (!data) return { error: "Cargo não encontrado." };
+    }
 
     const campos = {
       tenant_id: tenantId,
-      email,
-      name: input.name.trim() || null,
+      tipo: input.tipo,
+      email: input.tipo === "email" ? email : null,
+      name: input.tipo === "email" ? input.name.trim() || null : null,
+      hierarchy_level_id: input.tipo === "hierarquia" ? input.hierarchyLevelId : null,
+      alcance: input.tipo === "hierarquia" ? input.alcance : null,
+      position_id: input.tipo === "cargo" ? input.positionId : null,
       unit_id: input.unitId || null,
       updated_at: new Date().toISOString(),
     };

@@ -822,9 +822,12 @@ export type Database = {
       // organograma (portaria, contabilidade, transporte). `unit_id` nulo recebe
       // de todas as unidades.
       absenteismo_email_recipients: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; email: string; name: string | null; active: boolean; created_at: string; updated_at: string }
-        Insert: { id?: string; tenant_id: string; unit_id?: string | null; email: string; name?: string | null; active?: boolean; created_at?: string; updated_at?: string }
-        Update: { id?: string; tenant_id?: string; unit_id?: string | null; email?: string; name?: string | null; active?: boolean; created_at?: string; updated_at?: string }
+        // Desde 16/11/2026 cada linha é uma regra: `email` (avulso), `hierarquia`
+        // (nível + alcance cadeia/unidade) ou `cargo`. Quem recebe de fato é
+        // resolvido no envio pela RPC `absenteismo_destinatarios`.
+        Row: { id: string; tenant_id: string; unit_id: string | null; tipo: "email" | "hierarquia" | "cargo"; email: string | null; name: string | null; hierarchy_level_id: string | null; alcance: "cadeia" | "unidade" | null; position_id: string | null; active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; unit_id?: string | null; tipo?: "email" | "hierarquia" | "cargo"; email?: string | null; name?: string | null; hierarchy_level_id?: string | null; alcance?: "cadeia" | "unidade" | null; position_id?: string | null; active?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; tenant_id?: string; unit_id?: string | null; tipo?: "email" | "hierarquia" | "cargo"; email?: string | null; name?: string | null; hierarchy_level_id?: string | null; alcance?: "cadeia" | "unidade" | null; position_id?: string | null; active?: boolean; created_at?: string; updated_at?: string }
         Relationships: []
       }
       // O PROCESSO do absenteísmo, separado do fato acima. `employee_absences`
@@ -2102,6 +2105,10 @@ export type Database = {
       absenteismo_atestado: { Args: { p_id: string }; Returns: Json }
       // CPF do colaborador do lançamento, para o "Ver" (mesma guarda de quem vê o lançamento)
       absenteismo_cpf: { Args: { p_id: string }; Returns: string | null }
+      // quem recebe o comunicado deste lançamento: só o service role (traz e-mail pessoal)
+      absenteismo_destinatarios: { Args: { p_lancamento: string }; Returns: { email: string; nome: string | null; origem: string }[] }
+      // quem cada regra alcança hoje, sem o e-mail (regra_id nulo = os gestores); owner/admin/RH
+      absenteismo_alcance_das_regras: { Args: { p_tenant: string }; Returns: { regra_id: string | null; user_id: string; nome: string; tem_email: boolean }[] }
       // Férias. Os períodos viajam em jsonb [{inicio, fim, abono, decimo}];
       // `p_hoje` vem do cliente porque o servidor está em UTC (lição do
       // occurred_on do absenteísmo). Só a efetivação escreve em

@@ -32,7 +32,7 @@ import { FeriasConfigManager } from "@/components/FeriasConfigManager";
 import { SanctionsManager, type SanctionRow } from "@/components/SanctionsManager";
 import { InfractionTypesManager, type InfracaoRow } from "@/components/InfractionTypesManager";
 import { AbsenceTypesManager, type TipoAbsenteismoRow } from "@/components/AbsenceTypesManager";
-import { AbsenteismoRecipientsManager, type DestinatarioRow } from "@/components/AbsenteismoRecipientsManager";
+import { AbsenteismoRecipientsManager, type DestinatarioRow, type PessoaAlcancada } from "@/components/AbsenteismoRecipientsManager";
 import { CidTableViewer } from "@/components/CidTableViewer";
 import { SegCatalogoManager } from "@/components/SegCatalogoManager";
 import { SegEquipeManager } from "@/components/SegEquipeManager";
@@ -137,6 +137,13 @@ export default async function SettingsPage({
     console.error("[acesso] regras", e instanceof Error ? e.message : e);
     return null;
   });
+  // quem cada regra do comunicado de absenteísmo alcança hoje (só o DP vê a lista)
+  const alcanceP = canEditDP
+    ? supabase.rpc("absenteismo_alcance_das_regras", { p_tenant: tenant.id }).then((r) => {
+        if (r.error) console.error("[absenteismo] alcance das regras", r.error.message);
+        return r.data ?? [];
+      })
+    : Promise.resolve([]);
   const sessaoP = lerRegrasDeSessao(supabase, tenant.id).catch((e: unknown) => {
     console.error("[sessao] regras", e instanceof Error ? e.message : e);
     return null;
@@ -238,9 +245,9 @@ export default async function SettingsPage({
     // Gerencial esta consulta volta vazia em vez de erro
     supabase
       .from("absenteismo_email_recipients")
-      .select("id, email, name, unit_id, active")
+      .select("id, tipo, email, name, hierarchy_level_id, alcance, position_id, unit_id, active")
       .eq("tenant_id", tenant.id)
-      .order("email"),
+      .order("created_at"),
     // quais ausências nasceram de um lançamento aprovado: essas não se editam
     // nem se excluem por aqui, para o processo e o fato não divergirem
     supabase.from("absenteismo_lancamentos").select("absence_id").eq("tenant_id", tenant.id).not("absence_id", "is", null),
@@ -515,10 +522,28 @@ export default async function SettingsPage({
     countsAsAbsenteeism: t.counts_as_absenteeism, active: t.active,
   }));
   const nomeUnidade = new Map((units ?? []).map((u) => [u.id, u.name]));
+  // Quem cada regra alcança hoje, e os gestores (regra_id nulo), que recebem sempre
+  const alcanceDasRegras = await alcanceP;
+  const alcancePorRegra = new Map<string, PessoaAlcancada[]>();
+  const gestoresAlcancados: PessoaAlcancada[] = [];
+  for (const a of alcanceDasRegras) {
+    const pessoa = { nome: a.nome, temEmail: a.tem_email };
+    if (!a.regra_id) { gestoresAlcancados.push(pessoa); continue; }
+    alcancePorRegra.set(a.regra_id, [...(alcancePorRegra.get(a.regra_id) ?? []), pessoa]);
+  }
+  const nomeHierarquia = new Map((hierarchies ?? []).map((h) => [h.id, h.name]));
+  const nomeCargo = new Map((positions ?? []).map((p) => [p.id, p.name]));
   const recipientRows: DestinatarioRow[] = (recipientsData ?? []).map((d) => ({
-    id: d.id, email: d.email, name: d.name, unitId: d.unit_id,
+    id: d.id, tipo: d.tipo, email: d.email, name: d.name,
+    hierarchyLevelId: d.hierarchy_level_id,
+    hierarchyName: d.hierarchy_level_id ? nomeHierarquia.get(d.hierarchy_level_id) ?? null : null,
+    alcance: d.alcance,
+    positionId: d.position_id,
+    positionName: d.position_id ? nomeCargo.get(d.position_id) ?? null : null,
+    unitId: d.unit_id,
     unitName: d.unit_id ? nomeUnidade.get(d.unit_id) ?? null : null,
     active: d.active,
+    pessoas: alcancePorRegra.get(d.id) ?? [],
   }));
   const sanctionTypeName = new Map(sanctionTypeOpts.map((t) => [t.id, t.name]));
   const vindasDeLancamento = new Set((sancoesDeLancamento ?? []).map((l) => l.sanction_id).filter(Boolean) as string[]);
@@ -1488,6 +1513,9 @@ export default async function SettingsPage({
               content: (
                 <AbsenteismoRecipientsManager
                   rows={recipientRows}
+                  gestores={gestoresAlcancados}
+                  hierarquias={(hierarchies ?? []).filter((h) => h.active).map((h) => ({ id: h.id, name: h.name }))}
+                  cargos={(positions ?? []).filter((p) => p.active).map((p) => ({ id: p.id, name: p.name }))}
                   unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
                   canEdit={canEditDP}
                   temChaveDeEmail={integrationFlags.hasResend}

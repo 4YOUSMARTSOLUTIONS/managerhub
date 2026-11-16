@@ -255,12 +255,11 @@ export async function dispatchComunicadoAbsenteismo(
 
     const linha = l as unknown as Linha;
 
-    const [{ data: destinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }] = await Promise.all([
-      admin
-        .from("absenteismo_email_recipients")
-        .select("email, unit_id")
-        .eq("tenant_id", linha.tenant_id)
-        .eq("active", true),
+    const [{ data: destinos, error: erroDestinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }] = await Promise.all([
+      // Quem recebe (LUIZ, 16/11/2026): o gestor do cadastro, o carimbado no
+      // lançamento e quem lançou, sempre; mais as regras de Configurações
+      // (e-mail avulso, hierarquia, cargo), resolvidas pelo cadastro de agora.
+      admin.rpc("absenteismo_destinatarios", { p_lancamento: lancamentoId }),
       admin.from("tenants").select("name").eq("id", linha.tenant_id).maybeSingle(),
       admin.from("profiles").select("full_name, email").eq("id", linha.created_by).maybeSingle(),
       getPlatformResend(),
@@ -270,13 +269,9 @@ export async function dispatchComunicadoAbsenteismo(
         : Promise.resolve({ data: null as { full_name: string | null } | null }),
     ]);
 
-    // Sem unidade cadastrada, recebe de todas; com unidade, só o que bate com a
-    // unidade CARIMBADA no lançamento.
-    const emails = [...new Set(
-      (destinos ?? [])
-        .filter((d) => !d.unit_id || d.unit_id === linha.snap_unit_id)
-        .map((d) => d.email.trim().toLowerCase()),
-    )];
+    if (erroDestinos) throw new Error(`destinatários: ${erroDestinos.message}`);
+    // a unidade da regra já foi conferida contra a CARIMBADA no lançamento
+    const emails = [...new Set((destinos ?? []).map((d) => d.email.trim().toLowerCase()))];
 
     if (!apiKey) {
       await registrar(linha.tenant_id, "skipped", emails, "integração de e-mail não configurada");
