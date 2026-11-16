@@ -16,7 +16,7 @@ import { normTexto, parseDataPlanilha } from "@/lib/absences-import";
 
 /** O cabeçalho do modelo, na ordem. A leitura aceita as colunas em qualquer ordem. */
 export const COLUNAS_HISTORICO = [
-  "ID", "Unidade", "Colaborador", "Motivo", "Início", "Fim", "Das", "Até", "Observação",
+  "ID", "Unidade", "Colaborador", "Motivo", "Detalhe do afastamento", "Início", "Fim", "Das", "Até", "Observação",
   "Tipo de atestado", "CID", "Profissional", "CRM", "Local de atendimento", "Data de emissão",
   "Acompanhado", "Parentesco", "Acidente de trabalho", "Abonada",
 ] as const;
@@ -34,6 +34,8 @@ export type LinhaHistorico = {
   /** só conferência: o sistema NÃO casa por nome */
   name: string;
   motivo: string;
+  /** "Afastado pelo INSS", "Licença-maternidade"...: vira a situação do colaborador */
+  detalhe: string;
   inicio: string | null;
   fim: string | null;
   das: string | null;
@@ -117,6 +119,20 @@ export function tipoDeAtestado(v: string): "" | "medico" | "odontologico" | null
 }
 
 /**
+ * Detalhe do afastamento (`employee_absences.motivo`): `""` vazio, `null`
+ * ilegível. Se combina com o motivo da linha, quem confere é o servidor.
+ */
+export function detalheDoAfastamento(v: string): "" | "afastado_inss" | "acidente_trabalho" | "aposentadoria_invalidez" | "licenca_maternidade" | null {
+  const s = normTexto(v ?? "");
+  if (!s) return "";
+  if (s.includes("matern")) return "licenca_maternidade";
+  if (s.includes("aposentad") || s.includes("invalidez")) return "aposentadoria_invalidez";
+  if (s.includes("acidente")) return "acidente_trabalho";
+  if (s.includes("inss")) return "afastado_inss";
+  return null;
+}
+
+/**
  * CID como a tabela guarda: maiúsculo, com ponto antes do 4º caractere.
  * "m545", "M54,5" e " M54.5 " viram "M54.5"; "M54" fica "M54" (a categoria).
  */
@@ -140,6 +156,7 @@ export function mapearColunas(cabecalho: unknown[]) {
     return i;
   };
   const tipoAtestado = achar((x) => x.includes("tipo de atestado") || x.includes("tipo atestado"));
+  const detalhe = achar((x) => x.includes("detalhe"));
   const emissao = achar((x) => x.includes("emissao") || x.includes("emitido"));
   // "ID" por igualdade: "unidade" e "acidente" contêm "id"
   const code = achar((x) => x === "id" || x.includes("matricula") || x.startsWith("id ") || x.includes("identificador"));
@@ -160,7 +177,7 @@ export function mapearColunas(cabecalho: unknown[]) {
   const acidente = achar((x) => x.includes("acidente"));
   const abonada = achar((x) => x.includes("abonad") || x.includes("abono"));
   return {
-    code, unit, name, motivo, inicio, fim, das, ate, obs, tipoAtestado, cid, medico, crm, local,
+    code, unit, name, motivo, detalhe, inicio, fim, das, ate, obs, tipoAtestado, cid, medico, crm, local,
     emissao, acompanhado, parentesco, acidente, abonada,
   };
 }

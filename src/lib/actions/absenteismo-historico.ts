@@ -6,7 +6,8 @@ import type { Enums } from "@/types/database";
 import { normTexto } from "@/lib/absences-import";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type Origem } from "@/lib/import-pessoa";
 import { fetchAll } from "@/lib/supabase/fetch-all";
-import { dataBR, normCid, simNao, tipoDeAtestado, type LinhaHistorico } from "@/lib/absenteismo-historico";
+import { dataBR, detalheDoAfastamento, normCid, simNao, tipoDeAtestado, type LinhaHistorico } from "@/lib/absenteismo-historico";
+import { AFASTAMENTO_MOTIVO } from "@/lib/constants";
 
 /**
  * Importação do HISTÓRICO de absenteísmo (LUIZ, 16/11/2026).
@@ -154,16 +155,16 @@ export async function importarHistoricoAbsenteismo(
 
     const [{ refs, unidades }, { data: tipos }] = await Promise.all([
       carregarCadastro(supabase, tenantId),
-      supabase.from("absence_types").select("id, name").eq("tenant_id", tenantId),
+      supabase.from("absence_types").select("id, name, kind").eq("tenant_id", tenantId),
     ]);
     const idx = indiceDeAlvos(refs, unidades.map((u) => u.name));
     const unidadePorNome = new Map(unidades.map((u) => [normTexto(u.name), u.id]));
     // o nome do motivo casa sem caixa e sem acento, mas inteiro: "Atestado" não
     // pode virar "Atestado de acompanhamento" por aproximação
-    const tipoPorNome = new Map<string, string>();
+    const tipoPorNome = new Map<string, { id: string; kind: Enums<"absence_kind"> }>();
     for (const t of tipos ?? []) {
       const k = normTexto(t.name);
-      if (!tipoPorNome.has(k)) tipoPorNome.set(k, t.id);
+      if (!tipoPorNome.has(k)) tipoPorNome.set(k, { id: t.id, kind: t.kind });
     }
 
     const porLinha = new Map<number, LinhaHistorico>();
@@ -188,8 +189,8 @@ export async function importarHistoricoAbsenteismo(
 
       const motivoNome = normTexto(l.motivo ?? "");
       if (!motivoNome) { recusar(l, "Informe o motivo."); continue; }
-      const tipoId = tipoPorNome.get(motivoNome);
-      if (!tipoId) { recusar(l, `Motivo "${(l.motivo ?? "").trim()}" não está no catálogo (veja a aba Motivos do modelo).`); continue; }
+      const tipo = tipoPorNome.get(motivoNome);
+      if (!tipo) { recusar(l, `Motivo "${(l.motivo ?? "").trim()}" não está no catálogo (veja a aba Motivos do modelo).`); continue; }
 
       if (l.inicio === null || l.fim === null) { recusar(l, "Data de início ou fim ilegível."); continue; }
       if (!l.inicio || !l.fim) { recusar(l, "Informe o início e o fim."); continue; }
@@ -202,11 +203,21 @@ export async function importarHistoricoAbsenteismo(
       if (acidente === null) { recusar(l, "Acidente de trabalho: use Sim ou Não."); continue; }
       const abonada = simNao(l.abonada ?? "");
       if (abonada === null) { recusar(l, "Abonada: use Sim ou Não."); continue; }
+      const detalhe = detalheDoAfastamento(l.detalhe ?? "");
+      if (detalhe === null) {
+        recusar(l, "Detalhe do afastamento: use Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez ou Licença-maternidade.");
+        continue;
+      }
+      if (detalhe && AFASTAMENTO_MOTIVO[detalhe]?.kind !== tipo.kind) {
+        recusar(l, `"${AFASTAMENTO_MOTIVO[detalhe].label}" não combina com o motivo "${(l.motivo ?? "").trim()}".`);
+        continue;
+      }
 
       paraOBanco.push({
         linha: l.linha,
         user_id: alvo.alvoId,
-        tipo_id: tipoId,
+        tipo_id: tipo.id,
+        detalhe: detalhe || null,
         unit_id: unidadePorNome.get(normTexto(l.unit ?? "")) ?? null,
         matricula: (l.code ?? "").trim(),
         inicio: l.inicio,

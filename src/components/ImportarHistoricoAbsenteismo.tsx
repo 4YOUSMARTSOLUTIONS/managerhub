@@ -77,10 +77,11 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
 
       const wsEx = XLSX.utils.aoa_to_sheet([
         [...COLUNAS_HISTORICO],
-        [id, un, nome, "Atestado", "03/03/2026", "05/03/2026", "", "", "", "Médico", "M54.5", "Dra. Maria Souza", "CRM-MG 12345", "UPA Centro", "03/03/2026", "", "", "Não", ""],
-        [id, un, nome, "Falta sem justificativa", "14/04/2026", "14/04/2026", "", "", "", "", "", "", "", "", "", "", "", "", "Não"],
-        [id, un, nome, "Falta sem justificativa", "20/05/2026", "20/05/2026", "08:00", "10:30", "Chegou atrasado", "", "", "", "", "", "", "", "", "", "Não"],
-        [id, un, nome, "Licença nojo (falecimento)", "02/06/2026", "03/06/2026", "", "", "", "", "", "", "", "", "", "", "Avô", "", ""],
+        [id, un, nome, "Atestado", "", "03/03/2026", "05/03/2026", "", "", "", "Médico", "M54.5", "Dra. Maria Souza", "CRM-MG 12345", "UPA Centro", "03/03/2026", "", "", "Não", ""],
+        [id, un, nome, "Falta sem justificativa", "", "14/04/2026", "14/04/2026", "", "", "", "", "", "", "", "", "", "", "", "", "Não"],
+        [id, un, nome, "Falta sem justificativa", "", "20/05/2026", "20/05/2026", "08:00", "10:30", "Chegou atrasado", "", "", "", "", "", "", "", "", "", "Não"],
+        [id, un, nome, "Licença nojo (falecimento)", "", "02/06/2026", "03/06/2026", "", "", "", "", "", "", "", "", "", "", "Avô", "", ""],
+        [id, un, nome, "Afastamento", "Afastado pelo INSS", "10/07/2026", "06/01/2027", "", "", "", "", "M51", "Dr. João Lima", "CRM-MG 54321", "Hospital Central", "", "", "", "", ""],
       ]);
       wsEx["!cols"] = COLUNAS_HISTORICO.map((c) => ({ wch: Math.max(12, c.length + 2) }));
 
@@ -108,6 +109,7 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
           : "A empresa tem uma única unidade; pode deixar em branco."],
         ["Colaborador", "Não", "Só para conferência. O sistema identifica por ID e Unidade."],
         ["Motivo", "Sim", "O nome do motivo exatamente como na aba Motivos (sem diferença de acento ou maiúscula)."],
+        ["Detalhe do afastamento", "Não", "Só para afastamento e licença: Afastado pelo INSS, Acidente de trabalho ou Aposentadoria por invalidez (motivo de afastamento), ou Licença-maternidade (motivo de licença). É o que aparece como situação do colaborador; em branco ele aparece só como Afastado ou De licença."],
         ["Início", "Sim", "Primeiro dia de ausência, DD/MM/AAAA. Precisa ser antes de hoje: o que acontece de hoje em diante segue pelo Lançar ausência."],
         ["Fim", "Sim", "Último dia de ausência, DD/MM/AAAA (conta como ausência). Ausência de um dia: Início e Fim iguais."],
         ["Das / Até", "Não", "Só para ausência de horas (chegou atrasado, saiu mais cedo, consulta): o horário em que esteve ausente, HH:MM. Vale para um dia só, então Início e Fim precisam ser iguais. Ausência de horas não vira dias de ausência."],
@@ -171,6 +173,7 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
           unit: txt(r, col.unit),
           name: txt(r, col.name),
           motivo: txt(r, col.motivo),
+          detalhe: txt(r, col.detalhe),
           inicio: dataDaCelula(cel(r, col.inicio)),
           fim: dataDaCelula(cel(r, col.fim)),
           das: horaDaCelula(cel(r, col.das)),
