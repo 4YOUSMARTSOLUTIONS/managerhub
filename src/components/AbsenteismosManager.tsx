@@ -330,12 +330,14 @@ export function AbsenteismosManager({
    * O horário da linha: o da ausência de horas, ou o do primeiro dia parcial
    * (com o dia na frente, porque os dias inteiros começam no seguinte).
    */
-  const horarioDaLinha = (r: AbsenteismoRow): string => {
-    if (r.partialDay) return faixaDeHoras(r.hoursStart, r.hoursEnd) || "Parcial, a confirmar";
-    if (r.primeiroDia === "parcial" && r.startDate && r.hoursStart) {
-      return `${diaMes(r.startDate)}, ${faixaDeHoras(r.hoursStart, r.hoursEnd)}`;
-    }
-    return "";
+  /**
+   * Horário inicial e final da ausência de horas (ou do 1º dia parcial), em duas
+   * colunas na planilha (LUIZ, 16/11/2026). Parcial ainda sem horário: "A confirmar".
+   */
+  const horariosDaLinha = (r: AbsenteismoRow): [string, string] => {
+    if (!r.partialDay && r.primeiroDia !== "parcial") return ["", ""];
+    if (!r.hoursStart) return [r.partialDay ? "A confirmar" : "", ""];
+    return [r.hoursStart.slice(0, 5), r.hoursEnd?.slice(0, 5) ?? ""];
   };
 
   /**
@@ -543,18 +545,23 @@ export function AbsenteismosManager({
                 filename="absenteismos.xlsx"
                 sheetName="Absenteísmos"
                 colunasDeData={["Dia", "Início", "Término"]}
-                headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Efeito na RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
-                rows={rows.map((r) => [
-                  r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
-                  r.unitName ?? "", r.occurredOn, horarioDaLinha(r), r.typeName ?? "",
-                  r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
-                  r.startDate ?? "", r.endDate ?? "", duracao(r),
-                  efeitoNaRv({
-                    status: r.status, kind: r.kind, descontaRv: r.discountsRv, abonada: r.waived, horas: r.partialDay,
-                  }, kindsComRedutor),
-                  ABSENTEISMO_STATUS[r.status], r.importado ? "Importação" : r.createdByName ?? "",
-                  r.decidedByName ?? "", r.decisionNote ?? "",
-                ])}
+                // mesma sequência do Relatório completo (LUIZ, 16/11/2026), com
+                // as colunas que o gestor pode ver
+                headers={["Unidade", "Matrícula", "Colaborador", "Setor", "Função", "Dia", "Início", "Término", "Duração", "Horário inicial", "Horário final", "Motivo", "Situação", "Comportamento", "Efeito na RV", "Lançado por", "Decidido por", "Observação da decisão"]}
+                rows={rows.map((r) => {
+                  const [horaIni, horaFim] = horariosDaLinha(r);
+                  return [
+                    r.unitName ?? "", r.employeeCode ?? "", r.fullName ?? "", r.departmentName ?? "", r.positionName ?? "",
+                    r.occurredOn, r.startDate ?? "", r.endDate ?? "", duracao(r), horaIni, horaFim,
+                    r.typeName ?? "", ABSENTEISMO_STATUS[r.status],
+                    r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
+                    efeitoNaRv({
+                      status: r.status, kind: r.kind, descontaRv: r.discountsRv, abonada: r.waived, horas: r.partialDay,
+                    }, kindsComRedutor),
+                    r.importado ? "Importação" : r.createdByName ?? "",
+                    r.decidedByName ?? "", r.decisionNote ?? "",
+                  ];
+                })}
               />
             );
             // A exportação simples é a do GESTOR, que não vê CPF nem dado de

@@ -2248,6 +2248,7 @@ export type Database = {
           funcao: string | null; comportamento: Database["public"]["Enums"]["absence_kind"] | null
           desconta_rv: string | null; horas: string | null
           lancado_por: string | null; decidido_por: string | null; observacao_decisao: string | null
+          hora_inicial: string | null; hora_final: string | null
         }[]
       }
       concluir_troca_de_senha: { Args: { p_user: string }; Returns: undefined }

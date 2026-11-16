@@ -847,19 +847,27 @@ export async function gerarRelatorioAbsenteismo(
     // exportação simples tinha (função, comportamento, desconta RV, lançado e
     // decidido por, observação da decisão), o "Horário" foi para perto das
     // datas e "Horas" traz o total da ausência de horas, que "Dias" não mostra.
+    //
+    // A ORDEM é a do LUIZ (16/11/2026), até "Situação". O que ele não listou e
+    // tinha pedido antes (horas, comportamento, efeito na RV, trâmite) vem
+    // depois, para não sumir.
     const headers = [
-      "Unidade", "Setor", "Subsetor", "Função", "Data", "Mês", "Código do colaborador", "CPF",
-      "Nome do colaborador", "Data início", "Data fim", "Horário", "Horas", "Dias de atestado", "Data retorno",
-      "Tipo de afastamento", "Comportamento", "Efeito na RV", "Observação", "CID", "Descrição do CID", "Categoria CID",
-      "Descrição da categoria", "Nome do médico", "CRM", "Hospital",
-      "Acidente de trabalho", "Tipo de atestado", "Falta abonada", "Acompanhado",
+      "Unidade", "Código do colaborador", "Nome do colaborador", "CPF", "Setor", "Subsetor", "Função",
+      "Data", "Mês", "Data início", "Data fim", "Dias de atestado", "Data retorno",
+      "Horário inicial", "Horário final", "Tipo de afastamento", "Tipo de atestado", "Observação",
+      "CID", "Descrição do CID", "Categoria CID", "Descrição da categoria",
+      "Nome do médico", "CRM", "Hospital", "Acidente de trabalho", "Falta abonada", "Acompanhado",
       "Parentesco do falecido", "Alerta INSS", "Situação",
-      "Lançado por", "Decidido por", "Observação da decisão",
+      "Horas", "Comportamento", "Efeito na RV", "Lançado por", "Decidido por", "Observação da decisão",
     ];
     const rows = (data ?? []).map((r) => [
-      r.unidade, r.setor, r.subsetor, r.funcao, r.data, r.mes, r.matricula, r.cpf, r.colaborador,
-      r.inicio, r.fim, r.horario, r.horas, r.dias, r.retorno,
-      r.tipo, r.comportamento ? ABSENCE_KIND_LABEL[r.comportamento] : null,
+      r.unidade, r.matricula, r.colaborador, r.cpf, r.setor, r.subsetor, r.funcao,
+      r.data, r.mes, r.inicio, r.fim, r.dias, r.retorno,
+      r.hora_inicial, r.hora_final, r.tipo, r.tipo_atestado, r.observacao,
+      r.cid, r.cid_descricao, r.cid_categoria, r.cid_categoria_descricao,
+      r.medico, r.crm, r.hospital, r.acidente_trabalho, r.abonada, r.acompanhado,
+      r.parentesco, r.alerta_inss, r.situacao,
+      r.horas, r.comportamento ? ABSENCE_KIND_LABEL[r.comportamento] : null,
       efeitoNaRv({
         status: STATUS_DA_SITUACAO[r.situacao] ?? "cancelado",
         kind: r.comportamento,
@@ -868,11 +876,6 @@ export async function gerarRelatorioAbsenteismo(
         // com motivo, "dias" vazio só acontece na ausência de horas
         horas: r.dias == null,
       }, kindsComRedutor),
-      r.observacao,
-      r.cid, r.cid_descricao, r.cid_categoria, r.cid_categoria_descricao,
-      r.medico, r.crm, r.hospital,
-      r.acidente_trabalho, r.tipo_atestado, r.abonada, r.acompanhado,
-      r.parentesco, r.alerta_inss, r.situacao,
       r.lancado_por, r.decidido_por, r.observacao_decisao,
     ]);
     return { headers, rows };
