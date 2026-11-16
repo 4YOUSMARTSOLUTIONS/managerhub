@@ -31,6 +31,7 @@ import {
   type AlertaInss, type AtestadoLido, type ConfirmacaoInput,
 } from "@/lib/actions/absenteismos";
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
+import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
 import { ImportarHistoricoAbsenteismo } from "@/components/ImportarHistoricoAbsenteismo";
 // só o tipo: o módulo é de servidor, e "use server" não pode reexportar tipo (quebra o arquivo de actions inteiro)
 import type { AtestadoLidoPorIA } from "@/lib/atestado-ia";
@@ -542,13 +543,15 @@ export function AbsenteismosManager({
                 filename="absenteismos.xlsx"
                 sheetName="Absenteísmos"
                 colunasDeData={["Dia", "Início", "Término"]}
-                headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Desconta RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
+                headers={["Colaborador", "Matrícula", "Setor", "Função", "Unidade", "Dia", "Horário", "Motivo", "Comportamento", "Início", "Término", "Duração", "Efeito na RV", "Situação", "Lançado por", "Decidido por", "Observação da decisão"]}
                 rows={rows.map((r) => [
                   r.fullName ?? "", r.employeeCode ?? "", r.departmentName ?? "", r.positionName ?? "",
                   r.unitName ?? "", r.occurredOn, horarioDaLinha(r), r.typeName ?? "",
                   r.kind ? ABSENCE_KIND_LABEL[r.kind] : "",
                   r.startDate ?? "", r.endDate ?? "", duracao(r),
-                  r.discountsRv === null ? "" : r.discountsRv ? "Sim" : "Não",
+                  efeitoNaRv({
+                    status: r.status, kind: r.kind, descontaRv: r.discountsRv, abonada: r.waived, horas: r.partialDay,
+                  }, kindsComRedutor),
                   ABSENTEISMO_STATUS[r.status], r.importado ? "Importação" : r.createdByName ?? "",
                   r.decidedByName ?? "", r.decisionNote ?? "",
                 ])}
@@ -810,6 +813,7 @@ export function AbsenteismosManager({
         <Dialogo titulo="Absenteísmo" onFechar={() => { setAberto(null); setErro(""); }}>
           <Ficha
             linha={aberto}
+            kindsComRedutor={kindsComRedutor}
             podeDecidir={podeDecidir}
             podeCancelarAprovado={podeCancelarAprovado}
             podeCancelarProprio={aberto.createdBy === meuId || podeDecidir}
@@ -1808,9 +1812,10 @@ function AnexoNoEnvio({ obrigatorio, arquivo, onArquivo, travado }: {
 
 /** A ficha completa, com a decisão do RH quando for o caso. */
 function Ficha({
-  linha, podeDecidir, podeCancelarAprovado, podeCancelarProprio, erro, onErro, onAbrirDocumento, onEfetivar, onFechar,
+  linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, erro, onErro, onAbrirDocumento, onEfetivar, onFechar,
 }: {
   linha: AbsenteismoRow;
+  kindsComRedutor: Enums<"absence_kind">[];
   podeDecidir: boolean;
   podeCancelarAprovado: boolean;
   podeCancelarProprio: boolean;
@@ -1952,8 +1957,11 @@ function Ficha({
           </>
         )}
         <Campo
-          rotulo="Desconta remuneração variável"
-          valor={linha.discountsRv === null ? null : linha.discountsRv ? "Sim" : "Não"}
+          rotulo="Efeito na RV"
+          valor={efeitoNaRv({
+            status: linha.status, kind: linha.kind, descontaRv: linha.discountsRv,
+            abonada: linha.waived, horas: linha.partialDay,
+          }, kindsComRedutor)}
         />
         {linha.kinship && <Campo rotulo="Parentesco do falecido" valor={linha.kinship} />}
         {linha.partialDay && (

@@ -10,6 +10,7 @@ import {
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { ABSENCE_KIND_LABEL } from "@/lib/constants";
+import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
 import { wantsActive } from "@/lib/catalogGuard";
 import { lerAtestadoNaOpenAI, MIMES_LEITURA_IA, type AtestadoLidoPorIA } from "@/lib/atestado-ia";
 
@@ -822,13 +823,25 @@ export async function gerarRelatorioAbsenteismo(
     if (!de || !ate) return { error: "Informe o período do relatório." };
     if (ate < de) return { error: "O fim do período não pode ser antes do início." };
     const { supabase, tenantId } = await actionContext();
-    const { data, error } = await supabase.rpc("absenteismo_relatorio", {
-      p_tenant: tenantId,
-      p_de: de,
-      p_ate: ate,
-      p_units: unidades && unidades.length ? unidades : null,
-    });
+    const [{ data, error }, { data: regrasRedutor }, { data: faixasRedutor }] = await Promise.all([
+      supabase.rpc("absenteismo_relatorio", {
+        p_tenant: tenantId,
+        p_de: de,
+        p_ate: ate,
+        p_units: unidades && unidades.length ? unidades : null,
+      }),
+      // o mesmo recorte da tela: regra de ausência ativa e COM faixa
+      supabase.from("rv_reducer_rules").select("id, absence_kind").eq("tenant_id", tenantId).eq("source", "absence").eq("active", true),
+      supabase.from("rv_reducer_bands").select("rule_id").eq("tenant_id", tenantId),
+    ]);
     if (error) return { error: error.message };
+    const comFaixa = new Set((faixasRedutor ?? []).map((f) => f.rule_id));
+    const kindsComRedutor = [...new Set(
+      (regrasRedutor ?? []).filter((r) => comFaixa.has(r.id) && r.absence_kind).map((r) => r.absence_kind as string),
+    )];
+    const STATUS_DA_SITUACAO: Record<string, Enums<"absenteismo_status">> = {
+      "Não comparecimento": "aberto", "Aguardando o RH": "pendente", Aprovado: "aprovado", Reprovado: "reprovado",
+    };
 
     // A planilha única do DP (LUIZ, 16/11/2026): ganhou as colunas que só a
     // exportação simples tinha (função, comportamento, desconta RV, lançado e
@@ -837,7 +850,7 @@ export async function gerarRelatorioAbsenteismo(
     const headers = [
       "Unidade", "Setor", "Subsetor", "Função", "Data", "Mês", "Código do colaborador", "CPF",
       "Nome do colaborador", "Data início", "Data fim", "Horário", "Horas", "Dias de atestado", "Data retorno",
-      "Tipo de afastamento", "Comportamento", "Desconta RV", "Observação", "CID", "Descrição do CID", "Categoria CID",
+      "Tipo de afastamento", "Comportamento", "Efeito na RV", "Observação", "CID", "Descrição do CID", "Categoria CID",
       "Descrição da categoria", "Nome do médico", "CRM", "Hospital",
       "Acidente de trabalho", "Tipo de atestado", "Falta abonada", "Acompanhado",
       "Parentesco do falecido", "Alerta INSS", "Situação",
@@ -846,7 +859,16 @@ export async function gerarRelatorioAbsenteismo(
     const rows = (data ?? []).map((r) => [
       r.unidade, r.setor, r.subsetor, r.funcao, r.data, r.mes, r.matricula, r.cpf, r.colaborador,
       r.inicio, r.fim, r.horario, r.horas, r.dias, r.retorno,
-      r.tipo, r.comportamento ? ABSENCE_KIND_LABEL[r.comportamento] : null, r.desconta_rv, r.observacao,
+      r.tipo, r.comportamento ? ABSENCE_KIND_LABEL[r.comportamento] : null,
+      efeitoNaRv({
+        status: STATUS_DA_SITUACAO[r.situacao] ?? "cancelado",
+        kind: r.comportamento,
+        descontaRv: r.desconta_rv === "Sim",
+        abonada: r.abonada === "Sim",
+        // com motivo, "dias" vazio só acontece na ausência de horas
+        horas: r.dias == null,
+      }, kindsComRedutor),
+      r.observacao,
       r.cid, r.cid_descricao, r.cid_categoria, r.cid_categoria_descricao,
       r.medico, r.crm, r.hospital,
       r.acidente_trabalho, r.tipo_atestado, r.abonada, r.acompanhado,
