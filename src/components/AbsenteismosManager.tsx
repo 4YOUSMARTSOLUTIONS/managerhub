@@ -984,10 +984,13 @@ function PainelConfirmacao({
   onFechar: () => void;
 }) {
   const userId = linha?.userId ?? novoPara?.userId ?? "";
+  // No lançamento novo, motivo e datas começam em branco (LUIZ, 16/11/2026):
+  // vindo preenchidos com o primeiro motivo e o dia de hoje, passavam sem
+  // ninguém conferir. No Efetivar as datas partem do dia já lançado.
   const [c, setC] = useState<Confirmacao>({
-    absenceTypeId: linha?.absenceTypeId ?? tipos[0]?.id ?? "",
-    startDate: linha?.startDate ?? linha?.occurredOn ?? hoje(),
-    endDate: linha?.endDate ?? linha?.occurredOn ?? hoje(),
+    absenceTypeId: linha?.absenceTypeId ?? (linha ? tipos[0]?.id ?? "" : ""),
+    startDate: linha?.startDate ?? linha?.occurredOn ?? "",
+    endDate: linha?.endDate ?? linha?.occurredOn ?? "",
     note: linha?.note ?? "",
     parentesco: linha?.kinship ?? "",
     acidenteTrabalho: linha?.workAccident ?? false,
@@ -1088,6 +1091,10 @@ function PainelConfirmacao({
   };
 
   const enviar = async () => {
+    // antes de criar o lançamento: um erro depois dele deixaria um lançamento em aberto pela metade
+    if (!c.absenceTypeId) { onErro("Escolha o motivo."); return; }
+    if (!c.startDate || !c.endDate) { onErro("Informe o início e o término."); return; }
+    if (c.endDate < c.startDate) { onErro("O término não pode ser antes do início."); return; }
     const ok = await confirmDialog({
       title: ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH",
       confirmLabel: "Enviar",
@@ -1250,6 +1257,7 @@ function PainelConfirmacao({
             className="select" value={c.absenceTypeId}
             onChange={(e) => setC((x) => ({ ...x, absenceTypeId: e.target.value }))}
           >
+            {!c.absenceTypeId && <option value="" disabled>Selecione…</option>}
             {tipos.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
@@ -1264,6 +1272,7 @@ function PainelConfirmacao({
           <label className="label">Término <span style={{ color: "var(--mh-danger)" }}>*</span></label>
           <input
             type="date" className="input" value={c.endDate}
+            min={c.startDate || undefined}
             disabled={c.emHoras}
             title={c.emHoras ? "Ausência de horas vale para um único dia." : undefined}
             onChange={(e) => setC((x) => ({ ...x, endDate: e.target.value }))}
