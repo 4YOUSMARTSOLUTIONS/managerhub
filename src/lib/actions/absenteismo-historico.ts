@@ -5,7 +5,7 @@ import { actionContext } from "./context";
 import type { Enums } from "@/types/database";
 import { normTexto } from "@/lib/absences-import";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type Origem } from "@/lib/import-pessoa";
-import { fetchAll } from "@/lib/supabase/fetch-all";
+import { carregarCadastroParaImportar } from "@/lib/absenteismo-cadastro";
 import { dataBR, detalheDoAfastamento, normCid, simNao, tipoDeAtestado, type LinhaHistorico } from "@/lib/absenteismo-historico";
 import { AFASTAMENTO_MOTIVO } from "@/lib/constants";
 
@@ -44,52 +44,6 @@ export type ResultadoHistorico = {
 
 const SITUACAO: Record<Origem, string> = { ativo: "Ativo", desligado: "Desligado", contrato_anterior: "Contrato anterior" };
 
-/** O cadastro inteiro (ativos, desligados e contratos anteriores) no formato do resolvedor. */
-async function carregarCadastro(supabase: Awaited<ReturnType<typeof actionContext>>["supabase"], tenantId: string) {
-  const [{ data: membros }, { data: unidades }, { data: vinculoUnidade }, { data: contratos }] = await Promise.all([
-    fetchAll(() => supabase
-      .from("memberships")
-      .select("id, user_id, is_active, employee_code, profiles!memberships_user_id_fkey(full_name)")
-      .eq("tenant_id", tenantId)
-      .order("id")),
-    supabase.from("units").select("id, name").eq("tenant_id", tenantId),
-    // RLS já limita ao tenant; .in() com centenas de ids estouraria a URL
-    fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
-    supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenantId),
-  ]);
-
-  const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
-  const unidadesDoVinculo = new Map<string, string[]>();
-  for (const v of vinculoUnidade ?? []) {
-    const nm = nomeUnidade.get(v.unit_id);
-    if (!nm) continue;
-    const arr = unidadesDoVinculo.get(v.membership_id) ?? [];
-    arr.push(nm);
-    unidadesDoVinculo.set(v.membership_id, arr);
-  }
-
-  const nomePorUser = new Map<string, string>();
-  for (const m of membros ?? []) {
-    const nome = (m.profiles as unknown as { full_name: string | null } | null)?.full_name;
-    if (nome) nomePorUser.set(m.user_id, nome);
-  }
-
-  // Histórico de quem já saiu, ou de um contrato ANTERIOR da mesma pessoa (a
-  // matrícula muda na recontratação), é justamente o caso desta importação.
-  const unidadesPorUser = new Map<string, string[]>();
-  const refs: { id: string; code?: string | null; units?: string[]; origem?: Origem }[] = [];
-  for (const m of membros ?? []) {
-    const uns = unidadesDoVinculo.get(m.id) ?? [];
-    unidadesPorUser.set(m.user_id, uns);
-    refs.push({ id: m.user_id, code: m.employee_code, units: uns, origem: m.is_active ? "ativo" : "desligado" });
-  }
-  for (const c of contratos ?? []) {
-    refs.push({ id: c.user_id, code: c.employee_code, units: unidadesPorUser.get(c.user_id) ?? [], origem: "contrato_anterior" });
-  }
-
-  return { refs, unidades: unidades ?? [], nomePorUser };
-}
-
 /**
  * O que o modelo precisa: a lista de colaboradores (para copiar a matrícula) e
  * os motivos do catálogo (o nome tem de ser escrito igual).
@@ -105,7 +59,7 @@ export async function dadosDoModeloHistorico(): Promise<{
     if (role !== "owner") return { pessoas: [], motivos: [], multiUnidade: false, error: SO_DONO };
 
     const [{ refs, unidades, nomePorUser }, { data: tipos }] = await Promise.all([
-      carregarCadastro(supabase, tenantId),
+      carregarCadastroParaImportar(supabase, tenantId),
       supabase
         .from("absence_types")
         .select("name, kind, requires_medical, requires_companion, requires_kinship, active")
@@ -154,7 +108,7 @@ export async function importarHistoricoAbsenteismo(
     if (linhas.length > 5000) return { ...vazio, error: "No máximo 5.000 linhas por importação. Divida a planilha." };
 
     const [{ refs, unidades }, { data: tipos }] = await Promise.all([
-      carregarCadastro(supabase, tenantId),
+      carregarCadastroParaImportar(supabase, tenantId),
       supabase.from("absence_types").select("id, name, kind").eq("tenant_id", tenantId),
     ]);
     const idx = indiceDeAlvos(refs, unidades.map((u) => u.name));

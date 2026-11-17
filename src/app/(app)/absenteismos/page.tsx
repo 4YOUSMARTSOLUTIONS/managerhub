@@ -180,6 +180,8 @@ export default async function AbsenteismosPage() {
     emailStatus: l.email_status,
     emailAt: l.email_at,
     importado: l.importado,
+    comunicadoImportado: l.comunicado_importado_por != null,
+    importadoPorName: l.comunicado_importado_por ? nomePorId.get(l.comunicado_importado_por) ?? null : null,
   }));
 
   // Regra sem faixa não corta nada, então só conta quem tem as duas coisas. É o

@@ -34,6 +34,7 @@ import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDia
 import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
 import { nomeParaBaixar, rotuloTipoDocumento } from "@/lib/absenteismo-documento";
 import { ImportarHistoricoAbsenteismo } from "@/components/ImportarHistoricoAbsenteismo";
+import { ImportarComunicadosAbsenteismo } from "@/components/ImportarComunicadosAbsenteismo";
 // só o tipo: o módulo é de servidor, e "use server" não pode reexportar tipo (quebra o arquivo de actions inteiro)
 import type { AtestadoLidoPorIA } from "@/lib/atestado-ia";
 import type { Enums } from "@/types/database";
@@ -94,6 +95,13 @@ export type AbsenteismoRow = {
   emailAt: string | null;
   /** veio da importação de histórico: aprovado, sem comunicado e sem anexo */
   importado: boolean;
+  /**
+   * Veio da importação de comunicados (LUIZ, 17/11/2026): entrou em aberto, sem
+   * e-mail, no nome do gestor atual (createdBy), e segue o fluxo normal.
+   */
+  comunicadoImportado: boolean;
+  /** quem importou o comunicado */
+  importadoPorName: string | null;
 };
 
 export type Pessoa = {
@@ -325,6 +333,7 @@ export function AbsenteismosManager({
   // os diálogos do menu Planilhas moram fora dele: fechar o menu os desmontaria
   const [relatorioAberto, setRelatorioAberto] = useState(false);
   const [importarAberto, setImportarAberto] = useState(false);
+  const [importarComunicados, setImportarComunicados] = useState(false);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
 
@@ -522,6 +531,15 @@ export function AbsenteismosManager({
       </td>
       {comAutor && (r.importado
         ? <td className="muted" title={r.createdByName ? `Importado por ${r.createdByName}` : undefined}>Importação</td>
+        : r.comunicadoImportado
+        ? (
+          <td
+            className="muted"
+            title={[r.importadoPorName && `Importado por ${r.importadoPorName}`, r.createdByName && `com ${r.createdByName}`].filter(Boolean).join(", ") || undefined}
+          >
+            Importação
+          </td>
+        )
         : <td title={r.createdByName ?? undefined}>{r.createdByName ? shortName(r.createdByName) : <span className="soft">–</span>}</td>)}
       <td>
         <Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge>
@@ -709,7 +727,7 @@ export function AbsenteismosManager({
                     efeitoNaRv({
                       status: r.status, kind: r.kind, descontaRv: r.discountsRv, abonada: r.waived, horas: r.partialDay,
                     }, kindsComRedutor),
-                    r.importado ? "Importação" : r.createdByName ?? "",
+                    r.importado || r.comunicadoImportado ? "Importação" : r.createdByName ?? "",
                     r.decidedByName ?? "", r.decisionNote ?? "",
                   ];
                 })}
@@ -737,6 +755,9 @@ export function AbsenteismosManager({
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setImportarAberto(true); fechar(); }}>
                           <IconImport /> Importar histórico
                         </button>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setImportarComunicados(true); fechar(); }}>
+                          <IconImport /> Importar comunicados
+                        </button>
                       </>
                     )}
                   </>
@@ -758,6 +779,9 @@ export function AbsenteismosManager({
       )}
       {podeImportarHistorico && (
         <ImportarHistoricoAbsenteismo aberto={importarAberto} onFechar={() => setImportarAberto(false)} />
+      )}
+      {podeImportarHistorico && (
+        <ImportarComunicadosAbsenteismo aberto={importarComunicados} onFechar={() => setImportarComunicados(false)} />
       )}
 
       {erro && !novo && !confirmando && !aberto && (
@@ -2412,7 +2436,16 @@ function Ficha({
           </>
         ) : (
           <>
-            <Campo rotulo="Lançado por" valor={linha.createdByName} />
+            {linha.comunicadoImportado ? (
+              <>
+                {/* entrou em aberto pela importação de comunicados, no nome do gestor */}
+                <Campo rotulo="Origem" valor="Comunicado importado, sem e-mail na importação" />
+                <Campo rotulo="Importado por" valor={linha.importadoPorName} />
+                <Campo rotulo="Com o gestor" valor={linha.createdByName} />
+              </>
+            ) : (
+              <Campo rotulo="Lançado por" valor={linha.createdByName} />
+            )}
             <Campo rotulo="Enviado ao RH em" valor={linha.submittedAt ? formatDate(linha.submittedAt) : null} />
             <Campo rotulo="Decidido por" valor={linha.decidedByName} />
             <Campo rotulo="Decidido em" valor={linha.decidedAt ? formatDate(linha.decidedAt) : null} />
@@ -2473,7 +2506,8 @@ function Ficha({
         )}
         {/* Sem fila e sem retry automático, reenviar é a única recuperação. O
             cancelado não reenvia: o e-mail de "desconsidere" já saiu no cancelamento. */}
-        {linha.status !== "cancelado" && !linha.importado && <button
+        {/* o comunicado importado não teve e-mail (decisão do LUIZ): o primeiro sai no envio ao RH */}
+        {linha.status !== "cancelado" && !linha.importado && !(linha.comunicadoImportado && !linha.emailStatus) && <button
           type="button" className="btn btn-ghost btn-sm" disabled={pendente}
           onClick={() => {
             onErro("");
