@@ -29,6 +29,9 @@ type Pessoa = {
   abono: number;
 };
 
+/** até onde a busca vai quando o período segue as últimas férias (o teto do ferias_agenda) */
+const TETO_DA_BUSCA = 800;
+
 /**
  * A programação de férias por colaborador: quem tem férias marcadas no
  * período, quando e quantos dias, somando os períodos de cada pessoa. A
@@ -37,6 +40,12 @@ type Pessoa = {
  * Desde 12/11/2026 (LUIZ) é também o antigo Acompanhamento ("quem está fora
  * num período"): os atalhos curtos (hoje, 7 dias), a contagem por situação e
  * os dias que caem dentro do período, numa aba só em vez de duas parecidas.
+ *
+ * Desde 17/11/2026 (LUIZ) o período abre de hoje até as últimas férias
+ * programadas, no mínimo 12 meses: as férias do ITALO, lançadas para dez/2027,
+ * sumiam da janela fixa de 12 meses. A busca vai até o teto do `ferias_agenda`
+ * e o "Até" encosta na última férias que veio; mexer no período desliga isso, e
+ * o atalho "Até as últimas férias" religa.
  */
 export function FeriasProgramacao({
   setores, unidades, hoje, soUsuarios = null,
@@ -50,16 +59,35 @@ export function FeriasProgramacao({
   const [filtros, setFiltros] = useState<FiltrosFerias>({
     de: hoje, ate: somarDias(hoje, 364), status: TODOS_OS_STATUS, setor: "", busca: "",
   });
-  const invalido = periodoValido(filtros);
   const [buscado, setBuscado] = useState({ de: filtros.de, ate: filtros.ate });
-  const mudar = (f: FiltrosFerias) => {
-    setFiltros(f);
-    if (!periodoValido(f)) setBuscado({ de: f.de, ate: f.ate });
-  };
+  const [nasUltimas, setNasUltimas] = useState(true);
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [gerando, setGerando] = useState(false);
 
-  const { itens, erro, carregando } = useAgendaFerias(buscado.de, buscado.ate, unidades, soUsuarios);
+  const teto = somarDias(hoje, TETO_DA_BUSCA);
+  const { itens, erro, carregando } = useAgendaFerias(
+    nasUltimas ? hoje : buscado.de, nasUltimas ? teto : buscado.ate, unidades, soUsuarios,
+  );
+  // a última férias que veio da busca larga, nunca menos de 12 meses
+  const ateUltimas = useMemo(() => {
+    let ate = somarDias(hoje, 364);
+    for (const i of itens) if (i.fim > ate) ate = i.fim;
+    return ate > teto ? teto : ate;
+  }, [itens, hoje, teto]);
+
+  // o período que vale na tela: até as últimas férias ou o que a pessoa escolheu
+  const de = nasUltimas ? hoje : buscado.de;
+  const ate = nasUltimas ? ateUltimas : buscado.ate;
+  const filtrosNaTela = nasUltimas ? { ...filtros, de, ate } : filtros;
+  const invalido = nasUltimas ? null : periodoValido(filtros);
+  const mudar = (f: FiltrosFerias) => {
+    // busca, setor e situação não mexem no período
+    if (nasUltimas && f.de === de && f.ate === ate) { setFiltros(f); return; }
+    setNasUltimas(false);
+    setFiltros(f);
+    if (!periodoValido(f)) setBuscado({ de: f.de, ate: f.ate });
+  };
+
   const cores = useMemo(() => coresDosSetores(setores), [setores]);
 
   const pessoas = useMemo(() => {
@@ -71,14 +99,14 @@ export function FeriasProgramacao({
       };
       p.periodos.push(i);
       p.dias += i.dias;
-      p.noPeriodo += diasNoPeriodo(i, buscado.de, buscado.ate);
+      p.noPeriodo += diasNoPeriodo(i, de, ate);
       p.abono += i.abono;
       porPessoa.set(i.userId, p);
     }
     return [...porPessoa.values()]
       .map((p) => ({ ...p, periodos: p.periodos.sort((a, b) => a.inicio.localeCompare(b.inicio)) }))
       .sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
-  }, [itens, filtros, buscado]);
+  }, [itens, filtros, de, ate]);
 
   // quantas pessoas em cada situação (o que era o Acompanhamento)
   const porSituacao = (status: AgendaItem["status"]) =>
@@ -100,13 +128,13 @@ export function FeriasProgramacao({
   const baixar = async () => {
     setGerando(true);
     try {
-      await downloadSheets(`programacao_de_ferias_${buscado.de}_a_${buscado.ate}.xlsx`, [
+      await downloadSheets(`programacao_de_ferias_${de}_a_${ate}.xlsx`, [
         {
           name: "Períodos",
           headers: ["Colaborador", "Matrícula", "Setor", "Subsetor", "Cargo", "Unidade", "Início", "Término", "Dias", "Dias no período", "Abono", "Situação", "Em dobro", "Origem"],
           rows: pessoas.flatMap((p) => p.periodos.map((i) => [
             i.nome, i.matricula, i.setor, i.subsetor, i.cargo, i.unidade,
-            formatDate(i.inicio), formatDate(i.fim), i.dias, diasNoPeriodo(i, buscado.de, buscado.ate), i.abono,
+            formatDate(i.inicio), formatDate(i.fim), i.dias, diasNoPeriodo(i, de, ate), i.abono,
             FERIAS_STATUS[i.status], i.emDobro ? "Sim" : "Não",
             i.origem === "registro" ? "Registro direto" : "Módulo Férias",
           ])),
@@ -129,8 +157,9 @@ export function FeriasProgramacao({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", paddingTop: "0.9rem" }}>
       <BarraFiltrosFerias
-        filtros={filtros} onChange={mudar} setores={setores} hoje={hoje} itens={itens}
+        filtros={filtrosNaTela} onChange={mudar} setores={setores} hoje={hoje} itens={itens}
         atalhos={["hoje", "7d", "30d", "mes", "proximoMes", "12m", "ano"]}
+        ultimas={{ ate: ateUltimas, ativo: nasUltimas, onEscolher: () => setNasUltimas(true) }}
       />
       {invalido && <p style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: 0 }}>{invalido}</p>}
       {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
@@ -139,7 +168,7 @@ export function FeriasProgramacao({
         <span className="soft" style={{ fontSize: "0.8rem" }}>
           {carregando
             ? "Carregando…"
-            : `${pessoas.length} colaborador(es) com ${totalPeriodos} período(s), ${totalDias} dias de férias entre ${formatDate(buscado.de)} e ${formatDate(buscado.ate)}`}
+            : `${pessoas.length} colaborador(es) com ${totalPeriodos} período(s), ${totalDias} dias de férias entre ${formatDate(de)} e ${formatDate(ate)}`}
           {!carregando && pessoas.length > 0 && (
             <>
               <br />
@@ -212,7 +241,7 @@ export function FeriasProgramacao({
                         <td />
                         <td />
                         <td className="tabular" style={{ textAlign: "right", fontSize: "0.82rem" }}>{i.dias}</td>
-                        <td className="tabular" style={{ textAlign: "right", fontSize: "0.82rem" }}>{diasNoPeriodo(i, buscado.de, buscado.ate)}</td>
+                        <td className="tabular" style={{ textAlign: "right", fontSize: "0.82rem" }}>{diasNoPeriodo(i, de, ate)}</td>
                         <td><Badge tone={FERIAS_STATUS_TONE[i.status]}>{FERIAS_STATUS[i.status]}</Badge></td>
                       </tr>
                     ))}

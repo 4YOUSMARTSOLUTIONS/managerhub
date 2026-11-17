@@ -126,7 +126,7 @@ type Atalho = "hoje" | "7d" | "30d" | "mes" | "proximoMes" | "12m" | "ano";
  * próprio botão, e o resto da linha fica para o que muda com mais frequência.
  */
 export function BarraFiltrosFerias({
-  filtros, onChange, setores, hoje, atalhos, itens,
+  filtros, onChange, setores, hoje, atalhos, itens, ultimas,
 }: {
   filtros: FiltrosFerias;
   onChange: (f: FiltrosFerias) => void;
@@ -136,6 +136,11 @@ export function BarraFiltrosFerias({
   atalhos: Atalho[];
   /** o que veio do período: para contar cada situação nos botões */
   itens?: AgendaItem[];
+  /**
+   * Atalho "Até as últimas férias" (Programação): de hoje até a última férias
+   * programada. Quem decide a data é a tela, que busca longe para descobrir.
+   */
+  ultimas?: { ate: string; ativo: boolean; onEscolher: () => void };
 }) {
   const set = (patch: Partial<FiltrosFerias>) => onChange({ ...filtros, ...patch });
   const ano = hoje.slice(0, 4);
@@ -148,11 +153,34 @@ export function BarraFiltrosFerias({
     "12m": { rotulo: "Próximos 12 meses", de: hoje, ate: somarDias(hoje, 364) },
     ano: { rotulo: `Ano de ${ano}`, de: `${ano}-01-01`, ate: `${ano}-12-31` },
   };
-  const atalhoAtivo = atalhos.find((a) => opcoes[a].de === filtros.de && opcoes[a].ate === filtros.ate);
+  const atalhoAtivo = ultimas?.ativo
+    ? undefined
+    : atalhos.find((a) => opcoes[a].de === filtros.de && opcoes[a].ate === filtros.ate);
   const datas = filtros.de === filtros.ate
     ? formatDate(filtros.de)
     : `${formatDate(filtros.de)} a ${formatDate(filtros.ate)}`;
-  const rotulo = `${atalhoAtivo ? opcoes[atalhoAtivo].rotulo : "Personalizado"} · ${datas}`;
+  const nomeDoPeriodo = ultimas?.ativo ? "Até as últimas férias" : atalhoAtivo ? opcoes[atalhoAtivo].rotulo : "Personalizado";
+  const rotulo = `${nomeDoPeriodo} · ${datas}`;
+
+  const opcao = (chave: string, texto: string, datasDaOpcao: string, ativo: boolean, escolher: () => void) => (
+    <button
+      key={chave}
+      type="button"
+      onClick={escolher}
+      style={{
+        display: "flex", alignItems: "center", gap: "0.5rem", width: "100%",
+        padding: "0.45rem 0.6rem", borderRadius: "var(--mh-radius-sm)",
+        border: "none", font: "inherit", fontSize: "0.85rem", textAlign: "left", cursor: "pointer",
+        background: ativo ? "var(--mh-primary-soft)" : "none",
+        color: ativo ? "var(--mh-primary-500)" : "var(--mh-text-1)",
+        fontWeight: ativo ? 600 : 400,
+      }}
+    >
+      <span style={{ flex: 1 }}>{texto}</span>
+      <span className="soft" style={{ fontSize: "0.74rem", fontWeight: 400 }}>{datasDaOpcao}</span>
+      <Check size={14} aria-hidden style={{ visibility: ativo ? "visible" : "hidden" }} />
+    </button>
+  );
 
   // a contagem de cada situação respeita busca e setor, não o próprio liga/desliga
   const contagem = useMemo(() => {
@@ -168,35 +196,22 @@ export function BarraFiltrosFerias({
         {(fechar) => (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
+              {ultimas && opcao(
+                "ultimas", "Até as últimas férias", ultimas.ativo ? `até ${formatDate(ultimas.ate)}` : "",
+                ultimas.ativo, () => { ultimas.onEscolher(); fechar(); },
+              )}
               {atalhos.map((a) => {
                 const o = opcoes[a];
-                const ativo = a === atalhoAtivo;
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => { set({ de: o.de, ate: o.ate }); fechar(); }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "0.5rem", width: "100%",
-                      padding: "0.45rem 0.6rem", borderRadius: "var(--mh-radius-sm)",
-                      border: "none", font: "inherit", fontSize: "0.85rem", textAlign: "left", cursor: "pointer",
-                      background: ativo ? "var(--mh-primary-soft)" : "none",
-                      color: ativo ? "var(--mh-primary-500)" : "var(--mh-text-1)",
-                      fontWeight: ativo ? 600 : 400,
-                    }}
-                  >
-                    <span style={{ flex: 1 }}>{o.rotulo}</span>
-                    <span className="soft" style={{ fontSize: "0.74rem", fontWeight: 400 }}>
-                      {o.de === o.ate ? formatDate(o.de).slice(0, 5) : `${formatDate(o.de).slice(0, 5)} a ${formatDate(o.ate).slice(0, 5)}`}
-                    </span>
-                    <Check size={14} aria-hidden style={{ visibility: ativo ? "visible" : "hidden" }} />
-                  </button>
+                return opcao(
+                  a, o.rotulo,
+                  o.de === o.ate ? formatDate(o.de).slice(0, 5) : `${formatDate(o.de).slice(0, 5)} a ${formatDate(o.ate).slice(0, 5)}`,
+                  a === atalhoAtivo, () => { set({ de: o.de, ate: o.ate }); fechar(); },
                 );
               })}
             </div>
             <div style={{ borderTop: "1px solid var(--mh-border)", paddingTop: "0.65rem", display: "flex", flexDirection: "column", gap: "0.45rem" }}>
               <span style={{ fontSize: "0.78rem", fontWeight: 700 }}>
-                Período personalizado{!atalhoAtivo && <span className="soft" style={{ fontWeight: 400 }}> (em uso)</span>}
+                Período personalizado{!atalhoAtivo && !ultimas?.ativo && <span className="soft" style={{ fontWeight: 400 }}> (em uso)</span>}
               </span>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.45rem" }}>
                 <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontSize: "0.74rem" }} className="soft">
