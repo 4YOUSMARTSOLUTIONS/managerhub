@@ -956,7 +956,8 @@ export function AbsenteismosManager({
       {aberto && (
         <Dialogo titulo="Absenteísmo" onFechar={() => { setAberto(null); setErro(""); }}>
           <Ficha
-            linha={aberto}
+            // a linha da lista, para o anexo recém-enviado ao importado aparecer
+            linha={rows.find((r) => r.id === aberto.id) ?? aberto}
             kindsComRedutor={kindsComRedutor}
             podeDecidir={podeDecidir}
             podeCancelarAprovado={podeCancelarAprovado}
@@ -2267,6 +2268,8 @@ function Ficha({
   };
 
   const decidindo = podeDecidir && linha.status === "pendente";
+  // a importação entra sem anexo: o DP anexa o atestado depois (LUIZ, 17/11/2026)
+  const anexandoImportado = podeDecidir && linha.importado && linha.status === "aprovado";
   const cancelandoAprovado = podeCancelarAprovado && linha.status === "aprovado";
   const cancelandoAberto = podeCancelarProprio && (linha.status === "aberto" || linha.status === "reprovado");
 
@@ -2387,7 +2390,7 @@ function Ficha({
         {linha.importado ? (
           <>
             {/* sem envio ao RH nem decisão: entrou aprovado pela importação de histórico */}
-            <Campo rotulo="Origem" valor="Importação de histórico, sem anexo e sem comunicado" />
+            <Campo rotulo="Origem" valor="Importação de histórico, sem comunicado" />
             <Campo rotulo="Importado por" valor={linha.createdByName} />
             <Campo rotulo="Importado em" valor={linha.decidedAt ? formatDate(linha.decidedAt) : null} />
           </>
@@ -2412,18 +2415,31 @@ function Ficha({
         </FieldGrid>
       </DetailSection>
 
+      {anexandoImportado && (
+        <Anexo
+          linha={linha}
+          obrigatorio={false}
+          temDoc={Boolean(linha.docPath)}
+          onMudou={() => {}}
+          onErro={onErro}
+          onAbrir={onAbrirDocumento}
+          onBaixar={onBaixarDocumento}
+          nomeBaixar={nomeBaixar}
+        />
+      )}
+
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         {onEfetivar && (
           <button type="button" className="btn btn-primary btn-sm" onClick={onEfetivar}>
             <Pencil size={15} /> Efetivar
           </button>
         )}
-        {linha.docPath && (
+        {linha.docPath && !anexandoImportado && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onAbrirDocumento(linha.docPath as string)}>
             <Paperclip size={15} /> {linha.docFilename ?? "Documento"}
           </button>
         )}
-        {nomeBaixar && (
+        {nomeBaixar && !anexandoImportado && (
           <button
             type="button" className="btn btn-ghost btn-sm" title={`Baixar como ${nomeBaixar}`}
             onClick={() => onBaixarDocumento(linha.docPath as string, nomeBaixar)}

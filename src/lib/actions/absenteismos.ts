@@ -589,9 +589,25 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
   }
 }
 
+/**
+ * Quem mexe no anexo: o lançamento ainda com quem lançou (aberto/reprovado) ou,
+ * desde 17/11/2026 (LUIZ), o importado aprovado pelo DP, que entrou sem anexo
+ * e recebe o atestado depois. A guarda do banco confere o mesmo.
+ */
+function recusaDoAnexo(
+  atual: { status: string; importado: boolean },
+  isDp: boolean,
+): string | null {
+  if (atual.status === "aberto" || atual.status === "reprovado") return null;
+  if (atual.importado && atual.status === "aprovado") {
+    return isDp ? null : "Só o DP anexa documento a lançamento importado.";
+  }
+  return "Este lançamento já foi enviado ao RH.";
+}
+
 export async function anexarDocumentoAbsenteismo(formData: FormData): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId } = await actionContext();
+    const { supabase, tenantId, userId, isDp } = await actionContext();
     const id = String(formData.get("id") ?? "");
     const file = formData.get("file");
     if (!id) return { error: "Lançamento inválido." };
@@ -602,13 +618,12 @@ export async function anexarDocumentoAbsenteismo(formData: FormData): Promise<Ac
 
     const { data: atual } = await supabase
       .from("absenteismo_lancamentos")
-      .select("status, doc_path")
+      .select("status, doc_path, importado")
       .eq("id", id)
       .maybeSingle();
     if (!atual) return { error: "Lançamento não encontrado." };
-    if (atual.status !== "aberto" && atual.status !== "reprovado") {
-      return { error: "Este lançamento já foi enviado ao RH." };
-    }
+    const naoPode = recusaDoAnexo(atual, isDp);
+    if (naoPode) return { error: naoPode };
 
     const limpo = file.name.replace(/[^\w.\- ]+/g, "_");
     const caminho = `${tenantId}/${id}/${Date.now()}-${limpo}`;
@@ -646,19 +661,18 @@ export async function anexarDocumentoAbsenteismo(formData: FormData): Promise<Ac
 
 export async function removerDocumentoAbsenteismo(formData: FormData): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase, isDp } = await actionContext();
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Lançamento inválido." };
 
     const { data: atual } = await supabase
       .from("absenteismo_lancamentos")
-      .select("status, doc_path")
+      .select("status, doc_path, importado")
       .eq("id", id)
       .maybeSingle();
     if (!atual) return { error: "Lançamento não encontrado." };
-    if (atual.status !== "aberto" && atual.status !== "reprovado") {
-      return { error: "Este lançamento já foi enviado ao RH." };
-    }
+    const naoPode = recusaDoAnexo(atual, isDp);
+    if (naoPode) return { error: naoPode };
 
     const { error } = await supabase
       .from("absenteismo_lancamentos")
