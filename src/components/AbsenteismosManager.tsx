@@ -498,194 +498,201 @@ export function AbsenteismosManager({
     return "";
   };
 
-  const linha = (r: AbsenteismoRow, comAutor: boolean) => (
-    <tr key={r.id}>
-      {/* Só nome e matrícula aqui. Função e setor viraram colunas: empilhados
-          debaixo do nome eles quebravam em quatro linhas e faziam a linha
-          inteira crescer, sem ficarem alinhados entre si para comparar. */}
-      <td>
-        {/* na tabela, o nome reduzido (LUIZ, 12/11/2026); e-mail, planilha e relatório levam o completo */}
-        <span style={{ fontWeight: 600 }} title={r.fullName ?? undefined}>{r.fullName ? shortName(r.fullName) : "Sem nome"}</span>
-        {r.employeeCode && (
-          <div className="soft" style={{ fontSize: "0.74rem" }}>{r.employeeCode}</div>
-        )}
-      </td>
-      <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? <span className="soft">–</span>}</td>
-      <td className="muted" style={{ fontSize: "0.82rem" }}>{r.positionName ?? <span className="soft">–</span>}</td>
+  /** o complemento da duração que antes ia numa segunda linha: agora na mesma, cortado se preciso */
+  const detalheDaDuracao = (r: AbsenteismoRow): string => {
+    if (r.partialDay) return r.hoursStart ? faixaDeHoras(r.hoursStart, r.hoursEnd) : "horário a confirmar";
+    if (r.primeiroDia === "trabalhou" && r.startDate) return `trabalhou em ${diaMes(r.startDate)}`;
+    if (r.primeiroDia === "parcial" && r.startDate) {
+      return r.hoursStart ? `+ ${faixaDeHoras(r.hoursStart, r.hoursEnd)} em ${diaMes(r.startDate)}` : `+ horas em ${diaMes(r.startDate)}`;
+    }
+    if (!r.startDate && r.status === "aberto" && semComparecer(r)) return "sem comparecer";
+    return "";
+  };
 
-      {/* Só o motivo (LUIZ, 16/11/2026): o comportamento embaixo repetia o
-          nome ("Atestado / Atestado") e quebrava a regra de uma informação por
-          coluna. Ele continua na ficha e na planilha exportada. */}
-      <td>
-        {r.typeName ? <span>{r.typeName}</span> : <span className="soft">Motivo não confirmado</span>}
-      </td>
-      {/* Sem efetivação ainda não há período, e a coluna ficaria vazia numa
-          linha que TEM data: o dia do lançamento entra aqui, apagado, para a
-          linha não perder a única data que possui. Os dois podem divergir de
-          propósito (atestado retroativo), e aí vale o que foi confirmado. */}
-      <td style={{ whiteSpace: "nowrap" }}>
-        {r.startDate
-          ? formatDate(r.startDate)
-          : <span className="soft" title="Dia do lançamento. O período é definido na efetivação.">{formatDate(r.occurredOn)}</span>}
-      </td>
-      <td style={{ whiteSpace: "nowrap" }}>
-        {r.endDate === SEM_RETORNO
-          ? <span title="Falta sem data de término: segue faltando">Sem término</span>
-          : r.endDate
-          ? formatDate(r.endDate)
-          : r.status === "aberto" && r.ausenteAte && r.ausenteAte > r.occurredOn
-            ? <span className="soft" title="Último dia registrado sem comparecer. O período é definido na efetivação.">{formatDate(r.ausenteAte)}</span>
-            : <span className="soft">–</span>}
-      </td>
-      <td style={{ whiteSpace: "nowrap" }}>
-        {duracao(r) ? (
-          <>
-            <span>{duracao(r)}</span>
-            {r.partialDay ? (
-              <div className="soft" style={{ fontSize: "0.74rem" }}>
-                {r.hoursStart ? faixaDeHoras(r.hoursStart, r.hoursEnd) : "Parcial, horário a confirmar"}
-              </div>
-            ) : r.primeiroDia === "trabalhou" && r.startDate ? (
-              <div className="soft" style={{ fontSize: "0.74rem" }}>Trabalhou em {diaMes(r.startDate)}</div>
-            ) : r.primeiroDia === "parcial" && r.startDate ? (
-              <div className="soft" style={{ fontSize: "0.74rem" }}>
-                {r.hoursStart ? `+ ${faixaDeHoras(r.hoursStart, r.hoursEnd)} em ${diaMes(r.startDate)}` : `+ horas em ${diaMes(r.startDate)}`}
-              </div>
-            ) : !r.startDate && r.status === "aberto" && semComparecer(r) ? (
-              <div className="soft" style={{ fontSize: "0.74rem" }}>Sem comparecer</div>
-            ) : null}
-          </>
-        ) : <span className="soft">–</span>}
-      </td>
-      {comAutor && (r.importado
-        ? <td className="muted" title={r.createdByName ? `Importado por ${r.createdByName}` : undefined}>Importação</td>
-        : r.comunicadoImportado
-        ? (
-          <td
-            className="muted"
-            title={[r.importadoPorName && `Importado por ${r.importadoPorName}`, r.createdByName && `com ${r.createdByName}`].filter(Boolean).join(", ") || undefined}
-          >
-            Importação
+  /** texto que pode passar da coluna: cortado com reticências, completo na dica */
+  const corta = (texto: string | null | undefined, largura: number) =>
+    texto
+      ? <span className="cell-trunc" style={{ maxWidth: largura }} title={texto}>{texto}</span>
+      : <span className="soft">–</span>;
+
+  // Uma linha por lançamento (LUIZ, 17/11/2026): nada quebra; a matrícula tem
+  // coluna própria, antes do nome, e o que não cabe vira reticências com o
+  // dado completo na dica.
+  const linha = (r: AbsenteismoRow, comAutor: boolean) => {
+    const dur = duracao(r);
+    const det = dur ? detalheDaDuracao(r) : "";
+    const autor = r.importado
+      ? { texto: "Importação", dica: r.createdByName ? `Importado por ${r.createdByName}` : "Importação" }
+      : r.comunicadoImportado
+        ? {
+            texto: "Importação",
+            dica: [r.importadoPorName && `Importado por ${r.importadoPorName}`, r.createdByName && `com ${r.createdByName}`]
+              .filter(Boolean).join(", ") || "Importação",
+          }
+        : r.createdByName ? { texto: shortName(r.createdByName), dica: r.createdByName } : null;
+    return (
+      <tr key={r.id}>
+        <td className="tabular muted">{r.employeeCode ?? <span className="soft">–</span>}</td>
+        {/* o nome reduzido (LUIZ, 12/11/2026); o completo na dica, na planilha e no relatório */}
+        <td>
+          <span className="cell-trunc" style={{ maxWidth: 150, fontWeight: 600 }} title={r.fullName ?? undefined}>
+            {r.fullName ? shortName(r.fullName) : "Sem nome"}
+          </span>
+        </td>
+        <td className="muted">{corta(r.departmentName, 100)}</td>
+        <td className="muted">{corta(r.positionName, 120)}</td>
+        {/* Só o motivo (LUIZ, 16/11/2026): o comportamento fica na ficha e na planilha. */}
+        <td>
+          {r.typeName ? corta(r.typeName, 120) : <span className="soft">Motivo não confirmado</span>}
+        </td>
+        {/* Sem efetivação ainda não há período: o dia do lançamento entra aqui,
+            apagado, para a linha não perder a única data que possui. */}
+        <td>
+          {r.startDate
+            ? formatDate(r.startDate)
+            : <span className="soft" title="Dia do lançamento. O período é definido na efetivação.">{formatDate(r.occurredOn)}</span>}
+        </td>
+        <td>
+          {r.endDate === SEM_RETORNO
+            ? <span title="Falta sem data de término: segue faltando">Sem término</span>
+            : r.endDate
+            ? formatDate(r.endDate)
+            : r.status === "aberto" && r.ausenteAte && r.ausenteAte > r.occurredOn
+              ? <span className="soft" title="Último dia registrado sem comparecer. O período é definido na efetivação.">{formatDate(r.ausenteAte)}</span>
+              : <span className="soft">–</span>}
+        </td>
+        <td>
+          {dur ? (
+            <span className="cell-trunc" style={{ maxWidth: 130 }} title={det ? `${dur}, ${det}` : dur}>
+              {dur}{det && <span className="soft"> · {det}</span>}
+            </span>
+          ) : <span className="soft">–</span>}
+        </td>
+        {comAutor && (
+          <td className={r.importado || r.comunicadoImportado ? "muted" : undefined}>
+            {autor
+              ? <span className="cell-trunc" style={{ maxWidth: 125 }} title={autor.dica}>{autor.texto}</span>
+              : <span className="soft">–</span>}
           </td>
-        )
-        : <td title={r.createdByName ?? undefined}>{r.createdByName ? shortName(r.createdByName) : <span className="soft">–</span>}</td>)}
-      <td>
-        <Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge>
-        {/* o porquê da reprovação à vista, sem abrir a ficha */}
-        {r.status === "reprovado" && r.decisionNote && (
-          <div
-            className="soft" title={r.decisionNote}
-            style={{ fontSize: "0.74rem", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}
-          >
-            RH: {r.decisionNote}
-          </div>
         )}
-      </td>
-      <td style={{ textAlign: "center" }}>
-        {r.docPath && (
-          <button
-            type="button" className="icon-btn"
-            title={`Abrir ${r.docFilename ?? "documento"}`} aria-label={`Abrir ${r.docFilename ?? "documento"}`}
-            onClick={() => abrirDocumento(r.docPath as string)}
-          >
-            <Paperclip size={15} />
-          </button>
-        )}
-      </td>
-      <td style={{ textAlign: "center" }}>
-        {/* Os três estados do comunicado se leem pela cor, sem abrir nada:
-            verde saiu, vermelho falhou, apagado não tinha para quem mandar.
-            O enviado ficava na cor do texto e era o único indistinguível. */}
-        {r.emailStatus === "sent" && (
-          <span title="Comunicado enviado" style={{ color: "var(--mh-success)", display: "inline-flex" }}>
-            <Mail size={15} aria-label="Comunicado enviado" />
+        <td>
+          {/* o porquê da reprovação à vista, na mesma linha do selo */}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", maxWidth: 300 }}>
+            <Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge>
+            {r.status === "reprovado" && r.decisionNote && (
+              <span className="cell-trunc soft" style={{ maxWidth: 100 }} title={`RH: ${r.decisionNote}`}>
+                RH: {r.decisionNote}
+              </span>
+            )}
           </span>
-        )}
-        {r.emailStatus === "failed" && (
-          <span title="O comunicado não pôde ser enviado" style={{ color: "var(--mh-danger)", display: "inline-flex" }}>
-            <Mail size={15} />
-          </span>
-        )}
-        {r.emailStatus === "skipped" && (
-          <span title="Nenhum destinatário configurado" className="soft" style={{ display: "inline-flex" }}>
-            <Mail size={15} />
-          </span>
-        )}
-      </td>
-      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-        <span style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center" }}>
-          <button type="button" className="icon-btn" title="Ver" onClick={() => setAberto(r)}>
-            <FileText size={15} />
-          </button>
-          {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
-              escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
-          {podeMexer(r) && (
+        </td>
+        <td style={{ textAlign: "center" }}>
+          {r.docPath && (
             <button
-              type="button" className="btn btn-primary btn-sm"
-              onClick={() => { setErro(""); setConfirmando(r); }}
+              type="button" className="icon-btn"
+              title={`Abrir ${r.docFilename ?? "documento"}`} aria-label={`Abrir ${r.docFilename ?? "documento"}`}
+              onClick={() => abrirDocumento(r.docPath as string)}
             >
-              <Pencil size={14} /> Efetivar
+              <Paperclip size={14} />
             </button>
           )}
-          {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
-              com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
-              parcial é de um dia só. */}
-          {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
-            <button
-              type="button" className="btn btn-ghost btn-sm"
-              title="O colaborador continua sem comparecer e sem informar o motivo"
-              onClick={() => { setErro(""); setContinuando(r); }}
-            >
-              <CalendarPlus size={14} /> Continua ausente
-            </button>
+        </td>
+        <td style={{ textAlign: "center" }}>
+          {/* Os três estados do comunicado se leem pela cor, sem abrir nada:
+              verde saiu, vermelho falhou, apagado não tinha para quem mandar. */}
+          {r.emailStatus === "sent" && (
+            <span title="Comunicado enviado" style={{ color: "var(--mh-success)", display: "inline-flex" }}>
+              <Mail size={14} aria-label="Comunicado enviado" />
+            </span>
           )}
-          {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
-              horas): cancela e pede ao RH para desconsiderar o comunicado */}
-          {r.status === "aberto" && podeMexer(r) && (
-            <button
-              type="button" className="btn btn-danger btn-sm"
-              title="A ausência não se confirmou (o colaborador chegou depois, por exemplo)"
-              onClick={() => { setErro(""); setCancelando(r); }}
-            >
-              <Ban size={14} /> Cancelar
-            </button>
+          {r.emailStatus === "failed" && (
+            <span title="O comunicado não pôde ser enviado" style={{ color: "var(--mh-danger)", display: "inline-flex" }}>
+              <Mail size={14} />
+            </span>
           )}
-        </span>
-      </td>
-    </tr>
-  );
+          {r.emailStatus === "skipped" && (
+            <span title="Nenhum destinatário configurado" className="soft" style={{ display: "inline-flex" }}>
+              <Mail size={14} />
+            </span>
+          )}
+        </td>
+        <td style={{ textAlign: "right" }}>
+          <span style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center" }}>
+            <button type="button" className="icon-btn" title="Ver" onClick={() => setAberto(r)}>
+              <FileText size={14} />
+            </button>
+            {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
+                escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
+            {podeMexer(r) && (
+              <button
+                type="button" className="btn btn-primary btn-sm"
+                onClick={() => { setErro(""); setConfirmando(r); }}
+              >
+                <Pencil size={13} /> Efetivar
+              </button>
+            )}
+            {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
+                com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
+                parcial é de um dia só. Só o ícone desde a tabela de uma linha
+                (17/11/2026): com o nome, a linha passava da tela. */}
+            {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
+              <button
+                type="button" className="icon-btn"
+                title="Continua ausente: o colaborador segue sem comparecer e sem informar o motivo"
+                aria-label="Continua ausente"
+                onClick={() => { setErro(""); setContinuando(r); }}
+              >
+                <CalendarPlus size={14} />
+              </button>
+            )}
+            {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
+                horas): cancela e pede ao RH para desconsiderar o comunicado */}
+            {r.status === "aberto" && podeMexer(r) && (
+              <button
+                type="button" className="icon-btn"
+                title="Cancelar: a ausência não se confirmou (o colaborador chegou depois, por exemplo)"
+                aria-label="Cancelar lançamento"
+                style={{ color: "var(--mh-danger)" }}
+                onClick={() => { setErro(""); setCancelando(r); }}
+              >
+                <Ban size={14} />
+              </button>
+            )}
+          </span>
+        </td>
+      </tr>
+    );
+  };
 
   const tabela = (lista: AbsenteismoRow[], comAutor: boolean, vazio: string) =>
     lista.length === 0 ? (
       <EmptyState title="Nada por aqui" description={vazio} />
     ) : (
-      // com Setor, Função, Início, Fim e Duração a tabela passa da largura da
-      // tela em notebook: a rolagem mora aqui dentro, e não no corpo da página
+      // a rolagem lateral mora aqui dentro, e não no corpo da página
       <div style={{ overflowX: "auto" }}>
-      <table className="table">
+      <table className="table table-linha">
         <thead>
           <tr>
+            <th>Matrícula</th>
             <th>Colaborador</th>
-            <th style={{ width: 150 }}>Setor</th>
-            <th style={{ width: 180 }}>Função</th>
-            <th style={{ width: 190 }}>Motivo</th>
-            <th style={{ width: 110 }}>Início</th>
-            <th style={{ width: 110 }}>Fim</th>
-            <th style={{ width: 110 }} title="Horas quando a ausência é parcial; dias quando cobre o período inteiro">Duração</th>
-            {comAutor && <th style={{ width: 170 }}>Lançado por</th>}
-            <th style={{ width: 160 }}>Situação</th>
-            {/* quem já tem documento, sem abrir a ficha (LUIZ, 17/11/2026: os
-                importados recebem o atestado depois, um a um) */}
-            <th style={{ width: 70, textAlign: "center" }} title="Clipe: o lançamento tem documento anexado. Clique para abrir.">
+            <th>Setor</th>
+            <th>Função</th>
+            <th>Motivo</th>
+            <th>Início</th>
+            <th>Fim</th>
+            <th title="Horas quando a ausência é parcial; dias quando cobre o período inteiro">Duração</th>
+            {comAutor && <th>Lançado por</th>}
+            <th>Situação</th>
+            {/* quem já tem documento, sem abrir a ficha (LUIZ, 17/11/2026) */}
+            <th style={{ textAlign: "center" }} title="Clipe: o lançamento tem documento anexado. Clique para abrir.">
               Anexo
             </th>
             {/* Escrito, e não o ícone sozinho: o cabeçalho é onde a pessoa
-                descobre o que a coluna significa, e um envelope ali obrigava a
-                passar o mouse para saber. */}
-            <th style={{ width: 140, textAlign: "center", whiteSpace: "nowrap" }} title="Verde: enviado. Vermelho: falhou. Apagado: sem destinatário cadastrado.">
-              Comunicado enviado
+                descobre o que a coluna significa. */}
+            <th style={{ textAlign: "center" }} title="Comunicado por e-mail. Verde: enviado. Vermelho: falhou. Apagado: sem destinatário cadastrado.">
+              Comunicado
             </th>
-            <th style={{ width: 90 }}></th>
+            <th aria-label="Ações"></th>
           </tr>
         </thead>
         <tbody>{lista.map((r) => linha(r, comAutor))}</tbody>

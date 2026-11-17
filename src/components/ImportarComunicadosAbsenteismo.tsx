@@ -263,12 +263,14 @@ export function ImportarComunicadosAbsenteismo({ aberto, onFechar }: { aberto: b
 
           {mostrado.entradas.length > 0 && (
             <div style={{ overflowX: "auto" }}>
-              <table className="table" style={{ fontSize: "0.8rem" }}>
+              {/* uma linha por pessoa, como a lista do módulo (LUIZ, 17/11/2026) */}
+              <table className="table table-linha">
                 <thead>
                   <tr>
-                    <th style={{ width: 56 }}>Linha</th>
+                    <th>Linha</th>
+                    <th>Matrícula</th>
                     <th>Colaborador no cadastro</th>
-                    <th style={{ width: 96 }}>Data</th>
+                    <th>Data</th>
                     <th>Fica com</th>
                   </tr>
                 </thead>
@@ -276,14 +278,19 @@ export function ImportarComunicadosAbsenteismo({ aberto, onFechar }: { aberto: b
                   {mostrado.entradas.map((e) => (
                     <tr key={e.linha}>
                       <td className="tabular muted">{e.linha}</td>
-                      <td title={e.nome}>
-                        {shortName(e.nome)}
-                        {e.matricula && <span className="soft"> · {e.matricula}</span>}
+                      <td className="tabular muted">{e.matricula ?? "–"}</td>
+                      <td>
+                        <span className="cell-trunc" style={{ maxWidth: 170 }} title={e.nome}>{shortName(e.nome)}</span>
                       </td>
                       <td className="tabular">{e.data}</td>
-                      <td title={e.responsavel}>
-                        {shortName(e.responsavel)}
-                        {e.semGestor && <div className="soft" style={{ fontSize: "0.74rem" }}>Sem gestor ativo: fica com quem importou</div>}
+                      <td>
+                        <span
+                          className="cell-trunc" style={{ maxWidth: 220 }}
+                          title={e.semGestor ? `${e.responsavel}: sem gestor ativo, fica com quem importou` : e.responsavel}
+                        >
+                          {shortName(e.responsavel)}
+                          {e.semGestor && <span className="soft"> · sem gestor ativo</span>}
+                        </span>
                       </td>
                     </tr>
                   ))}

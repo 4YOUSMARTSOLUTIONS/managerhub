@@ -1117,6 +1117,27 @@ a {
   padding: 0.4rem 0.5rem;
 }
 
+/* tabela de uma linha só (Absenteísmos, LUIZ 17/11/2026): nada quebra linha,
+   a fonte é um pouco menor e o texto longo é cortado com reticências por
+   .cell-trunc, com o dado completo na dica (title) */
+.table-linha {
+  font-size: 0.76rem;
+}
+.table-linha th {
+  font-size: 0.62rem;
+  padding: 0.42rem 0.45rem;
+}
+.table-linha td {
+  padding: 0.34rem 0.45rem;
+  white-space: nowrap;
+}
+.cell-trunc {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* avatares menores dentro de tabelas, p/ ganhar largura */
 .table .avatar {
   width: 26px;
