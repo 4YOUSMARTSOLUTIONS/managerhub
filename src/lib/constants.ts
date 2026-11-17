@@ -428,13 +428,16 @@ export const SITUACAO_COLABORADOR: Record<string, string> = {
   licenca_maternidade: "Licença-maternidade",
   afastamento: "Afastado",
   licenca: "De licença",
+  // falta sem data de término (LUIZ, 17/11/2026): segue faltando sem justificar
+  falta: "Faltando",
 };
 
 /**
  * "Sem data de retorno" (aposentadoria por invalidez, INSS sem alta prevista).
  * Data distante e não NULL: a RV e as metas comparam `iso <= fim` como texto, e
- * com NULL o dia de quem está afastado contaria como trabalhado. Só afastamento
- * e licença aceitam (constraint `employee_absences_sem_retorno`).
+ * com NULL o dia de quem está afastado contaria como trabalhado. Aceitam
+ * afastamento, licença e, desde 17/11/2026, a falta sem término (constraint
+ * `employee_absences_sem_retorno`; no absenteísmo, `falta_continua`).
  */
 export const SEM_RETORNO = "9999-12-31";
 

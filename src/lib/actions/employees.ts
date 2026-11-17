@@ -5,6 +5,7 @@ import { actionContext } from "./context";
 import { isValidCpf, onlyDigits } from "@/lib/cpf";
 import type { ActionState } from "./types";
 import { SEM_GESTOR } from "@/lib/constants";
+import { comunicarFaltasEncerradasNoDesligamento } from "@/lib/absenteismo-email";
 
 // "Sem gestor" é uma escolha (chega como marcador); em branco é esquecimento
 const GESTOR_EM_BRANCO = "Escolha o gestor, ou \"Sem gestor\" para quem está no topo da hierarquia.";
@@ -180,7 +181,7 @@ export async function updateEmployee(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    const { supabase, tenantId, role } = await actionContext();
+    const { supabase, tenantId, role, userId: atorId } = await actionContext();
     const userId = String(formData.get("user_id") ?? "");
     if (!userId) return { error: "Usuário inválido." };
     const cpf = onlyDigits(String(formData.get("cpf") ?? ""));
@@ -214,10 +215,17 @@ export async function updateEmployee(
     if (error) return { error: error.message };
 
     if (temDesligamento) {
+      // a data de antes: só um desligamento NOVO (ou com outra data) comunica o
+      // encerramento das faltas sem término, que o banco faz sozinho
+      const { data: antes } = await supabase
+        .from("memberships").select("dismissed_at").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
       const { error: eDeslig } = await supabase.rpc("colaborador_definir_desligamento", {
         p_tenant: tenantId, p_user: userId, p_data: desligamento,
       });
       if (eDeslig) return { error: `A ficha foi salva, mas o desligamento não: ${eDeslig.message}` };
+      if (desligamento && antes?.dismissed_at !== desligamento) {
+        await comunicarFaltasEncerradasNoDesligamento(tenantId, userId, atorId);
+      }
     }
 
     // A marca de gestão de treinamentos vai à parte, e só quando o campo estava

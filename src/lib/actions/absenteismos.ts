@@ -12,6 +12,7 @@ import type { Enums } from "@/types/database";
 import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
 import { wantsActive } from "@/lib/catalogGuard";
 import { lerAtestadoNaOpenAI, MIMES_LEITURA_IA, type AtestadoLidoPorIA } from "@/lib/atestado-ia";
+import { SEM_RETORNO } from "@/lib/constants";
 
 /**
  * Absenteísmos: o catálogo de tipos, a lista de quem recebe o comunicado e,
@@ -436,6 +437,12 @@ export type ConfirmacaoInput = {
   /** falta abonada: fica no histórico, mas não pesa na remuneração variável */
   abonada?: boolean;
   /**
+   * Falta sem data de término (LUIZ, 17/11/2026): a pessoa segue faltando e não
+   * se sabe até quando. Só vale para motivo de falta; o término é gravado como
+   * `SEM_RETORNO` e o DP encerra depois, pela ficha (ou o desligamento encerra).
+   */
+  semTermino?: boolean;
+  /**
    * Ausência de horas: entrada e saída no dia (vazio = ausência de dias).
    *
    * Vale para QUALQUER tipo, não só atestado: é assim que a falta parcial diz
@@ -482,7 +489,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
     const { supabase, tenantId, userId } = await actionContext();
     if (!input.id) return { error: "Lançamento inválido." };
     if (!input.absenceTypeId) return { error: "Escolha o tipo de absenteísmo." };
-    if (!input.startDate || !input.endDate) return { error: "Informe o período." };
+    if (!input.startDate || (!input.semTermino && !input.endDate)) return { error: "Informe o período." };
 
     const { data: tipo } = await supabase
       .from("absence_types")
@@ -491,12 +498,17 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
       .maybeSingle();
     if (!tipo) return { error: "Tipo de absenteísmo não encontrado." };
 
+    // sem término só existe na falta; o "fim" 9999 nunca vem digitado
+    const semTermino = tipo.kind === "falta" && Boolean(input.semTermino);
+    if (!semTermino && input.endDate === SEM_RETORNO) return { error: "Informe o término." };
+    const fim = semTermino ? SEM_RETORNO : input.endDate;
+
     const diasDoDocumento =
-      Math.round((Date.parse(input.endDate) - Date.parse(input.startDate)) / 86400000) + 1;
+      Math.round((Date.parse(fim) - Date.parse(input.startDate)) / 86400000) + 1;
 
     // O primeiro dia só se aplica a período de dois dias ou mais, e nunca ao
-    // lançamento que é todo de horas (um dia só).
-    const primeiroDia = !input.parcial && diasDoDocumento >= 2
+    // lançamento que é todo de horas (um dia só) nem à falta sem término.
+    const primeiroDia = !semTermino && !input.parcial && diasDoDocumento >= 2
       && (input.primeiroDia === "trabalhou" || input.primeiroDia === "parcial")
       ? input.primeiroDia
       : "integral";
@@ -513,7 +525,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
     if (comHoras && horaFim <= horaIni) {
       return { error: "O horário final precisa ser maior que o inicial." };
     }
-    const emHoras = Boolean(input.parcial) || (primeiroDia === "integral" && comHoras);
+    const emHoras = !semTermino && (Boolean(input.parcial) || (primeiroDia === "integral" && comHoras));
     const gravaHoras = comHoras && (emHoras || primeiroDia === "parcial");
 
     const { error } = await supabase
@@ -528,7 +540,8 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         snap_requires_kinship: tipo.requires_kinship,
         snap_discounts_rv_default: tipo.discounts_rv_default,
         start_date: input.startDate,
-        end_date: input.endDate,
+        end_date: fim,
+        falta_continua: semTermino,
         discounts_rv: tipo.discounts_rv_default,
         note: input.note.trim() || null,
         kinship_of_deceased: tipo.requires_kinship ? (input.parentesco?.trim() || null) : null,
@@ -573,7 +586,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
             doctor_crm: a.crm.trim() || null,
             facility: a.local.trim() || null,
             issued_on: a.emitidoEm || null,
-            days_off: emHoras || !Number.isFinite(diasCorridos) ? null : diasCorridos,
+            days_off: emHoras || semTermino || !Number.isFinite(diasCorridos) ? null : diasCorridos,
             companion_name: a.acompanhado.trim() || null,
             updated_by: userId,
             updated_at: new Date().toISOString(),
@@ -603,6 +616,37 @@ function recusaDoAnexo(
     return isDp ? null : "Só o DP anexa documento a lançamento importado.";
   }
   return "Este lançamento já foi enviado ao RH.";
+}
+
+/**
+ * Encerra, corrige ou reabre a falta sem término (LUIZ, 17/11/2026). Só o DP.
+ *
+ * `ultimoDia` = o último dia de falta; `null` reabre (a pessoa segue faltando).
+ * Ao encerrar, sai o comunicado de encerramento para os destinatários de
+ * sempre; reabrir não avisa ninguém.
+ */
+export async function encerrarFaltaSemTermino(input: { id: string; ultimoDia: string | null }): Promise<ActionState> {
+  try {
+    const { supabase, userId, isDp } = await actionContext();
+    if (!isDp) return { error: "Só o DP encerra as faltas." };
+    if (!input.id) return { error: "Lançamento inválido." };
+    if (input.ultimoDia !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.ultimoDia)) {
+      return { error: "Informe o último dia de falta." };
+    }
+    const { error } = await supabase.rpc("absenteismo_encerrar_falta", {
+      p_id: input.id,
+      p_ultimo_dia: input.ultimoDia,
+    });
+    if (error) return { error: error.message };
+
+    // o término muda a ausência que a RV lê
+    revalidarComRv();
+    if (input.ultimoDia === null) return { ok: true, message: "Falta reaberta: segue sem data de término." };
+    const envio = await dispatchComunicadoAbsenteismo(input.id, "encerrada", userId);
+    return { ok: true, message: "Faltas encerradas.", ...avisoDoEnvio(envio) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function anexarDocumentoAbsenteismo(formData: FormData): Promise<ActionState> {

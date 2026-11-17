@@ -182,6 +182,8 @@ export default async function AbsenteismosPage() {
     importado: l.importado,
     comunicadoImportado: l.comunicado_importado_por != null,
     importadoPorName: l.comunicado_importado_por ? nomePorId.get(l.comunicado_importado_por) ?? null : null,
+    faltaContinua: l.falta_continua,
+    faltaEncerradaNoDesligamento: l.falta_encerrada_no_desligamento,
   }));
 
   // Regra sem faixa não corta nada, então só conta quem tem as duas coisas. É o

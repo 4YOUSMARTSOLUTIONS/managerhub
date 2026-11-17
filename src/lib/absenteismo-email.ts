@@ -36,8 +36,14 @@ import { sendMail } from "@/lib/mailer";
  *
  * `continua`: o lançamento em aberto ganhou mais um dia sem comparecer ("Continua
  * ausente", LUIZ, 17/11/2026). Os dias se acumulam no mesmo lançamento.
+ *
+ * `encerrada`: a falta sem data de término ganhou o último dia (LUIZ,
+ * 17/11/2026), pela ficha ou pelo desligamento do colaborador.
  */
-export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto" | "cancelado" | "continua";
+export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto" | "cancelado" | "continua" | "encerrada";
+
+/** o término da falta que segue sem data (o mesmo SEM_RETORNO de constants.ts) */
+const SEM_TERMINO = "9999-12-31";
 
 export type ResultadoComunicado = {
   status: "sent" | "failed" | "skipped";
@@ -96,6 +102,10 @@ type Linha = {
   work_accident: boolean | null;
   /** último dia sem comparecer registrado pelo "Continua ausente"; nulo = só occurred_on */
   ausente_ate: string | null;
+  /** falta lançada sem data de término (end_date SEM_TERMINO enquanto segue) */
+  falta_continua?: boolean | null;
+  /** o término veio do desligamento do colaborador */
+  falta_encerrada_no_desligamento?: boolean | null;
 };
 
 /** Os dias sem comparecer do lançamento em aberto, quando passam de um. */
@@ -130,6 +140,7 @@ function assunto(evento: EventoComunicado, l: Linha): string {
   if (evento === "aprovado") return `Absenteísmo aprovado: ${quem} em ${dia}`;
   if (evento === "reprovado") return `Absenteísmo reprovado: ${quem} em ${dia}`;
   if (evento === "confirmado") return `Motivo confirmado: ${quem} em ${dia}`;
+  if (evento === "encerrada") return `Faltas encerradas: ${quem}, último dia ${dataBr(l.end_date)}`;
   if (evento === "continua") {
     const s = diasSemComparecer(l);
     return `Continua ausente: ${quem} em ${dataBr(l.ausente_ate ?? l.occurred_on)}${s ? ` (${s.dias}º dia)` : ""}`;
@@ -179,7 +190,16 @@ function corpo(
       const primeiro = l.primeiro_dia === "trabalhou" || l.primeiro_dia === "parcial" ? l.primeiro_dia : null;
       // Primeiro dia trabalhado (LUIZ, 12/11/2026): o período é o do documento,
       // e a ausência que vale vem logo abaixo, para o RH não descontar a mais.
-      linhas.push([primeiro ? "Período do atestado" : "Período", `${dataBr(l.start_date)} a ${dataBr(l.end_date)}`]);
+      linhas.push([
+        primeiro ? "Período do atestado" : "Período",
+        l.end_date === SEM_TERMINO
+          ? `Desde ${dataBr(l.start_date)}, sem data de término (segue faltando)`
+          : `${dataBr(l.start_date)} a ${dataBr(l.end_date)}`,
+      ]);
+      if (evento === "encerrada" && l.end_date !== SEM_TERMINO) {
+        const dias = diasEntre(l.ausencia_inicio ?? l.start_date, l.end_date);
+        linhas.push(["Dias de falta", `${dias} dia${dias === 1 ? "" : "s"}`]);
+      }
       if (primeiro && l.ausencia_inicio) {
         const dias = diasEntre(l.ausencia_inicio, l.end_date);
         const inteiros = `${dataBr(l.ausencia_inicio)} a ${dataBr(l.end_date)} (${dias} dia${dias === 1 ? "" : "s"})`;
@@ -236,6 +256,10 @@ function corpo(
         : "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
       : evento === "continua"
         ? "O colaborador continua sem comparecer e sem informar o motivo. Situação ainda não confirmada: o motivo será informado quando o gestor confirmar o lançamento."
+      : evento === "encerrada"
+        ? l.falta_encerrada_no_desligamento
+          ? `A falta, lançada sem data de término, foi encerrada no desligamento do colaborador. O último dia de falta é ${dataBr(l.end_date)}.`
+          : `A falta, lançada sem data de término, foi encerrada pelo DP. O último dia de falta é ${dataBr(l.end_date)}.`
       : evento === "confirmado"
         ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH."
       : evento === "direto"
@@ -421,4 +445,27 @@ export async function comunicarAberturaSeFaltar(lancamentoId: string, atorId?: s
     .eq("lancamento_id", lancamentoId);
   if ((count ?? 0) > 0) return null;
   return dispatchComunicadoAbsenteismo(lancamentoId, "aberto", atorId);
+}
+
+/**
+ * O desligamento encerra a falta sem término (gatilho no banco); aqui sai o
+ * comunicado de cada uma. Chamado pela ficha do colaborador só quando a data de
+ * desligamento mudou, para salvar a ficha de novo não repetir o e-mail.
+ */
+export async function comunicarFaltasEncerradasNoDesligamento(
+  tenantId: string, userId: string, atorId?: string,
+): Promise<void> {
+  // a marca só fica nas que o desligamento ATUAL encerrou: trocar a data reabre
+  // as anteriores e encerra de novo na nova
+  const { data: faltas } = await createServiceClient()
+    .from("absenteismo_lancamentos")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .eq("falta_continua", true)
+    .eq("falta_encerrada_no_desligamento", true)
+    .eq("status", "aprovado");
+  for (const f of faltas ?? []) {
+    await dispatchComunicadoAbsenteismo(f.id, "encerrada", atorId);
+  }
 }

@@ -20,10 +20,11 @@ import { formatDate, normalizar, shortName } from "@/lib/format";
 import { formatCpf } from "@/lib/cpf";
 import {
   ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE,
-  ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO,
+  ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO, SEM_RETORNO,
 } from "@/lib/constants";
 import {
   anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, comunicarAberturaPendente, confirmarAbsenteismo, continuaAusente,
+  encerrarFaltaSemTermino,
   decidirAbsenteismo, getAlertaInss, getAtestado, getCpfDoLancamento, getDocumentoAbsenteismoUrl,
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
@@ -102,7 +103,19 @@ export type AbsenteismoRow = {
   comunicadoImportado: boolean;
   /** quem importou o comunicado */
   importadoPorName: string | null;
+  /**
+   * Falta sem data de término (LUIZ, 17/11/2026): enquanto segue, endDate é
+   * SEM_RETORNO; encerrada, vira o último dia de falta e a marca fica.
+   */
+  faltaContinua: boolean;
+  /** o término veio do desligamento do colaborador */
+  faltaEncerradaNoDesligamento: boolean;
 };
+
+/** a falta sem término que ainda segue (enviada ao RH ou aprovada) */
+function semTerminoAberto(r: Pick<AbsenteismoRow, "faltaContinua" | "endDate" | "status">): boolean {
+  return r.faltaContinua && r.endDate === SEM_RETORNO && (r.status === "pendente" || r.status === "aprovado");
+}
 
 export type Pessoa = {
   id: string;
@@ -153,6 +166,8 @@ type Confirmacao = {
   /** só vale em período de 2 dias ou mais, fora da ausência de horas */
   primeiroDia: PrimeiroDia;
   acompanhado: string;
+  /** falta sem data de término (LUIZ, 17/11/2026); só vale com motivo de falta */
+  semTermino: boolean;
 };
 
 /**
@@ -340,10 +355,16 @@ export function AbsenteismosManager({
   const tiposAtivos = tipos.filter((t) => t.active);
   const pessoaPorId = useMemo(() => new Map(pessoas.map((p) => [p.id, p])), [pessoas]);
 
+  // "Faltas sem término" (LUIZ, 17/11/2026): quem segue faltando, sem data
+  const [soSemTermino, setSoSemTermino] = useState(false);
+  const [aba, setAba] = useState<string | undefined>(undefined);
+  const quantosSemTermino = rows.filter(semTerminoAberto).length;
+
   const filtrar = (lista: AbsenteismoRow[]) => {
     const q = normalizar(busca.trim());
-    if (!q) return lista;
-    return lista.filter((r) =>
+    const base = soSemTermino ? lista.filter(semTerminoAberto) : lista;
+    if (!q) return base;
+    return base.filter((r) =>
       [r.fullName, r.typeName, r.employeeCode, r.departmentName]
         .some((v) => v && normalizar(v).includes(q)));
   };
@@ -461,6 +482,11 @@ export function AbsenteismosManager({
       const m = minutos % 60;
       return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
     }
+    // falta sem término: os dias contados até hoje
+    if (r.startDate && r.endDate === SEM_RETORNO) {
+      const d = diasDoPeriodo(r.ausenciaInicio ?? r.startDate, hoje());
+      return d === null ? "" : `${d} dia${d === 1 ? "" : "s"} até hoje`;
+    }
     if (r.startDate && r.endDate) {
       // os dias que valem: o primeiro dia trabalhado (todo ou parte) não conta
       const d = diasDoPeriodo(r.ausenciaInicio ?? r.startDate, r.endDate);
@@ -503,7 +529,9 @@ export function AbsenteismosManager({
           : <span className="soft" title="Dia do lançamento. O período é definido na efetivação.">{formatDate(r.occurredOn)}</span>}
       </td>
       <td style={{ whiteSpace: "nowrap" }}>
-        {r.endDate
+        {r.endDate === SEM_RETORNO
+          ? <span title="Falta sem data de término: segue faltando">Sem término</span>
+          : r.endDate
           ? formatDate(r.endDate)
           : r.status === "aberto" && r.ausenteAte && r.ausenteAte > r.occurredOn
             ? <span className="soft" title="Último dia registrado sem comparecer. O período é definido na efetivação.">{formatDate(r.ausenteAte)}</span>
@@ -702,6 +730,22 @@ export function AbsenteismosManager({
           className="input" placeholder="Buscar por colaborador, motivo ou setor…"
           value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 340 }}
         />
+        {(quantosSemTermino > 0 || soSemTermino) && (
+          <button
+            type="button"
+            className={`btn btn-sm ${soSemTermino ? "btn-primary" : "btn-ghost"}`}
+            aria-pressed={soSemTermino}
+            title="Faltas lançadas sem data de término, que seguem em aberto"
+            onClick={() => {
+              const liga = !soSemTermino;
+              setSoSemTermino(liga);
+              // as aprovadas moram no Histórico
+              if (liga) setAba("historico");
+            }}
+          >
+            Faltas sem término ({quantosSemTermino})
+          </button>
+        )}
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto", flexWrap: "wrap" }}>
           {(() => {
             /* Sem CID nem médico na planilha: o arquivo sai do sistema e vai
@@ -721,7 +765,7 @@ export function AbsenteismosManager({
                     r.occurredOn,
                     // em aberto com "Continua ausente": os dias sem comparecer
                     r.startDate ?? (r.status === "aberto" && semComparecer(r) ? r.occurredOn : ""),
-                    r.endDate ?? (r.status === "aberto" && semComparecer(r) ? r.ausenteAte ?? "" : ""),
+                    r.endDate === SEM_RETORNO ? "" : r.endDate ?? (r.status === "aberto" && semComparecer(r) ? r.ausenteAte ?? "" : ""),
                     duracao(r), horaIni, horaFim,
                     r.typeName ?? "", ABSENTEISMO_STATUS[r.status],
                     efeitoNaRv({
@@ -788,7 +832,7 @@ export function AbsenteismosManager({
         <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>
       )}
 
-      <Tabs tabs={abas} />
+      <Tabs tabs={abas} active={aba} onActiveChange={setAba} />
 
       {/* ---------------- lançamento da ausência ---------------- */}
       {novo && (
@@ -1305,8 +1349,9 @@ function PainelConfirmacao({
   const [c, setC] = useState<Confirmacao>({
     absenceTypeId: linha?.absenceTypeId ?? "",
     startDate: linha?.startDate ?? linha?.occurredOn ?? "",
-    // com "Continua ausente", o período parte dos dias sem comparecer
-    endDate: linha?.endDate ?? linha?.ausenteAte ?? linha?.occurredOn ?? "",
+    // com "Continua ausente", o período parte dos dias sem comparecer; a falta
+    // sem término guarda 9999, que não é data para o campo
+    endDate: (linha?.endDate === SEM_RETORNO ? null : linha?.endDate) ?? linha?.ausenteAte ?? linha?.occurredOn ?? "",
     note: linha?.note ?? "",
     parentesco: linha?.kinship ?? "",
     acidenteTrabalho: linha?.workAccident ?? false,
@@ -1324,6 +1369,7 @@ function PainelConfirmacao({
     horaFim: linha?.hoursEnd?.slice(0, 5) ?? "",
     primeiroDia: linha?.primeiroDia ?? "integral",
     acompanhado: "",
+    semTermino: Boolean(linha?.faltaContinua && linha.endDate === SEM_RETORNO),
   });
   const [inss, setInss] = useState<AlertaInss | null>(null);
   const [temDoc, setTemDoc] = useState(Boolean(linha?.docPath));
@@ -1345,13 +1391,16 @@ function PainelConfirmacao({
   const tipo = tipos.find((t) => t.id === c.absenceTypeId) ?? null;
   // afastamento: o documento é médico ou da perícia do INSS (LUIZ, 17/11/2026)
   const pedeTipoDocumento = tipo?.kind === "afastamento" && !tipo.requiresMedical;
-  const primeiroDia = primeiroDiaQueVale(c);
-  const diasNoDocumento = diasDoPeriodo(c.startDate, c.endDate);
+  // falta sem término (LUIZ, 17/11/2026): só com motivo de falta; o fim vai 9999
+  const semTermino = c.semTermino && tipo?.kind === "falta";
+  const fimEfetivo = semTermino ? SEM_RETORNO : c.endDate;
+  const primeiroDia = semTermino ? "integral" : primeiroDiaQueVale(c);
+  const diasNoDocumento = semTermino ? null : diasDoPeriodo(c.startDate, c.endDate);
   // Dias sem comparecer que o documento não cobre (LUIZ, 17/11/2026): no envio
   // viram falta à parte. null = não cobre nenhum, e o envio é recusado.
   const sem = linha ? semComparecer(linha) : null;
-  const foraDoDocumento = sem && c.startDate && c.endDate && c.endDate >= c.startDate
-    ? diasForaDoDocumento(sem, c.startDate, c.endDate, primeiroDia)
+  const foraDoDocumento = sem && c.startDate && fimEfetivo && fimEfetivo >= c.startDate
+    ? diasForaDoDocumento(sem, c.startDate, fimEfetivo, primeiroDia)
     : [];
   const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument) ?? null;
   const umDiaFora = foraDoDocumento?.length === 1 && foraDoDocumento[0][0] === foraDoDocumento[0][1];
@@ -1393,7 +1442,8 @@ function PainelConfirmacao({
     id,
     absenceTypeId: c.absenceTypeId,
     startDate: c.startDate,
-    endDate: c.endDate,
+    endDate: fimEfetivo,
+    semTermino,
     note: c.note,
     parentesco: c.parentesco,
     acidenteTrabalho: c.acidenteTrabalho,
@@ -1436,10 +1486,13 @@ function PainelConfirmacao({
     if (nome) itens.push(["Colaborador", nome]);
     itens.push(["Motivo", tipo?.name ?? "", true]);
     const dias = diasDoPeriodo(c.startDate, c.endDate) ?? 0;
-    itens.push([
-      tipo?.requiresMedical ? "Período do atestado" : "Período",
-      `${intervalo([c.startDate, c.endDate])} (${dias} dia${dias === 1 ? "" : "s"})`,
-    ]);
+    itens.push(semTermino
+      ? ["Período", `Desde ${formatDate(c.startDate)}, sem data de término`, true]
+      : [
+          tipo?.requiresMedical ? "Período do atestado" : "Período",
+          `${intervalo([c.startDate, c.endDate])} (${dias} dia${dias === 1 ? "" : "s"})`,
+        ]);
+    if (semTermino) itens.push(["Falta sem término", "Conta todos os dias até o DP encerrar. O desligamento encerra sozinho."]);
     const horario = c.horaInicio ? `das ${c.horaInicio} às ${c.horaFim || "?"}` : "horário a informar";
     if (c.emHoras) itens.push(["Ausência de horas", horario]);
     if (primeiroDia === "trabalhou") {
@@ -1460,8 +1513,8 @@ function PainelConfirmacao({
   const enviar = async () => {
     // antes de criar o lançamento: um erro depois dele deixaria um lançamento em aberto pela metade
     if (!c.absenceTypeId) { onErro("Escolha o motivo."); return; }
-    if (!c.startDate || !c.endDate) { onErro("Informe o início e o término."); return; }
-    if (c.endDate < c.startDate) { onErro("O término não pode ser antes do início."); return; }
+    if (!c.startDate || (!semTermino && !c.endDate)) { onErro("Informe o início e o término."); return; }
+    if (!semTermino && c.endDate < c.startDate) { onErro("O término não pode ser antes do início."); return; }
     if (pedeTipoDocumento && !c.tipoDocumento) {
       onErro("Informe o tipo de documento do afastamento: Médico ou Perícia INSS.");
       return;
@@ -1657,14 +1710,20 @@ function PainelConfirmacao({
           />
         </div>
         <div>
-          <label className="label">Término <span style={{ color: "var(--mh-danger)" }}>*</span></label>
-          <input
-            type="date" className="input" value={c.endDate}
-            min={c.startDate || undefined}
-            disabled={c.emHoras}
-            title={c.emHoras ? "Ausência de horas vale para um único dia." : undefined}
-            onChange={(e) => setC((x) => ({ ...x, endDate: e.target.value }))}
-          />
+          <label className="label">Término {!semTermino && <span style={{ color: "var(--mh-danger)" }}>*</span>}</label>
+          {semTermino ? (
+            <div className="input" style={{ display: "flex", alignItems: "center", background: "var(--surface-2)" }}>
+              Sem término
+            </div>
+          ) : (
+            <input
+              type="date" className="input" value={c.endDate}
+              min={c.startDate || undefined}
+              disabled={c.emHoras}
+              title={c.emHoras ? "Ausência de horas vale para um único dia." : undefined}
+              onChange={(e) => setC((x) => ({ ...x, endDate: e.target.value }))}
+            />
+          )}
         </div>
         {/* A conta é feita aqui e gravada pelo servidor: dias digitados à mão
             divergiam das datas que o RH aprova. */}
@@ -1673,6 +1732,8 @@ function PainelConfirmacao({
           <div className="input" style={{ display: "flex", alignItems: "center", background: "var(--surface-2)" }}>
             {c.emHoras
               ? "Em horas"
+              : semTermino
+              ? "Até o DP encerrar"
               : (() => {
                   if (diasNoDocumento === null) return "…";
                   // o primeiro dia trabalhado (todo ou parte) não conta como dia inteiro
@@ -1704,6 +1765,26 @@ function PainelConfirmacao({
             <span className="soft" style={{ fontSize: "0.78rem" }}>{tipo.description}</span>
           )}
         </div>
+      )}
+
+      {/* Falta sem término (LUIZ, 17/11/2026): quem parou de vir e não vai
+          justificar, sem data para acabar. O DP encerra depois, pela ficha. */}
+      {tipo?.kind === "falta" && !c.emHoras && (
+        <label style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
+          <input
+            type="checkbox" checked={c.semTermino} style={{ marginTop: 3 }}
+            onChange={(e) => {
+              const liga = e.target.checked;
+              setC((x) => ({ ...x, semTermino: liga, primeiroDia: liga ? "integral" : x.primeiroDia }));
+            }}
+          />
+          <span>
+            Continua faltando, sem data de término
+            <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+              Conta como falta todos os dias até o DP encerrar pela ficha. O desligamento do colaborador encerra sozinho.
+            </span>
+          </span>
+        </label>
       )}
 
       {/* Dias sem comparecer fora do documento (LUIZ, 17/11/2026): viram falta
@@ -1787,7 +1868,7 @@ function PainelConfirmacao({
           meio período no consultório; na falta, é o horário que a folha vai
           descontar. Por isso ela mora aqui, e não no bloco clínico. */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.8rem", alignItems: "end" }}>
-        {(c.emHoras || (diasNoDocumento ?? 1) <= 1) && (
+        {!semTermino && (c.emHoras || (diasNoDocumento ?? 1) <= 1) && (
           <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
             <input
               type="checkbox" checked={c.emHoras}
@@ -2202,6 +2283,86 @@ function AnexoNoEnvio({ obrigatorio, arquivo, onArquivo, travado }: {
   );
 }
 
+/**
+ * Encerrar, corrigir ou reabrir a falta sem término (LUIZ, 17/11/2026). Só o DP.
+ *
+ * Encerrar pede o último dia de falta (até hoje) e manda o comunicado de
+ * encerramento. Já encerrada, dá para corrigir a data ou reabrir, por exemplo
+ * quando o desligamento foi lançado errado.
+ */
+function EncerrarFalta({ linha, onErro }: { linha: AbsenteismoRow; onErro: (m: string) => void }) {
+  const segue = linha.endDate === SEM_RETORNO;
+  const [editando, setEditando] = useState(segue);
+  const [dia, setDia] = useState(segue ? hoje() : linha.endDate ?? hoje());
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  const inicio = linha.ausenciaInicio ?? linha.startDate ?? undefined;
+
+  const aplicar = async (ultimoDia: string | null) => {
+    if (ultimoDia !== null && !dia) { onErro("Informe o último dia de falta."); return; }
+    const ok = await confirmDialog(ultimoDia === null
+      ? {
+          title: "Reabrir a falta",
+          confirmLabel: "Reabrir",
+          message: `A falta de ${linha.fullName ?? "colaborador"} volta a seguir sem data de término e a contar até hoje.`,
+        }
+      : {
+          title: segue ? "Encerrar as faltas" : "Corrigir o término",
+          confirmLabel: segue ? "Encerrar" : "Corrigir",
+          message: `Último dia de falta de ${linha.fullName ?? "colaborador"}: ${formatDate(ultimoDia)}. Os destinatários de sempre recebem o comunicado de encerramento.`,
+        });
+    if (!ok) return;
+    onErro("");
+    iniciar(async () => {
+      const r = await encerrarFaltaSemTermino({ id: linha.id, ultimoDia });
+      if (r.error) { onErro(r.error); return; }
+      if (r.warning) toast.warning(r.warning);
+      else if (r.message) toast.success(r.message);
+      setEditando(false);
+      router.refresh();
+    });
+  };
+
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+      <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Falta sem término</div>
+      <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+        {segue
+          ? "Conta como falta todos os dias até ser encerrada. Quando a situação se resolver, informe o último dia de falta. O desligamento do colaborador encerra sozinho, na data dele."
+          : "A falta já foi encerrada. Corrija a data se ela estiver errada, ou reabra se a pessoa segue faltando."}
+      </p>
+      {editando ? (
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div>
+            <label className="label" htmlFor={`ultimo-dia-${linha.id}`}>Último dia de falta</label>
+            <input
+              id={`ultimo-dia-${linha.id}`} type="date" className="input" value={dia}
+              min={inicio} max={hoje()} onChange={(e) => setDia(e.target.value)}
+            />
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" disabled={pendente} onClick={() => aplicar(dia)}>
+            {segue ? "Encerrar as faltas" : "Salvar término"}
+          </button>
+          {!segue && (
+            <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setEditando(false)}>
+              Cancelar
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => setEditando(true)}>
+            Corrigir término
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={() => aplicar(null)}>
+            Reabrir (segue faltando)
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A ficha completa, com a decisão do RH quando for o caso. */
 function Ficha({
   linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, erro, onErro, onAbrirDocumento, onBaixarDocumento, onEfetivar, onFechar,
@@ -2345,8 +2506,21 @@ function Ficha({
         <Campo rotulo="Motivo" valor={linha.typeName} />
         <Campo
           rotulo={linha.primeiroDia === "integral" ? "Período" : "Período do atestado"}
-          valor={linha.startDate && linha.endDate ? `${formatDate(linha.startDate)} a ${formatDate(linha.endDate)}` : null}
+          valor={linha.startDate && linha.endDate === SEM_RETORNO
+            ? (() => {
+                const d = diasDoPeriodo(linha.ausenciaInicio ?? linha.startDate, hoje()) ?? 0;
+                return `Desde ${formatDate(linha.startDate)}, sem término (${d} dia${d === 1 ? "" : "s"} até hoje)`;
+              })()
+            : linha.startDate && linha.endDate ? `${formatDate(linha.startDate)} a ${formatDate(linha.endDate)}` : null}
         />
+        {linha.faltaContinua && linha.endDate !== SEM_RETORNO && linha.endDate && (
+          <Campo
+            rotulo="Falta sem término"
+            valor={linha.faltaEncerradaNoDesligamento
+              ? `Encerrada no desligamento, em ${formatDate(linha.endDate)}`
+              : `Encerrada pelo DP, último dia ${formatDate(linha.endDate)}`}
+          />
+        )}
         {linha.primeiroDia !== "integral" && linha.startDate && linha.endDate && linha.ausenciaInicio && (
           <>
             <Campo
@@ -2463,6 +2637,10 @@ function Ficha({
         )}
         </FieldGrid>
       </DetailSection>
+
+      {podeDecidir && linha.faltaContinua && (linha.status === "aprovado" || linha.status === "pendente") && (
+        <EncerrarFalta linha={linha} onErro={onErro} />
+      )}
 
       {anexandoImportado && (
         <Anexo
