@@ -20,7 +20,9 @@ import { sendMail } from "@/lib/mailer";
  *
  * Para que isso seja impossível e não apenas evitado, a montagem do HTML lê
  * SOMENTE de `absenteismo_lancamentos` e nunca recebe o registro de
- * `absenteismo_atestados` como parâmetro.
+ * `absenteismo_atestados` como parâmetro. O alerta de INSS chega como um número
+ * (a soma de dias): a RPC olha a categoria do CID por dentro e não a devolve
+ * para cá.
  */
 
 /**
@@ -83,7 +85,20 @@ type Linha = {
   created_by: string;
   decision_note: string | null;
   cancel_note: string | null;
+  user_id: string;
+  /** comportamento do motivo (atestado, falta...); nulo antes do Efetivar */
+  snap_kind: string | null;
+  /** médico | odontológico: o tipo do documento, nada do conteúdo */
+  certificate_kind: string | null;
+  work_accident: boolean | null;
 };
+
+/** O dia seguinte a uma data ISO, em dd/mm/aaaa (o retorno previsto). */
+function diaSeguinte(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return dataBr(d.toISOString());
+}
 
 /** "09:00 às 11:00", ou vazio quando o lançamento não é de horas. */
 function faixaDeHoras(l: Linha): string {
@@ -118,7 +133,11 @@ function assunto(evento: EventoComunicado, l: Linha): string {
   return `Não comparecimento: ${quem} em ${dia}`;
 }
 
-function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: string, appUrl: string, quemCancelou?: string): string {
+/** `inssDias`: a soma de dias de atestado quando passou de 15; nulo quando não passou. */
+function corpo(
+  evento: EventoComunicado, l: Linha, empresa: string, autor: string, appUrl: string,
+  quemCancelou?: string, inssDias?: number | null,
+): string {
   const linhas: [string, string][] = [
     ["Colaborador", l.snap_full_name ?? "-"],
     ["Matrícula", l.snap_employee_code ?? "-"],
@@ -153,6 +172,29 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
           linhas.push(["Primeiro dia", `Trabalhou parte de ${dataBr(l.start_date)}, ausente ${faixa}`]);
           linhas.push(["Ausência considerada", `${dataBr(l.start_date)} ${faixa} e ${inteiros}`]);
         }
+      }
+    }
+    // O e-mail de motivo informado leva o que o RH precisa para agir (LUIZ,
+    // 17/11/2026): dias, retorno, tipo do documento, acidente de trabalho e o
+    // alerta de INSS. O CID ficou de fora por decisão dele: vai para dezenas de
+    // pessoas.
+    if (evento === "confirmado" || evento === "direto") {
+      const doAtestado = l.snap_kind === "atestado";
+      // a ausência de horas não tem dias nem retorno
+      if (doAtestado && l.start_date && l.end_date && !parcial) {
+        // com o primeiro dia trabalhado, os dias já estão na "Ausência considerada"
+        if (l.primeiro_dia !== "trabalhou" && l.primeiro_dia !== "parcial") {
+          const dias = diasEntre(l.ausencia_inicio ?? l.start_date, l.end_date);
+          linhas.push(["Dias de atestado", `${dias} dia${dias === 1 ? "" : "s"}`]);
+        }
+        linhas.push(["Retorno previsto", diaSeguinte(l.end_date)]);
+      }
+      if (doAtestado && (l.certificate_kind === "medico" || l.certificate_kind === "odontologico")) {
+        linhas.push(["Tipo de atestado", l.certificate_kind === "medico" ? "Médico" : "Odontológico"]);
+      }
+      if (l.work_accident) linhas.push(["Acidente de trabalho", "Sim"]);
+      if (inssDias != null) {
+        linhas.push(["Alerta INSS", `Soma ${inssDias} dias de atestado. Do 16º dia em diante o pagamento é do INSS: encaminhe a perícia.`]);
       }
     }
   }
@@ -259,7 +301,8 @@ export async function dispatchComunicadoAbsenteismo(
     // abertura, fosse qual fosse a situação. O log continua registrando "reenvio".
     const modelo = evento === "reenvio" ? await modeloDoReenvio(lancamentoId, linha.status) : evento;
 
-    const [{ data: destinos, error: erroDestinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }] = await Promise.all([
+    const comAlertaInss = (modelo === "confirmado" || modelo === "direto") && linha.snap_kind === "atestado" && linha.end_date;
+    const [{ data: destinos, error: erroDestinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }, { data: inss }] = await Promise.all([
       // Quem recebe (LUIZ, 16/11/2026): o gestor do cadastro, o carimbado no
       // lançamento e quem lançou, sempre; mais as regras de Configurações
       // (e-mail avulso, hierarquia, cargo), resolvidas pelo cadastro de agora.
@@ -271,7 +314,13 @@ export async function dispatchComunicadoAbsenteismo(
       modelo === "cancelado" && atorId
         ? admin.from("profiles").select("full_name").eq("id", atorId).maybeSingle()
         : Promise.resolve({ data: null as { full_name: string | null } | null }),
+      // só a contagem de dias sai daqui; a categoria do CID fica dentro da RPC
+      comAlertaInss
+        ? admin.rpc("absenteismo_inss", { p_tenant: linha.tenant_id, p_user: linha.user_id, p_ate: linha.end_date })
+        : Promise.resolve({ data: null }),
     ]);
+    const alerta = inss as { atinge?: boolean; dias?: number } | null;
+    const inssDias = alerta?.atinge && typeof alerta.dias === "number" ? alerta.dias : null;
 
     if (erroDestinos) throw new Error(`destinatários: ${erroDestinos.message}`);
     // a unidade da regra já foi conferida contra a CARIMBADA no lançamento
@@ -291,7 +340,7 @@ export async function dispatchComunicadoAbsenteismo(
       apiKey,
       to: emails,
       subject: assunto(modelo, linha),
-      html: corpo(modelo, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined),
+      html: corpo(modelo, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined, inssDias),
       replyTo: autor?.email ?? undefined,
     });
 
