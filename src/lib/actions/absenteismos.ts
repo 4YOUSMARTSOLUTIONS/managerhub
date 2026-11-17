@@ -891,13 +891,23 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Lançamento inválido." };
 
-    const { error } = await supabase.rpc("absenteismo_confirmar", { p_id: id });
+    // Com "Continua ausente", os dias que o documento não cobre viram falta à
+    // parte, já enviada ao RH na mesma transação (LUIZ, 17/11/2026)
+    const { data: faltas, error } = await supabase.rpc("absenteismo_confirmar_e_separar", { p_id: id });
     if (error) return { error: error.message };
 
     const envio = await dispatchComunicadoAbsenteismo(id, "confirmado", userId);
+    // a falta separada nunca teve aviso de abertura: sai como "Ausência lançada"
+    const envios = await Promise.all((faltas ?? []).map((f) => dispatchComunicadoAbsenteismo(f, "confirmado", userId)));
+    const falhou = [envio, ...envios].find((e) => e.status !== "sent") ?? envio;
 
     revalidar();
-    return { ok: true, message: "Enviado ao RH.", ...avisoDoEnvio(envio) };
+    const n = faltas?.length ?? 0;
+    return {
+      ok: true,
+      message: n ? `Enviado ao RH, com ${n === 1 ? "a falta dos dias" : `${n} lançamentos de falta para os dias`} que o documento não cobre.` : "Enviado ao RH.",
+      ...avisoDoEnvio(falhou),
+    };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -925,6 +935,33 @@ export async function comunicarAberturaPendente(id: string): Promise<ActionState
     return {
       ok: true,
       message: "A ausência ficou em aberto, e o RH foi avisado. Efetive quando tiver o motivo.",
+      ...avisoDoEnvio(envio),
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * "Continua ausente" (LUIZ, 17/11/2026): o colaborador segue sem aparecer e sem
+ * dar notícia. Os dias se acumulam no MESMO lançamento em aberto (um segundo
+ * "não comparecimento" batia no período do primeiro na aprovação) e os
+ * destinatários recebem o aviso do novo dia. A guarda mora na RPC.
+ */
+export async function continuaAusente(id: string, ate: string): Promise<ActionState> {
+  try {
+    const { supabase, userId } = await actionContext();
+    if (!id) return { error: "Lançamento inválido." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ate)) return { error: "Informe até que dia o colaborador segue sem comparecer." };
+
+    const { error } = await supabase.rpc("absenteismo_continua_ausente", { p_id: id, p_ate: ate });
+    if (error) return { error: error.message };
+
+    const envio = await dispatchComunicadoAbsenteismo(id, "continua", userId);
+    revalidar();
+    return {
+      ok: true,
+      message: envio.status === "sent" ? "Registrado. Os destinatários do comunicado foram avisados." : "Registrado.",
       ...avisoDoEnvio(envio),
     };
   } catch (e) {

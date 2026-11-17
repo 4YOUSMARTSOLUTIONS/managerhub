@@ -33,8 +33,11 @@ import { sendMail } from "@/lib/mailer";
  * `cancelado`: o lançamento em aberto foi cancelado (a pessoa chegou depois
  * das primeiras horas) e o RH precisa desconsiderar o comunicado anterior
  * (LUIZ, 12/11/2026). Só sai quando um comunicado já tinha saído.
+ *
+ * `continua`: o lançamento em aberto ganhou mais um dia sem comparecer ("Continua
+ * ausente", LUIZ, 17/11/2026). Os dias se acumulam no mesmo lançamento.
  */
-export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto" | "cancelado";
+export type EventoComunicado = "aberto" | "confirmado" | "aprovado" | "reprovado" | "reenvio" | "direto" | "cancelado" | "continua";
 
 export type ResultadoComunicado = {
   status: "sent" | "failed" | "skipped";
@@ -91,7 +94,16 @@ type Linha = {
   /** médico | odontológico: o tipo do documento, nada do conteúdo */
   certificate_kind: string | null;
   work_accident: boolean | null;
+  /** último dia sem comparecer registrado pelo "Continua ausente"; nulo = só occurred_on */
+  ausente_ate: string | null;
 };
+
+/** Os dias sem comparecer do lançamento em aberto, quando passam de um. */
+function diasSemComparecer(l: Linha): { texto: string; dias: number } | null {
+  if (!l.ausente_ate || l.ausente_ate <= l.occurred_on) return null;
+  const dias = diasEntre(l.occurred_on, l.ausente_ate);
+  return { texto: `${dataBr(l.occurred_on)} a ${dataBr(l.ausente_ate)} (${dias} dias)`, dias };
+}
 
 /** O dia seguinte a uma data ISO, em dd/mm/aaaa (o retorno previsto). */
 function diaSeguinte(iso: string): string {
@@ -118,6 +130,10 @@ function assunto(evento: EventoComunicado, l: Linha): string {
   if (evento === "aprovado") return `Absenteísmo aprovado: ${quem} em ${dia}`;
   if (evento === "reprovado") return `Absenteísmo reprovado: ${quem} em ${dia}`;
   if (evento === "confirmado") return `Motivo confirmado: ${quem} em ${dia}`;
+  if (evento === "continua") {
+    const s = diasSemComparecer(l);
+    return `Continua ausente: ${quem} em ${dataBr(l.ausente_ate ?? l.occurred_on)}${s ? ` (${s.dias}º dia)` : ""}`;
+  }
   // Quem saiu duas horas não "não compareceu". O assunto é o que o RH lê na
   // caixa de entrada antes de abrir, então a diferença precisa estar ali.
   const horas = faixaDeHoras(l);
@@ -147,6 +163,9 @@ function corpo(
     ["Unidade", l.snap_unit_name ?? "-"],
     ["Dia da ausência", dataBr(l.occurred_on)],
   ];
+  // em aberto com "Continua ausente": os dias acumulados no mesmo lançamento
+  const semComparecer = evento === "aberto" || evento === "continua" ? diasSemComparecer(l) : null;
+  if (semComparecer) linhas.push(["Dias sem comparecer", semComparecer.texto]);
 
   const horas = faixaDeHoras(l);
   const parcial = Boolean(l.partial_day);
@@ -154,7 +173,7 @@ function corpo(
   else if (parcial) linhas.push(["Horário", "a confirmar"]);
 
   // cancelado em aberto: nunca houve motivo nem período informado
-  if (evento !== "aberto" && evento !== "cancelado") {
+  if (evento !== "aberto" && evento !== "cancelado" && evento !== "continua") {
     linhas.push(["Motivo informado", l.snap_type_name ?? "-"]);
     if (l.start_date && l.end_date) {
       const primeiro = l.primeiro_dia === "trabalhou" || l.primeiro_dia === "parcial" ? l.primeiro_dia : null;
@@ -211,6 +230,8 @@ function corpo(
       ? parcial
         ? "Ausência parcial: o colaborador trabalhou no restante do dia. Situação ainda não confirmada, e o motivo será informado quando o gestor confirmar o lançamento."
         : "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
+      : evento === "continua"
+        ? "O colaborador continua sem comparecer e sem informar o motivo. Situação ainda não confirmada: o motivo será informado quando o gestor confirmar o lançamento."
       : evento === "confirmado"
         ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH."
       : evento === "direto"
@@ -225,7 +246,7 @@ function corpo(
     ? `<p style="margin:0 0 12px"><strong>Motivo da reprovação:</strong> ${escapeHtml(l.decision_note)}</p>`
     : "";
 
-  const observacao = evento === "aberto" && l.reason_note
+  const observacao = (evento === "aberto" || evento === "continua") && l.reason_note
     ? `<p style="margin:0 0 12px"><strong>Observação do gestor:</strong> ${escapeHtml(l.reason_note)}</p>`
     : "";
 
@@ -299,7 +320,7 @@ export async function dispatchComunicadoAbsenteismo(
     // Reenvio (LUIZ, 17/11/2026): repete o comunicado da situação de AGORA. Antes
     // ele não tinha texto próprio e caía no de reprovação, com o assunto de
     // abertura, fosse qual fosse a situação. O log continua registrando "reenvio".
-    const modelo = evento === "reenvio" ? await modeloDoReenvio(lancamentoId, linha.status) : evento;
+    const modelo = evento === "reenvio" ? await modeloDoReenvio(lancamentoId, linha) : evento;
 
     const comAlertaInss = (modelo === "confirmado" || modelo === "direto") && linha.snap_kind === "atestado" && linha.end_date;
     const [{ data: destinos, error: erroDestinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }, { data: inss }] = await Promise.all([
@@ -363,13 +384,14 @@ export async function jaComunicou(lancamentoId: string): Promise<boolean> {
 }
 
 /** O modelo que o reenvio repete: o da situação em que o lançamento está agora. */
-async function modeloDoReenvio(lancamentoId: string, status: string): Promise<EventoComunicado> {
-  if (status === "aprovado") return "aprovado";
-  if (status === "reprovado") return "reprovado";
-  if (status === "cancelado") return "cancelado";
+async function modeloDoReenvio(lancamentoId: string, l: Pick<Linha, "status" | "occurred_on" | "ausente_ate">): Promise<EventoComunicado> {
+  if (l.status === "aprovado") return "aprovado";
+  if (l.status === "reprovado") return "reprovado";
+  if (l.status === "cancelado") return "cancelado";
   // no RH: "motivo confirmado" se o aviso de abertura saiu antes; senão, "lançada"
-  if (status === "pendente") return (await avisouAbertura(lancamentoId)) ? "confirmado" : "direto";
-  return "aberto";
+  if (l.status === "pendente") return (await avisouAbertura(lancamentoId)) ? "confirmado" : "direto";
+  // em aberto com dias acumulados: a versão mais recente é a do "Continua ausente"
+  return l.ausente_ate && l.ausente_ate > l.occurred_on ? "continua" : "aberto";
 }
 
 /** Já saiu (ou se tentou mandar) o aviso de abertura deste lançamento? */

@@ -159,6 +159,7 @@ export default async function AbsenteismosPage() {
     partialDay: l.partial_day,
     primeiroDia: l.primeiro_dia,
     ausenciaInicio: l.ausencia_inicio,
+    ausenteAte: l.ausente_ate,
     fullName: l.snap_full_name,
     employeeCode: l.snap_employee_code,
     departmentName: l.snap_department_name,

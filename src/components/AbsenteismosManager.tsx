@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Ban, Check, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
+  AlertTriangle, Ban, CalendarPlus, Check, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
@@ -23,7 +23,7 @@ import {
   ABSENTEISMO_STATUS, ABSENTEISMO_STATUS_TONE, GRAUS_PARENTESCO,
 } from "@/lib/constants";
 import {
-  anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, comunicarAberturaPendente, confirmarAbsenteismo,
+  anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, comunicarAberturaPendente, confirmarAbsenteismo, continuaAusente,
   decidirAbsenteismo, getAlertaInss, getAtestado, getCpfDoLancamento, getDocumentoAbsenteismoUrl,
   lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
@@ -67,6 +67,11 @@ export type AbsenteismoRow = {
   primeiroDia: PrimeiroDia;
   /** primeiro dia INTEIRO de ausência, calculado no banco */
   ausenciaInicio: string | null;
+  /**
+   * "Continua ausente" (LUIZ, 17/11/2026): último dia registrado sem comparecer.
+   * De occurredOn a ausenteAte são os dias acumulados no lançamento em aberto.
+   */
+  ausenteAte: string | null;
   fullName: string | null;
   employeeCode: string | null;
   departmentName: string | null;
@@ -174,8 +179,44 @@ function diaSeguinte(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** O dia anterior de uma data ISO (AAAA-MM-DD), sem passar por fuso. */
+function diaAnterior(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** "09/11" de uma data ISO. */
 const diaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/**
+ * Os dias sem comparecer acumulados pelo "Continua ausente" (LUIZ, 17/11/2026),
+ * quando passam de um. null = só o dia do lançamento.
+ */
+function semComparecer(r: Pick<AbsenteismoRow, "occurredOn" | "ausenteAte">): { inicio: string; fim: string; dias: number } | null {
+  if (!r.ausenteAte || r.ausenteAte <= r.occurredOn) return null;
+  return { inicio: r.occurredOn, fim: r.ausenteAte, dias: diasDoPeriodo(r.occurredOn, r.ausenteAte) ?? 0 };
+}
+
+/**
+ * Os dias sem comparecer que o documento não cobre: no envio ao RH eles viram
+ * falta, num lançamento à parte. Mesma conta da RPC
+ * `absenteismo_confirmar_e_separar`. null = o documento não cobre nenhum deles.
+ */
+function diasForaDoDocumento(
+  sem: { inicio: string; fim: string }, inicio: string, fim: string, primeiroDia: PrimeiroDia,
+): [string, string][] | null {
+  // o primeiro dia trabalhado do documento não cobre ausência
+  const cobre = primeiroDia === "trabalhou" ? diaSeguinte(inicio) : inicio;
+  if (cobre > fim || cobre > sem.fim || fim < sem.inicio) return null;
+  const blocos: [string, string][] = [];
+  if (sem.inicio < cobre) blocos.push([sem.inicio, diaAnterior(cobre)]);
+  if (sem.fim > fim) blocos.push([diaSeguinte(fim), sem.fim]);
+  return blocos;
+}
+
+/** "16/11/2026" ou "16/11/2026 a 17/11/2026". */
+const intervalo = ([a, b]: [string, string]) => (a === b ? formatDate(a) : `${formatDate(a)} a ${formatDate(b)}`);
 
 /**
  * O primeiro dia que vale de fato: só em período de 2 dias ou mais, e nunca
@@ -243,6 +284,8 @@ export function AbsenteismosManager({
   const [aberto, setAberto] = useState<AbsenteismoRow | null>(null);
   // cancelar um lançamento em aberto direto da lista (LUIZ, 12/11/2026)
   const [cancelando, setCancelando] = useState<AbsenteismoRow | null>(null);
+  // "Continua ausente" (LUIZ, 17/11/2026)
+  const [continuando, setContinuando] = useState<AbsenteismoRow | null>(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   // os diálogos do menu Planilhas moram fora dele: fechar o menu os desmontaria
@@ -361,6 +404,9 @@ export function AbsenteismosManager({
       const d = diasDoPeriodo(r.ausenciaInicio ?? r.startDate, r.endDate);
       return d === null ? "" : `${d} dia${d === 1 ? "" : "s"}`;
     }
+    // em aberto, sem período ainda: os dias acumulados pelo "Continua ausente"
+    const sem = r.status === "aberto" ? semComparecer(r) : null;
+    if (sem) return `${sem.dias} dias`;
     return "";
   };
 
@@ -394,7 +440,13 @@ export function AbsenteismosManager({
           ? formatDate(r.startDate)
           : <span className="soft" title="Dia do lançamento. O período é definido na efetivação.">{formatDate(r.occurredOn)}</span>}
       </td>
-      <td style={{ whiteSpace: "nowrap" }}>{r.endDate ? formatDate(r.endDate) : <span className="soft">–</span>}</td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        {r.endDate
+          ? formatDate(r.endDate)
+          : r.status === "aberto" && r.ausenteAte && r.ausenteAte > r.occurredOn
+            ? <span className="soft" title="Último dia registrado sem comparecer. O período é definido na efetivação.">{formatDate(r.ausenteAte)}</span>
+            : <span className="soft">–</span>}
+      </td>
       <td style={{ whiteSpace: "nowrap" }}>
         {duracao(r) ? (
           <>
@@ -409,6 +461,8 @@ export function AbsenteismosManager({
               <div className="soft" style={{ fontSize: "0.74rem" }}>
                 {r.hoursStart ? `+ ${faixaDeHoras(r.hoursStart, r.hoursEnd)} em ${diaMes(r.startDate)}` : `+ horas em ${diaMes(r.startDate)}`}
               </div>
+            ) : !r.startDate && r.status === "aberto" && semComparecer(r) ? (
+              <div className="soft" style={{ fontSize: "0.74rem" }}>Sem comparecer</div>
             ) : null}
           </>
         ) : <span className="soft">–</span>}
@@ -450,6 +504,18 @@ export function AbsenteismosManager({
               onClick={() => { setErro(""); setConfirmando(r); }}
             >
               <Pencil size={14} /> Efetivar
+            </button>
+          )}
+          {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
+              com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
+              parcial é de um dia só. */}
+          {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
+            <button
+              type="button" className="btn btn-ghost btn-sm"
+              title="O colaborador continua sem comparecer e sem informar o motivo"
+              onClick={() => { setErro(""); setContinuando(r); }}
+            >
+              <CalendarPlus size={14} /> Continua ausente
             </button>
           )}
           {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
@@ -552,7 +618,11 @@ export function AbsenteismosManager({
                   const [horaIni, horaFim] = horariosDaLinha(r);
                   return [
                     r.unitName ?? "", r.employeeCode ?? "", r.fullName ?? "", r.departmentName ?? "", r.positionName ?? "",
-                    r.occurredOn, r.startDate ?? "", r.endDate ?? "", duracao(r), horaIni, horaFim,
+                    r.occurredOn,
+                    // em aberto com "Continua ausente": os dias sem comparecer
+                    r.startDate ?? (r.status === "aberto" && semComparecer(r) ? r.occurredOn : ""),
+                    r.endDate ?? (r.status === "aberto" && semComparecer(r) ? r.ausenteAte ?? "" : ""),
+                    duracao(r), horaIni, horaFim,
                     r.typeName ?? "", ABSENTEISMO_STATUS[r.status],
                     efeitoNaRv({
                       status: r.status, kind: r.kind, descontaRv: r.discountsRv, abonada: r.waived, horas: r.partialDay,
@@ -833,7 +903,86 @@ export function AbsenteismosManager({
       )}
 
       {cancelando && <CancelarAberto linha={cancelando} onFechar={() => setCancelando(null)} />}
+      {continuando && <ContinuaAusente linha={continuando} onFechar={() => setContinuando(null)} />}
     </div>
+  );
+}
+
+/**
+ * "Continua ausente" (LUIZ, 17/11/2026): o colaborador do lançamento em aberto
+ * segue sem aparecer e sem dar notícia. O dia entra no MESMO lançamento (um
+ * segundo "não comparecimento" virava outra ausência, com outro Efetivar) e os
+ * destinatários do comunicado recebem o aviso do novo dia.
+ */
+function ContinuaAusente({ linha, onFechar }: { linha: AbsenteismoRow; onFechar: () => void }) {
+  const ultimo = linha.ausenteAte && linha.ausenteAte > linha.occurredOn ? linha.ausenteAte : linha.occurredOn;
+  const minimo = diaSeguinte(ultimo);
+  const maximo = hoje();
+  const emDia = minimo > maximo;
+  const [ate, setAte] = useState(emDia ? "" : maximo);
+  const [erro, setErro] = useState("");
+  const [pendente, iniciar] = useTransition();
+  const router = useRouter();
+  const dias = ate ? diasDoPeriodo(linha.occurredOn, ate) : null;
+
+  const registrar = () => {
+    if (!ate) { setErro("Informe até que dia o colaborador segue sem comparecer."); return; }
+    setErro("");
+    iniciar(async () => {
+      const r = await continuaAusente(linha.id, ate);
+      if (r.error) { setErro(r.error); return; }
+      if (r.warning) toast.warning(r.warning);
+      else toast.success(r.message ?? "Registrado.");
+      onFechar();
+      router.refresh();
+    });
+  };
+
+  return (
+    <DetailModal
+      open onClose={onFechar} width="sm" title="Continua ausente"
+      footer={
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={pendente || emDia} onClick={registrar}>
+            <CalendarPlus size={14} /> {pendente ? "Registrando…" : "Registrar e avisar"}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={onFechar}>Voltar</button>
+        </div>
+      }
+    >
+      <p style={{ margin: 0, fontSize: "0.88rem" }}>
+        <strong title={linha.fullName ?? undefined}>{shortName(linha.fullName)}</strong>, sem comparecer desde{" "}
+        {formatDate(linha.occurredOn)}
+        {ultimo !== linha.occurredOn ? `, registrado até ${formatDate(ultimo)}` : ""}.
+      </p>
+      {emDia ? (
+        <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>
+          A ausência já está registrada até hoje. Amanhã, se o colaborador continuar sem comparecer, registre de novo.
+        </p>
+      ) : (
+        <>
+          <div style={{ maxWidth: 220 }}>
+            <label className="label">Sem comparecer até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+            <input
+              type="date" className="input" value={ate} min={minimo} max={maximo}
+              onChange={(e) => setAte(e.target.value)}
+            />
+          </div>
+          {dias !== null && dias > 1 && (
+            <p style={{ margin: 0, fontSize: "0.84rem" }}>
+              Fica <strong>{formatDate(linha.occurredOn)} a {formatDate(ate)} ({dias} dias)</strong> no mesmo
+              lançamento. No Efetivar, o período já vem com esses dias.
+            </p>
+          )}
+          <p className="soft" style={{ margin: 0, fontSize: "0.82rem" }}>
+            Use quando o colaborador não compareceu em nenhum dia desde {formatDate(linha.occurredOn)}. Se ele
+            veio em algum dia no meio, efetive este lançamento até o último dia de ausência e lance a nova
+            ausência à parte. Os destinatários do comunicado recebem um e-mail avisando que ele continua ausente.
+          </p>
+        </>
+      )}
+      {erro && <p style={{ color: "var(--mh-danger)", fontSize: "0.85rem", margin: 0 }}>{erro}</p>}
+    </DetailModal>
   );
 }
 
@@ -1043,7 +1192,8 @@ function PainelConfirmacao({
   const [c, setC] = useState<Confirmacao>({
     absenceTypeId: linha?.absenceTypeId ?? (linha ? tipos[0]?.id ?? "" : ""),
     startDate: linha?.startDate ?? linha?.occurredOn ?? "",
-    endDate: linha?.endDate ?? linha?.occurredOn ?? "",
+    // com "Continua ausente", o período parte dos dias sem comparecer
+    endDate: linha?.endDate ?? linha?.ausenteAte ?? linha?.occurredOn ?? "",
     note: linha?.note ?? "",
     parentesco: linha?.kinship ?? "",
     acidenteTrabalho: linha?.workAccident ?? false,
@@ -1077,6 +1227,17 @@ function PainelConfirmacao({
   const tipo = tipos.find((t) => t.id === c.absenceTypeId) ?? null;
   const primeiroDia = primeiroDiaQueVale(c);
   const diasNoDocumento = diasDoPeriodo(c.startDate, c.endDate);
+  // Dias sem comparecer que o documento não cobre (LUIZ, 17/11/2026): no envio
+  // viram falta à parte. null = não cobre nenhum, e o envio é recusado.
+  const sem = linha ? semComparecer(linha) : null;
+  const foraDoDocumento = sem && c.startDate && c.endDate && c.endDate >= c.startDate
+    ? diasForaDoDocumento(sem, c.startDate, c.endDate, primeiroDia)
+    : [];
+  const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument) ?? null;
+  const umDiaFora = foraDoDocumento?.length === 1 && foraDoDocumento[0][0] === foraDoDocumento[0][1];
+  const avisoFalta = foraDoDocumento?.length
+    ? `O período informado não cobre ${foraDoDocumento.map(intervalo).join(" e ")}. ${umDiaFora ? "Esse dia será lançado" : "Esses dias serão lançados"} como ${tipoFalta?.name ?? "falta"}, num lançamento à parte que vai ao RH junto.`
+    : "";
   // o horário vai ao servidor na ausência de horas e no primeiro dia parcial
   const levaHoras = c.emHoras || primeiroDia === "parcial";
 
@@ -1148,10 +1309,15 @@ function PainelConfirmacao({
     if (!c.absenceTypeId) { onErro("Escolha o motivo."); return; }
     if (!c.startDate || !c.endDate) { onErro("Informe o início e o término."); return; }
     if (c.endDate < c.startDate) { onErro("O término não pode ser antes do início."); return; }
+    if (sem && foraDoDocumento === null) {
+      onErro(`O período informado não cobre nenhum dos dias sem comparecer (${intervalo([sem.inicio, sem.fim])}).`);
+      return;
+    }
     const ok = await confirmDialog({
       title: ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH",
       confirmLabel: "Enviar",
-      message: "Depois de enviado o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.",
+      message: (avisoFalta ? `${avisoFalta} ` : "")
+        + "Depois de enviado o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.",
     });
     if (!ok) return;
     onErro("");
@@ -1292,7 +1458,9 @@ function PainelConfirmacao({
         <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
         <Campo rotulo="Colaborador" valor={linha.fullName} />
-        <Campo rotulo="Dia" valor={formatDate(linha.occurredOn)} />
+        {sem
+          ? <Campo rotulo="Sem comparecer" valor={`${intervalo([sem.inicio, sem.fim])} (${sem.dias} dias)`} />
+          : <Campo rotulo="Dia" valor={formatDate(linha.occurredOn)} />}
         <Campo rotulo="Setor" valor={linha.departmentName} />
         <Campo rotulo="Função" valor={linha.positionName} />
       </div>
@@ -1369,6 +1537,20 @@ function PainelConfirmacao({
             <span className="soft" style={{ fontSize: "0.78rem" }}>{tipo.description}</span>
           )}
         </div>
+      )}
+
+      {/* Dias sem comparecer fora do documento (LUIZ, 17/11/2026): viram falta
+          à parte no envio. Avisado aqui, antes, e repetido na confirmação. */}
+      {sem && foraDoDocumento === null && c.startDate && c.endDate && (
+        <p style={{ fontSize: "0.82rem", margin: 0, color: "var(--mh-danger)", background: "var(--mh-danger-soft)", padding: "0.6rem 0.7rem", borderRadius: 8 }}>
+          O período informado não cobre nenhum dos dias sem comparecer ({intervalo([sem.inicio, sem.fim])}). Ajuste o
+          início e o término.
+        </p>
+      )}
+      {avisoFalta && (
+        <p style={{ fontSize: "0.82rem", margin: 0, color: "var(--mh-text-1)", background: "var(--mh-warning-soft)", padding: "0.6rem 0.7rem", borderRadius: 8, borderLeft: "3px solid var(--mh-warning)" }}>
+          <strong>Dias sem comparecer: {intervalo([sem!.inicio, sem!.fim])}.</strong> {avisoFalta} Se não for isso, ajuste o período.
+        </p>
       )}
 
       {/* Primeiro dia (LUIZ, 12/11/2026): atestado de 09 a 11 de quem foi ao
@@ -1933,6 +2115,10 @@ function Ficha({
         <Campo rotulo="Gestor imediato" valor={linha.managerName} />
         <Campo rotulo="Unidade" valor={linha.unitName} />
         <Campo rotulo="Dia" valor={formatDate(linha.occurredOn)} />
+        {/* em aberto com "Continua ausente": os dias acumulados */}
+        {linha.status === "aberto" && semComparecer(linha) && (
+          <Campo rotulo="Sem comparecer" valor={`${intervalo([linha.occurredOn, linha.ausenteAte!])} (${semComparecer(linha)!.dias} dias)`} />
+        )}
         </FieldGrid>
       </DetailSection>
 
