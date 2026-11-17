@@ -1186,11 +1186,13 @@ function PainelConfirmacao({
   onFechar: () => void;
 }) {
   const userId = linha?.userId ?? novoPara?.userId ?? "";
-  // No lançamento novo, motivo e datas começam em branco (LUIZ, 16/11/2026):
-  // vindo preenchidos com o primeiro motivo e o dia de hoje, passavam sem
-  // ninguém conferir. No Efetivar as datas partem do dia já lançado.
+  // O motivo começa em branco nos dois caminhos (LUIZ, 16 e 17/11/2026): vindo
+  // preenchido com o primeiro do catálogo ("Licença"), passava sem ninguém
+  // conferir e um atestado foi ao RH como licença. Só volta o que já foi
+  // gravado (rascunho ou reprovado). No lançamento novo as datas também
+  // começam em branco; no Efetivar elas partem do dia já lançado.
   const [c, setC] = useState<Confirmacao>({
-    absenceTypeId: linha?.absenceTypeId ?? (linha ? tipos[0]?.id ?? "" : ""),
+    absenceTypeId: linha?.absenceTypeId ?? "",
     startDate: linha?.startDate ?? linha?.occurredOn ?? "",
     // com "Continua ausente", o período parte dos dias sem comparecer
     endDate: linha?.endDate ?? linha?.ausenteAte ?? linha?.occurredOn ?? "",
