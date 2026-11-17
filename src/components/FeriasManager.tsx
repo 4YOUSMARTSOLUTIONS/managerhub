@@ -153,7 +153,7 @@ const dataDoPedido = (iso: string) =>
 export function FeriasManager({
   rows, meuId, ehDp, ehOwner, ehGestor, equipe, vejoEmpresa, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
-  antecedencia, prazos, escolhasDecimo, painelDecimo,
+  antecedencia, prazos, escolhasDecimo, painelDecimo, aguardandoDecimo,
 }: {
   rows: FeriasRow[];
   meuId: string;
@@ -191,6 +191,11 @@ export function FeriasManager({
   escolhasDecimo: EscolhaDecimo[] | null;
   /** quem acompanha equipe: os operacionais e a escolha do 13º de cada um no ano */
   painelDecimo: { ano: number; pessoas: EscolhaDecimoDaEquipe[] } | null;
+  /**
+   * DP: previsões cuja efetivação o banco recusa enquanto o operacional não
+   * escolhe o 13º do ano (id → prazo da escolha, aaaa-mm-dd).
+   */
+  aguardandoDecimo: Record<string, string>;
 }) {
   // aba aberta: os cartões do Painel levam aos detalhes
   const [aba, setAba] = useState<string | undefined>(undefined);
@@ -424,7 +429,8 @@ export function FeriasManager({
   }
   if (ehDp) {
     abas.push({ id: "efetivacao", label: `Efetivação${filaDp.length ? ` (${filaDp.length})` : ""}`, content: (
-      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} onDetalhe={setDetalhe} onEfetivar={setEfetivando}
+      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} aguardandoDecimo={aguardandoDecimo}
+        onDetalhe={setDetalhe} onEfetivar={setEfetivando}
         onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
     ) });
   }
@@ -610,7 +616,8 @@ export function FeriasManager({
         />
       )}
       {efetivando && (
-        <EfetivarDialog row={efetivando} anterior={anteriorDe(efetivando)} onFechar={() => setEfetivando(null)}
+        <EfetivarDialog row={efetivando} anterior={anteriorDe(efetivando)}
+          prazoDecimo={aguardandoDecimo[efetivando.id] ?? null} onFechar={() => setEfetivando(null)}
           onDevolver={(r) => { setEfetivando(null); setNota({ row: r, acao: "devolver" }); }} />
       )}
       {nota && (
@@ -1390,9 +1397,11 @@ function AlternadorDeEscopo({
 // ============================================================================
 
 function FilaDp({
-  fila, soEquipe, anteriorDe, onDetalhe, onEfetivar, onDevolver,
+  fila, soEquipe, anteriorDe, aguardandoDecimo, onDetalhe, onEfetivar, onDevolver,
 }: {
   fila: FeriasRow[];
+  /** id → prazo da escolha do 13º que ainda segura a efetivação */
+  aguardandoDecimo: Record<string, string>;
   /** o período que um reagendamento troca (null se não for reagendamento) */
   anteriorDe: (r: FeriasRow) => FeriasRow | null;
   /** a tela está em "Minha equipe": o vazio aqui não quer dizer que a empresa não tem nada */
@@ -1424,7 +1433,7 @@ function FilaDp({
             <th style={{ width: 70, textAlign: "right" }}>Dias</th>
             <th style={{ width: 110 }}>Origem</th>
             <th style={{ width: 190 }}>Prazo legal</th>
-            <th style={{ width: 230, textAlign: "right" }}>Efetivação</th>
+            <th style={{ width: 300, textAlign: "right" }}>Efetivação</th>
           </tr>
         </thead>
         <tbody>
@@ -1452,10 +1461,18 @@ function FilaDp({
                   : <span className="soft">—</span>}
               </td>
               <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                <div style={{ display: "inline-flex", gap: "0.35rem" }}>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => onEfetivar(r)}>
-                    <Send size={13} aria-hidden /> Efetivar
-                  </button>
+                <div style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center" }}>
+                  {/* O operacional ainda não escolheu o 13º do ano: efetivar agora
+                      perderia o adiantamento, e o banco recusa (LUIZ, 17/11/2026). */}
+                  {aguardandoDecimo[r.id] ? (
+                    <span title={`O colaborador escolhe em Minhas férias até ${formatDate(aguardandoDecimo[r.id])}. A efetivação libera depois da escolha ou quando esse prazo terminar.`}>
+                      <Badge tone="amber">Aguardando escolha do 13º</Badge>
+                    </span>
+                  ) : (
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => onEfetivar(r)}>
+                      <Send size={13} aria-hidden /> Efetivar
+                    </button>
+                  )}
                   <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
                     <Undo2 size={13} aria-hidden /> Devolver
                   </button>
@@ -1743,11 +1760,13 @@ function DetalheFerias({
 // ============================================================================
 
 function EfetivarDialog({
-  row, anterior, onFechar, onDevolver,
+  row, anterior, prazoDecimo, onFechar, onDevolver,
 }: {
   row: FeriasRow;
   /** a previsão que este reagendamento troca */
   anterior: FeriasRow | null;
+  /** o operacional ainda não escolheu o 13º do ano: prazo da escolha (aaaa-mm-dd) */
+  prazoDecimo: string | null;
   onFechar: () => void;
   onDevolver: (r: FeriasRow) => void;
 }) {
@@ -1798,7 +1817,7 @@ function EfetivarDialog({
           </button>
           <div style={{ display: "flex", gap: "0.4rem" }}>
             <button type="button" className="btn btn-ghost" onClick={onFechar}>Cancelar</button>
-            <button type="button" className="btn btn-primary" disabled={salvando} onClick={efetivar}>
+            <button type="button" className="btn btn-primary" disabled={salvando || !!prazoDecimo} onClick={efetivar}>
               {salvando ? "Efetivando…" : "Confirmar efetivação"}
             </button>
           </div>
@@ -1821,6 +1840,14 @@ function EfetivarDialog({
         </p>
       )}
       <NotaForaPrazo row={row} />
+      {prazoDecimo && (
+        <p style={{ fontSize: "0.84rem", margin: "0.6rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--mh-warning)" }}>
+          <strong>Aguardando a escolha do 13º.</strong> {shortName(row.fullName)} ainda não escolheu se quer o
+          adiantamento do 13º junto com as férias de {row.startDate.slice(0, 4)}. A escolha é do colaborador, em
+          Minhas férias, até {formatDate(prazoDecimo)}. Efetivar antes faria o adiantamento se perder, então a
+          efetivação libera depois da escolha ou quando esse prazo terminar.
+        </p>
+      )}
 
       <DetailSection title={c?.origem === "folha" ? "Dados importados do aquisitivo" : "Informativo do art. 130 (faltas injustificadas)"}>
         {c == null ? (

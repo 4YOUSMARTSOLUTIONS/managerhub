@@ -2159,6 +2159,8 @@ export type Database = {
       ferias_escolhas_decimo: { Args: { p_tenant: string; p_user: string }; Returns: Json }
       ferias_reabrir_decimo: { Args: { p_tenant: string; p_user: string; p_ano: number }; Returns: undefined }
       ferias_painel_decimo: { Args: { p_tenant: string; p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
+      // DP: previsões aprovadas que esperam o operacional escolher o 13º (a efetivação recusa até lá)
+      ferias_efetivacao_aguardando_decimo: { Args: { p_tenant: string }; Returns: { solicitacao_id: string; prazo: string }[] }
       // férias que cruzam [p_inicio, p_fim]: fato + solicitada/aprovada, escopo decidido dentro (AgendaItem[])
       ferias_agenda: { Args: { p_tenant: string; p_inicio: string; p_fim: string; p_unit_ids?: string[] | null }; Returns: Json }
       // Situação do colaborador, CALCULADA: o afastamento ou a licença em vigor

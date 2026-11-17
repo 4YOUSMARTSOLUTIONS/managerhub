@@ -155,6 +155,13 @@ export default async function FeriasPage() {
   const painelDecimo = escolhasDaEquipe
     ? { ano: anoDecimo, pessoas: escolhasDaEquipe as unknown as EscolhaDecimoDaEquipe[] }
     : null;
+  // DP: o banco recusa efetivar enquanto o operacional não escolhe o 13º do ano
+  const { data: esperaDecimo } = ehDp
+    ? await supabase.rpc("ferias_efetivacao_aguardando_decimo", { p_tenant: tenant.id })
+    : { data: null };
+  const aguardandoDecimo: Record<string, string> = Object.fromEntries(
+    (esperaDecimo ?? []).map((e) => [e.solicitacao_id, e.prazo]),
+  );
   const avisoSolicitar = nivelBloqueado
     ? "As férias do seu nível são programadas pelo seu gestor. Você acompanha por aqui o saldo e as previsões lançadas para você."
     : semAdmissao
@@ -208,6 +215,7 @@ export default async function FeriasPage() {
         }}
         escolhasDecimo={escolhasDecimo}
         painelDecimo={painelDecimo}
+        aguardandoDecimo={aguardandoDecimo}
       />
     </div>
   );
