@@ -336,7 +336,13 @@ export function AbsenteismosManager({
         .some((v) => v && normalizar(v).includes(q)));
   };
 
-  const emAberto = filtrar(rows.filter((r) => r.status === "aberto"));
+  // O reprovado volta ao gestor (LUIZ, 17/11/2026): fica também em "Em aberto",
+  // no topo, porque é trabalho dele corrigir e reenviar. Só no Histórico ele
+  // sumia no meio do que já foi encerrado.
+  const emAberto = filtrar([
+    ...rows.filter((r) => r.status === "reprovado"),
+    ...rows.filter((r) => r.status === "aberto"),
+  ]);
   const fila = filtrar(rows.filter((r) => r.status === "pendente"));
   const historico = filtrar(rows.filter((r) =>
     r.status === "aprovado" || r.status === "reprovado" || r.status === "cancelado"));
@@ -501,7 +507,18 @@ export function AbsenteismosManager({
       {comAutor && (r.importado
         ? <td className="muted" title={r.createdByName ? `Importado por ${r.createdByName}` : undefined}>Importação</td>
         : <td title={r.createdByName ?? undefined}>{r.createdByName ? shortName(r.createdByName) : <span className="soft">–</span>}</td>)}
-      <td><Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge></td>
+      <td>
+        <Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge>
+        {/* o porquê da reprovação à vista, sem abrir a ficha */}
+        {r.status === "reprovado" && r.decisionNote && (
+          <div
+            className="soft" title={r.decisionNote}
+            style={{ fontSize: "0.74rem", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}
+          >
+            RH: {r.decisionNote}
+          </div>
+        )}
+      </td>
       <td style={{ textAlign: "center" }}>
         {/* Os três estados do comunicado se leem pela cor, sem abrir nada:
             verde saiu, vermelho falhou, apagado não tinha para quem mandar.
@@ -607,6 +624,8 @@ export function AbsenteismosManager({
             Comunicados registrados, ainda sem definição. Nada daqui foi ao RH nem conta como
             ausência: quando a situação estiver confirmada (atestado em mãos, falta assumida),
             use <strong>Efetivar</strong> para informar o motivo, o período real e os documentos.
+            Os lançamentos reprovados pelo RH também voltam para cá, no topo: corrija pelo
+            <strong> Efetivar</strong> e envie de novo.
           </p>
           {tabela(emAberto, true, "Nenhuma ausência em aberto. Quando alguém faltar ou sair por algumas horas, lance por aqui.")}
         </div>
@@ -1529,6 +1548,17 @@ function PainelConfirmacao({
       </div>
       {linha.reasonNote && <Campo rotulo="O que se sabia no lançamento" valor={linha.reasonNote} />}
         </>
+      )}
+
+      {/* devolvido pelo RH: o que corrigir vem antes de tudo */}
+      {linha?.status === "reprovado" && (
+        <p style={{ fontSize: "0.84rem", margin: 0, color: "var(--mh-text-1)", background: "var(--mh-danger-soft)", padding: "0.6rem 0.7rem", borderRadius: 8, borderLeft: "3px solid var(--mh-danger)" }}>
+          <strong>
+            Reprovado pelo RH{linha.decidedByName ? ` (${shortName(linha.decidedByName)}` : ""}
+            {linha.decidedByName && linha.decidedAt ? `, ${formatDate(linha.decidedAt)})` : linha.decidedByName ? ")" : ""}:
+          </strong>{" "}
+          {linha.decisionNote ?? "sem observação."} Corrija o que for preciso e envie de novo.
+        </p>
       )}
 
       {/* Quatro colunas do mesmo tamanho: o Motivo ocupava metade da linha e
