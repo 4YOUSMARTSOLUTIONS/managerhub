@@ -540,7 +540,8 @@ export function AbsenteismosManager({
             Continua ausente, Cancelar, Ver. Botões compactos (btn-xs), todos na
             mesma altura, e "Continua ausente" em duas linhas para ocupar menos
             largura (LUIZ, 17/11/2026). */}
-        <td>
+        {/* centralizada como o cabeçalho: no Histórico, só o Ver fica no meio */}
+        <td style={{ textAlign: "center" }}>
           <span style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
             {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
                 escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
@@ -557,12 +558,14 @@ export function AbsenteismosManager({
                 parcial é de um dia só. Com o nome (o LUIZ pediu de volta). */}
             {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
               <button
-                type="button" className="btn btn-ghost btn-xs" style={{ height: ALTURA_ACAO }}
+                // mais folga dos lados que o btn-xs (LUIZ, 17/11/2026: ficou espremido)
+                type="button" className="btn btn-ghost btn-xs"
+                style={{ height: ALTURA_ACAO, paddingInline: "0.7rem", gap: "0.4rem" }}
                 title="Continua ausente: o colaborador segue sem comparecer e sem informar o motivo"
                 onClick={() => { setErro(""); setContinuando(r); }}
               >
                 <CalendarPlus size={12} />
-                <span style={{ lineHeight: 1.05, textAlign: "left" }}>Continua<br />ausente</span>
+                <span style={{ lineHeight: 1.15, textAlign: "left" }}>Continua<br />ausente</span>
               </button>
             )}
             {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
@@ -685,7 +688,7 @@ export function AbsenteismosManager({
       <table className="table table-linha">
         <thead>
           <tr>
-            <th>Ações</th>
+            <th style={{ textAlign: "center" }}>Ações</th>
             <th>Matrícula</th>
             <th>Colaborador</th>
             <th>Setor</th>
