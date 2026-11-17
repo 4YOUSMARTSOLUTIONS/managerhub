@@ -112,6 +112,9 @@ export type AbsenteismoRow = {
   faltaEncerradaNoDesligamento: boolean;
 };
 
+/** altura dos botões da coluna Ações: todos iguais, para a linha não pular */
+const ALTURA_ACAO = 28;
+
 /** a falta sem término que ainda segue (enviada ao RH ou aprovada) */
 function semTerminoAberto(r: Pick<AbsenteismoRow, "faltaContinua" | "endDate" | "status">): boolean {
   return r.faltaContinua && r.endDate === SEM_RETORNO && (r.status === "pendente" || r.status === "aprovado");
@@ -534,17 +537,19 @@ export function AbsenteismosManager({
       <tr key={r.id}>
         {/* As ações na frente (LUIZ, 17/11/2026): no fim da linha elas sumiam
             atrás da rolagem lateral em tela menor. Ordem dele: Efetivar,
-            Continua ausente, Cancelar, Ver. */}
+            Continua ausente, Cancelar, Ver. Botões compactos (btn-xs), todos na
+            mesma altura, e "Continua ausente" em duas linhas para ocupar menos
+            largura (LUIZ, 17/11/2026). */}
         <td>
-          <span style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center" }}>
+          <span style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
             {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
                 escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
             {podeMexer(r) && (
               <button
-                type="button" className="btn btn-primary btn-sm"
+                type="button" className="btn btn-primary btn-xs" style={{ height: ALTURA_ACAO }}
                 onClick={() => { setErro(""); setConfirmando(r); }}
               >
-                <Pencil size={13} /> Efetivar
+                <Pencil size={12} /> Efetivar
               </button>
             )}
             {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
@@ -552,11 +557,12 @@ export function AbsenteismosManager({
                 parcial é de um dia só. Com o nome (o LUIZ pediu de volta). */}
             {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
               <button
-                type="button" className="btn btn-ghost btn-sm"
-                title="O colaborador continua sem comparecer e sem informar o motivo"
+                type="button" className="btn btn-ghost btn-xs" style={{ height: ALTURA_ACAO }}
+                title="Continua ausente: o colaborador segue sem comparecer e sem informar o motivo"
                 onClick={() => { setErro(""); setContinuando(r); }}
               >
-                <CalendarPlus size={13} /> Continua ausente
+                <CalendarPlus size={12} />
+                <span style={{ lineHeight: 1.05, textAlign: "left" }}>Continua<br />ausente</span>
               </button>
             )}
             {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
@@ -566,14 +572,18 @@ export function AbsenteismosManager({
                 type="button" className="icon-btn"
                 title="Cancelar: a ausência não se confirmou (o colaborador chegou depois, por exemplo)"
                 aria-label="Cancelar lançamento"
-                style={{ color: "var(--mh-danger)" }}
+                style={{ color: "var(--mh-danger)", width: ALTURA_ACAO, height: ALTURA_ACAO }}
                 onClick={() => { setErro(""); setCancelando(r); }}
               >
-                <Ban size={14} />
+                <Ban size={13} />
               </button>
             )}
-            <button type="button" className="icon-btn" title="Ver" onClick={() => setAberto(r)}>
-              <FileText size={14} />
+            <button
+              type="button" className="icon-btn" title="Ver"
+              style={{ width: ALTURA_ACAO, height: ALTURA_ACAO }}
+              onClick={() => setAberto(r)}
+            >
+              <FileText size={13} />
             </button>
           </span>
         </td>
@@ -588,7 +598,8 @@ export function AbsenteismosManager({
         <td className="muted">{corta(r.positionName, 120)}</td>
         {/* Só o motivo (LUIZ, 16/11/2026): o comportamento fica na ficha e na planilha. */}
         <td>
-          {r.typeName ? corta(r.typeName, 120) : <span className="soft">Motivo não confirmado</span>}
+          {/* a coluna já se chama Motivo: não repete a palavra (LUIZ, 17/11/2026) */}
+          {r.typeName ? corta(r.typeName, 120) : <span className="soft">Não confirmado</span>}
         </td>
         {/* Sem efetivação ainda não há período: o dia do lançamento entra aqui,
             apagado, para a linha não perder a única data que possui. */}
