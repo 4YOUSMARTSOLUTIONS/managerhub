@@ -532,37 +532,14 @@ export function AbsenteismosManager({
         : r.createdByName ? { texto: shortName(r.createdByName), dica: r.createdByName } : null;
     return (
       <tr key={r.id}>
-        {/* as ações na frente (LUIZ, 17/11/2026): no fim da linha elas sumiam
-            atrás da rolagem lateral em tela menor */}
+        {/* As ações na frente (LUIZ, 17/11/2026): no fim da linha elas sumiam
+            atrás da rolagem lateral em tela menor. Ordem dele: Ver, Cancelar,
+            Continua ausente, Efetivar. */}
         <td>
           <span style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center" }}>
             <button type="button" className="icon-btn" title="Ver" onClick={() => setAberto(r)}>
               <FileText size={14} />
             </button>
-            {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
-                escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
-            {podeMexer(r) && (
-              <button
-                type="button" className="btn btn-primary btn-sm"
-                onClick={() => { setErro(""); setConfirmando(r); }}
-              >
-                <Pencil size={13} /> Efetivar
-              </button>
-            )}
-            {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
-                com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
-                parcial é de um dia só. Só o ícone desde a tabela de uma linha
-                (17/11/2026): com o nome, a linha passava da tela. */}
-            {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
-              <button
-                type="button" className="icon-btn"
-                title="Continua ausente: o colaborador segue sem comparecer e sem informar o motivo"
-                aria-label="Continua ausente"
-                onClick={() => { setErro(""); setContinuando(r); }}
-              >
-                <CalendarPlus size={14} />
-              </button>
-            )}
             {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
                 horas): cancela e pede ao RH para desconsiderar o comunicado */}
             {r.status === "aberto" && podeMexer(r) && (
@@ -574,6 +551,28 @@ export function AbsenteismosManager({
                 onClick={() => { setErro(""); setCancelando(r); }}
               >
                 <Ban size={14} />
+              </button>
+            )}
+            {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
+                com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
+                parcial é de um dia só. Com o nome (o LUIZ pediu de volta). */}
+            {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
+              <button
+                type="button" className="btn btn-ghost btn-sm"
+                title="O colaborador continua sem comparecer e sem informar o motivo"
+                onClick={() => { setErro(""); setContinuando(r); }}
+              >
+                <CalendarPlus size={13} /> Continua ausente
+              </button>
+            )}
+            {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
+                escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
+            {podeMexer(r) && (
+              <button
+                type="button" className="btn btn-primary btn-sm"
+                onClick={() => { setErro(""); setConfirmando(r); }}
+              >
+                <Pencil size={13} /> Efetivar
               </button>
             )}
           </span>
@@ -675,7 +674,7 @@ export function AbsenteismosManager({
       <table className="table table-linha">
         <thead>
           <tr>
-            <th aria-label="Ações"></th>
+            <th>Ações</th>
             <th>Matrícula</th>
             <th>Colaborador</th>
             <th>Setor</th>
