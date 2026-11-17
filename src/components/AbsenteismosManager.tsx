@@ -226,6 +226,37 @@ function primeiroDiaQueVale(c: Pick<Confirmacao, "emHoras" | "startDate" | "endD
   return !c.emHoras && (diasDoPeriodo(c.startDate, c.endDate) ?? 0) >= 2 ? c.primeiroDia : "integral";
 }
 
+/**
+ * O resumo do "Enviar ao RH": rótulo e valor em duas colunas, o motivo maior
+ * e em negrito, o aviso da falta à parte em amarelo e a trava no fim.
+ */
+function ResumoDoEnvio({ itens, avisoFalta }: { itens: [string, string, boolean?][]; avisoFalta: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+      <span>Confira antes de enviar:</span>
+      <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.3rem 0.8rem", margin: 0, alignItems: "baseline" }}>
+        {itens.map(([rotulo, valor, destaque]) => (
+          <div key={rotulo} style={{ display: "contents" }}>
+            <dt style={{ fontSize: "0.78rem" }}>{rotulo}</dt>
+            <dd style={{
+              margin: 0, color: "var(--mh-text-1)", minWidth: 0, overflowWrap: "anywhere",
+              fontWeight: destaque ? 700 : 500, fontSize: destaque ? "0.98rem" : "0.86rem",
+            }}>
+              {valor}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {avisoFalta && (
+        <p style={{ fontSize: "0.82rem", margin: 0, color: "var(--mh-text-1)", background: "var(--mh-warning-soft)", padding: "0.5rem 0.65rem", borderRadius: 8, borderLeft: "3px solid var(--mh-warning)" }}>
+          {avisoFalta}
+        </p>
+      )}
+      <span>Depois de enviado, o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.</span>
+    </div>
+  );
+}
+
 /** O dia de HOJE do navegador. No servidor, em UTC, viraria amanhã às 21h. */
 const hoje = () => {
   const d = new Date();
@@ -762,7 +793,7 @@ export function AbsenteismosManager({
               <PainelConfirmacao
                 key={novo.userId}
                 linha={null}
-                novoPara={{ userId: novo.userId }}
+                novoPara={{ userId: novo.userId, nome: pessoaEscolhida?.name }}
                 tipos={tiposAtivos}
                 kindsComRedutor={kindsComRedutor}
                 onErro={setErro}
@@ -1173,7 +1204,7 @@ function PainelConfirmacao({
   /** o lançamento a efetivar; null no lançamento novo já com o motivo */
   linha: AbsenteismoRow | null;
   /** "Já sei o motivo" (LUIZ, 11/11/2026): para quem é; o lançamento só nasce no envio */
-  novoPara?: { userId: string };
+  novoPara?: { userId: string; nome?: string };
   tipos: Tipo[];
   kindsComRedutor: Enums<"absence_kind">[];
   erro: string;
@@ -1306,6 +1337,37 @@ function PainelConfirmacao({
     });
   };
 
+  /**
+   * O que vai ao RH, para conferir antes do envio (LUIZ, 17/11/2026): com só
+   * as datas, um atestado foi como "Licença" sem ninguém perceber. O motivo
+   * vem primeiro e em destaque.
+   */
+  const resumoDoEnvio = (): [string, string, boolean?][] => {
+    const itens: [string, string, boolean?][] = [];
+    const nome = linha?.fullName ?? novoPara?.nome;
+    if (nome) itens.push(["Colaborador", nome]);
+    itens.push(["Motivo", tipo?.name ?? "", true]);
+    const dias = diasDoPeriodo(c.startDate, c.endDate) ?? 0;
+    itens.push([
+      tipo?.requiresMedical ? "Período do atestado" : "Período",
+      `${intervalo([c.startDate, c.endDate])} (${dias} dia${dias === 1 ? "" : "s"})`,
+    ]);
+    const horario = c.horaInicio ? `das ${c.horaInicio} às ${c.horaFim || "?"}` : "horário a informar";
+    if (c.emHoras) itens.push(["Ausência de horas", horario]);
+    if (primeiroDia === "trabalhou") {
+      itens.push(["Primeiro dia", `Trabalhou normalmente em ${formatDate(c.startDate)}`]);
+      const d = dias - 1;
+      itens.push(["Ausência considerada", `${intervalo([diaSeguinte(c.startDate), c.endDate])} (${d} dia${d === 1 ? "" : "s"})`]);
+    } else if (primeiroDia === "parcial") {
+      itens.push(["Primeiro dia", `Trabalhou parte de ${formatDate(c.startDate)}, ausente ${horario}`]);
+    }
+    if (tipo?.requiresMedical) itens.push(["Tipo de atestado", c.tipoAtestado === "odontologico" ? "Odontológico" : "Médico"]);
+    if (tipo?.requiresCompanion && c.acompanhado.trim()) itens.push(["Acompanhado", c.acompanhado.trim()]);
+    if (tipo?.requiresKinship && c.parentesco.trim()) itens.push(["Parentesco do falecido", c.parentesco.trim()]);
+    if (c.acidenteTrabalho) itens.push(["Acidente de trabalho", "Sim"]);
+    return itens;
+  };
+
   const enviar = async () => {
     // antes de criar o lançamento: um erro depois dele deixaria um lançamento em aberto pela metade
     if (!c.absenceTypeId) { onErro("Escolha o motivo."); return; }
@@ -1318,8 +1380,7 @@ function PainelConfirmacao({
     const ok = await confirmDialog({
       title: ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH",
       confirmLabel: "Enviar",
-      message: (avisoFalta ? `${avisoFalta} ` : "")
-        + "Depois de enviado o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.",
+      message: <ResumoDoEnvio itens={resumoDoEnvio()} avisoFalta={avisoFalta} />,
     });
     if (!ok) return;
     onErro("");
