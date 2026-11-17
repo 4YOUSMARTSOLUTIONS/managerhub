@@ -536,6 +536,17 @@ export function AbsenteismosManager({
         )}
       </td>
       <td style={{ textAlign: "center" }}>
+        {r.docPath && (
+          <button
+            type="button" className="icon-btn"
+            title={`Abrir ${r.docFilename ?? "documento"}`} aria-label={`Abrir ${r.docFilename ?? "documento"}`}
+            onClick={() => abrirDocumento(r.docPath as string)}
+          >
+            <Paperclip size={15} />
+          </button>
+        )}
+      </td>
+      <td style={{ textAlign: "center" }}>
         {/* Os três estados do comunicado se leem pela cor, sem abrir nada:
             verde saiu, vermelho falhou, apagado não tinha para quem mandar.
             O enviado ficava na cor do texto e era o único indistinguível. */}
@@ -617,6 +628,11 @@ export function AbsenteismosManager({
             <th style={{ width: 110 }} title="Horas quando a ausência é parcial; dias quando cobre o período inteiro">Duração</th>
             {comAutor && <th style={{ width: 170 }}>Lançado por</th>}
             <th style={{ width: 160 }}>Situação</th>
+            {/* quem já tem documento, sem abrir a ficha (LUIZ, 17/11/2026: os
+                importados recebem o atestado depois, um a um) */}
+            <th style={{ width: 70, textAlign: "center" }} title="Clipe: o lançamento tem documento anexado. Clique para abrir.">
+              Anexo
+            </th>
             {/* Escrito, e não o ícone sozinho: o cabeçalho é onde a pessoa
                 descobre o que a coluna significa, e um envelope ali obrigava a
                 passar o mouse para saber. */}
