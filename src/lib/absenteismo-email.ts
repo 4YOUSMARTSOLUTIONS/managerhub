@@ -170,11 +170,11 @@ function corpo(evento: EventoComunicado, l: Linha, empresa: string, autor: strin
         ? "Ausência parcial: o colaborador trabalhou no restante do dia. Situação ainda não confirmada, e o motivo será informado quando o gestor confirmar o lançamento."
         : "Situação ainda não confirmada. O motivo será informado quando o gestor confirmar o lançamento."
       : evento === "confirmado"
-        ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH. Ainda não vale como ausência."
+        ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH."
       : evento === "direto"
         ? parcial
-          ? "Ausência parcial lançada pelo gestor já com o motivo e enviada para aprovação do RH. Ainda não vale como ausência."
-          : "O gestor lançou a ausência já com o motivo e enviou para aprovação do RH. Ainda não vale como ausência."
+          ? "Ausência parcial lançada pelo gestor já com o motivo e enviada para aprovação do RH."
+          : "O gestor lançou a ausência já com o motivo e enviou para aprovação do RH."
         : evento === "aprovado"
           ? "O RH aprovou o lançamento, que passa a valer como ausência registrada."
           : "O RH reprovou o lançamento, que não vale como ausência.";
@@ -254,6 +254,10 @@ export async function dispatchComunicadoAbsenteismo(
     if (!l) return { status: "skipped", destinatarios: 0, error: "lançamento não encontrado" };
 
     const linha = l as unknown as Linha;
+    // Reenvio (LUIZ, 17/11/2026): repete o comunicado da situação de AGORA. Antes
+    // ele não tinha texto próprio e caía no de reprovação, com o assunto de
+    // abertura, fosse qual fosse a situação. O log continua registrando "reenvio".
+    const modelo = evento === "reenvio" ? await modeloDoReenvio(lancamentoId, linha.status) : evento;
 
     const [{ data: destinos, error: erroDestinos }, { data: empresa }, { data: autor }, { apiKey }, { data: ator }] = await Promise.all([
       // Quem recebe (LUIZ, 16/11/2026): o gestor do cadastro, o carimbado no
@@ -264,7 +268,7 @@ export async function dispatchComunicadoAbsenteismo(
       admin.from("profiles").select("full_name, email").eq("id", linha.created_by).maybeSingle(),
       getPlatformResend(),
       // quem cancelou pode não ser quem lançou (o RH, o gestor da pessoa)
-      evento === "cancelado" && atorId
+      modelo === "cancelado" && atorId
         ? admin.from("profiles").select("full_name").eq("id", atorId).maybeSingle()
         : Promise.resolve({ data: null as { full_name: string | null } | null }),
     ]);
@@ -286,8 +290,8 @@ export async function dispatchComunicadoAbsenteismo(
     const r = await sendMail({
       apiKey,
       to: emails,
-      subject: assunto(evento, linha),
-      html: corpo(evento, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined),
+      subject: assunto(modelo, linha),
+      html: corpo(modelo, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined),
       replyTo: autor?.email ?? undefined,
     });
 
@@ -307,6 +311,16 @@ export async function jaComunicou(lancamentoId: string): Promise<boolean> {
     .eq("lancamento_id", lancamentoId)
     .eq("status", "sent");
   return (count ?? 0) > 0;
+}
+
+/** O modelo que o reenvio repete: o da situação em que o lançamento está agora. */
+async function modeloDoReenvio(lancamentoId: string, status: string): Promise<EventoComunicado> {
+  if (status === "aprovado") return "aprovado";
+  if (status === "reprovado") return "reprovado";
+  if (status === "cancelado") return "cancelado";
+  // no RH: "motivo confirmado" se o aviso de abertura saiu antes; senão, "lançada"
+  if (status === "pendente") return (await avisouAbertura(lancamentoId)) ? "confirmado" : "direto";
+  return "aberto";
 }
 
 /** Já saiu (ou se tentou mandar) o aviso de abertura deste lançamento? */

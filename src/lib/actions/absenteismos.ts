@@ -948,10 +948,12 @@ export async function reenviarComunicado(formData: FormData): Promise<ActionStat
     // adivinhado mandaria e-mail sobre gente de outra equipe.
     const { data: linha } = await supabase
       .from("absenteismo_lancamentos")
-      .select("id")
+      .select("id, status")
       .eq("id", id)
       .maybeSingle();
     if (!linha) return { error: "Lançamento não encontrado." };
+    // o pedido de "desconsidere" já saiu no cancelamento (a tela nem oferece o botão)
+    if (linha.status === "cancelado") return { error: "Lançamento cancelado não reenvia comunicado." };
 
     const envio = await dispatchComunicadoAbsenteismo(id, "reenvio", userId);
     revalidar();
