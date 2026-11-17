@@ -533,24 +533,18 @@ export function AbsenteismosManager({
     return (
       <tr key={r.id}>
         {/* As ações na frente (LUIZ, 17/11/2026): no fim da linha elas sumiam
-            atrás da rolagem lateral em tela menor. Ordem dele: Ver, Cancelar,
-            Continua ausente, Efetivar. */}
+            atrás da rolagem lateral em tela menor. Ordem dele: Efetivar,
+            Continua ausente, Cancelar, Ver. */}
         <td>
           <span style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center" }}>
-            <button type="button" className="icon-btn" title="Ver" onClick={() => setAberto(r)}>
-              <FileText size={14} />
-            </button>
-            {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
-                horas): cancela e pede ao RH para desconsiderar o comunicado */}
-            {r.status === "aberto" && podeMexer(r) && (
+            {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
+                escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
+            {podeMexer(r) && (
               <button
-                type="button" className="icon-btn"
-                title="Cancelar: a ausência não se confirmou (o colaborador chegou depois, por exemplo)"
-                aria-label="Cancelar lançamento"
-                style={{ color: "var(--mh-danger)" }}
-                onClick={() => { setErro(""); setCancelando(r); }}
+                type="button" className="btn btn-primary btn-sm"
+                onClick={() => { setErro(""); setConfirmando(r); }}
               >
-                <Ban size={14} />
+                <Pencil size={13} /> Efetivar
               </button>
             )}
             {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
@@ -565,16 +559,22 @@ export function AbsenteismosManager({
                 <CalendarPlus size={13} /> Continua ausente
               </button>
             )}
-            {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
-                escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
-            {podeMexer(r) && (
+            {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
+                horas): cancela e pede ao RH para desconsiderar o comunicado */}
+            {r.status === "aberto" && podeMexer(r) && (
               <button
-                type="button" className="btn btn-primary btn-sm"
-                onClick={() => { setErro(""); setConfirmando(r); }}
+                type="button" className="icon-btn"
+                title="Cancelar: a ausência não se confirmou (o colaborador chegou depois, por exemplo)"
+                aria-label="Cancelar lançamento"
+                style={{ color: "var(--mh-danger)" }}
+                onClick={() => { setErro(""); setCancelando(r); }}
               >
-                <Pencil size={13} /> Efetivar
+                <Ban size={14} />
               </button>
             )}
+            <button type="button" className="icon-btn" title="Ver" onClick={() => setAberto(r)}>
+              <FileText size={14} />
+            </button>
           </span>
         </td>
         <td className="tabular muted">{r.employeeCode ?? <span className="soft">–</span>}</td>
