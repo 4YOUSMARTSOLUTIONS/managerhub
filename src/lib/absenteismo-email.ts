@@ -91,7 +91,7 @@ type Linha = {
   user_id: string;
   /** comportamento do motivo (atestado, falta...); nulo antes do Efetivar */
   snap_kind: string | null;
-  /** médico | odontológico: o tipo do documento, nada do conteúdo */
+  /** médico | odontológico (atestado) ou médico | perícia INSS (afastamento): o tipo do documento, nada do conteúdo */
   certificate_kind: string | null;
   work_accident: boolean | null;
   /** último dia sem comparecer registrado pelo "Continua ausente"; nulo = só occurred_on */
@@ -210,6 +210,10 @@ function corpo(
       }
       if (doAtestado && (l.certificate_kind === "medico" || l.certificate_kind === "odontologico")) {
         linhas.push(["Tipo de atestado", l.certificate_kind === "medico" ? "Médico" : "Odontológico"]);
+      }
+      // afastamento: documento médico ou da perícia do INSS (LUIZ, 17/11/2026)
+      if (l.snap_kind === "afastamento" && (l.certificate_kind === "medico" || l.certificate_kind === "pericia_inss")) {
+        linhas.push(["Tipo de documento", l.certificate_kind === "medico" ? "Médico" : "Perícia INSS"]);
       }
       if (l.work_accident) linhas.push(["Acidente de trabalho", "Sim"]);
       if (inssDias != null) {

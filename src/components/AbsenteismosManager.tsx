@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Ban, CalendarPlus, Check, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
+  AlertTriangle, Ban, CalendarPlus, Check, Download, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
@@ -32,6 +32,7 @@ import {
 } from "@/lib/actions/absenteismos";
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
 import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
+import { nomeParaBaixar, rotuloTipoDocumento } from "@/lib/absenteismo-documento";
 import { ImportarHistoricoAbsenteismo } from "@/components/ImportarHistoricoAbsenteismo";
 // só o tipo: o módulo é de servidor, e "use server" não pode reexportar tipo (quebra o arquivo de actions inteiro)
 import type { AtestadoLidoPorIA } from "@/lib/atestado-ia";
@@ -129,6 +130,8 @@ type Confirmacao = {
   parentesco: string;
   acidenteTrabalho: boolean;
   tipoAtestado: string;
+  /** afastamento: "medico" | "pericia_inss"; começa em branco e é obrigatório no envio */
+  tipoDocumento: string;
   abonada: boolean;
   cid: string;
   cidDescricao: string;
@@ -396,6 +399,19 @@ export function AbsenteismosManager({
   const abrirDocumento = async (path: string) => {
     const url = await getDocumentoAbsenteismoUrl(path);
     if (url) window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  // O link já volta como download, com o nome no cabeçalho da resposta: a
+  // página não sai do lugar e funciona igual no celular (LUIZ, 17/11/2026).
+  const baixarDocumento = async (path: string, nome: string) => {
+    const url = await getDocumentoAbsenteismoUrl(path, nome);
+    if (!url) { toast.error("Não foi possível baixar o documento."); return; }
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const podeMexer = (r: AbsenteismoRow) =>
@@ -818,6 +834,7 @@ export function AbsenteismosManager({
                 onErro={setErro}
                 erro={erro}
                 onAbrirDocumento={abrirDocumento}
+                onBaixarDocumento={baixarDocumento}
                 onCriado={marcarSemComunicado}
                 // enviado ao RH: o comunicado saiu no envio, não há aviso pendente
                 onEnviado={() => { marcarSemComunicado(null); setNovo(null); setErro(""); }}
@@ -929,6 +946,7 @@ export function AbsenteismosManager({
             onErro={setErro}
             erro={erro}
             onAbrirDocumento={abrirDocumento}
+            onBaixarDocumento={baixarDocumento}
             onFechar={fecharEfetivar}
           />
         </Dialogo>
@@ -946,6 +964,7 @@ export function AbsenteismosManager({
             erro={erro}
             onErro={setErro}
             onAbrirDocumento={abrirDocumento}
+            onBaixarDocumento={baixarDocumento}
             onEfetivar={podeMexer(aberto) ? () => { const r = aberto; setAberto(null); setErro(""); setConfirmando(r); } : undefined}
             onFechar={() => { setAberto(null); setErro(""); }}
           />
@@ -1218,7 +1237,7 @@ function BuscaCid({
  * bloco clínico e trava o envio sem o documento.
  */
 function PainelConfirmacao({
-  linha, novoPara, tipos, kindsComRedutor, erro, onErro, onAbrirDocumento, onCriado, onEnviado, onFechar,
+  linha, novoPara, tipos, kindsComRedutor, erro, onErro, onAbrirDocumento, onBaixarDocumento, onCriado, onEnviado, onFechar,
 }: {
   /** o lançamento a efetivar; null no lançamento novo já com o motivo */
   linha: AbsenteismoRow | null;
@@ -1229,6 +1248,7 @@ function PainelConfirmacao({
   erro: string;
   onErro: (m: string) => void;
   onAbrirDocumento: (path: string) => void;
+  onBaixarDocumento: (path: string, nome: string) => void;
   /** o lançamento novo foi gravado (o envio pode ainda falhar depois) */
   onCriado?: (id: string) => void;
   /** chamado depois do envio ao RH dar certo, antes de fechar */
@@ -1249,7 +1269,12 @@ function PainelConfirmacao({
     note: linha?.note ?? "",
     parentesco: linha?.kinship ?? "",
     acidenteTrabalho: linha?.workAccident ?? false,
-    tipoAtestado: linha?.certificateKind ?? "medico",
+    // a mesma coluna guarda o tipo do atestado e o do documento do afastamento:
+    // cada campo só aproveita o valor que é dele
+    tipoAtestado: linha?.certificateKind === "odontologico" ? "odontologico" : "medico",
+    tipoDocumento: linha?.kind === "afastamento"
+      && (linha.certificateKind === "medico" || linha.certificateKind === "pericia_inss")
+      ? linha.certificateKind : "",
     abonada: linha?.waived ?? false,
     cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
     // só o marcador: com o primeiro dia parcial há horário sem o lançamento ser de horas
@@ -1277,6 +1302,8 @@ function PainelConfirmacao({
   const ehNovo = !linha;
 
   const tipo = tipos.find((t) => t.id === c.absenceTypeId) ?? null;
+  // afastamento: o documento é médico ou da perícia do INSS (LUIZ, 17/11/2026)
+  const pedeTipoDocumento = tipo?.kind === "afastamento" && !tipo.requiresMedical;
   const primeiroDia = primeiroDiaQueVale(c);
   const diasNoDocumento = diasDoPeriodo(c.startDate, c.endDate);
   // Dias sem comparecer que o documento não cobre (LUIZ, 17/11/2026): no envio
@@ -1330,6 +1357,7 @@ function PainelConfirmacao({
     parentesco: c.parentesco,
     acidenteTrabalho: c.acidenteTrabalho,
     tipoAtestado: c.tipoAtestado,
+    tipoDocumento: c.tipoDocumento,
     abonada: c.abonada,
     horaInicio: levaHoras ? c.horaInicio : "",
     horaFim: levaHoras ? c.horaFim : "",
@@ -1381,6 +1409,7 @@ function PainelConfirmacao({
       itens.push(["Primeiro dia", `Trabalhou parte de ${formatDate(c.startDate)}, ausente ${horario}`]);
     }
     if (tipo?.requiresMedical) itens.push(["Tipo de atestado", c.tipoAtestado === "odontologico" ? "Odontológico" : "Médico"]);
+    else if (pedeTipoDocumento) itens.push(["Tipo de documento", rotuloTipoDocumento(c.tipoDocumento) ?? ""]);
     if (tipo?.requiresCompanion && c.acompanhado.trim()) itens.push(["Acompanhado", c.acompanhado.trim()]);
     if (tipo?.requiresKinship && c.parentesco.trim()) itens.push(["Parentesco do falecido", c.parentesco.trim()]);
     if (c.acidenteTrabalho) itens.push(["Acidente de trabalho", "Sim"]);
@@ -1392,6 +1421,10 @@ function PainelConfirmacao({
     if (!c.absenceTypeId) { onErro("Escolha o motivo."); return; }
     if (!c.startDate || !c.endDate) { onErro("Informe o início e o término."); return; }
     if (c.endDate < c.startDate) { onErro("O término não pode ser antes do início."); return; }
+    if (pedeTipoDocumento && !c.tipoDocumento) {
+      onErro("Informe o tipo de documento do afastamento: Médico ou Perícia INSS.");
+      return;
+    }
     if (sem && foraDoDocumento === null) {
       onErro(`O período informado não cobre nenhum dos dias sem comparecer (${intervalo([sem.inicio, sem.fim])}).`);
       return;
@@ -1925,6 +1958,24 @@ function PainelConfirmacao({
       {/* O anexo aparece para QUALQUER tipo: uma falta pode ter o print da
           conversa em que o colaborador a assume. O que o catálogo controla é a
           obrigatoriedade, não a possibilidade. */}
+      {pedeTipoDocumento && (
+        <div>
+          <label className="label">Tipo de documento <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+          <div style={{ display: "flex", gap: "1rem", alignItems: "center", minHeight: 34, flexWrap: "wrap" }}>
+            {[["medico", "Médico"], ["pericia_inss", "Perícia INSS"]].map(([v, r]) => (
+              <label key={v} style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem", cursor: "pointer" }}>
+                <input
+                  type="radio" name={`tipo-documento-${linha?.id ?? "novo"}`} value={v}
+                  checked={c.tipoDocumento === v}
+                  onChange={() => setC((x) => ({ ...x, tipoDocumento: v }))}
+                />
+                {r}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       {linha ? (
         <Anexo
           linha={linha}
@@ -1933,6 +1984,16 @@ function PainelConfirmacao({
           onMudou={(v) => setTemDoc(v)}
           onErro={onErro}
           onAbrir={onAbrirDocumento}
+          onBaixar={onBaixarDocumento}
+          // o nome segue o que está NA TELA (motivo e tipo podem ter mudado agora)
+          nomeBaixar={linha.docPath ? nomeParaBaixar({
+            kind: tipo?.kind ?? null,
+            tipoDocumento: tipo?.requiresMedical ? c.tipoAtestado : pedeTipoDocumento ? c.tipoDocumento : null,
+            emHoras: c.emHoras,
+            inicio: c.startDate || null,
+            original: linha.docFilename,
+            caminho: linha.docPath,
+          }) : ""}
         />
       ) : (
         <AnexoNoEnvio obrigatorio={Boolean(tipo?.requiresDocument)} arquivo={arquivo} onArquivo={setArquivo} travado={arquivoSubiu} />
@@ -1976,7 +2037,7 @@ function PainelConfirmacao({
 }
 
 function Anexo({
-  linha, obrigatorio, temDoc, onMudou, onErro, onAbrir,
+  linha, obrigatorio, temDoc, onMudou, onErro, onAbrir, onBaixar, nomeBaixar,
 }: {
   linha: AbsenteismoRow;
   obrigatorio: boolean;
@@ -1984,6 +2045,9 @@ function Anexo({
   onMudou: (v: boolean) => void;
   onErro: (m: string) => void;
   onAbrir: (path: string) => void;
+  onBaixar: (path: string, nome: string) => void;
+  /** ATD_2026_11_16.pdf e afins; ver `nomeParaBaixar` */
+  nomeBaixar: string;
 }) {
   const [enviando, iniciar] = useTransition();
   const [nome, setNome] = useState(linha.docFilename);
@@ -2031,6 +2095,12 @@ function Anexo({
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onAbrir(linha.docPath as string)}>
             <Paperclip size={15} /> {nome ?? "Ver documento"}
+          </button>
+          <button
+            type="button" className="btn btn-ghost btn-sm" title={`Baixar como ${nomeBaixar}`}
+            onClick={() => onBaixar(linha.docPath as string, nomeBaixar)}
+          >
+            <Download size={15} /> Baixar
           </button>
           <button type="button" className="btn btn-ghost btn-sm" disabled={enviando} onClick={remover}>
             Remover
@@ -2093,7 +2163,7 @@ function AnexoNoEnvio({ obrigatorio, arquivo, onArquivo, travado }: {
 
 /** A ficha completa, com a decisão do RH quando for o caso. */
 function Ficha({
-  linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, erro, onErro, onAbrirDocumento, onEfetivar, onFechar,
+  linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, erro, onErro, onAbrirDocumento, onBaixarDocumento, onEfetivar, onFechar,
 }: {
   linha: AbsenteismoRow;
   kindsComRedutor: Enums<"absence_kind">[];
@@ -2103,12 +2173,22 @@ function Ficha({
   erro: string;
   onErro: (m: string) => void;
   onAbrirDocumento: (path: string) => void;
+  onBaixarDocumento: (path: string, nome: string) => void;
   /** presente quando o lançamento ainda pode ser efetivado por quem está olhando */
   onEfetivar?: () => void;
   onFechar: () => void;
 }) {
   const [medico, setMedico] = useState<AtestadoLido | null>(null);
   const [verMedico, setVerMedico] = useState(false);
+  // ATD_/ATH_/PERÍCIA_INSS_ + início do documento (LUIZ, 17/11/2026)
+  const nomeBaixar = linha.docPath ? nomeParaBaixar({
+    kind: linha.kind,
+    tipoDocumento: linha.certificateKind,
+    emHoras: linha.partialDay,
+    inicio: linha.startDate ?? linha.occurredOn,
+    original: linha.docFilename,
+    caminho: linha.docPath,
+  }) : "";
   const [motivo, setMotivo] = useState("");
   // separado de `erro` porque o reenvio bem-sucedido é notícia boa, e notícia
   // boa em vermelho faz a pessoa achar que quebrou
@@ -2258,7 +2338,10 @@ function Ficha({
           />
         )}
         {linha.certificateKind && (
-          <Campo rotulo="Tipo de atestado" valor={linha.certificateKind === "medico" ? "Médico" : "Odontológico"} />
+          <Campo
+            rotulo={linha.kind === "afastamento" ? "Tipo de documento" : "Tipo de atestado"}
+            valor={rotuloTipoDocumento(linha.certificateKind)}
+          />
         )}
         {linha.workAccident && <Campo rotulo="Acidente de trabalho" valor="Sim" />}
         {linha.waived && <Campo rotulo="Falta abonada" valor="Sim" />}
@@ -2338,6 +2421,14 @@ function Ficha({
         {linha.docPath && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onAbrirDocumento(linha.docPath as string)}>
             <Paperclip size={15} /> {linha.docFilename ?? "Documento"}
+          </button>
+        )}
+        {nomeBaixar && (
+          <button
+            type="button" className="btn btn-ghost btn-sm" title={`Baixar como ${nomeBaixar}`}
+            onClick={() => onBaixarDocumento(linha.docPath as string, nomeBaixar)}
+          >
+            <Download size={15} /> Baixar
           </button>
         )}
         {linha.emailStatus && (

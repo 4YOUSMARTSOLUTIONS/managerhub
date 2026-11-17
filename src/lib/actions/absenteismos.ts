@@ -427,6 +427,12 @@ export type ConfirmacaoInput = {
   acidenteTrabalho?: boolean;
   /** "medico" | "odontologico"; só quando o tipo exige dados do atestado */
   tipoAtestado?: string;
+  /**
+   * Afastamento: de onde vem o documento, "medico" | "pericia_inss" (LUIZ,
+   * 17/11/2026). Dá o nome do arquivo que o RH baixa. Grava na mesma coluna do
+   * tipo de atestado (`certificate_kind`).
+   */
+  tipoDocumento?: string;
   /** falta abonada: fica no histórico, mas não pesa na remuneração variável */
   abonada?: boolean;
   /**
@@ -527,7 +533,12 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         note: input.note.trim() || null,
         kinship_of_deceased: tipo.requires_kinship ? (input.parentesco?.trim() || null) : null,
         work_accident: Boolean(input.acidenteTrabalho),
-        certificate_kind: tipo.requires_medical ? (input.tipoAtestado || null) : null,
+        // o motivo diz qual conjunto vale; fora dele, nulo (o banco confere de novo no envio)
+        certificate_kind: tipo.requires_medical
+          ? (input.tipoAtestado === "medico" || input.tipoAtestado === "odontologico" ? input.tipoAtestado : null)
+          : tipo.kind === "afastamento"
+            ? (input.tipoDocumento === "medico" || input.tipoDocumento === "pericia_inss" ? input.tipoDocumento : null)
+            : null,
         // abono só existe para falta: nas demais o motivo já diz o efeito
         waived: tipo.kind === "falta" ? Boolean(input.abonada) : false,
         hours_start: gravaHoras ? horaIni : null,
@@ -668,11 +679,24 @@ export async function removerDocumentoAbsenteismo(formData: FormData): Promise<A
   }
 }
 
-/** Link temporário para ler o documento (o bucket é privado). */
-export async function getDocumentoAbsenteismoUrl(path: string): Promise<string | null> {
+/**
+ * Link temporário para ler o documento (o bucket é privado).
+ *
+ * Com `baixarComo`, o link baixa o arquivo com esse nome em vez de abrir
+ * (ATD_2026_11_16.pdf; LUIZ, 17/11/2026). O `download` da própria biblioteca
+ * codifica o nome duas vezes, e o acento chegava ao arquivo salvo como
+ * "PER%C3%8DCIA": por isso o parâmetro é posto aqui, codificado uma vez só. O
+ * armazenamento responde com `filename*=UTF-8''…`, que o navegador decodifica.
+ */
+export async function getDocumentoAbsenteismoUrl(path: string, baixarComo?: string): Promise<string | null> {
   const { supabase } = await actionContext();
   const { data } = await supabase.storage.from(BUCKET_DOC).createSignedUrl(path, 60 * 10);
-  return data?.signedUrl ?? null;
+  if (!data?.signedUrl) return null;
+  const nome = (baixarComo ?? "").replace(/\p{Cc}+/gu, "").replace(/[\\/:*?"<>|]+/g, "_").trim().slice(0, 150);
+  if (!nome) return data.signedUrl;
+  const url = new URL(data.signedUrl);
+  url.searchParams.set("download", nome);
+  return url.toString();
 }
 
 /**
