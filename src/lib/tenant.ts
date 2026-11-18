@@ -54,64 +54,86 @@ export function effectiveUnitFilter(scope: UnitScope): string[] | null {
  */
 export const requireContext = cache(async function requireContext(): Promise<ActiveContext> {
   const supabase = await createClient();
-  // identidade e papel vêm da camada compartilhada: o layout já resolveu ambos neste
-  // mesmo request, então aqui não custa nova ida à rede
-  const [user, isSuperAdmin] = await Promise.all([getAuthUser(), getIsSuperAdmin()]);
-
+  // O usuário vem do token (getClaims, local), sem ida à rede.
+  const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  let tenant: Tables<"tenants">;
-  let role: Enums<"member_role">;
-  let isHr = false;
-  let isAdmin: boolean;
-  let membershipId: string | null = null;
-  let companyScope: CompanyScope | null = null;
-
-  if (isSuperAdmin) {
-    // Owner de plataforma: opera na empresa selecionada no seletor do topo.
-    const { data: activeId } = await supabase.rpc("my_active_tenant");
-    if (!activeId) redirect("/admin"); // nenhuma empresa no sistema ainda
-    const { data: t } = await supabase.from("tenants").select("*").eq("id", activeId).maybeSingle();
-    if (!t) redirect("/admin");
-    tenant = t as Tables<"tenants">;
-    role = "owner";
-    isAdmin = true;
-    const { data: companies } = await supabase.from("tenants").select("id, name").eq("status", "active").order("name");
-    const viewAll = (await cookies()).get(ADMIN_VIEW_COOKIE)?.value === "all";
-    companyScope = { companies: companies ?? [], activeTenantId: tenant.id, viewAll };
-  } else {
-    const { data: memberships } = await supabase
+  // 1ª rodada (desempenho, LUIZ 18/11/2026): as três perguntas que antes iam em
+  // fila saem JUNTAS. É super admin? Qual o vínculo? Qual a empresa ativa do
+  // seletor? A empresa ativa só serve ao super admin, mas é uma consulta leve,
+  // e esperar o "é super admin?" para fazê-la custava uma rodada inteira.
+  const [isSuperAdmin, { data: memberships }, { data: activeTenantId }] = await Promise.all([
+    getIsSuperAdmin(),
+    supabase
       .from("memberships")
       .select("id, role, tenant_id, is_active, is_hr, tenants(*)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
-      .limit(1);
+      .limit(1),
+    supabase.rpc("my_active_tenant"),
+  ]);
+
+  let tenantId: string;
+  let tenantDoVinculo: Tables<"tenants"> | null = null;
+  let role: Enums<"member_role">;
+  let isHr = false;
+  let isAdmin: boolean;
+  let membershipId: string | null = null;
+
+  if (isSuperAdmin) {
+    // Owner de plataforma: opera na empresa selecionada no seletor do topo.
+    const activeId = activeTenantId as string | null;
+    if (!activeId) redirect("/admin"); // nenhuma empresa no sistema ainda
+    tenantId = activeId;
+    role = "owner";
+    isAdmin = true;
+  } else {
     const membership = memberships?.[0];
     if (!membership || !membership.tenants) redirect("/onboarding");
     if (membership.is_active === false) redirect("/suspenso");
     const t = membership.tenants as Tables<"tenants">;
     if (t.status !== "active") redirect("/suspenso");
-    tenant = t;
+    tenantDoVinculo = t;
+    tenantId = t.id;
     role = membership.role;
     isHr = membership.is_hr;
     isAdmin = role === "owner" || role === "admin";
     membershipId = membership.id;
   }
 
-  // ----- escopo de unidade (dentro da empresa ativa) -----
-  //
-  // As duas perguntas saem JUNTAS: "quais unidades a empresa tem" precisa do id da
-  // empresa, e "a quais eu tenho acesso" precisa do id do vínculo. As duas coisas
-  // chegaram juntas no bloco acima, então a segunda não tem por que esperar a
-  // primeira. Antes esperava, só por estar escrita depois — uma ida e volta ao
-  // banco a mais em 100% das navegações de todas as telas.
-  const [{ data: unitRows }, { data: mu }] = await Promise.all([
-    supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
-    // admin enxerga todas as unidades: nem chega a perguntar (igual a antes)
+  // 2ª rodada: tudo o que depende só do id da empresa (e do vínculo) sai junto.
+  // Os módulos (unidades contratadas, telas liberadas, em construção) começam
+  // aqui e o `getModuleAccess` só aproveita o resultado, sem rodada própria.
+  void dadosDeModulos(tenantId).catch(() => undefined);
+  const [{ data: unitRows }, { data: mu }, superAdmin, cookieStore] = await Promise.all([
+    supabase.from("units").select("id, name").eq("tenant_id", tenantId).order("name"),
+    // admin enxerga todas as unidades: nem chega a perguntar
     !isAdmin && membershipId
       ? supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId)
       : Promise.resolve({ data: null as { unit_id: string }[] | null }),
+    // o super admin precisa da linha da empresa e da lista do seletor
+    isSuperAdmin
+      ? Promise.all([
+          supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle(),
+          supabase.from("tenants").select("id, name").eq("status", "active").order("name"),
+        ])
+      : Promise.resolve(null),
+    cookies(),
   ]);
+
+  let tenant: Tables<"tenants">;
+  let companyScope: CompanyScope | null = null;
+  if (superAdmin) {
+    const [{ data: t }, { data: companies }] = superAdmin;
+    if (!t) redirect("/admin");
+    tenant = t as Tables<"tenants">;
+    const viewAll = cookieStore.get(ADMIN_VIEW_COOKIE)?.value === "all";
+    companyScope = { companies: companies ?? [], activeTenantId: tenant.id, viewAll };
+  } else {
+    tenant = tenantDoVinculo as Tables<"tenants">;
+  }
+
+  // ----- escopo de unidade (dentro da empresa ativa) -----
   const allUnits: UnitOpt[] = unitRows ?? [];
 
   let allowed: UnitOpt[] = allUnits;
@@ -122,7 +144,6 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   const allowedUnitIds = allowed.map((u) => u.id);
   const unrestricted = allowedUnitIds.length === allUnits.length;
 
-  const cookieStore = await cookies();
   const raw = cookieStore.get(UNIT_COOKIE)?.value ?? null;
   let activeUnitId: string | null = null;
   if (allowed.length === 1) {
@@ -141,6 +162,29 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     isSuperAdmin,
     companyScope,
   };
+});
+
+/**
+ * O que o controle de módulos precisa, buscado UMA vez por request e o quanto
+ * antes: o `requireContext` dispara assim que sabe a empresa, e o
+ * `getModuleAccess` só espera o resultado (antes era uma rodada a mais, depois
+ * das unidades, em toda navegação).
+ *
+ * `unit_modules` vem da empresa INTEIRA e o recorte pelas unidades do escopo é
+ * feito no `getModuleAccess`: são poucas linhas (unidades × módulos), e assim a
+ * consulta não precisa esperar as unidades.
+ */
+export const dadosDeModulos = cache(async function dadosDeModulos(tenantId: string) {
+  const supabase = await createClient();
+  const [{ data: linhas }, { data: emConstrucao }, { data: telas, error: erroTelas }] = await Promise.all([
+    supabase.from("unit_modules").select("unit_id, module_key, state").eq("tenant_id", tenantId),
+    // O catálogo de módulos da plataforma é informação comercial nossa: a RPC
+    // devolve só a lista de chaves em obra, que a interface já mostra no selo.
+    supabase.rpc("modulos_em_construcao"),
+    // telas liberadas para esta pessoa (null = sem restrição); ver acesso-telas.ts
+    supabase.rpc("minhas_telas", { p_tenant: tenantId }),
+  ]);
+  return { linhas: linhas ?? [], emConstrucao: emConstrucao ?? [], telas, erroTelas };
 });
 
 /** `cache()`: /metas chamava isto duas vezes no mesmo request, e outras 7 telas uma vez. */

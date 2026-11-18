@@ -1,6 +1,5 @@
 import { cache } from "react";
-import { requireContext } from "@/lib/tenant";
-import { createClient } from "@/lib/supabase/server";
+import { requireContext, dadosDeModulos } from "@/lib/tenant";
 import { MODULE_BY_KEY, MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
 import { FORA_DA_REGRA } from "@/lib/acesso-telas";
 
@@ -32,26 +31,18 @@ export const getModuleAccess = cache(async function getModuleAccess(): Promise<M
     return { state, construction: new Set<ModuleKey>(), restrito: false };
   }
 
-  const supabase = await createClient();
-
   const unitIds = unitScope.activeUnitId ? [unitScope.activeUnitId] : unitScope.allowedUnitIds;
 
-  // tenant sem unidades: nada vendável liberado (não há operação sem unidade)
-  const [{ data: rows }, { data: flags }, { data: restricao, error: erroRestricao }] = await Promise.all([
-    unitIds.length
-      ? supabase.from("unit_modules").select("module_key, state").eq("tenant_id", tenant.id).in("unit_id", unitIds)
-      : Promise.resolve({ data: [] as { module_key: string; state: ModuleState }[] }),
-    // O catálogo de módulos da plataforma é informação comercial nossa, não do
-    // cliente: a tabela só é legível pelo owner de plataforma. Esta RPC devolve
-    // apenas a lista de chaves em obra, que é o que a interface já mostra ao
-    // usuário no selo "Em construção".
-    supabase.rpc("modulos_em_construcao"),
-    // telas liberadas para esta pessoa (null = sem restrição); ver acesso-telas.ts
-    supabase.rpc("minhas_telas", { p_tenant: tenant.id }),
-  ]);
+  // Buscado pelo `requireContext` na mesma rodada das unidades (desempenho,
+  // LUIZ 18/11/2026); aqui só se espera o resultado. `unit_modules` vem da
+  // empresa inteira, e o recorte pelas unidades do escopo é este filtro (tenant
+  // sem unidades: nada vendável liberado, não há operação sem unidade).
+  const { linhas, emConstrucao: flags, telas: restricao, erroTelas: erroRestricao } = await dadosDeModulos(tenant.id);
+  const doEscopo = new Set(unitIds);
+  const rows = linhas.filter((r) => doEscopo.has(r.unit_id));
 
   const best: Partial<Record<ModuleKey, ModuleState>> = {};
-  for (const r of rows ?? []) {
+  for (const r of rows) {
     const k = r.module_key as ModuleKey;
     if (!(k in MODULE_BY_KEY)) continue; // key órfã no banco: ignora
     const cur = best[k];

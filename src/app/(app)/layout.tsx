@@ -6,7 +6,7 @@ import { getTheme } from "@/lib/theme";
 import { getModuleAccess } from "@/lib/module-access";
 import { getAvatarMap } from "@/lib/avatars";
 import { getAuthUser, getOwnIdentity, trocaDeSenhaPendente } from "@/lib/auth-cache";
-import { getConversas, getPreferencias } from "@/lib/actions/chat";
+import { getConversas } from "@/lib/actions/chat";
 import { AppShell } from "@/components/AppShell";
 import { SessaoInatividade } from "@/components/SessaoInatividade";
 import { EnvioDasBlitzGuardadas } from "@/components/BlitzGuardadas";
@@ -29,6 +29,26 @@ const CORE_ONLY_STATE = Object.fromEntries(
  */
 const proprioAvatar = (userId: string, path: string | null | undefined): Record<string, string> =>
   path ? { [userId]: path } : {};
+
+/**
+ * As preferências do chat (status, aviso e som), lidas direto pela própria
+ * linha. A RLS de `chat_settings` só devolve a linha do próprio usuário. Mesmo
+ * resultado da action `getPreferencias`, sem a consulta de vínculo do
+ * `actionContext`, que aqui era uma rodada a mais no carregamento.
+ */
+async function preferenciasDoChat(userId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("chat_settings")
+    .select("notificacoes, som, status")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return {
+    notificacoes: data?.notificacoes ?? true,
+    som: data?.som ?? true,
+    status: data?.status ?? "disponivel",
+  };
+}
 
 export default async function AppLayout({
   children,
@@ -88,13 +108,20 @@ export default async function AppLayout({
   const ctx = await requireContext();
 
   // 3º estágio: o que depende só do tenant/usuário, tudo junto.
-  const [{ state: moduleState, construction }, avatars, perfil, prefsChat, inatividade] = await Promise.all([
+  //
+  // As conversas do chat entram na MESMA leva (desempenho, LUIZ 18/11/2026):
+  // antes esperavam o estado dos módulos para saber se o chat está ligado, uma
+  // rodada a mais em todo carregamento. Agora saem junto e são descartadas se
+  // o chat estiver desligado. As preferências do chat são lidas direto pelo id
+  // do usuário, sem o contexto de action (que fazia outra consulta de vínculo).
+  const [{ state: moduleState, construction }, avatars, perfil, prefsChat, inatividade, conversas] = await Promise.all([
     getModuleAccess(),
     getAvatarMap(ctx.tenant.id),
     getOwnIdentity(user.id),
-    getPreferencias(),
+    preferenciasDoChat(user.id),
     // minutos sem uso que encerram a sessão (celular compartilhado)
     getMinhaInatividade(ctx.tenant.id),
+    getConversas().catch(() => []),
   ]);
 
   /**
@@ -105,7 +132,7 @@ export default async function AppLayout({
    * na mesma leva das outras consultas do layout.
    */
   const chatLigado = moduleState.chat === "on";
-  const chatConversas = chatLigado ? await getConversas() : [];
+  const chatConversas = chatLigado ? conversas : [];
 
   // o nome real vem do cadastro; o prefixo do e-mail é só a reserva de quem ainda
   // não tem full_name (e rende uma inicial só: "luiz.nobre" vira "l")
