@@ -31,6 +31,11 @@ export type ActiveContext = {
   isHr: boolean;
   /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
   isDp: boolean;
+  /**
+   * marca de avaliador da blitz (`memberships.is_avaliador_blitz`): vê a blitz
+   * da empresa inteira e, por isso, não fica travado na própria unidade
+   */
+  isAvaliadorBlitz: boolean;
   unitScope: UnitScope;
   isSuperAdmin: boolean;
   /** presente só p/ super admin: lista de empresas + a selecionada no topo */
@@ -66,7 +71,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     getIsSuperAdmin(),
     supabase
       .from("memberships")
-      .select("id, role, tenant_id, is_active, is_hr, tenants(*)")
+      .select("id, role, tenant_id, is_active, is_hr, is_avaliador_blitz, tenants(*)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1),
@@ -77,6 +82,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   let tenantDoVinculo: Tables<"tenants"> | null = null;
   let role: Enums<"member_role">;
   let isHr = false;
+  let isAvaliadorBlitz = false;
   let isAdmin: boolean;
   let membershipId: string | null = null;
 
@@ -97,6 +103,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     tenantId = t.id;
     role = membership.role;
     isHr = membership.is_hr;
+    isAvaliadorBlitz = membership.is_avaliador_blitz === true;
     isAdmin = role === "owner" || role === "admin";
     membershipId = membership.id;
   }
@@ -107,8 +114,11 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   void dadosDeModulos(tenantId).catch(() => undefined);
   const [{ data: unitRows }, { data: mu }, superAdmin, cookieStore] = await Promise.all([
     supabase.from("units").select("id, name").eq("tenant_id", tenantId).order("name"),
-    // admin enxerga todas as unidades: nem chega a perguntar
-    !isAdmin && membershipId
+    // admin enxerga todas as unidades: nem chega a perguntar. O avaliador da
+    // blitz também (LUIZ, 18/11/2026): ele aborda gente de qualquer unidade, e
+    // preso à dele não via nem as blitz que lançou na outra. Nas demais telas
+    // o seletor só recorta; o que ele alcança continua decidido pela RLS
+    !isAdmin && !isAvaliadorBlitz && membershipId
       ? supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId)
       : Promise.resolve({ data: null as { unit_id: string }[] | null }),
     // o super admin precisa da linha da empresa e da lista do seletor
@@ -158,6 +168,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     role,
     isHr,
     isDp: isAdmin || isHr,
+    isAvaliadorBlitz,
     unitScope: { units: allowed, allowedUnitIds, unrestricted, activeUnitId, locked: allowed.length === 1 },
     isSuperAdmin,
     companyScope,

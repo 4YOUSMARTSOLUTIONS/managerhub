@@ -21,7 +21,7 @@ export default async function SegurancaBlitzPage() {
   const gate = await moduleGate("seg_blitz");
   if (gate) return gate;
 
-  const { tenant, unitScope, role, user } = await requireContext();
+  const { tenant, unitScope, role, user, isAvaliadorBlitz } = await requireContext();
   const supabase = await createClient();
 
   const unidades = effectiveUnitFilter(unitScope);
@@ -36,15 +36,16 @@ export default async function SegurancaBlitzPage() {
 
   /**
    * A aba Análises (indicadores e recorrência) é de quem tem alçada: gestor,
-   * gerência, administração e equipe de segurança. O avaliador da blitz (e o
-   * colaborador comum) fica só com a lista: decisão do LUIZ, 10/11/2026.
+   * gerência, administração, equipe de segurança e, desde 18/11/2026, o
+   * avaliador da blitz, que vê a empresa inteira (LUIZ). O colaborador comum
+   * fica só com a lista das próprias.
    */
   const temAlcadaP = daSegurancaP.then(({ data }) =>
-    role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || data === true);
+    role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || data === true || isAvaliadorBlitz);
   // "Todos | Minha gestão" (LUIZ, 11/11/2026): para quem vê a empresa inteira e
   // também tem gente embaixo. O Gestor já vê só a cadeia dele
   const veAEmpresaP = daSegurancaP.then(({ data }) =>
-    role === "owner" || role === "admin" || role === "manager" || data === true);
+    role === "owner" || role === "admin" || role === "manager" || data === true || isAvaliadorBlitz);
 
   // Análises do mês corrente (o filtro da tela troca o período). O público
   // da blitz se configura em Configurações > Segurança.
