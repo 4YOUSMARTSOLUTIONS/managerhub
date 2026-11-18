@@ -46,22 +46,48 @@ export default async function FeriasPage() {
     .limit(500);
   if (unidades) lista = lista.or(`snap_unit_id.in.(${unidades.join(",")}),snap_unit_id.is.null`);
 
+  // As três leituras do 13º vinham em fila DEPOIS do lote (desempenho, LUIZ
+  // 18/11/2026). Agora cada uma sai assim que o que ela precisa chega, em
+  // paralelo com o resto: a escolha da própria pessoa espera só o vínculo e os
+  // níveis bloqueados; o painel da equipe espera só a configuração (o ano da
+  // escolha depende do prazo); a espera da efetivação não depende de nada.
+  const meuVinculoP = supabase
+    .from("memberships")
+    .select("admission_date, hierarchy_level_id")
+    .eq("tenant_id", tenant.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const bloqueadosP = supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id);
+  // antecedência mínima por quem lança (Configurações > Férias)
+  const configP = supabase
+    .from("ferias_config")
+    .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo, decimo_prazo")
+    .eq("tenant_id", tenant.id)
+    .maybeSingle();
+  const nivelBloqueadoP = Promise.all([meuVinculoP, bloqueadosP]).then(([{ data: v }, { data: b }]) =>
+    !!v?.hierarchy_level_id && (b ?? []).some((x) => x.hierarchy_level_id === v.hierarchy_level_id));
+  // quem não solicita as próprias férias escolhe, por ano, o adiantamento do 13º
+  const minhaEscolhaP = (async () => (await nivelBloqueadoP)
+    ? (await supabase.rpc("ferias_escolhas_decimo", { p_tenant: tenant.id, p_user: user.id })).data
+    : null)();
+  // quem acompanha equipe vê se os operacionais já escolheram o 13º do ano
+  const anoDecimoP = configP.then(({ data }) => anoDaEscolhaDecimo(hoje, data?.decimo_prazo ?? "01-31"));
+  const escolhasDaEquipeP = (async () => (ehDp || role === "manager" || podeLiderar)
+    ? (await supabase.rpc("ferias_painel_decimo", { p_tenant: tenant.id, p_ano: await anoDecimoP, p_unit_ids: unidades })).data
+    : null)();
+
   const [
     { data: linhas }, membros, equipe,
     { data: meuVinculo }, { data: bloqueados }, { data: feriados },
     { data: aquisitivos }, { data: painel }, { data: importacao }, { data: setores },
     { data: config },
+    minhaEscolha, anoDecimo, escolhasDaEquipe, { data: esperaDecimo },
   ] = await Promise.all([
     lista,
     getMembers(tenant.id),
     podeLiderar ? minhaEquipe(supabase, tenant.id) : Promise.resolve([] as string[]),
-    supabase
-      .from("memberships")
-      .select("admission_date, hierarchy_level_id")
-      .eq("tenant_id", tenant.id)
-      .eq("user_id", user.id)
-      .maybeSingle(),
-    supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id),
+    meuVinculoP,
+    bloqueadosP,
     supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
     supabase.rpc("ferias_periodos_aquisitivos", {
       p_tenant: tenant.id, p_user: user.id, p_hoje: hoje,
@@ -75,12 +101,14 @@ export default async function FeriasPage() {
     supabase.rpc("ferias_situacao_importacao", { p_tenant: tenant.id }),
     // a cor de cada setor no calendário vem da posição dele no cadastro
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
-    // antecedência mínima por quem lança (Configurações > Férias)
-    supabase
-      .from("ferias_config")
-      .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo, decimo_prazo")
-      .eq("tenant_id", tenant.id)
-      .maybeSingle(),
+    configP,
+    minhaEscolhaP,
+    anoDecimoP,
+    escolhasDaEquipeP,
+    // DP: o banco recusa efetivar enquanto o operacional não escolhe o 13º do ano
+    ehDp
+      ? supabase.rpc("ferias_efetivacao_aguardando_decimo", { p_tenant: tenant.id })
+      : Promise.resolve({ data: null }),
   ]);
 
   const situacaoFolha = (importacao ?? null) as {
@@ -140,25 +168,12 @@ export default async function FeriasPage() {
   // conferível, e o banco recusaria o pedido de qualquer jeito.
   const semFolha = usaFolha && meusAquisitivos.length === 0;
   const podeSolicitar = !nivelBloqueado && !semAdmissao && !semFolha;
-  // quem não solicita as próprias férias escolhe, por ano, o adiantamento do 13º
-  const { data: minhaEscolha } = nivelBloqueado
-    ? await supabase.rpc("ferias_escolhas_decimo", { p_tenant: tenant.id, p_user: user.id })
-    : { data: null };
   const escolhasDecimo = nivelBloqueado
     ? ((minhaEscolha as unknown as DecimoPelaEscolha | null)?.escolhas ?? [])
     : null;
-  // quem acompanha equipe vê se os operacionais já escolheram o 13º do ano
-  const anoDecimo = anoDaEscolhaDecimo(hoje, config?.decimo_prazo ?? "01-31");
-  const { data: escolhasDaEquipe } = (ehDp || role === "manager" || podeLiderar)
-    ? await supabase.rpc("ferias_painel_decimo", { p_tenant: tenant.id, p_ano: anoDecimo, p_unit_ids: unidades })
-    : { data: null };
   const painelDecimo = escolhasDaEquipe
     ? { ano: anoDecimo, pessoas: escolhasDaEquipe as unknown as EscolhaDecimoDaEquipe[] }
     : null;
-  // DP: o banco recusa efetivar enquanto o operacional não escolhe o 13º do ano
-  const { data: esperaDecimo } = ehDp
-    ? await supabase.rpc("ferias_efetivacao_aguardando_decimo", { p_tenant: tenant.id })
-    : { data: null };
   const aguardandoDecimo: Record<string, string> = Object.fromEntries(
     (esperaDecimo ?? []).map((e) => [e.solicitacao_id, e.prazo]),
   );
