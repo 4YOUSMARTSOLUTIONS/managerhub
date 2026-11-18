@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Ban, CalendarPlus, Check, Download, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
+  AlertTriangle, Ban, CalendarPlus, Check, Download, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, Trash2, X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
@@ -2441,6 +2441,27 @@ function Ficha({
     });
   };
 
+  // remover o documento direto da ficha (LUIZ, 18/11/2026: atestado de outra
+  // pessoa anexado por engano, e o Remover só existia dentro do Efetivar). Vale
+  // para quem pode efetivar; o servidor confere de novo (recusaDoAnexo)
+  const removerDocumento = async () => {
+    const ok = await confirmDialog({
+      title: "Remover o documento",
+      tone: "danger",
+      confirmLabel: "Remover",
+      message: `Remover ${linha.docFilename ? `"${linha.docFilename}"` : "o documento"} deste lançamento? O arquivo é apagado e não volta. Se ainda for usar, baixe antes.`,
+    });
+    if (!ok) return;
+    onErro("");
+    const fd = new FormData();
+    fd.set("id", linha.id);
+    iniciar(async () => {
+      const r = await removerDocumentoAbsenteismo(fd);
+      if (r.error) { onErro(r.error); return; }
+      toast.success("Documento removido.");
+    });
+  };
+
   const aprovar = async () => {
     const ok = await confirmDialog({
       title: "Aprovar absenteísmo",
@@ -2685,6 +2706,11 @@ function Ficha({
             onClick={() => onBaixarDocumento(linha.docPath as string, nomeBaixar)}
           >
             <Download size={15} /> Baixar
+          </button>
+        )}
+        {linha.docPath && !anexandoImportado && onEfetivar && (
+          <button type="button" className="btn btn-ghost btn-sm" disabled={pendente} onClick={removerDocumento}>
+            <Trash2 size={15} /> Remover
           </button>
         )}
         {linha.emailStatus && (
