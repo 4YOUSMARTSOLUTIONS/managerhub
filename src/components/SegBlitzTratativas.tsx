@@ -7,6 +7,10 @@ import { MessageSquare, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, hojeYmd, shortName } from "@/lib/format";
 import { registrarTratativaBlitz, type BlitzAlerta } from "@/lib/actions/seguranca";
+import { linhaDaBlitzDaTratativa } from "@/lib/blitz-aderencia";
+
+/** A tratativa por recorrência cobre várias blitz (LUIZ, 18/11/2026). */
+const ehRecorrencia = (a: BlitzAlerta) => a.tipo === "recorrencia" && (a.blitz?.length ?? 0) > 0;
 
 /**
  * As blitzes não conformes da equipe do gestor, e a tratativa de cada uma.
@@ -47,19 +51,34 @@ export function SegBlitzTratativas({ alertas }: { alertas: BlitzAlerta[] }) {
               <div style={{ minWidth: 220, flex: "1 1 340px" }}>
                 <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>{shortName(a.colaborador)}</span>
-                  <Badge variant="quiet" tone="blue">{a.meio ?? "—"}</Badge>
-                  <Badge tone={a.liberado ? "amber" : "red"}>
-                    {a.liberado ? "Liberado com desvio" : "Bloqueado"}
-                  </Badge>
-                  <span className="soft" style={{ fontSize: "0.75rem" }}>{formatDate(a.occurred_on)}</span>
+                  {ehRecorrencia(a) ? (
+                    <>
+                      <Badge variant="quiet" tone="red">Recorrência · {a.blitz!.length} blitz</Badge>
+                      <span className="soft" style={{ fontSize: "0.75rem" }}>
+                        {formatDate(a.blitz![0].occurred_on).slice(0, 5)} a {formatDate(a.occurred_on)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Badge variant="quiet" tone="blue">{a.meio ?? "—"}</Badge>
+                      <Badge tone={a.liberado ? "amber" : "red"}>
+                        {a.liberado ? "Liberado com desvio" : "Bloqueado"}
+                      </Badge>
+                      <span className="soft" style={{ fontSize: "0.75rem" }}>{formatDate(a.occurred_on)}</span>
+                    </>
+                  )}
                   {a.tratativa_em
                     ? <Badge tone="green">Tratado em {formatDate(a.tratativa_em)}</Badge>
                     : <Badge tone="amber">Aguardando sua tratativa</Badge>}
                 </div>
-                {a.motivo && (
+                {ehRecorrencia(a) ? (
+                  <ul style={{ fontSize: "0.78rem", margin: "0.35rem 0 0", paddingLeft: "1.1rem" }}>
+                    {a.blitz!.map((b) => <li key={b.id}>{linhaDaBlitzDaTratativa(b)}</li>)}
+                  </ul>
+                ) : a.motivo && (
                   <p style={{ fontSize: "0.82rem", margin: "0.35rem 0 0" }}>Motivo do bloqueio: {a.motivo}</p>
                 )}
-                {a.respostas_nao.length > 0 && (
+                {!ehRecorrencia(a) && a.respostas_nao.length > 0 && (
                   <ul className="soft" style={{ fontSize: "0.76rem", margin: "0.35rem 0 0", paddingLeft: "1.1rem" }}>
                     {a.respostas_nao.map((q, i) => <li key={i}>{q}</li>)}
                   </ul>
@@ -130,8 +149,9 @@ function TratativaDialog({ alerta, onFechar }: { alerta: BlitzAlerta; onFechar: 
 
         <div style={{ padding: "1.15rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-            Blitz de {shortName(alerta.colaborador)} em {formatDate(alerta.occurred_on)}
-            {alerta.meio ? `, de ${alerta.meio.toLowerCase()}` : ""}.
+            {ehRecorrencia(alerta)
+              ? `Recorrência de ${shortName(alerta.colaborador)}: ${alerta.blitz!.length} blitz não conformes, de ${formatDate(alerta.blitz![0].occurred_on)} a ${formatDate(alerta.occurred_on)}.`
+              : <>Blitz de {shortName(alerta.colaborador)} em {formatDate(alerta.occurred_on)}{alerta.meio ? `, de ${alerta.meio.toLowerCase()}` : ""}.</>}
           </p>
 
           <div>

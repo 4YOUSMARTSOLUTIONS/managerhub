@@ -18,8 +18,10 @@ export type AderenciaFalta = {
   setor: string | null;
   gestor: string | null;
   unidade: string | null;
-  /** última blitz da pessoa em qualquer data (YYYY-MM-DD) */
+  /** última blitz da pessoa em qualquer data (YYYY-MM-DD), sem contar a educativa */
   ultima: string | null;
+  /** a blitz educativa da pessoa no período, que não conta (LUIZ, 18/11/2026) */
+  educativa?: string | null;
 };
 
 /** Uma pessoa do público no período: a tela agrupa e filtra a partir daqui. */
@@ -32,8 +34,10 @@ export type AderenciaPessoa = {
   gestor: string | null;
   unidade: string | null;
   passou: boolean;
-  /** última blitz da pessoa em qualquer data (YYYY-MM-DD) */
+  /** última blitz da pessoa em qualquer data (YYYY-MM-DD), sem contar a educativa */
   ultima: string | null;
+  /** a blitz educativa da pessoa no período, que não conta (LUIZ, 18/11/2026) */
+  educativa?: string | null;
 };
 
 export type AderenciaDados = {
@@ -55,7 +59,30 @@ export type BlitzIndicadores = {
   com_desvio: number;
   bloqueios: number;
   colaboradores: number;
+  /** educativas do período: fora de toda a conta acima */
+  educativas?: number;
   alertas: { enviados: number; com_tratativa: number };
+};
+
+/** Uma blitz educativa do recorte: só para dizer quantas ficaram de fora, com o filtro da tela. */
+export type BlitzEducativaItem = {
+  id: string;
+  user_id: string;
+  occurred_on: string;
+  setor: string | null;
+  gestor: string | null;
+  unidade: string | null;
+  funcao: string | null;
+};
+
+/** Uma blitz coberta por uma tratativa (a da ocorrência, ou as N da recorrência). */
+export type BlitzDaTratativa = {
+  id: string;
+  occurred_on: string;
+  liberado: boolean;
+  meio: string | null;
+  motivo: string | null;
+  nao: string[];
 };
 
 export type BlitzRecorrencia = {
@@ -113,6 +140,10 @@ export type BlitzAlertaAnalise = {
   tratativa_acordo: string | null;
   /** preenchido quando o gestor registrou a tratativa */
   registrada_em: string | null;
+  /** a cada ocorrência ou por recorrência (LUIZ, 18/11/2026) */
+  tipo?: "ocorrencia" | "recorrencia";
+  /** as blitz que a tratativa cobre */
+  blitz?: BlitzDaTratativa[];
 };
 
 export type BlitzAnaliseDados = {
@@ -125,6 +156,8 @@ export type BlitzAnaliseDados = {
   alertas?: BlitzAlertaAnalise[];
   /** as blitz do recorte, uma a uma (o filtro da tela refaz os cartões com elas) */
   blitz?: BlitzItem[];
+  /** as educativas do recorte, fora de toda a conta */
+  educativas?: BlitzEducativaItem[];
 };
 
 /** O cadastro do público, para Configurações > Segurança. */
@@ -136,3 +169,11 @@ export type BlitzPublicoConfig = {
 };
 
 export const pct = (ok: number, total: number) => (total > 0 ? Math.round((ok / total) * 100) : null);
+
+/** Uma blitz da tratativa numa linha: "05/11 · Liberado com desvio: Antena; Pneus" ou "12/11 · Bloqueado: Sem CNH". */
+export function linhaDaBlitzDaTratativa(b: BlitzDaTratativa): string {
+  const [, m, d] = b.occurred_on.slice(0, 10).split("-");
+  const dia = `${d}/${m}`;
+  if (!b.liberado) return `${dia} · Bloqueado${b.motivo ? `: ${b.motivo}` : ""}`;
+  return `${dia} · Liberado com desvio${b.nao.length ? `: ${b.nao.join("; ")}` : ""}`;
+}

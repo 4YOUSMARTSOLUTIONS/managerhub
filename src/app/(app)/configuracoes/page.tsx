@@ -42,6 +42,8 @@ import { SegOcorrenciasManager } from "@/components/SegOcorrenciasManager";
 import { SegBlitzPerguntasManager } from "@/components/SegBlitzPerguntasManager";
 import { SegVeiculosManager } from "@/components/SegVeiculosManager";
 import { BlitzPublicoManager } from "@/components/BlitzPublicoManager";
+import { BlitzRegrasManager } from "@/components/BlitzRegrasManager";
+import { regrasDaLinha } from "@/lib/blitz-regras";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
 import { RvReducerEditor, type RegraRow } from "@/components/RvReducerEditor";
 import {
@@ -303,7 +305,10 @@ export default async function SettingsPage({
       .order("sort").order("name") : nada,
     em("seguranca") ? supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id) : nada,
     // a que item do Programa as ações de relato se amarram
-    em("seguranca") ? supabase.from("seg_settings").select("relato_item_id, acidente_item_id").eq("tenant_id", tenant.id).maybeSingle() : nada,
+    // e as regras da blitz (educativa e tratativa)
+    em("seguranca") ? supabase.from("seg_settings")
+      .select("relato_item_id, acidente_item_id, blitz_educativa_ativa, blitz_educativa_desde, blitz_tratativa_modo, blitz_recorrencia_qtd, blitz_recorrencia_dias, blitz_bloqueio_imediato")
+      .eq("tenant_id", tenant.id).maybeSingle() : nada,
     em("seguranca") ? supabase.from("seg_causas").select("id, name, description, active")
       .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
     em("seguranca") ? supabase.from("seg_ocorrencias").select("id, name, description, image_path, active")
@@ -1699,6 +1704,12 @@ export default async function SettingsPage({
                   pessoas={rvMembers.map((m) => ({ id: m.userId, name: m.name, code: m.code }))}
                 />
               ),
+            },
+            {
+              // a primeira blitz educativa e como a tratativa abre (LUIZ, 18/11/2026)
+              id: "seg-blitz-regras",
+              label: "Regras da blitz",
+              content: <BlitzRegrasManager canEdit={canEdit} regras={regrasDaLinha(segSettingsData)} />,
             },
             {
               id: "seg-veiculos",

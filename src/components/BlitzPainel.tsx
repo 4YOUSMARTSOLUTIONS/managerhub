@@ -256,11 +256,13 @@ function CartaoDoTopo({ rotulo, dica, children, rodape }: { rotulo: string; dica
  */
 export function CartoesAgrupados({
   aderencia, passaram, publico, conformidade, total, conformes, desvio, bloqueios, tratou, tratados, enviados,
-  dicaAderencia, onDesvio, onBloqueio,
+  educativas = 0, dicaAderencia, onDesvio, onBloqueio,
 }: {
   aderencia: number | null; passaram: number; publico: number;
   conformidade: number | null; total: number; conformes: number; desvio: number; bloqueios: number;
   tratou: number | null; tratados: number; enviados: number;
+  /** blitz educativas do recorte: fora da conta, só citadas */
+  educativas?: number;
   dicaAderencia?: React.ReactNode;
   onDesvio?: () => void; onBloqueio?: () => void;
 }) {
@@ -283,7 +285,10 @@ export function CartoesAgrupados({
                 { valor: desvio, ...COR.desvio },
                 { valor: bloqueios, ...COR.bloqueio },
               ]} />
-              {legendaFina(total ? `${conformes} de ${total} blitz conformes` : "Nenhuma blitz no período")}
+              {legendaFina(
+                (total ? `${conformes} de ${total} blitz conformes` : "Nenhuma blitz no período") +
+                (educativas ? `, e ${educativas} ${educativas === 1 ? "educativa" : "educativas"} fora da conta` : ""),
+              )}
             </>}>
             <Numero valor={conformidade === null ? "—" : `${conformidade}%`} rotulo="conformes" />
             <Numero valor={desvio} rotulo="liberadas com desvio" cor={desvio ? "var(--mh-warning)" : undefined}

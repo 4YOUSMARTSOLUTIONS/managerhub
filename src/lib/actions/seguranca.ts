@@ -8,7 +8,8 @@ import { SEG_ICONE_BUCKET } from "@/lib/avatar";
 import { hojeYmd, normalizar } from "@/lib/format";
 import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
-import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
+import type { BlitzAlertaAnalise, BlitzAnaliseDados, BlitzDaTratativa } from "@/lib/blitz-aderencia";
+import { LIMITES_DA_RECORRENCIA, type BlitzRegras } from "@/lib/blitz-regras";
 import { lerRegistrosDaBlitz } from "@/lib/blitz-registros";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
@@ -1421,6 +1422,10 @@ export type BlitzAlerta = {
   tratativa_em: string | null;
   tratativa_resumo: string | null;
   tratativa_acordo: string | null;
+  /** a cada ocorrência ou por recorrência (LUIZ, 18/11/2026) */
+  tipo?: "ocorrencia" | "recorrencia";
+  /** as blitz que a tratativa cobre */
+  blitz?: BlitzDaTratativa[];
 };
 
 /**
@@ -1530,6 +1535,42 @@ export async function salvarPublicoBlitz(input: {
     revalidatePath("/seguranca/blitz");
     revalidatePath("/configuracoes");
     return { ok: true, message: "Público da blitz atualizado." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Grava as regras da blitz (LUIZ, 18/11/2026): a educativa e o modo da
+ * tratativa. Vale para as próximas blitz; o que já foi lançado e as
+ * tratativas abertas ficam como estão. Só a administração (a RLS de
+ * `seg_settings` também).
+ */
+export async function salvarRegrasBlitz(input: BlitzRegras): Promise<ActionState> {
+  try {
+    const { supabase, tenantId } = await adminActionContext();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.educativaDesde)) return { error: "Informe a data de contratação da blitz educativa." };
+    if (input.modo !== "ocorrencia" && input.modo !== "recorrencia") return { error: "Escolha como a tratativa abre." };
+    const { qtd, dias } = LIMITES_DA_RECORRENCIA;
+    if (!Number.isInteger(input.qtd) || input.qtd < qtd.min || input.qtd > qtd.max) {
+      return { error: `A recorrência precisa ser de ${qtd.min} a ${qtd.max} blitz.` };
+    }
+    if (!Number.isInteger(input.dias) || input.dias < dias.min || input.dias > dias.max) {
+      return { error: `O período da recorrência precisa ser de ${dias.min} a ${dias.max} dias.` };
+    }
+    const { error } = await supabase.from("seg_settings").upsert({
+      tenant_id: tenantId,
+      blitz_educativa_ativa: !!input.educativaAtiva,
+      blitz_educativa_desde: input.educativaDesde,
+      blitz_tratativa_modo: input.modo,
+      blitz_recorrencia_qtd: input.qtd,
+      blitz_recorrencia_dias: input.dias,
+      blitz_bloqueio_imediato: !!input.bloqueioImediato,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "tenant_id" });
+    if (error) return { error: mensagem(error) };
+    revalidar();
+    return { ok: true, message: "Regras da blitz salvas." };
   } catch (e) {
     return { error: (e as Error).message };
   }

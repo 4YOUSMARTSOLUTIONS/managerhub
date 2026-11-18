@@ -8,13 +8,17 @@ import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { formatDate, formatDateTime, normalizar, shortName } from "@/lib/format";
-import type { BlitzAlertaAnalise } from "@/lib/blitz-aderencia";
+import { linhaDaBlitzDaTratativa, type BlitzAlertaAnalise } from "@/lib/blitz-aderencia";
 
 export type SituacaoAlerta = "" | "aguardando" | "tratado";
 type Situacao = SituacaoAlerta;
 
+/** A tratativa por recorrência cobre várias blitz (LUIZ, 18/11/2026). */
+const ehRecorrencia = (a: BlitzAlertaAnalise) => a.tipo === "recorrencia" && (a.blitz?.length ?? 0) > 0;
+
 /** O que deu errado na blitz, numa linha. */
 function ocorrencia(a: BlitzAlertaAnalise): string {
+  if (ehRecorrencia(a)) return `Recorrência: ${a.blitz!.length} blitz não conformes`;
   if (!a.liberado) return `Bloqueado${a.motivo ? `: ${a.motivo}` : ""}`;
   const n = a.respostas_nao.length;
   return `Liberado com desvio${n ? ` (${n} ${n === 1 ? "item" : "itens"} "não")` : ""}`;
@@ -58,8 +62,8 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
         <div style={{ flex: "1 1 320px", minWidth: 0 }}>
           <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Alertas de {rotuloPeriodo}</h3>
           <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0" }}>
-            Toda blitz liberada com desvio ou bloqueada avisa o gestor do colaborador, que conversa com a pessoa e registra a
-            tratativa. Só o gestor alertado registra. {tratados} de {alertas.length} com tratativa.
+            A blitz não conforme abre tratativa para o gestor do colaborador, a cada ocorrência ou por recorrência, pela
+            regra da empresa. Ele conversa com a pessoa e registra; só o gestor alertado registra. {tratados} de {alertas.length} com tratativa.
           </p>
         </div>
         <ExportButton
@@ -68,7 +72,7 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
           headers={["Data da blitz", "Matrícula", "Colaborador", "Setor", "Unidade", "Gestor", "Ocorrência", "Itens não conformes", "Situação", "Data da conversa", "O que foi tratado", "O que ficou combinado"]}
           rows={lista.map((a) => [
             formatDate(a.occurred_on), a.matricula ?? "", a.colaborador ?? "", a.setor ?? "", a.unidade ?? "", a.gestor ?? "",
-            ocorrencia(a), a.respostas_nao.join("; "),
+            ocorrencia(a), ehRecorrencia(a) ? a.blitz!.map(linhaDaBlitzDaTratativa).join(" | ") : a.respostas_nao.join("; "),
             a.registrada_em ? "Tratado" : "Aguardando tratativa",
             a.tratativa_em ? formatDate(a.tratativa_em) : "", a.tratativa_resumo ?? "", a.tratativa_acordo ?? "",
           ])}
@@ -148,7 +152,14 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
             : <Badge tone={detalhe.liberado ? "amber" : "red"}>Aguardando tratativa</Badge>}
           footer={<><span /><button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button></>}
         >
-          <DetailSection title="A blitz">
+          {ehRecorrencia(detalhe) && (
+            <DetailSection title={`As ${detalhe.blitz!.length} blitz da recorrência`}>
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.84rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                {detalhe.blitz!.map((b) => <li key={b.id}>{linhaDaBlitzDaTratativa(b)}</li>)}
+              </ul>
+            </DetailSection>
+          )}
+          <DetailSection title={ehRecorrencia(detalhe) ? "A blitz que fechou a conta" : "A blitz"}>
             <FieldGrid>
               <Field label="Ocorrência">{ocorrencia(detalhe)}</Field>
               <Field label="Meio">{detalhe.meio ?? "—"}</Field>

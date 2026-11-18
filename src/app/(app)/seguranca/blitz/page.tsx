@@ -7,6 +7,7 @@ import type { BlitzJaPassou, BlitzUltimaComNok } from "@/components/SegBlitzDial
 import { getBlitzAlertas } from "@/lib/actions/seguranca";
 import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { lerRegistrosDaBlitz } from "@/lib/blitz-registros";
+import { regrasDaLinha } from "@/lib/blitz-regras";
 
 /**
  * Blitz de trajeto.
@@ -78,13 +79,19 @@ export default async function SegurancaBlitzPage() {
   const ultimaComNokP = (async () => (await podeAvaliarP).data === true
     ? (await supabase.rpc("seg_blitz_ultima_com_nok")).data
     : null)();
+  // quem terá a blitz educativa (contratado a partir da data, nunca passou):
+  // o formulário avisa, também sem sinal (LUIZ, 18/11/2026)
+  const educativaParaP = (async () => (await podeAvaliarP).data === true
+    ? (await supabase.rpc("seg_blitz_educativa_para")).data
+    : null)();
 
   const [
     { data: podeAvaliar }, membros,
     { data: meios }, { data: perguntas }, { data: perguntaMeios },
     { data: motivos }, { data: veiculos },
     alertas,
-    veAEmpresa, analiseDoMes, registros, diretos, jaPassaramRes, ultimaComNokRes,
+    veAEmpresa, analiseDoMes, registros, diretos, jaPassaramRes, ultimaComNokRes, educativaParaRes,
+    { data: regrasLinha },
   ] = await Promise.all([
     podeAvaliarP,
     getMembers(tenant.id),
@@ -107,6 +114,11 @@ export default async function SegurancaBlitzPage() {
     diretosP,
     jaPassaramP,
     ultimaComNokP,
+    educativaParaP,
+    // as regras da empresa: os textos do formulário dizem o que acontece com a blitz
+    supabase.from("seg_settings")
+      .select("blitz_educativa_ativa, blitz_educativa_desde, blitz_tratativa_modo, blitz_recorrencia_qtd, blitz_recorrencia_dias, blitz_bloqueio_imediato")
+      .eq("tenant_id", tenant.id).maybeSingle(),
   ]);
   const [analiseRes, alertasRes] = analiseDoMes ?? [{ data: null }, { data: null }];
   if (registros.error !== null) console.error("[blitz] registros:", registros.error);
@@ -147,10 +159,10 @@ export default async function SegurancaBlitzPage() {
 
   const ultimaComNok: Record<string, BlitzUltimaComNok> = Object.fromEntries(
     ((ultimaComNokRes ?? []) as unknown as {
-      user_id: string; occurred_on: string; liberado: boolean; motivo: string | null;
+      user_id: string; occurred_on: string; liberado: boolean; educativa: boolean; motivo: string | null;
       nao: { pergunta_id: string | null; pergunta: string }[];
     }[]).map((x) => [x.user_id, {
-      dia: x.occurred_on, liberado: x.liberado, motivo: x.motivo,
+      dia: x.occurred_on, liberado: x.liberado, educativa: x.educativa === true, motivo: x.motivo,
       itens: x.nao.map((n) => ({ perguntaId: n.pergunta_id, pergunta: n.pergunta })),
     }]),
   );
@@ -160,6 +172,8 @@ export default async function SegurancaBlitzPage() {
       <SegBlitzManager
         jaPassaram={jaPassaram}
         ultimaComNok={ultimaComNok}
+        regras={regrasDaLinha(regrasLinha)}
+        educativaPara={(educativaParaRes ?? []) as unknown as string[]}
         dono={user.id}
         tenantId={tenant.id}
         rows={rows}

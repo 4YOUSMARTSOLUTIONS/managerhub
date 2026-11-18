@@ -16,6 +16,7 @@ import type { Person } from "@/components/PeoplePicker";
 import { BlitzAnalises, type RecorteDosRegistros } from "@/components/BlitzAnalises";
 import { passaNoFiltro } from "@/components/BlitzAderencia";
 import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
+import type { BlitzRegras } from "@/lib/blitz-regras";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
   SegBlitzDialog, type BlitzJaPassou, type BlitzMeioOpt, type BlitzPerguntaOpt, type BlitzUltimaComNok, type VeiculoSugestao,
@@ -51,6 +52,8 @@ export type BlitzRow = {
   motivoNome: string | null;
   observacao: string | null;
   conforme: boolean;
+  /** a primeira blitz da pessoa, fora de toda a conta (LUIZ, 18/11/2026) */
+  educativa: boolean;
   avaliador: string | null;
 };
 
@@ -88,6 +91,18 @@ function situacao(r: BlitzRow): { label: string; tone: "green" | "amber" | "red"
   return { label: "Conforme", tone: "green" };
 }
 
+/**
+ * A pílula da situação. A educativa não pede ação (não abre tratativa nem conta
+ * nos resultados), então fala baixo: quiet, com a situação dentro (DESIGN.md,
+ * uma pílula tintada por linha só para o que pede ação).
+ */
+function PilulaDaSituacao({ r }: { r: BlitzRow }) {
+  const s = situacao(r);
+  return r.educativa
+    ? <Badge variant="quiet" tone={s.tone}>Educativa · {s.label}</Badge>
+    : <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
 const TELA_DE_CELULAR = "(max-width: 719px)";
 function assinarTela(avisar: () => void) {
   const mq = window.matchMedia(TELA_DE_CELULAR);
@@ -98,7 +113,7 @@ const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
 
 export function SegBlitzManager({
   rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null, jaPassaram,
-  ultimaComNok,
+  ultimaComNok, regras, educativaPara,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -126,6 +141,10 @@ export function SegBlitzManager({
   jaPassaram?: Record<string, BlitzJaPassou>;
   /** o que deu "não" na última blitz de cada um (para o aviso do formulário) */
   ultimaComNok?: Record<string, BlitzUltimaComNok>;
+  /** as regras da empresa (educativa e tratativa), para os textos do formulário */
+  regras?: BlitzRegras;
+  /** quem terá a blitz educativa */
+  educativaPara?: string[];
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -193,9 +212,11 @@ export function SegBlitzManager({
       if (recorte && !passaNoFiltro(r, recorte.filtro)) return false;
       if (recorte?.ids && !recorte.ids.has(r.id)) return false;
       if (meio && r.meioId !== meio) return false;
-      if (sit === "conforme" && !(r.liberado && r.conforme)) return false;
-      if (sit === "desvio" && !(r.liberado && !r.conforme)) return false;
-      if (sit === "bloqueado" && r.liberado) return false;
+      // as situações que contam deixam a educativa de fora, como os cartões das Análises
+      if (sit === "conforme" && !(r.liberado && r.conforme && !r.educativa)) return false;
+      if (sit === "desvio" && !(r.liberado && !r.conforme && !r.educativa)) return false;
+      if (sit === "bloqueado" && (r.liberado || r.educativa)) return false;
+      if (sit === "educativa" && !r.educativa) return false;
       if (!q) return true;
       return [r.pessoa, r.setor, r.placa, r.avaliador, r.motivoNome]
         .some((v) => v && normalizar(v).includes(q));
@@ -274,6 +295,7 @@ export function SegBlitzManager({
           <option value="conforme">Conforme</option>
           <option value="desvio">Liberado com desvio</option>
           <option value="bloqueado">Bloqueado</option>
+          <option value="educativa">Educativa</option>
         </select>
         <div style={{ marginLeft: "auto" }}>
           <ExportButton
@@ -288,7 +310,7 @@ export function SegBlitzManager({
               nomeMeio.get(r.meioId) ?? "", r.placa ?? "", r.veiculoTipo ?? "",
               r.propriedade ? SEG_VEICULO_PROPRIEDADE[r.propriedade] : "",
               nomeDaCor(r.cor),
-              situacao(r).label, r.motivoNome ?? "", r.observacao ?? "", r.avaliador ?? "",
+              r.educativa ? `Educativa (${situacao(r).label})` : situacao(r).label, r.motivoNome ?? "", r.observacao ?? "", r.avaliador ?? "",
             ])}
           />
         </div>
@@ -310,7 +332,6 @@ export function SegBlitzManager({
             larga empurrando a tela para o lado */}
         <div className="so-celular" style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
           {lista.map((r) => {
-            const s = situacao(r);
             const rodape = [r.setor, r.avaliador ? `por ${shortName(r.avaliador)}` : null].filter(Boolean).join(" · ");
             return (
               <button
@@ -325,7 +346,7 @@ export function SegBlitzManager({
                     {shortName(r.pessoa)}
                     {r.matricula && <span className="soft" style={{ fontWeight: 400, fontSize: "0.78rem" }}> · {r.matricula}</span>}
                   </span>
-                  <Badge tone={s.tone}>{s.label}</Badge>
+                  <PilulaDaSituacao r={r} />
                 </span>
                 <span className="muted" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem 0.6rem", fontSize: "0.8rem" }}>
                   <span title={tituloDaHora(r)}>{dataBr(r.occurredOn)} · {horaDoRegistro(r)}</span>
@@ -354,7 +375,6 @@ export function SegBlitzManager({
           </thead>
           <tbody>
             {lista.map((r) => {
-              const s = situacao(r);
               return (
                 <tr key={r.id} onClick={() => abrir(r.id)} style={{ cursor: "pointer" }} title="Abrir a blitz">
                   <td>{dataBr(r.occurredOn)}</td>
@@ -367,7 +387,7 @@ export function SegBlitzManager({
                   </td>
                   <td className="mono" style={{ fontSize: "0.8rem" }}>{r.placa ?? "—"}</td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{shortName(r.avaliador)}</td>
-                  <td><Badge tone={s.tone}>{s.label}</Badge></td>
+                  <td><PilulaDaSituacao r={r} /></td>
                 </tr>
               );
             })}
@@ -457,7 +477,7 @@ export function SegBlitzManager({
           title={`${shortName(detalhe.pessoa)} · ${dataBr(detalhe.occurredOn)} · ${horaDoRegistro(detalhe)}`}
           badges={
             <>
-              <Badge tone={situacao(detalhe).tone}>{situacao(detalhe).label}</Badge>
+              <PilulaDaSituacao r={detalhe} />
               <Badge variant="quiet" tone="blue">{nomeMeio.get(detalhe.meioId) ?? "—"}</Badge>
             </>
           }
@@ -475,6 +495,11 @@ export function SegBlitzManager({
             </>
           }
         >
+          {detalhe.educativa && (
+            <p className="soft" style={{ margin: 0, fontSize: "0.83rem" }}>
+              Primeira blitz da pessoa, educativa: não conta na aderência nem nos resultados, e não abriu tratativa.
+            </p>
+          )}
           {!detalhe.liberado && (
             <p style={{ margin: 0, fontSize: "0.88rem" }}>
               Bloqueado: <strong>{detalhe.motivoNome ?? "sem motivo registrado"}</strong>
@@ -544,6 +569,7 @@ export function SegBlitzManager({
         open={novo} onClose={() => setNovo(false)}
         pessoas={pessoas} meios={meios} perguntas={perguntas} motivos={motivos} veiculos={veiculos}
         dono={dono} tenantId={tenantId} jaPassaram={jaPassaram} ultimaComNok={ultimaComNok}
+        regras={regras} educativaPara={educativaPara}
       />
     </div>
   );

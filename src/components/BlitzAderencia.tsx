@@ -306,7 +306,8 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
         <div>
           <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Público da blitz em {rotuloPeriodo}</h3>
           <p className="soft" style={{ fontSize: "0.78rem", margin: "0.15rem 0 0" }}>
-            Mostrando {lista.length} de {pessoas.length} pessoas. Passou quem fez a blitz pelo menos uma vez no período.
+            Mostrando {lista.length} de {pessoas.length} pessoas. Passou quem fez a blitz pelo menos uma vez no período
+            (a educativa não conta).
           </p>
         </div>
         <ExportButton
@@ -315,7 +316,8 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
           headers={["Matrícula", "Colaborador", "Função", "Setor", "Gestor", "Unidade", "Situação", "Última blitz"]}
           rows={lista.map((f) => [
             f.matricula ?? "", f.nome ?? "", f.funcao ?? "", f.setor ?? "", f.gestor ?? "", f.unidade ?? "",
-            f.passou ? "Passou" : "Falta passar", f.ultima ? formatDate(f.ultima) : "",
+            f.passou ? "Passou" : "Falta passar",
+            f.ultima ? formatDate(f.ultima) : f.educativa ? `Só a educativa, ${formatDate(f.educativa)}` : "",
           ])}
         />
       </div>
@@ -364,7 +366,10 @@ export function BlitzColaboradoresLista({ pessoas: doFiltro, rotuloPeriodo, chav
                     {/* falta passar é o que pede ação: só ela leva a pílula tintada (DESIGN.md) */}
                     {f.passou ? <Badge variant="quiet" tone="green">Passou</Badge> : <Badge tone="amber">Falta passar</Badge>}
                   </td>
-                  <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>{f.ultima ? formatDate(f.ultima) : "Nunca"}</td>
+                  {/* a educativa não conta (LUIZ, 18/11/2026): quem só passou por ela ainda falta */}
+                  <td className="so-desktop muted" style={{ fontSize: "0.82rem" }}>
+                    {f.ultima ? formatDate(f.ultima) : f.educativa ? `Só a educativa, ${formatDate(f.educativa)}` : "Nunca"}
+                  </td>
                 </tr>
               ))}
             </tbody>

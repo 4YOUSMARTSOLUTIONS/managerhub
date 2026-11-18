@@ -264,6 +264,10 @@ export function BlitzAnalises({
   const alertas = useMemo(() => (dados.alertas ?? []).filter((a) => passaNoFiltro(a, filtro)), [dados.alertas, filtro]);
   const recorrencia = useMemo(() => dados.recorrencia.filter((r) => passaNoFiltro(r, filtro)), [dados.recorrencia, filtro]);
   const blitz = useMemo(() => dados.blitz?.filter((b) => passaNoFiltro(b, filtro)), [dados.blitz, filtro]);
+  // as educativas ficam fora de toda a conta; o cartão só diz quantas (LUIZ, 18/11/2026)
+  const educativas = useMemo(
+    () => dados.educativas ? dados.educativas.filter((b) => passaNoFiltro(b, filtro)).length : (dados.indicadores.educativas ?? 0),
+    [dados.educativas, dados.indicadores.educativas, filtro]);
   const temFiltro = FILTROS_DA_TELA.some(({ campo }) => filtro[campo]);
   // sem a lista de blitz (versão antiga do banco), vale o número do servidor
   const ind = blitz ? {
@@ -368,6 +372,7 @@ export function BlitzAnalises({
     <>
       Do público, quem passou pela blitz pelo menos uma vez no período. Setor, gestor e unidade são os de hoje.
       Fora da conta: {ad.fora.por_funcao} por função, {ad.fora.por_excecao} por exceção e {ad.fora.ausentes} ausentes o período todo.
+      A blitz educativa não conta: quem só passou por ela ainda falta.
     </>
   );
 
@@ -378,6 +383,7 @@ export function BlitzAnalises({
       aderencia={aderencia} passaram={passaram} publico={publico}
       conformidade={conformidade} total={ind.total} conformes={ind.conformes} desvio={ind.com_desvio} bloqueios={ind.bloqueios}
       tratou={tratou} tratados={ind.alertas.com_tratativa} enviados={ind.alertas.enviados}
+      educativas={educativas}
       dicaAderencia={dicaAderencia}
       onDesvio={onVerRegistros ? () => onVerRegistros("desvio") : undefined}
       onBloqueio={onVerRegistros ? () => onVerRegistros("bloqueado") : undefined}

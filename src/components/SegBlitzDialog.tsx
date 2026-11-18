@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck, CloudOff, Plus, TriangleAlert } from "lucide-react";
+import { CircleCheck, CloudOff, Info, Plus, TriangleAlert } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { Badge } from "@/components/ui/Badge";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, type SegVeiculoCor } from "@/lib/constants";
 import { formatDate, hojeYmd, shortName } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
 import { criarBlitz, type BlitzInput } from "@/lib/actions/seguranca";
+import { REGRAS_PADRAO, abreNaHora, textoDaRecorrencia, type BlitzRegras } from "@/lib/blitz-regras";
 import {
   comLimite, guardarBlitz, novoCodigoDeBlitz, removerBlitzGuardada, useBlitzGuardadas, useConectado, type BlitzGuardada,
 } from "@/lib/blitz-fila";
@@ -22,6 +23,8 @@ export type BlitzJaPassou = { vezes: number; dia: string; hora: string | null };
 export type BlitzUltimaComNok = {
   dia: string;
   liberado: boolean;
+  /** a última foi a educativa (primeira blitz da pessoa) */
+  educativa: boolean;
   motivo: string | null;
   itens: { perguntaId: string | null; pergunta: string }[];
 };
@@ -96,6 +99,7 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  */
 export function SegBlitzDialog({
   open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId, jaPassaram, ultimaComNok,
+  regras = REGRAS_PADRAO, educativaPara,
 }: {
   open: boolean;
   onClose: () => void;
@@ -112,6 +116,10 @@ export function SegBlitzDialog({
   jaPassaram?: Record<string, BlitzJaPassou>;
   /** o que deu "não" na última blitz de cada um (LUIZ, 18/11/2026) */
   ultimaComNok?: Record<string, BlitzUltimaComNok>;
+  /** as regras da empresa: a educativa e como a tratativa abre (LUIZ, 18/11/2026) */
+  regras?: BlitzRegras;
+  /** quem terá a blitz educativa: contratado a partir da data e nunca passou */
+  educativaPara?: string[];
 }) {
   const hoje = hojeYmd();
   const inicioDoMes = `${hoje.slice(0, 7)}-01`;
@@ -132,7 +140,7 @@ export function SegBlitzDialog({
   const [verObservacao, setVerObservacao] = useState(false);
   const [erro, setErro] = useState("");
   /** a blitz acabou de ser registrada (ou guardada sem sinal): a tela confirma e oferece a próxima */
-  const [registrada, setRegistrada] = useState<{ nome: string; situacao: string; guardada: boolean } | null>(null);
+  const [registrada, setRegistrada] = useState<{ nome: string; situacao: string; guardada: boolean; educativa: boolean } | null>(null);
   // o código desta blitz: nasce com o formulário e só troca quando ele limpa,
   // então tentar de novo depois de um erro reaproveita o mesmo
   const [clientId, setClientId] = useState(novoCodigoDeBlitz);
@@ -145,6 +153,11 @@ export function SegBlitzDialog({
   // deram "não" ganham a marca na verificação (pelo id; pelo texto, se a
   // pergunta mudou de cadastro)
   const nokAnterior = userId ? ultimaComNok?.[userId] : undefined;
+  // a primeira blitz da vida de quem entrou depois da data é educativa; uma
+  // guardada no aparelho para a pessoa já seria a primeira. Quem decide de
+  // verdade é o banco: aqui é só para avisar
+  const educativa = !!userId && (educativaPara?.includes(userId) ?? false)
+    && !guardadas.some((g) => g.input.userId === userId);
   const nokIds = new Set(nokAnterior?.itens.map((i) => i.perguntaId).filter((x): x is string => !!x));
   const nokTextos = new Set(nokAnterior?.itens.map((i) => i.pergunta));
   const guardadasDele = userId
@@ -280,7 +293,7 @@ export function SegBlitzDialog({
         return;
       }
       limpar();
-      setRegistrada({ nome, situacao, guardada: true });
+      setRegistrada({ nome, situacao, guardada: true, educativa });
     };
 
     // o navegador já sabe que está sem rede: nem tenta, guarda direto
@@ -304,7 +317,7 @@ export function SegBlitzDialog({
       }
       if (r.error) { setErro(r.error); return; }
       limpar();
-      setRegistrada({ nome, situacao, guardada: false });
+      setRegistrada({ nome, situacao, guardada: false, educativa });
       router.refresh();
     });
   };
@@ -354,11 +367,17 @@ export function SegBlitzDialog({
                 quando o sinal voltar. Não precisa registrar de novo.
               </p>
             )}
-            {registrada.situacao !== "Conforme" && (
+            {registrada.educativa ? (
               <p className="soft" style={{ fontSize: "0.8rem", margin: 0, maxWidth: 360 }}>
-                {registrada.guardada
-                  ? "O gestor da pessoa é avisado assim que a blitz for enviada."
-                  : "O gestor da pessoa já foi avisado para conversar e registrar a tratativa."}
+                Blitz educativa: não conta nos resultados e não abre tratativa.
+              </p>
+            ) : registrada.situacao !== "Conforme" && (
+              <p className="soft" style={{ fontSize: "0.8rem", margin: 0, maxWidth: 360 }}>
+                {!abreNaHora(regras, registrada.situacao === "Bloqueado")
+                  ? `Conta para a recorrência: o gestor é avisado quando a pessoa chegar a ${textoDaRecorrencia(regras)}.`
+                  : registrada.guardada
+                    ? "O gestor da pessoa é avisado assim que a blitz for enviada."
+                    : "O gestor da pessoa já foi avisado para conversar e registrar a tratativa."}
               </p>
             )}
           </div>
@@ -399,6 +418,19 @@ export function SegBlitzDialog({
                   </span>
                 </p>
               )}
+              {/* a primeira blitz de quem entrou depois da data é educativa (LUIZ, 18/11/2026) */}
+              {educativa && (
+                <p role="status" style={{
+                  display: "flex", gap: "0.45rem", alignItems: "flex-start", fontSize: "0.8rem", margin: "0.45rem 0 0",
+                  background: "var(--mh-info-soft)", padding: "0.5rem 0.7rem", borderRadius: 8,
+                }}>
+                  <Info size={15} style={{ color: "var(--mh-info)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+                  <span>
+                    <strong>Primeira blitz: educativa.</strong> Não conta na aderência nem nos resultados, e não
+                    abre tratativa. Aproveite para orientar a pessoa.
+                  </span>
+                </p>
+              )}
               {/* a última blitz teve "não" ou bloqueio: avisa o que conferir (LUIZ, 18/11/2026) */}
               {nokAnterior && (
                 <div role="status" style={{
@@ -407,8 +439,8 @@ export function SegBlitzDialog({
                 }}>
                   <TriangleAlert size={15} style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 1 }} aria-hidden />
                   <div style={{ minWidth: 0 }}>
-                    <strong>Atenção!</strong> Na última blitz de {shortName(pessoas.find((p) => p.id === userId)?.name)},
-                    em {formatDate(nokAnterior.dia)},{" "}
+                    <strong>Atenção!</strong> Na última blitz de {shortName(pessoas.find((p) => p.id === userId)?.name)}
+                    {nokAnterior.educativa ? " (a educativa)" : ""}, em {formatDate(nokAnterior.dia)},{" "}
                     {!nokAnterior.liberado && <>houve bloqueio{nokAnterior.motivo ? ` (${nokAnterior.motivo})` : ""}{nokAnterior.itens.length > 0 ? " e " : "."}</>}
                     {nokAnterior.itens.length > 0 && (
                       <>
@@ -637,8 +669,13 @@ export function SegBlitzDialog({
 
             {userId && (
               <p className="soft" style={{ fontSize: "0.74rem", margin: 0 }}>
-                O gestor de {shortName(pessoas.find((p) => p.id === userId)?.name)} é avisado
-                automaticamente se a blitz sair não conforme.
+                {educativa
+                  ? "Blitz educativa: o gestor não é avisado e ela não conta nos resultados."
+                  : regras.modo === "ocorrencia"
+                    ? `O gestor de ${shortName(pessoas.find((p) => p.id === userId)?.name)} é avisado automaticamente se a blitz sair não conforme.`
+                    : regras.bloqueioImediato
+                      ? `Bloqueio avisa o gestor de ${shortName(pessoas.find((p) => p.id === userId)?.name)} na hora; desvio conta para a recorrência (${textoDaRecorrencia(regras)}).`
+                      : `Não conforme conta para a recorrência: o gestor de ${shortName(pessoas.find((p) => p.id === userId)?.name)} é avisado ao chegar a ${textoDaRecorrencia(regras)}.`}
               </p>
             )}
             </>

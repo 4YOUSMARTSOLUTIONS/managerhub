@@ -1834,9 +1834,11 @@ export type Database = {
         Relationships: []
       }
       // A blitz de um colaborador. Escrita só pela RPC seg_criar_blitz
-      // (conforme é carimbado lá: liberado E nenhuma resposta 'nao').
+      // (conforme é carimbado lá: liberado E nenhuma resposta 'nao'; educativa
+      // também: a primeira blitz da vida de quem entrou depois da data do
+      // parâmetro, fora de toda a conta).
       seg_blitz_avaliacoes: {
-        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; user_id: string; snap_full_name: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; meio_id: string; veiculo_id: string | null; placa: string | null; veiculo_tipo: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"] | null; cor: string | null; liberado: boolean; motivo_bloqueio_id: string | null; observacao: string | null; conforme: boolean; created_by: string; created_at: string; client_id: string | null; registrada_em: string }
+        Row: { id: string; tenant_id: string; unit_id: string | null; occurred_on: string; user_id: string; snap_full_name: string | null; snap_department_id: string | null; snap_department_name: string | null; snap_position_name: string | null; snap_manager_id: string | null; snap_manager_name: string | null; snap_unit_id: string | null; snap_unit_name: string | null; meio_id: string; veiculo_id: string | null; placa: string | null; veiculo_tipo: string | null; propriedade: Database["public"]["Enums"]["seg_veiculo_propriedade"] | null; cor: string | null; liberado: boolean; motivo_bloqueio_id: string | null; observacao: string | null; conforme: boolean; educativa: boolean; created_by: string; created_at: string; client_id: string | null; registrada_em: string }
         Insert: never
         Update: never
         Relationships: []
@@ -1865,7 +1867,15 @@ export type Database = {
         Relationships: []
       }
       seg_blitz_alertas: {
-        Row: { id: string; tenant_id: string; avaliacao_id: string; gestor_id: string; enviado_em: string; tratativa_em: string | null; tratativa_resumo: string | null; tratativa_acordo: string | null; registrada_em: string | null }
+        Row: { id: string; tenant_id: string; avaliacao_id: string; gestor_id: string; tipo: "ocorrencia" | "recorrencia"; enviado_em: string; tratativa_em: string | null; tratativa_resumo: string | null; tratativa_acordo: string | null; registrada_em: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      // as blitz que cada tratativa cobre (uma na ocorrência, N na recorrência);
+      // escrita só por RPC, leitura de quem vê a tratativa
+      seg_blitz_alerta_avaliacoes: {
+        Row: { alerta_id: string; avaliacao_id: string; tenant_id: string }
         Insert: never
         Update: never
         Relationships: []
@@ -1928,10 +1938,13 @@ export type Database = {
       // Excelência ao qual as ações de relato são amarradas (o "1.2 Relatos de
       // Incidentes, Atos e Condições Inseguras" do pilar Segurança), que é
       // catálogo de cada empresa e por isso não pode morar no código.
+      // Também as regras da blitz (LUIZ, 18/11/2026): a primeira blitz educativa
+      // de quem entrou a partir de uma data, e a tratativa a cada ocorrência ou
+      // por recorrência (N não conformes em D dias; bloqueio pode abrir na hora).
       seg_settings: {
-        Row: { id: string; tenant_id: string; relato_item_id: string | null; acidente_item_id: string | null; updated_at: string }
-        Insert: { id?: string; tenant_id: string; relato_item_id?: string | null; acidente_item_id?: string | null; updated_at?: string }
-        Update: { relato_item_id?: string | null; acidente_item_id?: string | null; updated_at?: string }
+        Row: { id: string; tenant_id: string; relato_item_id: string | null; acidente_item_id: string | null; updated_at: string; blitz_educativa_ativa: boolean; blitz_educativa_desde: string; blitz_tratativa_modo: "ocorrencia" | "recorrencia"; blitz_recorrencia_qtd: number; blitz_recorrencia_dias: number; blitz_bloqueio_imediato: boolean }
+        Insert: { id?: string; tenant_id: string; relato_item_id?: string | null; acidente_item_id?: string | null; updated_at?: string; blitz_educativa_ativa?: boolean; blitz_educativa_desde?: string; blitz_tratativa_modo?: "ocorrencia" | "recorrencia"; blitz_recorrencia_qtd?: number; blitz_recorrencia_dias?: number; blitz_bloqueio_imediato?: boolean }
+        Update: { relato_item_id?: string | null; acidente_item_id?: string | null; updated_at?: string; blitz_educativa_ativa?: boolean; blitz_educativa_desde?: string; blitz_tratativa_modo?: "ocorrencia" | "recorrencia"; blitz_recorrencia_qtd?: number; blitz_recorrencia_dias?: number; blitz_bloqueio_imediato?: boolean }
         Relationships: []
       }
       // Liga o relato à ação de tratamento. Tabela própria de propósito: uma
@@ -2463,6 +2476,8 @@ export type Database = {
       seg_blitz_ja_passaram_no_mes: { Args: Record<PropertyKey, never>; Returns: Json }
       // a última blitz de cada colaborador, quando teve "não" ou bloqueio (aviso do formulário)
       seg_blitz_ultima_com_nok: { Args: Record<PropertyKey, never>; Returns: Json }
+      // quem terá a blitz educativa (contratado a partir da data, nunca passou)
+      seg_blitz_educativa_para: { Args: Record<PropertyKey, never>; Returns: Json }
       seg_blitz_registrar_tratativa: { Args: { p_alerta: string; p_em: string; p_resumo: string; p_acordo?: string | null }; Returns: undefined }
       seg_blitz_painel: { Args: { p_ano: number; p_unit_ids?: string[] | null }; Returns: Json }
       // aderência do mês (p_mes = qualquer dia do mês); alçada igual à das Análises
