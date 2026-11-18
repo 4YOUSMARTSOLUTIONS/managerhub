@@ -524,8 +524,16 @@ export function AbsenteismosManager({
   // Uma linha por lançamento (LUIZ, 17/11/2026): nada quebra; a matrícula tem
   // coluna própria, antes do nome, e o que não cabe vira reticências com o
   // dado completo na dica.
-  const linha = (r: AbsenteismoRow, comAutor: boolean) => {
+  // quais botões de ação esta linha mostra; a tabela reserva a vaga de cada um
+  const acoesDa = (r: AbsenteismoRow) => {
+    const mexe = podeMexer(r);
+    const abertoMexe = r.status === "aberto" && mexe;
+    return { efetivar: mexe, continua: abertoMexe && !r.partialDay, cancelar: abertoMexe };
+  };
+
+  const linha = (r: AbsenteismoRow, comAutor: boolean, vagas: Vagas) => {
     const dur = duracao(r);
+    const acoes = acoesDa(r);
     const det = dur ? detalheDaDuracao(r) : "";
     const autor = r.importado
       ? { texto: "Importação", dica: r.createdByName ? `Importado por ${r.createdByName}` : "Importação" }
@@ -543,23 +551,29 @@ export function AbsenteismosManager({
             Continua ausente, Cancelar, Ver. Botões compactos (btn-xs), todos na
             mesma altura, e "Continua ausente" em duas linhas para ocupar menos
             largura (LUIZ, 17/11/2026). */}
-        {/* centralizada como o cabeçalho: no Histórico, só o Ver fica no meio */}
+        {/* centralizada como o cabeçalho: no Histórico, só o Ver fica no meio.
+            Botão que não vale para a linha guarda a vaga, invisível, para os
+            outros não mudarem de lugar (LUIZ, 18/11/2026: o reprovado, sem
+            Continua ausente nem cancelar, ficava com os botões deslocados) */}
         <td style={{ textAlign: "center" }}>
           <span style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
             {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
                 escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
-            {podeMexer(r) && (
+            {vagas.efetivar && (
+              <Vaga mostra={acoes.efetivar}>
               <button
                 type="button" className="btn btn-primary btn-xs" style={{ height: ALTURA_ACAO }}
                 onClick={() => { setErro(""); setConfirmando(r); }}
               >
                 <Pencil size={12} /> Efetivar
               </button>
+              </Vaga>
             )}
             {/* segue sem aparecer e sem notícia: mais um dia no MESMO lançamento,
                 com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
                 parcial é de um dia só. Com o nome (o LUIZ pediu de volta). */}
-            {r.status === "aberto" && podeMexer(r) && !r.partialDay && (
+            {vagas.continua && (
+              <Vaga mostra={acoes.continua}>
               <button
                 // mais folga dos lados que o btn-xs (LUIZ, 17/11/2026: ficou espremido)
                 type="button" className="btn btn-ghost btn-xs"
@@ -570,10 +584,12 @@ export function AbsenteismosManager({
                 <CalendarPlus size={12} />
                 <span style={{ lineHeight: 1.15, textAlign: "left" }}>Continua<br />ausente</span>
               </button>
+              </Vaga>
             )}
             {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
                 horas): cancela e pede ao RH para desconsiderar o comunicado */}
-            {r.status === "aberto" && podeMexer(r) && (
+            {vagas.cancelar && (
+              <Vaga mostra={acoes.cancelar}>
               <button
                 type="button" className="icon-btn"
                 title="Cancelar: a ausência não se confirmou (o colaborador chegou depois, por exemplo)"
@@ -583,6 +599,7 @@ export function AbsenteismosManager({
               >
                 <Ban size={13} />
               </button>
+              </Vaga>
             )}
             <button
               type="button" className="icon-btn" title="Ver"
@@ -682,8 +699,17 @@ export function AbsenteismosManager({
     );
   };
 
-  const tabela = (lista: AbsenteismoRow[], comAutor: boolean, vazio: string) =>
-    lista.length === 0 ? (
+  const tabela = (lista: AbsenteismoRow[], comAutor: boolean, vazio: string) => {
+    // a vaga de um botão só existe se alguma linha da tabela o mostra: no
+    // Histórico, onde ninguém efetiva, o Ver não fica empurrado por vagas vazias
+    const vagas: Vagas = { efetivar: false, continua: false, cancelar: false };
+    for (const r of lista) {
+      const a = acoesDa(r);
+      vagas.efetivar ||= a.efetivar;
+      vagas.continua ||= a.continua;
+      vagas.cancelar ||= a.cancelar;
+    }
+    return lista.length === 0 ? (
       <EmptyState title="Nada por aqui" description={vazio} />
     ) : (
       // a rolagem lateral mora aqui dentro, e não no corpo da página
@@ -713,10 +739,11 @@ export function AbsenteismosManager({
             </th>
           </tr>
         </thead>
-        <tbody>{lista.map((r) => linha(r, comAutor))}</tbody>
+        <tbody>{lista.map((r) => linha(r, comAutor, vagas))}</tbody>
       </table>
       </div>
     );
+  };
 
   const abas: Tab[] = [
     {
@@ -1087,6 +1114,18 @@ export function AbsenteismosManager({
       {continuando && <ContinuaAusente linha={continuando} onFechar={() => setContinuando(null)} />}
     </div>
   );
+}
+
+type Vagas = { efetivar: boolean; continua: boolean; cancelar: boolean };
+
+/**
+ * O espaço de um botão de ação. Escondido, ele continua ocupando o lugar
+ * (invisível e fora do alcance do teclado e do leitor de tela), para os botões
+ * das linhas ficarem alinhados em colunas.
+ */
+function Vaga({ mostra, children }: { mostra: boolean; children: React.ReactNode }) {
+  if (mostra) return <>{children}</>;
+  return <span aria-hidden inert style={{ visibility: "hidden", display: "inline-flex" }}>{children}</span>;
 }
 
 /**
