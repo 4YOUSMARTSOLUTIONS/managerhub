@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importTicketStructure, type TicketStructureRow, type TicketStructureResult } from "@/lib/actions/tickets";
@@ -20,7 +19,6 @@ export function ImportTicketStructureDialog({ open: openProp, onClose, hideTrigg
   const [parseError, setParseError] = useState("");
   const [importing, setImporting] = useState(false);
   const [summary, setSummary] = useState<TicketStructureResult | null>(null);
-  const router = useRouter();
 
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
@@ -87,7 +85,6 @@ export function ImportTicketStructureDialog({ open: openProp, onClose, hideTrigg
     const parts = [`${res.setoresCreated} setor(es)`, `${res.categoriasCreated} categoria(s)`];
     if (res.skipped > 0) parts.push(`${res.skipped} ignorada(s)`);
     toast.success(`Importação concluída: ${parts.join(", ")}.`);
-    router.refresh();
     close();
   }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MessageSquare, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -94,7 +93,6 @@ function AbordagemDialog({ alerta, onFechar }: { alerta: AlertaDoGestor; onFecha
   const [acordo, setAcordo] = useState(alerta.abordagem_acordo ?? "");
   const [erro, setErro] = useState("");
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
 
   const salvar = () => {
     setErro("");
@@ -103,7 +101,6 @@ function AbordagemDialog({ alerta, onFechar }: { alerta: AlertaDoGestor; onFecha
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Conversa registrada.");
       onFechar();
-      router.refresh();
     });
   };
 

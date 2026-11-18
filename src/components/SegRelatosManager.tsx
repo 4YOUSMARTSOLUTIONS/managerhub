@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { BellRing, Check, ExternalLink, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -108,7 +107,6 @@ export function SegRelatosManager({
   const [causa, setCausa] = useState("");
   const [acao, setAcao] = useState(false);
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
 
   const nomeTipo = useMemo(() => new Map(tipos.map((t) => [t.id, t.name])), [tipos]);
   const nomeLocal = useMemo(() => new Map(locais.map((l) => [l.id, l.name])), [locais]);
@@ -156,7 +154,6 @@ export function SegRelatosManager({
       toast.success(r.message ?? "Relato atualizado.");
       if (novoStatus !== "triado") fecharDetalhe();
       setNota("");
-      router.refresh();
     });
   };
 
@@ -174,7 +171,6 @@ export function SegRelatosManager({
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Relato excluído.");
       fecharDetalhe();
-      router.refresh();
     })();
   };
 
@@ -199,7 +195,6 @@ export function SegRelatosManager({
       const r = await alertarGestor(detalhe.id);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Gestor avisado.");
-      router.refresh();
     });
   };
 

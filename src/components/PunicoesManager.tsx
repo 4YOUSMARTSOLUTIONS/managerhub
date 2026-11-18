@@ -164,7 +164,6 @@ export function PunicoesManager({
       if (r.error) { setErro(r.error); return; }
       // segue aberto com o id: é daqui que saem a impressão e o anexo
       setRascunho({ ...rascunho, id: r.id });
-      router.refresh();
     });
   };
 
@@ -182,7 +181,6 @@ export function PunicoesManager({
       const res = await excluirRascunhoPunicao(fd);
       if (res.error) setErro(res.error);
       setRascunho(null);
-      router.refresh();
     });
   };
 
@@ -200,7 +198,6 @@ export function PunicoesManager({
       if (res.error) { setErro(res.error); return; }
       setRascunho(null);
       setAberto(null);
-      router.refresh();
     });
   };
 
@@ -679,7 +676,6 @@ function Decisao({
 }) {
   const [motivo, setMotivo] = useState("");
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
 
   const decidir = (aprovar: boolean) => {
     onErro("");
@@ -691,7 +687,6 @@ function Decisao({
       const r = await decidirPunicao(fd);
       if (r.error) { onErro(r.error); return; }
       onFechar();
-      router.refresh();
     });
   };
 
@@ -725,7 +720,6 @@ function Decisao({
       const r = await cancelarPunicao(fd);
       if (r.error) { onErro(r.error); return; }
       onFechar();
-      router.refresh();
     });
   };
 

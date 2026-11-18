@@ -76,7 +76,6 @@ export function TicketSlaEditor({ categories, slas, mode: initialMode, canEdit =
       setMode(pendingMode);
       setPendingMode(null);
       setPw("");
-      router.refresh();
     });
   };
 

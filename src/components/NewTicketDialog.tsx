@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { createTicket } from "@/lib/actions/tickets";
 import { initialActionState } from "@/lib/actions/types";
 import { PRIORITY, TICKET_SLA_UNIT, options } from "@/lib/constants";
@@ -32,7 +31,6 @@ export function NewTicketDialog({
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
 
   // novo chamado usa só setores/categorias ativos
   const activeSectors = useMemo(() => sectors.filter((s) => s.active !== false), [sectors]);
@@ -66,7 +64,6 @@ export function NewTicketDialog({
       if (res.error) { setError(res.error); return; }
       reset();
       onClose();
-      router.refresh();
     });
   };
 

@@ -191,7 +191,6 @@ export function SegAcidentesManager({
       // a data fica: reabrir o caso não desfaz o retorno que já aconteceu, e
       // limpar o campo faria o próximo encerramento pedir a data de novo
       toast.success(r.message ?? "Acidente encerrado.");
-      router.refresh();
     });
   };
 
@@ -208,7 +207,6 @@ export function SegAcidentesManager({
       toast.success(r.message ?? "Acidente excluído.");
       setExcluindo(false);
       setAberto(null);
-      router.refresh();
     });
   };
 
@@ -219,7 +217,6 @@ export function SegAcidentesManager({
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Acidente reaberto.");
       setRetorno(detalhe.retornoEm ?? "");
-      router.refresh();
     });
   };
 
@@ -275,7 +272,6 @@ export function SegAcidentesManager({
     iniciar(async () => {
       const r = await removerAnexoAcidente(anexo.id);
       if (r.error) toast.error(r.error);
-      router.refresh();
     });
   };
 

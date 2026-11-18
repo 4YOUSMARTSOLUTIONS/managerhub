@@ -82,7 +82,6 @@ export function RvReducerEditor({
   tiposPunicao: TipoPunicao[];
   canEdit?: boolean;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
   const [novoAberto, setNovoAberto] = useState(false);
   const [nome, setNome] = useState("");
@@ -102,7 +101,6 @@ export function RvReducerEditor({
       });
       if (r.error) { setErro(r.error); return; }
       setNovoAberto(false); setNome(""); setTipoId("");
-      router.refresh();
     });
   };
 
@@ -200,7 +198,6 @@ function Motivo({ regra, origem, canEdit }: { regra: RegraRow; origem: string; c
       const r = await updateReducerRuleKinds(regra.id, tipos);
       if (r.error) { setErro(r.error); return; }
       toast.success("Tipos do motivo atualizados.");
-      router.refresh();
     });
   };
 
@@ -215,7 +212,6 @@ function Motivo({ regra, origem, canEdit }: { regra: RegraRow; origem: string; c
       });
       if (r.error) { setErro(r.error); return; }
       setMin(""); setMax(""); setPct("");
-      router.refresh();
     });
   };
 

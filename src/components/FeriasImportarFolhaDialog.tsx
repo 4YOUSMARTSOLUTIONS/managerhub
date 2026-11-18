@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { loadXlsx } from "@/lib/xlsx-lazy";
@@ -48,7 +47,6 @@ export function FeriasImportarFolhaDialog({
   const [lendo, iniciarLeitura] = useTransition();
   const [importando, iniciarImportacao] = useTransition();
   const [baixando, iniciarDownload] = useTransition();
-  const router = useRouter();
   const hoje = hojeBrasil();
 
   const envio = (r: RelatorioFolha): PessoaFolhaEnvio[] =>
@@ -135,7 +133,6 @@ export function FeriasImportarFolhaDialog({
       if (r.error) { setErro(r.error); return; }
       toast.success(`Períodos de ${r.pessoas} colaborador(es) atualizados.`);
       setResultado(r);
-      router.refresh();
     });
   };
 

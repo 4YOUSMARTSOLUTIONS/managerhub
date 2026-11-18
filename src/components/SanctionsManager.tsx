@@ -99,7 +99,6 @@ export function SanctionsManager({
       });
       if (res.error) { setErro(res.error); return; }
       setRascunho(null);
-      router.refresh();
     });
   };
 

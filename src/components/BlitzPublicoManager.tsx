@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -25,7 +24,6 @@ export function BlitzPublicoManager({
   pessoas: Person[];
   canEdit: boolean;
 }) {
-  const router = useRouter();
   const [salvando, iniciar] = useTransition();
   const [fora, setFora] = useState(() => new Set(config.funcoesFora));
   const [excecoes, setExcecoes] = useState(config.excecoes);
@@ -74,7 +72,6 @@ export function BlitzPublicoManager({
       });
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Público da blitz atualizado.");
-      router.refresh();
     });
   };
 

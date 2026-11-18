@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FileCheck, GraduationCap, History, Layers, Lock, Pencil, PlayCircle, Trash2, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -376,7 +375,6 @@ function Catalogo({
 }) {
   const [busca, setBusca] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const visiveis = useMemo(() => {
     const q = normalizar(busca.trim());
@@ -394,7 +392,6 @@ function Catalogo({
       });
       if (!ok) return;
       await deleteTraining(t.id);
-      router.refresh();
     });
   };
 
@@ -600,14 +597,12 @@ function MatricularDialog({ training, people, onClose }: { training: TrainingRow
   const [prazo, setPrazo] = useState("");
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const salvar = () => {
     setErro("");
     start(async () => {
       const r = await enrollPeople(training.id, ids, prazo || null);
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
       onClose();
     });
   };

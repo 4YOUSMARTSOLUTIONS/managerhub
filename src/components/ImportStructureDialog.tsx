@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importStructure, type StructureImportRow, type StructureImportResult } from "@/lib/actions/registry";
@@ -20,7 +19,6 @@ export function ImportStructureDialog({ open: openProp, onClose, hideTrigger }: 
   const [parseError, setParseError] = useState("");
   const [importing, setImporting] = useState(false);
   const [summary, setSummary] = useState<StructureImportResult | null>(null);
-  const router = useRouter();
 
   function reset() { setRows([]); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
@@ -104,7 +102,6 @@ export function ImportStructureDialog({ open: openProp, onClose, hideTrigger }: 
     ];
     if (res.skipped > 0) parts.push(`${res.skipped} ignorada(s)`);
     toast.success(`Importação concluída: ${parts.join(", ")}.`);
-    router.refresh();
     close();
   }
 

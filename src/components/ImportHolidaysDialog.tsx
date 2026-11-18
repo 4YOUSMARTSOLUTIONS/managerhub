@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importHolidays, type HolidayImportRow } from "@/lib/actions/holidays";
@@ -36,7 +35,6 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
   const [parseError, setParseError] = useState("");
   const [importing, setImporting] = useState(false);
   const [summary, setSummary] = useState<{ imported: number; skipped: number; error?: string } | null>(null);
-  const router = useRouter();
 
   function reset() {
     setRows([]); setIgnored(0); setFileName(""); setParseError(""); setSummary(null);
@@ -105,7 +103,6 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
     const parts = [`${res.imported} importado(s)`];
     if (res.skipped > 0) parts.push(`${res.skipped} ignorado(s)`);
     toast.success(`Importação concluída: ${parts.join(", ")}.`);
-    router.refresh();
     close();
   }
 

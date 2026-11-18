@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Link2 } from "lucide-react";
 import { setItemDoPrograma, type AlvoDoPrograma } from "@/lib/actions/seguranca";
@@ -42,7 +41,6 @@ export function SegProgramaVinculo({
 }) {
   const [valor, setValor] = useState(atual ?? "");
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
 
   const escolhido = useMemo(() => itens.find((i) => i.id === valor) ?? null, [itens, valor]);
   const mudou = (atual ?? "") !== valor;
@@ -52,7 +50,6 @@ export function SegProgramaVinculo({
       const r = await setItemDoPrograma(valor || null, alvo);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Vínculo salvo.");
-      router.refresh();
     });
   };
 

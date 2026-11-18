@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Pencil, Route, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -38,7 +37,6 @@ export function TrainingPathsPanel({
   const [editando, setEditando] = useState<TrilhaForEdit | null>(null);
   const [criando, setCriando] = useState(false);
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const excluir = (t: TrilhaRow) => {
     start(async () => {
@@ -50,7 +48,6 @@ export function TrainingPathsPanel({
       });
       if (!ok) return;
       await deleteTrilha(t.id);
-      router.refresh();
     });
   };
 

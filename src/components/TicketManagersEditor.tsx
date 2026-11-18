@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { setTicketManagerSectors } from "@/lib/actions/tickets";
 
@@ -20,7 +19,6 @@ export function TicketManagersEditor({ members, sectors, canEdit = true }: {
   const [editing, setEditing] = useState<Member | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const sectorName = useMemo(() => new Map(sectors.map((s) => [s.id, s.name])), [sectors]);
   const managerCount = members.filter((m) => m.sectorIds.length > 0).length;
@@ -47,7 +45,6 @@ export function TicketManagersEditor({ members, sectors, canEdit = true }: {
       const res = await setTicketManagerSectors({ user_id: editing.userId, sector_ids: [...picked] });
       if (res.error) { toast.error(res.error); return; }
       setEditing(null);
-      router.refresh();
     });
   };
 

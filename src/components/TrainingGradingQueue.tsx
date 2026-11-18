@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { corrigirResposta, getFilaDeCorrecao, type ParaCorrigir } from "@/lib/actions/training-exams";
@@ -49,7 +48,6 @@ function ItemDeCorrecao({ item, onCorrigido }: { item: ParaCorrigir; onCorrigido
   const [nota, setNota] = useState(String(item.weight));
   const [feedback, setFeedback] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const corrigir = () => {
     const valor = Number(nota);
@@ -62,7 +60,6 @@ function ItemDeCorrecao({ item, onCorrigido }: { item: ParaCorrigir; onCorrigido
       if (r.error) { toast.error(r.error); return; }
       toast.success("Questão corrigida.");
       onCorrigido();
-      router.refresh();
     });
   };
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, Plus, Target, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -45,7 +44,6 @@ export function SegFocosPanel({
 }) {
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
 
   const { podeDefinir, vigentes, sugestoes, dias } = status;
   if (!podeDefinir && vigentes.length === 0) return null;
@@ -82,7 +80,6 @@ export function SegFocosPanel({
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Foco salvo.");
       setRascunho(null);
-      router.refresh();
     });
   };
 
@@ -98,7 +95,6 @@ export function SegFocosPanel({
       const r = await excluirFoco(f.id);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Foco removido.");
-      router.refresh();
     })();
   };
 

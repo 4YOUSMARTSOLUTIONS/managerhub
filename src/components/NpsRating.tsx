@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { rateTicket } from "@/lib/actions/tickets";
 import { npsColor, npsFace } from "@/lib/nps";
 
@@ -11,7 +10,6 @@ export function NpsRating({ ticketId, current, currentComment, onSubmitted }: { 
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const submit = () => {
     setError("");
@@ -20,7 +18,6 @@ export function NpsRating({ ticketId, current, currentComment, onSubmitted }: { 
       const res = await rateTicket({ ticket_id: ticketId, score, comment });
       if (res.error) { setError(res.error); return; }
       setSaved(true);
-      router.refresh();
       if (onSubmitted) { onSubmitted(); return; }
       setTimeout(() => setSaved(false), 1800);
     });

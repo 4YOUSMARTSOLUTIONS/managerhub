@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { MEETING_STATUS, MEETING_STATUS_TONE } from "@/lib/constants";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -102,7 +101,6 @@ export function RoomCalendar({
   const [confirmDel, setConfirmDel] = useState<Ev | null>(null);
   const [delErr, setDelErr] = useState("");
   const [delPending, startDel] = useTransition();
-  const router = useRouter();
   const today = new Date();
   const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[0];
 
@@ -290,7 +288,6 @@ export function RoomCalendar({
               if (res?.error) { setDelErr(res.error); return; }
               setConfirmDel(null);
               setDelErr("");
-              router.refresh();
             });
           }}
           onClose={() => { setConfirmDel(null); setDelErr(""); }}

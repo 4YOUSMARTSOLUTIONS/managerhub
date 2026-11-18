@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importRvConfig, type RvConfigImportRow } from "@/lib/actions/rv-config";
@@ -40,7 +39,6 @@ export function ImportRvDialog({ scope, refs, alvos, unidades, open: openProp, o
   const [parseError, setParseError] = useState("");
   const [importing, setImporting] = useState(false);
   const [summary, setSummary] = useState<{ imported: number; invalid: number; notFound: number; error?: string } | null>(null);
-  const router = useRouter();
 
   function reset() { setRows([]); setIgnored(0); setFileName(""); setParseError(""); setSummary(null); }
   function close() { if (controlled) onClose?.(); else setInternalOpen(false); reset(); }
@@ -183,7 +181,6 @@ export function ImportRvDialog({ scope, refs, alvos, unidades, open: openProp, o
       res.invalid > 0 ? `${res.invalid} inválida(s)` : "",
     ].filter(Boolean).join(", ");
     toast.success(`${res.imported} vigência(s) importada(s)${avisos ? ` (${avisos})` : ""}`);
-    router.refresh();
     close();
   }
 

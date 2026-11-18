@@ -91,7 +91,6 @@ export function SegBlitzPerguntasManager({
     iniciar(async () => {
       const r = await ativarBlitzPergunta(i.id, !i.active);
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
     });
   };
 

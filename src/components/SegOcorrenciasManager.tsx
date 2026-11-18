@@ -160,7 +160,6 @@ export function SegOcorrenciasManager({
       });
       if (r.error) { setErro(r.error); return; }
       setRascunho(null);
-      router.refresh();
     });
   };
 
@@ -197,7 +196,6 @@ export function SegOcorrenciasManager({
       const r = await definirIconeSeg(fd);
       if (r.error) toast.error(r.error);
       if (inputFigura.current) inputFigura.current.value = "";
-      router.refresh();
     });
   };
 
@@ -208,7 +206,6 @@ export function SegOcorrenciasManager({
     iniciar(async () => {
       const r = await removerIconeSeg(fd);
       if (r.error) toast.error(r.error);
-      router.refresh();
     });
   };
 

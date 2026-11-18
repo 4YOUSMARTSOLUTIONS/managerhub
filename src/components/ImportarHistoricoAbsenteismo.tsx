@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { IconImport } from "@/components/ui/ImpExpIcons";
@@ -47,7 +46,6 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
   const [previa, setPrevia] = useState<ResultadoHistorico | null>(null);
   const [resultado, setResultado] = useState<ResultadoHistorico | null>(null);
   const [ocupado, setOcupado] = useState<"" | "modelo" | "previa" | "importando">("");
-  const router = useRouter();
 
   function limpar() {
     setLinhas([]); setIgnoradas(0); setArquivo(""); setErro(""); setPrevia(null); setResultado(null);
@@ -227,7 +225,6 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
       setResultado(r);
       if (r.importadas > 0) {
         toast.success(`${r.importadas} absenteísmo(s) importado(s).`);
-        router.refresh();
       }
     } finally {
       setOcupado("");

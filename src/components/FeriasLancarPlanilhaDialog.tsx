@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -57,7 +56,6 @@ export function FeriasLancarPlanilhaDialog({
   const [lendo, iniciarLeitura] = useTransition();
   const [enviando, iniciarEnvio] = useTransition();
   const [baixando, iniciarDownload] = useTransition();
-  const router = useRouter();
 
   const baixarModelo = () => {
     iniciarDownload(async () => {
@@ -141,7 +139,6 @@ export function FeriasLancarPlanilhaDialog({
       ].sort((a, b) => a.linhas[0] - b.linhas[0]));
       setEnviado(true);
       if (ok > 0) toast.success(`Férias de ${ok} colaborador(es) lançadas. Elas seguem para a efetivação do DP.`);
-      router.refresh();
     });
   };
 

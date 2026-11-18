@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ShieldCheck } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
@@ -26,7 +25,6 @@ export function SegEquipeManager({
 }) {
   const [escolhidos, setEscolhidos] = useState<string[]>(selectedIds);
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
 
   const mudou =
     escolhidos.length !== selectedIds.length ||
@@ -37,7 +35,6 @@ export function SegEquipeManager({
       const r = await setSegEquipe({ user_ids: escolhidos });
       if (r.error) { toast.error(r.error); return; }
       toast.success("Equipe de segurança atualizada.");
-      router.refresh();
     });
   };
 

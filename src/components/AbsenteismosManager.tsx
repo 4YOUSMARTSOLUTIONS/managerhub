@@ -402,7 +402,6 @@ export function AbsenteismosManager({
       if (r.error) { setErro(r.error); return; }
       setNovo(null);
       if (r.warning) setErro(r.warning);
-      router.refresh();
     });
   };
 
@@ -1098,7 +1097,6 @@ function ContinuaAusente({ linha, onFechar }: { linha: AbsenteismoRow; onFechar:
   const [ate, setAte] = useState(emDia ? "" : maximo);
   const [erro, setErro] = useState("");
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
   const dias = ate ? diasDoPeriodo(linha.occurredOn, ate) : null;
 
   const registrar = () => {
@@ -1110,7 +1108,6 @@ function ContinuaAusente({ linha, onFechar }: { linha: AbsenteismoRow; onFechar:
       if (r.warning) toast.warning(r.warning);
       else toast.success(r.message ?? "Registrado.");
       onFechar();
-      router.refresh();
     });
   };
 
@@ -1172,7 +1169,6 @@ function CancelarAberto({ linha, onFechar }: { linha: AbsenteismoRow; onFechar: 
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState("");
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
   const comunicou = linha.emailStatus === "sent";
 
   const cancelar = () => {
@@ -1187,7 +1183,6 @@ function CancelarAberto({ linha, onFechar }: { linha: AbsenteismoRow; onFechar: 
       if (r.warning) toast.warning(r.warning);
       else toast.success(r.message ?? "Lançamento cancelado.");
       onFechar();
-      router.refresh();
     });
   };
 
@@ -1488,7 +1483,6 @@ function PainelConfirmacao({
     iniciar(async () => {
       const r = await salvarConfirmacao(dados(linha.id));
       if (r.error) { onErro(r.error); return; }
-      router.refresh();
       // Sem isto o botão não dizia nada: o diálogo fica aberto de propósito
       // (salvar sem enviar é para continuar depois), então nada na tela mudava
       // e a gravação parecia não ter acontecido.
@@ -1594,7 +1588,6 @@ function PainelConfirmacao({
       onFechar();
       if (r.warning) toast.warning(r.warning);
       else toast.success(ehNovo ? "Ausência lançada e enviada ao RH." : "Enviado ao RH.");
-      router.refresh();
     });
   };
 
@@ -2195,7 +2188,6 @@ function Anexo({
 }) {
   const [enviando, iniciar] = useTransition();
   const [nome, setNome] = useState(linha.docFilename);
-  const router = useRouter();
 
   const subir = (file: File) => {
     onErro("");
@@ -2207,7 +2199,6 @@ function Anexo({
       if (r.error) { onErro(r.error); return; }
       setNome(file.name);
       onMudou(true);
-      router.refresh();
     });
   };
 
@@ -2218,7 +2209,6 @@ function Anexo({
       const r = await removerDocumentoAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
       onMudou(false);
-      router.refresh();
     });
   };
 
@@ -2317,7 +2307,6 @@ function EncerrarFalta({ linha, onErro }: { linha: AbsenteismoRow; onErro: (m: s
   const [editando, setEditando] = useState(segue);
   const [dia, setDia] = useState(segue ? hoje() : linha.endDate ?? hoje());
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
   const inicio = linha.ausenciaInicio ?? linha.startDate ?? undefined;
 
   const aplicar = async (ultimoDia: string | null) => {
@@ -2341,7 +2330,6 @@ function EncerrarFalta({ linha, onErro }: { linha: AbsenteismoRow; onErro: (m: s
       if (r.warning) toast.warning(r.warning);
       else if (r.message) toast.success(r.message);
       setEditando(false);
-      router.refresh();
     });
   };
 
@@ -2418,7 +2406,6 @@ function Ficha({
   // boa em vermelho faz a pessoa achar que quebrou
   const [avisoEmail, setAvisoEmail] = useState("");
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
 
   const abrirMedico = async () => {
     setVerMedico(true);
@@ -2445,7 +2432,6 @@ function Ficha({
       const r = await decidirAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
       onFechar();
-      router.refresh();
     });
   };
 
@@ -2486,7 +2472,6 @@ function Ficha({
       if (r.warning) toast.warning(r.warning);
       else if (r.message) toast.success(r.message);
       onFechar();
-      router.refresh();
     });
   };
 
@@ -2718,7 +2703,6 @@ function Ficha({
               const r = await reenviarComunicado(fd);
               if (r.error) { onErro(r.error); return; }
               setAvisoEmail(r.warning ?? r.message ?? "");
-              router.refresh();
             });
           }}
         >

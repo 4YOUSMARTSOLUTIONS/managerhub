@@ -148,7 +148,6 @@ function RvScopeTable({ scope, refs, rows, period, canEdit, alvos, unidades }: {
       });
       if (res.error) { setError(res.error); return; }
       setFormFor(null);
-      router.refresh();
     });
   };
 

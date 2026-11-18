@@ -198,7 +198,6 @@ export function TaskDialog({
         setDraft((d) => ({ ...d, labelIds: [...d.labelIds, res.labelId!] }));
       }
       setNovaEtiqueta(null);
-      router.refresh();
     });
   }
 
@@ -248,7 +247,6 @@ export function TaskDialog({
       if (res?.error) { toast.error(res.error); return; }
       toast.success("Tarefa movida. As etiquetas ficaram no quadro de origem.");
       onClose();
-      router.refresh();
     });
   }
 

@@ -809,7 +809,6 @@ function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
   hoje: string;
 }) {
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
   const anos = anosDaEscolhaDecimo(hoje, escolhas, modo, ate);
   const [pedido, setPedido] = useState<{ ano: number; quer: boolean } | null>(null);
   const [erroSenha, setErroSenha] = useState<string | null>(null);
@@ -826,7 +825,6 @@ function EscolhaDoDecimo({ escolhas, modo, ate, hoje }: {
       if (r.error) { setErroSenha(r.error); return; }
       setPedido(null);
       toast.success(r.message ?? "Escolha enviada ao departamento pessoal.");
-      router.refresh();
     });
   };
 
@@ -931,7 +929,6 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp }: {
   const escolheram = pessoas.filter((p) => p.quer !== null);
   const [filtro, setFiltro] = useState<"pendentes" | "escolheram" | "todos">(pendentes.length > 0 ? "pendentes" : "todos");
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
   const lista = filtro === "pendentes" ? pendentes : filtro === "escolheram" ? escolheram : pessoas;
   const enviadoEm = (p: EscolhaDecimoDaEquipe) => (p.escolhidoEm ? DIA_SP.format(new Date(p.escolhidoEm)) : "");
   const rotulo = (p: EscolhaDecimoDaEquipe) => (p.quer === null ? "Pendente" : p.quer ? "Quer adiantar" : "Não quer adiantar");
@@ -955,7 +952,6 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp }: {
       const r = await reabrirDecimo({ userId: p.userId, ano });
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Escolha liberada.");
-      router.refresh();
     });
   };
 
@@ -1229,7 +1225,6 @@ function FilaGestor({
   soEquipe?: boolean;
 }) {
   const [decidindo, iniciar] = useTransition();
-  const router = useRouter();
   const [vendoEquipe, setVendoEquipe] = useState(false);
 
   // Quem mais estará fora no período de cada pedido (LUIZ, 12/11/2026): uma
@@ -1262,7 +1257,6 @@ function FilaGestor({
       const res = await decidirFerias({ id: r.id, aprovar: true });
       if (res.error) { toast.error(res.error); return; }
       toast.success("Previsão aprovada.");
-      router.refresh();
     });
   };
 
@@ -1615,7 +1609,6 @@ function DetalheFerias({
   onCancelar: (r: FeriasRow) => void;
 }) {
   const [excluindo, iniciar] = useTransition();
-  const router = useRouter();
 
   const excluir = async () => {
     if (!(await confirmDialog({
@@ -1629,7 +1622,6 @@ function DetalheFerias({
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Excluído.");
       onFechar();
-      router.refresh();
     });
   };
 
@@ -1775,7 +1767,6 @@ function EfetivarDialog({
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
 
   // o informativo chega por RPC (o RH não lê employee_absences direto)
   useEffect(() => {
@@ -1789,7 +1780,6 @@ function EfetivarDialog({
       if (r.error) { setErro(r.error); return; }
       toast.success("Férias efetivadas.");
       onFechar();
-      router.refresh();
     });
   };
 

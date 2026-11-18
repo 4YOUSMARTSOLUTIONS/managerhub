@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { CalendarPlus, Check, CheckCircle2, Lock, LockOpen, Pencil, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -96,12 +95,10 @@ export function TrainingSessionsManager({
   const [convocando, setConvocando] = useState<SessionRow | null>(null);
   const [presenca, setPresenca] = useState<SessionRow | null>(null);
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const alternarLiberacao = (s: SessionRow) => {
     start(async () => {
       await liberarTurma(s.id, !s.releasedAt);
-      router.refresh();
     });
   };
 
@@ -114,7 +111,6 @@ export function TrainingSessionsManager({
       });
       if (!ok) return;
       await cancelarTurma(s.id);
-      router.refresh();
     });
   };
 
@@ -305,7 +301,6 @@ function SessionDialog({
   const [vagas, setVagas] = useState(session?.capacity ? String(session.capacity) : "");
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const salvar = () => {
     setErro("");
@@ -327,7 +322,6 @@ function SessionDialog({
         capacity: vagas ? Number(vagas) : null,
       });
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
       onClose();
     });
   };
@@ -460,7 +454,6 @@ function ConvocarDialog({ session, onClose }: { session: SessionRow; onClose: ()
   const [setor, setSetor] = useState("");
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   useEffect(() => {
     let vivo = true;
@@ -495,7 +488,6 @@ function ConvocarDialog({ session, onClose }: { session: SessionRow; onClose: ()
     start(async () => {
       const r = await convocar(session.id, ids);
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
       onClose();
     });
   };
@@ -591,7 +583,6 @@ function PresencaDialog({ session, onClose }: { session: SessionRow; onClose: ()
   const [linhas, setLinhas] = useState<PresencaLinha[] | null>(null);
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   if (linhas === null) {
     getListaDePresenca(session.id).then((r) =>
@@ -614,7 +605,6 @@ function PresencaDialog({ session, onClose }: { session: SessionRow; onClose: ()
         fechar,
       );
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
       onClose();
     });
   };
@@ -623,7 +613,6 @@ function PresencaDialog({ session, onClose }: { session: SessionRow; onClose: ()
     start(async () => {
       await desconvocar(enrollmentId);
       setLinhas((atual) => (atual ?? []).filter((l) => l.enrollmentId !== enrollmentId));
-      router.refresh();
     });
   };
 

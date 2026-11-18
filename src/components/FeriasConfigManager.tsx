@@ -35,7 +35,6 @@ const doisDigitos = (n: number) => String(n).padStart(2, "0");
 function PrazosLegaisDoPedido({ atual, canEdit }: { atual: PrazosLegais; canEdit: boolean }) {
   const [valores, setValores] = useState<PrazosLegais>(atual);
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
   const mudou = valores.abono !== atual.abono || valores.decimo !== atual.decimo || valores.decimoAte !== atual.decimoAte;
   const mesAte = Number(valores.decimoAte.slice(0, 2)) || 1;
   const diaAte = Number(valores.decimoAte.slice(3, 5)) || 31;
@@ -51,7 +50,6 @@ function PrazosLegaisDoPedido({ atual, canEdit }: { atual: PrazosLegais; canEdit
       const r = await setPrazosLegaisFerias(valores);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Salvo.");
-      router.refresh();
     });
   };
 
@@ -148,7 +146,6 @@ function AntecedenciaMinima({ atual, canEdit }: { atual: AntecedenciaFerias; can
     colaborador: String(atual.colaborador), gestor: String(atual.gestor), dp: String(atual.dp),
   });
   const [salvando, iniciar] = useTransition();
-  const router = useRouter();
   const numeros = {
     colaborador: Number(valores.colaborador), gestor: Number(valores.gestor), dp: Number(valores.dp),
   };
@@ -161,7 +158,6 @@ function AntecedenciaMinima({ atual, canEdit }: { atual: AntecedenciaFerias; can
       const r = await setAntecedenciaFerias(numeros);
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Salvo.");
-      router.refresh();
     });
   };
 

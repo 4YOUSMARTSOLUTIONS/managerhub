@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
@@ -28,7 +27,6 @@ export function SegImportOcorrencias({ onClose }: { onClose: () => void }) {
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [avisos, setAvisos] = useState<string[]>([]);
-  const router = useRouter();
 
   const baixarModelo = async () => {
     const XLSX = await loadXlsx();
@@ -105,7 +103,6 @@ export function SegImportOcorrencias({ onClose }: { onClose: () => void }) {
       if (r.error) { setErro(r.error); return; }
       setAvisos(r.avisos ?? []);
       toast.success(r.message ?? "Importação concluída.");
-      router.refresh();
       // com avisos a janela fica aberta: eles são o resultado que importa ler
       if (!r.avisos?.length) onClose();
     })();

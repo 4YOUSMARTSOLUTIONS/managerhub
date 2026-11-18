@@ -240,7 +240,6 @@ export function SegCatalogoManager({
       const r = await definirIconeSeg(fd);
       if (r.error) setErro(r.error);
       if (inputFigura.current) inputFigura.current.value = "";
-      router.refresh();
     });
   };
 
@@ -251,7 +250,6 @@ export function SegCatalogoManager({
     iniciar(async () => {
       const r = await removerIconeSeg(fd);
       if (r.error) setErro(r.error);
-      router.refresh();
     });
   };
 

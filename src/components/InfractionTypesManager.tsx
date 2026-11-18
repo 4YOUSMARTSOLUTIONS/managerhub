@@ -74,7 +74,6 @@ export function InfractionTypesManager({
       });
       if (r.error) { setErro(r.error); return; }
       setRascunho(null);
-      router.refresh();
     });
   };
 

@@ -887,7 +887,6 @@ function EntryDialog({ goal, units, month, unitSel, onClose }: { goal: AreaGoalR
   const [den, setDen] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   useEffect(() => {
     const unitId = u === GROUP ? null : u;
@@ -926,7 +925,6 @@ function EntryDialog({ goal, units, month, unitSel, onClose }: { goal: AreaGoalR
       });
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
 

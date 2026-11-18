@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { confirmDialog } from "@/components/ui/confirm";
@@ -39,7 +38,6 @@ export function AcessoTelasManager({
   const [editando, setEditando] = useState<Edicao | null>(null);
   const [pessoaNova, setPessoaNova] = useState("");
   const [removendo, iniciar] = useTransition();
-  const router = useRouter();
 
   const comExcecao = useMemo(() => new Set(excecoes.map((e) => e.userId)), [excecoes]);
   const opcoesDePessoa = useMemo(
@@ -59,7 +57,6 @@ export function AcessoTelasManager({
       const r = await definirTelasDaPessoa({ userId: e.userId, modo: "nivel", telas: [] });
       if (r.error) { toast.error(r.error); return; }
       toast.success(r.message ?? "Exceção removida.");
-      router.refresh();
     });
   };
 

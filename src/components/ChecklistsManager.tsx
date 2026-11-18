@@ -221,7 +221,6 @@ function ModelsView({ checklists, runs, departments, subdepartments, canEdit, on
     if (!ok) return;
     startToggle(async () => {
       await toggleChecklistActive({ id: c.id, active: !c.active });
-      router.refresh();
     });
   };
 
@@ -1030,7 +1029,6 @@ function TaskDialog({ task, canTreat, onClose }: { task: TaskRow; canTreat: bool
     start(async () => {
       const r = await updateChecklistTaskStatus({ task_id: task.id, status, resolution });
       if (r?.error) { setError(r.error); return; }
-      router.refresh();
       if (status === "concluida" || status === "cancelada") onClose();
     });
   };

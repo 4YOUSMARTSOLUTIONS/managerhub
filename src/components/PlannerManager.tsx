@@ -241,7 +241,6 @@ export function PlannerManager({
       const res = await setBoardMembers(quadro.id, membrosDraft);
       if (res?.error) { setErroDialog(res.error); return; }
       setMembrosOpen(false);
-      router.refresh();
     });
   }
 
@@ -297,7 +296,6 @@ export function PlannerManager({
       if (res?.error) { setErroDialog(res.error); return; }
       setCopiaDialog(null);
       if (res.boardId) irPara({ quadro: res.boardId });
-      router.refresh();
     });
   }
 
@@ -314,7 +312,6 @@ export function PlannerManager({
       const res = await deleteBoard(quadro.id);
       if (res?.error) { toast.error(res.error); return; }
       irPara({ quadro: null });
-      router.refresh();
     });
   }
 

@@ -130,7 +130,6 @@ export function AbsenteismoRecipientsManager({
       const r = await saveEmailRecipient({ ...rascunho });
       if (r.error) { setErro(r.error); return; }
       setRascunho(null);
-      router.refresh();
     });
   };
 

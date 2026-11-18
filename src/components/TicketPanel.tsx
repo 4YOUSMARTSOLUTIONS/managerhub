@@ -92,7 +92,6 @@ export function TicketPanel({
       });
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
 
@@ -128,7 +127,6 @@ export function TicketPanel({
       const res = await requestTicketConclusion(ticket.id);
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
 
@@ -140,7 +138,6 @@ export function TicketPanel({
       const res = await decideTicketConclusion(ticket.id, true, "");
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
   const reopen = () => {
@@ -153,7 +150,6 @@ export function TicketPanel({
       if (res.error) { setError(res.error); return; }
       setCommentText("");
       onClose();
-      router.refresh();
     });
   };
 

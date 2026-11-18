@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { PeoplePicker } from "@/components/PeoplePicker";
@@ -55,7 +54,6 @@ export function TrainingPathDialog({
   const [aAdicionar, setAAdicionar] = useState("");
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const cursoPorId = useMemo(() => new Map(trainings.map((t) => [t.id, t])), [trainings]);
   const disponiveis = trainings.filter(
@@ -119,7 +117,6 @@ export function TrainingPathDialog({
         regras,
       });
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
       onClose();
     });
   };

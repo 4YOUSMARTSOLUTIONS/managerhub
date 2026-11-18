@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -94,7 +93,6 @@ export function TrainingDialog({
 
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   // subsetor segue os setores marcados: oferecer subsetor de outra área só
   // produziria combinação que não descreve ninguém
@@ -224,7 +222,6 @@ export function TrainingDialog({
         regras,
       });
       if (r.error) { setErro(r.error); return; }
-      router.refresh();
       onClose();
     });
   };

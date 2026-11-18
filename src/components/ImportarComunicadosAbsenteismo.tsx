@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { DetailModal } from "@/components/ui/DetailModal";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
@@ -36,7 +35,6 @@ export function ImportarComunicadosAbsenteismo({ aberto, onFechar }: { aberto: b
   const [previa, setPrevia] = useState<ResultadoComunicados | null>(null);
   const [resultado, setResultado] = useState<ResultadoComunicados | null>(null);
   const [ocupado, setOcupado] = useState<"" | "modelo" | "previa" | "importando">("");
-  const router = useRouter();
 
   function limpar() {
     setLinhas([]); setIgnoradas(0); setArquivo(""); setErro(""); setPrevia(null); setResultado(null);
@@ -171,7 +169,6 @@ export function ImportarComunicadosAbsenteismo({ aberto, onFechar }: { aberto: b
       setResultado(r);
       if (r.importadas > 0) {
         toast.success(`${r.importadas} comunicado(s) importado(s).`);
-        router.refresh();
       }
     } finally {
       setOcupado("");

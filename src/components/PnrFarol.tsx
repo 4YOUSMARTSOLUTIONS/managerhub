@@ -405,7 +405,6 @@ function EntryDialog({ kpi, month, onClose }: { kpi: PnrKpiRow; month: string; o
       });
       if (r?.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
   const remove = () => {
@@ -460,7 +459,6 @@ function KpiDialog({ mode, kpi, categories, members, onClose }: { mode: "new" | 
   const [pointsLow, setPointsLow] = useState(toInput(kpi?.pointsLow));
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const numOrNull = (s: string) => parseBR(s);
 
@@ -485,7 +483,6 @@ function KpiDialog({ mode, kpi, categories, members, onClose }: { mode: "new" | 
       const r = mode === "edit" && kpi ? await updatePnrKpi({ id: kpi.id, ...payload }) : await createPnrKpi(payload);
       if (r?.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
 

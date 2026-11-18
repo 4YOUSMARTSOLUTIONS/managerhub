@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { importarHistorico } from "@/lib/actions/trainings";
@@ -28,7 +27,6 @@ export function TrainingHistoryImportDialog({
   const [instrutor, setInstrutor] = useState("");
   const [erro, setErro] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -49,7 +47,6 @@ export function TrainingHistoryImportDialog({
       if (r.error) { setErro(r.error); return; }
       toast.success(`${r.importados} ${r.importados === 1 ? "registro importado" : "registros importados"}.`);
       if (r.warning) toast.warning(r.warning);
-      router.refresh();
       onClose();
     });
   };

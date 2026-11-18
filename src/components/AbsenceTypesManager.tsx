@@ -99,7 +99,6 @@ export function AbsenceTypesManager({
       });
       if (r.error) { setErro(r.error); return; }
       setRascunho(null);
-      router.refresh();
     });
   };
 

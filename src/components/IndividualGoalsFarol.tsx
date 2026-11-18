@@ -1153,12 +1153,10 @@ function SummaryCard({ label, value, tone, sub, onClick, active }: {
 
 function RemoveEntryButton({ goalId, period }: { goalId: string; period: string }) {
   const [pending, start] = useTransition();
-  const router = useRouter();
   const onClick = async () => {
     if (!(await confirmDialog({ tone: "danger", confirmLabel: "Excluir", message: "Remover esta meta desta competência? (o indicador continua disponível para outros meses)" }))) return;
     start(async () => {
       await deleteGoalEntry({ goal_id: goalId, period });
-      router.refresh();
     });
   };
   return (
@@ -1170,11 +1168,9 @@ function RemoveEntryButton({ goalId, period }: { goalId: string; period: string 
 
 function ApproveEntryButton({ goalId, period }: { goalId: string; period: string }) {
   const [pending, start] = useTransition();
-  const router = useRouter();
   const onClick = async () => {
     start(async () => {
       await approveGoalEntry({ goal_id: goalId, period });
-      router.refresh();
     });
   };
   return (
@@ -1187,13 +1183,11 @@ function ApproveEntryButton({ goalId, period }: { goalId: string; period: string
 function CopyPrevMonthDialog({ ownerId, ownerName, count, fromPeriod, toPeriod, fromLabel, toLabel, onClose }: { ownerId: string; ownerName: string | null; count: number; fromPeriod: string; toPeriod: string; fromLabel: string; toLabel: string; onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const router = useRouter();
   const submit = () => {
     start(async () => {
       const r = await copyPreviousMonthEntries({ owner_id: ownerId, from_period: fromPeriod, to_period: toPeriod });
       if (r?.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
   return (
@@ -1217,13 +1211,11 @@ function CopyPrevMonthDialog({ ownerId, ownerName, count, fromPeriod, toPeriod, 
 function CloseMonthDialog({ ownerId, ownerName, count, period, monthLabel, onClose }: { ownerId: string; ownerName: string | null; count: number; period: string; monthLabel: string; onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const router = useRouter();
   const submit = () => {
     start(async () => {
       const r = await approveMonth({ owner_id: ownerId, period });
       if (r?.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
   return (
@@ -1248,14 +1240,12 @@ function ReproveDialog({ goalId, period, name, onClose }: { goalId: string; peri
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const router = useRouter();
   const submit = () => {
     if (!note.trim()) { setError("Informe o motivo da reprovação."); return; }
     start(async () => {
       const r = await reproveGoalEntry({ goal_id: goalId, period, note: note.trim() });
       if (r?.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
   return (
@@ -1277,14 +1267,12 @@ function ReopenDialog({ goalId, period, name, onClose }: { goalId: string; perio
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const router = useRouter();
   const submit = () => {
     if (!password) { setError("Digite a sua senha."); return; }
     start(async () => {
       const r = await reopenGoalEntry({ goal_id: goalId, period, password });
       if (r?.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
   return (
@@ -1427,7 +1415,6 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const isNew = sel === "__new__";
   // meta de sim/nao: no indicador NOVO vem do seletor; no existente, do proprio
@@ -1478,7 +1465,6 @@ function AddDialog({ period, monthLabel, existing, isAdmin, members, defaultOwne
       });
       if (r.error) { setError(r.error); return; }
       onClose();
-      router.refresh();
     });
   };
 
@@ -1713,7 +1699,6 @@ function GoalDialog({ goal, month, onClose }: { goal: GoalRow; month: string; on
       const res = await deleteIndividualGoal(goal.id);
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
 
@@ -1832,7 +1817,6 @@ function EntryDialog({ goal, month, onClose }: { goal: GoalRow; month: string; o
       });
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
 
@@ -1905,7 +1889,6 @@ function WeightsDialog({ rows, period, onClose }: { rows: Row[]; period: string;
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(rows.map((r) => [r.goal.id, String(r.weight ?? 0)])));
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const total = Math.round(rows.reduce((s, r) => s + (Number(vals[r.goal.id]) || 0), 0));
 
@@ -1916,7 +1899,6 @@ function WeightsDialog({ rows, period, onClose }: { rows: Row[]; period: string;
       const res = await setEntryWeights({ period, weights: rows.map((r) => ({ goal_id: r.goal.id, weight: Number(vals[r.goal.id]) || 0 })) });
       if (res.error) { setError(res.error); return; }
       onClose();
-      router.refresh();
     });
   };
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -74,7 +73,6 @@ export function TicketsManager({
   const [reopenNote, setReopenNote] = useState("");
   const [decideError, setDecideError] = useState("");
   const [deciding, startDecide] = useTransition();
-  const router = useRouter();
 
   const runDecide = (approve: boolean) => {
     if (!decideTicket) return;
@@ -86,7 +84,6 @@ export function TicketsManager({
       if (res.error) { setDecideError(res.error); return; }
       setDecideTicket(null);
       setReopenNote("");
-      router.refresh();
     });
   };
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, Power, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -55,7 +54,6 @@ export function SegVeiculosManager({
   const [busca, setBusca] = useState("");
   const [erro, setErro] = useState("");
   const [pendente, iniciar] = useTransition();
-  const router = useRouter();
 
   const nomeMeio = useMemo(() => new Map(meios.map((m) => [m.id, m.name])), [meios]);
 
@@ -83,7 +81,6 @@ export function SegVeiculosManager({
       if (r.error) { setErro(r.error); return; }
       toast.success(r.message ?? "Veículo salvo.");
       setRascunho(null);
-      router.refresh();
     });
   };
 
@@ -91,7 +88,6 @@ export function SegVeiculosManager({
     iniciar(async () => {
       const r = await setVeiculoAtivo(v.id, !v.active);
       if (r.error) toast.error(r.error);
-      router.refresh();
     });
   };
 
