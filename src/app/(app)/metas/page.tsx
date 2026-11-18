@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { IndividualGoalsFarol, type GoalRow, type GoalEntryLite, type GoalEvidenceLite, type RvDiasRow, type RvCongeladoRow } from "@/components/IndividualGoalsFarol";
 import { moduleGate } from "@/lib/module-gate";
 import { fetchAll, emLotes } from "@/lib/supabase/fetch-all";
+import type { Tables } from "@/types/database";
 
 export default async function GoalsPage() {
   const gate = await moduleGate("metas");
@@ -44,7 +45,26 @@ export default async function GoalsPage() {
       ])
     : Promise.resolve(null);
 
-  const [{ data: reports }, { data: deps }, { data: subs }, { data: cargos }, { data: unidadesTodas }, todosMembros, donos] = await Promise.all([
+  // Metas, lotação, regras de redutor, faixas e cadeados também não dependem de
+  // nada e saem aqui (desempenho, LUIZ 18/11/2026): antes eram mais duas ondas.
+  //
+  // A lotação vem inteira para quem não é Funcionário (pode ver várias pessoas).
+  // O Funcionário lê só a própria linha; se ele tiver cadeia (raro), a lotação
+  // inteira sai na onda 2.
+  const goalsQuery = supabase
+    .from("individual_goals")
+    .select("id, name, description, unit, direction, partial_pct, evidence_required, owner_id, owner:profiles!owner_id(full_name)")
+    .eq("tenant_id", tenant.id);
+  const lotacao = (soPropria: boolean) => fetchAll(() => {
+    const q = supabase
+      .from("memberships")
+      .select("user_id, manager_id, department_id, subdepartment_id")
+      .eq("tenant_id", tenant.id);
+    return (soPropria ? q.eq("user_id", user.id) : q).order("id");
+  });
+
+  const [{ data: reports }, { data: deps }, { data: subs }, { data: cargos }, { data: unidadesTodas }, todosMembros, donos,
+         { data: goals }, { data: memsOnda1 }, { data: regrasRaw }, { data: faixasRaw }, { data: cadeados }] = await Promise.all([
     reportsP,
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id).order("name"),
     supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenant.id).order("name"),
@@ -53,6 +73,16 @@ export default async function GoalsPage() {
     supabase.from("units").select("id, name").eq("tenant_id", tenant.id),
     getMembers(tenant.id),
     donosP,
+    goalsQuery.order("name"),
+    lotacao(role === "member"),
+    // Regras e faixas são configuração: leitura de membro, então cliente normal.
+    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id").eq("tenant_id", tenant.id).eq("active", true).order("sort"),
+    supabase.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
+    // Competências fechadas. Leitura de membro, de propósito: se só o
+    // administrador enxergasse o cadeado, o colaborador veria o valor
+    // recalculado ao vivo e o chefe veria o congelado, cada um com um número na
+    // mão e ninguém sabendo qual vale.
+    supabase.from("rv_period_locks").select("period, locked_at").eq("tenant_id", tenant.id),
   ]);
 
   // Dono sem NENHUMA unidade continua aparecendo em qualquer recorte, igual ao
@@ -87,48 +117,41 @@ export default async function GoalsPage() {
   // sem isto a coluna Colaborador sumiria justamente da tela dele.
   const canSeeMultiple = canCreateGoals || podeAmpliar;
 
-  // ---------- ONDA 2: o que depende da onda 1 ----------
-  // Sem recorte por dono: o teto passa a ser a RLS, e só ela. São 25 metas no total,
-  // então carregar tudo o que a policy entrega e recortar em memória é mais barato
-  // que uma ida ao servidor por troca de escopo. Se um dia forem milhares, isto vira
-  // filtro no banco, como já é em /acoes.
-  const goalsQuery = supabase
-    .from("individual_goals")
-    .select("id, name, description, unit, direction, partial_pct, evidence_required, owner_id, owner:profiles!owner_id(full_name)")
-    .eq("tenant_id", tenant.id);
-
-  // `manager_id` entra para o escopo padrão (subordinados DIRETOS). Quem não tem
-  // equipe nem pode ampliar lê só a própria linha. fetchAll: a empresa passa de
-  // 1000 vínculos, e quem vê várias pessoas perdia o resto calado.
-  const memsP = fetchAll(() => {
-    const q = supabase
-      .from("memberships")
-      .select("user_id, manager_id, department_id, subdepartment_id")
-      .eq("tenant_id", tenant.id);
-    return (canSeeMultiple ? q : q.eq("user_id", user.id)).order("id");
-  });
-
-  const [{ data: goals }, { data: mems }] = await Promise.all([
-    goalsQuery.order("name"),
-    memsP,
-  ]);
-
-  // ---------- ONDA 3: o que depende da onda 2 ----------
-  // o recorte por unidade entra ANTES de buscar lançamentos e RV: não adianta
-  // carregar o histórico de metas que não vão aparecer
+  // ---------- ONDA 2: o que depende das metas ----------
+  // Sem recorte por dono nas metas: o teto é a RLS, e só ela. São poucas centenas
+  // no total, então carregar tudo o que a policy entrega e recortar em memória é
+  // mais barato que uma ida ao servidor por troca de escopo. Se um dia forem
+  // milhares, isto vira filtro no banco, como já é em /acoes.
+  //
+  // O recorte por unidade entra ANTES de buscar lançamentos e RV: não adianta
+  // carregar o histórico de metas que não vão aparecer.
   const goalsNoEscopo = donosVisiveis ? (goals ?? []).filter((g) => donosVisiveis.has(g.owner_id)) : (goals ?? []);
   const goalIds = goalsNoEscopo.map((g) => g.id);
   const ownerIds = [...new Set(goalsNoEscopo.map((g) => g.owner_id))];
   const admin = ownerIds.length ? createServiceClient() : null;
 
-  const [{ data: entries }, { data: rvCfgs }, { data: ownerMems }, { data: ausencias },
-         { data: sancoes }, { data: regrasRaw }, { data: faixasRaw },
-         { data: cadeados }, { data: retratos }] = await Promise.all([
+  // `manager_id` entra para o escopo padrão (subordinados DIRETOS). fetchAll: a
+  // empresa passa de 1000 vínculos, e quem vê várias pessoas perdia o resto calado.
+  const lotacaoCompletaP = role === "member" && canSeeMultiple ? lotacao(false) : null;
+
+  // Tudo o que vai por lista de ids sai em lotes (emLotes): a lista inteira na
+  // URL é recusada pelo gateway entre 600 e 800 ids, e cada lote ainda passa
+  // pelo teto de 1000 linhas (fetchAll).
+  const porDono = <T,>(ler: (lote: string[]) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) =>
+    admin ? emLotes(ownerIds, ler) : Promise.resolve({ data: [] as T[], error: null });
+
+  const [{ data: entriesDb }, { data: rvCfgs }, { data: ownerMemsDb }, { data: ausencias },
+         { data: sancoes }, { data: retratos }, lotacaoCompleta] = await Promise.all([
     // um lançamento por meta por mês: já são ~500 e passam de 1000 com o
     // tempo, e o PostgREST cortaria o histórico calado. Lista vazia não consulta.
+    //
+    // As evidências vêm EMBUTIDAS no lançamento (antes eram uma onda à parte,
+    // com todos os ids de lançamento num `.in()` só, que com ~500 ids já beirava
+    // o limite da URL e passaria dele no mês seguinte, sumindo com os anexos).
+    // A RLS dos anexos espelha a do lançamento.
     emLotes(goalIds, (lote) => fetchAll(() => supabase
       .from("individual_goal_entries")
-      .select("id, goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note")
+      .select("id, goal_id, period, target_value, actual_value, weight, note, partial_value, rv_value, approval_status, approved_at, reproval_note, anexos:individual_goal_entry_attachments(id, path, filename, size, created_at)")
       .in("goal_id", lote)
       .order("id"))),
     // RV configurada em Configuracoes (vigencias por funcao/colaborador). Leitura via
@@ -138,9 +161,16 @@ export default async function GoalsPage() {
       : Promise.resolve({ data: [] as { scope: string; position_id: string | null; user_id: string | null; effective_from: string; value: number }[] }),
     // admissao/desligamento entram junto: quem trabalhou meio mês recebe meio mês,
     // e a data do vínculo é o mesmo tipo de recorte que as férias
-    admin
-      ? admin.from("memberships").select("id, user_id, position_id, admission_date, dismissed_at").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { id: string; user_id: string; position_id: string | null; admission_date: string | null; dismissed_at: string | null }[] }),
+    //
+    // A função de cada dia vem do histórico com data, embutido no vínculo (antes
+    // era uma onda à parte, em lotes um depois do outro): quem trocou de função
+    // no meio do mês tem o valor cheio pesado pelos dias de cada uma
+    // (rv-funcao.ts, o mesmo cálculo do fechamento da competência).
+    porDono((lote) => admin!
+      .from("memberships")
+      .select("id, user_id, position_id, admission_date, dismissed_at, historico:membership_history!membership_history_membership_id_fkey(id, membership_id, effective_from, effective_to, position_id)")
+      .eq("tenant_id", tenant.id)
+      .in("user_id", lote)),
     // Férias e afastamentos que descontam. Pelo service client, como a RV: a RLS
     // da tabela é owner/admin, mas o GESTOR precisa do fator para entender o valor
     // da equipe dele. O que chega aqui é só o intervalo, já recortado aos donos
@@ -150,73 +180,62 @@ export default async function GoalsPage() {
     // proporcional, mas o redutor por faixa (atestado, falta) precisa contar os
     // dias mesmo com a marcação desligada — que é justamente como esses dois
     // tipos nascem.
-    admin
-      ? admin.from("employee_absences").select("user_id, kind, start_date, end_date, discounts_rv, waived").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { user_id: string; kind: string; start_date: string; end_date: string; discounts_rv: boolean; waived: boolean }[] }),
+    porDono((lote) => fetchAll(() => admin!
+      .from("employee_absences")
+      .select("user_id, kind, start_date, end_date, discounts_rv, waived")
+      .eq("tenant_id", tenant.id)
+      .in("user_id", lote)
+      .order("id"))),
     // Punições: service client pelo mesmo motivo das ausências, e o que chega ao
     // NAVEGADOR é só a contagem por mês dentro do fator. A lista de punições, com
     // tipo e observação, não sai daqui.
-    admin
-      ? admin.from("employee_sanctions").select("user_id, sanction_type_id, occurred_on").eq("tenant_id", tenant.id).in("user_id", ownerIds)
-      : Promise.resolve({ data: [] as { user_id: string; sanction_type_id: string; occurred_on: string }[] }),
-    // Regras e faixas são configuração: leitura de membro, então cliente normal.
-    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id").eq("tenant_id", tenant.id).eq("active", true).order("sort"),
-    supabase.from("rv_reducer_bands").select("rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
-    // Competências fechadas e o retrato de cada uma. Leitura de membro nas duas,
-    // de propósito: se só o administrador enxergasse o cadeado, o colaborador
-    // veria o valor recalculado ao vivo e o chefe veria o congelado, cada um com
-    // um número na mão e ninguém sabendo qual vale.
-    supabase.from("rv_period_locks").select("period, locked_at").eq("tenant_id", tenant.id),
+    porDono((lote) => fetchAll(() => admin!
+      .from("employee_sanctions")
+      .select("user_id, sanction_type_id, occurred_on")
+      .eq("tenant_id", tenant.id)
+      .in("user_id", lote)
+      .order("id"))),
+    // O retrato de cada competência fechada. Leitura de membro, pelo mesmo
+    // motivo do cadeado (onda 1).
     ownerIds.length
-      ? supabase.from("rv_period_snapshots").select("period, user_id, rv_full, prop_factor, reducer_pct, detail, department_id, position_id, manager_id, unit_ids").eq("tenant_id", tenant.id).in("user_id", ownerIds)
+      ? emLotes(ownerIds, (lote) => fetchAll(() => supabase
+          .from("rv_period_snapshots")
+          .select("period, user_id, rv_full, prop_factor, reducer_pct, detail, department_id, position_id, manager_id, unit_ids")
+          .eq("tenant_id", tenant.id)
+          .in("user_id", lote)
+          .order("id")))
       : Promise.resolve({ data: [] as { period: string; user_id: string; rv_full: number; prop_factor: number; reducer_pct: number; detail: unknown; department_id: string | null; position_id: string | null; manager_id: string | null; unit_ids: string[] }[] }),
+    lotacaoCompletaP,
   ]);
+  const mems = lotacaoCompleta?.data ?? memsOnda1;
 
-  // evidências: uma consulta só para todos os lançamentos em vista, e não uma por
-  // linha. A RLS da tabela de anexos espelha a do lançamento, então o recorte de
-  // quem pode ver já vem pronto do banco.
-  const entryIds = (entries ?? []).map((e) => e.id);
-  const { data: anexos } = entryIds.length
-    ? await supabase
-        .from("individual_goal_entry_attachments")
-        .select("id, entry_id, path, filename, size, created_at")
-        .in("entry_id", entryIds)
-        .order("created_at")
-    : { data: [] as { id: string; entry_id: string; path: string; filename: string; size: number | null; created_at: string }[] };
-
-  const anexosPorEntry = new Map<string, GoalEvidenceLite[]>();
-  for (const a of anexos ?? []) {
-    const arr = anexosPorEntry.get(a.entry_id) ?? [];
-    arr.push({ id: a.id, path: a.path, filename: a.filename, size: a.size });
-    anexosPorEntry.set(a.entry_id, arr);
-  }
+  // O typegen (mantido à mão) não declara estas duas relações; o formato da
+  // linha é declarado aqui e o cast acontece num ponto só.
+  type EntryDb = Pick<Tables<"individual_goal_entries">,
+    "id" | "goal_id" | "period" | "target_value" | "actual_value" | "weight" | "note" | "partial_value"
+    | "rv_value" | "approval_status" | "approved_at" | "reproval_note"> & {
+    anexos: Pick<Tables<"individual_goal_entry_attachments">, "id" | "path" | "filename" | "size" | "created_at">[] | null;
+  };
+  type VinculoDb = {
+    id: string; user_id: string; position_id: string | null;
+    admission_date: string | null; dismissed_at: string | null;
+    historico: HistoricoFuncaoRow[] | null;
+  };
+  const entries = (entriesDb ?? []) as unknown as EntryDb[];
+  const ownerMems = (ownerMemsDb ?? []) as unknown as VinculoDb[];
 
   const entriesByGoal = new Map<string, GoalEntryLite[]>();
-  for (const e of entries ?? []) {
+  for (const e of entries) {
+    const evidences: GoalEvidenceLite[] = [...(e.anexos ?? [])]
+      .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0))
+      .map((a) => ({ id: a.id, path: a.path, filename: a.filename, size: a.size }));
     const arr = entriesByGoal.get(e.goal_id) ?? [];
-    arr.push({ period: e.period, target: e.target_value, actual: e.actual_value, weight: e.weight, note: e.note, partial: e.partial_value, status: e.approval_status, approvedAt: e.approved_at, reprovalNote: e.reproval_note, evidences: anexosPorEntry.get(e.id) ?? [] });
+    arr.push({ period: e.period, target: e.target_value, actual: e.actual_value, weight: e.weight, note: e.note, partial: e.partial_value, status: e.approval_status, approvedAt: e.approved_at, reprovalNote: e.reproval_note, evidences });
     entriesByGoal.set(e.goal_id, arr);
   }
 
-  // A função de cada dia vem do histórico com data: quem trocou de função no
-  // meio do mês tem o valor cheio pesado pelos dias de cada uma (rv-funcao.ts,
-  // o mesmo cálculo do fechamento da competência). Em lotes, pelo teto de 1000
-  // linhas e pelo tamanho da URL.
   const historicoDe = new Map<string, HistoricoFuncaoRow[]>();
-  if (admin) {
-    const idsDosVinculos = (ownerMems ?? []).map((m) => m.id);
-    for (let i = 0; i < idsDosVinculos.length; i += 200) {
-      const lote = idsDosVinculos.slice(i, i + 200);
-      const { data: hist } = await fetchAll(() =>
-        admin.from("membership_history").select("id, membership_id, effective_from, effective_to, position_id")
-          .in("membership_id", lote).order("id"));
-      for (const h of hist ?? []) {
-        const arr = historicoDe.get(h.membership_id) ?? [];
-        arr.push(h);
-        historicoDe.set(h.membership_id, arr);
-      }
-    }
-  }
+  for (const m of ownerMems) historicoDe.set(m.id, m.historico ?? []);
 
   // Linha do tempo do valor cheio por dono: um ponto em cada mês em que o valor
   // pode mudar; a tela pega o último ponto <= competência
