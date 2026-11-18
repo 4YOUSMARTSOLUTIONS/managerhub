@@ -28,14 +28,18 @@ export default async function MeetingsPage() {
     // a 5000, mas os participantes vinham do historico INTEIRO, para sempre, e a
     // maior parte era descartada logo depois. Aninhado, o recorte da reuniao vale
     // para eles tambem, e some uma ida ao banco.
-    supabase
+    //
+    // Paginado (LUIZ, 18/11/2026): o `.limit(5000)` de antes parava em 1000 sem
+    // avisar, que é o teto do PostgREST (ver fetch-all.ts). O `id` desempata a
+    // ordem, senão uma página pode repetir reunião e pular outra.
+    fetchAll(() => supabase
       .from("meetings")
       .select("*, rooms(id, name, color, capacity, location, resources), creator:profiles!created_by(full_name), meeting_participants(user_id)")
       .eq("tenant_id", tenant.id)
       .gte("starts_at", winStart)
       .lt("starts_at", winEnd)
       .order("starts_at", { ascending: false })
-      .limit(5000),
+      .order("id")),
     // faltava o filtro de empresa: dependia so da RLS, diferente das demais
     supabase.from("rooms").select("id, name, color, capacity, location, resources").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     // mesma ideia nas series: os participantes vem junto, ja escopados

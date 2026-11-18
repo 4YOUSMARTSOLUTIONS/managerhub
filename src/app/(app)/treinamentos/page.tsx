@@ -1,4 +1,4 @@
-import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
+import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { moduleGate } from "@/lib/module-gate";
@@ -21,12 +21,6 @@ export default async function TreinamentosPage() {
 
   const { tenant, user, unitScope } = await requireContext();
   const supabase = await createClient();
-  // Quem cadastra cursos e trilhas: owner, admin, RH e quem tem a marca de
-  // gestão de treinamentos na ficha. A pergunta vai ao banco, que é onde a regra
-  // mora (as policies usam a mesma função), em vez de repetir a lista aqui.
-  const { data: gere } = await supabase.rpc("gere_treinamentos", { p_tenant: tenant.id });
-  const podeCadastrar = gere === true;
-
   const unitIdsDoEscopo = effectiveUnitFilter(unitScope);
 
   const cursosQuery = supabase
@@ -43,6 +37,7 @@ export default async function TreinamentosPage() {
     .order("name");
 
   const [
+    { data: gere },
     { data: cursos },
     { data: minhas },
     { data: todasMatriculas },
@@ -57,6 +52,12 @@ export default async function TreinamentosPage() {
     { data: salas },
     { data: trilhas },
   ] = await Promise.all([
+    // Quem cadastra cursos e trilhas: owner, admin, RH e quem tem a marca de
+    // gestão de treinamentos na ficha. A pergunta vai ao banco, que é onde a regra
+    // mora (as policies usam a mesma função), em vez de repetir a lista aqui.
+    // Sai na mesma leva das consultas (desempenho, LUIZ 18/11/2026): antes era
+    // uma rodada inteira à frente de todas elas.
+    supabase.rpc("gere_treinamentos", { p_tenant: tenant.id }),
     cursosQuery,
     // as minhas: a RLS já recorta, o filtro por user_id é só para não trazer a
     // equipe inteira de quem é gestor
@@ -67,14 +68,16 @@ export default async function TreinamentosPage() {
       .eq("user_id", user.id)
       .neq("status", "nao_aplicavel")
       .neq("status", "cancelado"),
-    // o acompanhamento: quem não gere ninguém recebe só as próprias, por RLS
-    supabase
+    // o acompanhamento: quem não gere ninguém recebe só as próprias, por RLS.
+    // Paginado: o `.limit(5000)` de antes parava em 1000 sem avisar (é o teto do
+    // PostgREST, ver fetch-all.ts), e a empresa inteira passa disso fácil.
+    fetchAll(() => supabase
       .from("training_enrollments")
       .select("id, training_id, user_id, status, mandatory, due_at, completed_at, expires_at, score, snap_department_id, applicable, path_id")
       .eq("tenant_id", tenant.id)
       .neq("status", "nao_aplicavel")
       .neq("status", "cancelado")
-      .limit(5000),
+      .order("id")),
     // lotação de quem está ativo: é o que permite oferecer, em "quem deve
     // fazer", só cargos e pessoas que existem dentro do escopo do treinamento
     fetchAll(() => supabase
@@ -101,11 +104,13 @@ export default async function TreinamentosPage() {
       .eq("tenant_id", tenant.id)
       .order("starts_at", { ascending: false })
       .limit(300),
-    supabase
+    // mesmo teto de 1000: paginado, senão a contagem de convocados encolhe calada
+    fetchAll(() => supabase
       .from("training_enrollments")
       .select("session_id")
       .eq("tenant_id", tenant.id)
-      .not("session_id", "is", null),
+      .not("session_id", "is", null)
+      .order("id")),
     // as mesmas salas das reuniões: turma presencial escolhe daqui
     supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     // trilhas com os passos já ordenados: o embed devolve na ordem do `order`
@@ -116,6 +121,8 @@ export default async function TreinamentosPage() {
       .is("deleted_at", null)
       .order("name"),
   ]);
+
+  const podeCadastrar = gere === true;
 
   type VinculoDb = {
     id: string; user_id: string;
