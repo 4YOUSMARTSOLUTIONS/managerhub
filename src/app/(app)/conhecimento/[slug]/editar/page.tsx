@@ -14,7 +14,7 @@ export default async function EditarArtigoPage({ params }: { params: Promise<{ s
   const supabase = await createClient();
   const { data: a } = await supabase
     .from("conhecimento_artigos")
-    .select("id, slug, modulo, titulo, resumo, conteudo, ordem, publicado")
+    .select("id, slug, modulo, titulo, resumo, conteudo, ordem, publicado, updated_at")
     .eq("slug", slug)
     .maybeSingle();
   if (!a) notFound();
@@ -24,7 +24,10 @@ export default async function EditarArtigoPage({ params }: { params: Promise<{ s
       <PageHeader title="Editar artigo" subtitle={a.titulo} />
       <EditorDeArtigo
         key={a.id}
-        inicial={{ ...a, resumo: a.resumo ?? "" }}
+        inicial={{
+          id: a.id, slug: a.slug, modulo: a.modulo, titulo: a.titulo, resumo: a.resumo ?? "",
+          conteudo: a.conteudo, ordem: a.ordem, publicado: a.publicado, versao: a.updated_at,
+        }}
         imagens={imagens}
       />
     </div>

@@ -22,6 +22,11 @@ export type ArtigoEditavel = {
   conteudo: string;
   ordem: number;
   publicado: boolean;
+  /**
+   * `updated_at` de quando o editor abriu: o salvar só grava se o artigo não
+   * mudou desde então (outra aba ou outra pessoa), senão pede para recarregar
+   */
+  versao: string | null;
 };
 
 /** Os módulos na mesma organização do menu, sem o próprio Banco. */
@@ -34,7 +39,7 @@ export function EditorDeArtigo({ inicial, imagens: imagensIniciais }: {
 }) {
   const router = useRouter();
   const [a, setA] = useState<ArtigoEditavel>(inicial ?? {
-    id: null, slug: "", modulo: null, titulo: "", resumo: "", conteudo: "", ordem: 0, publicado: false,
+    id: null, slug: "", modulo: null, titulo: "", resumo: "", conteudo: "", ordem: 0, publicado: false, versao: null,
   });
   // o endereço acompanha o título até alguém mexer nele (ou até já existir)
   const [slugManual, setSlugManual] = useState(Boolean(inicial));
@@ -98,11 +103,11 @@ export function EditorDeArtigo({ inicial, imagens: imagensIniciais }: {
     setErro("");
     iniciar(async () => {
       const r = await salvarArtigo({ ...a, modulo: a.modulo || null });
-      if (r.error || !r.id || !r.slug) { setErro(r.error ?? "Não foi possível salvar."); return; }
+      if (r.error || !r.id || !r.slug || !r.versao) { setErro(r.error ?? "Não foi possível salvar."); return; }
       setSujo(false);
       toast.success(a.publicado ? "Artigo salvo e publicado." : "Rascunho salvo. Só você vê enquanto não publicar.");
       const novoEndereco = !a.id || r.slug !== inicial?.slug;
-      setA((x) => ({ ...x, id: r.id as string, slug: r.slug as string }));
+      setA((x) => ({ ...x, id: r.id as string, slug: r.slug as string, versao: r.versao as string }));
       if (novoEndereco) router.replace(`/conhecimento/${r.slug}/editar`);
       else router.refresh();
     });

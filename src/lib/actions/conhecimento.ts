@@ -51,7 +51,9 @@ export async function salvarArtigo(input: {
   conteudo: string;
   ordem: number;
   publicado: boolean;
-}): Promise<{ error?: string; id?: string; slug?: string }> {
+  /** `updated_at` de quando o editor abriu; obrigatório para atualizar */
+  versao: string | null;
+}): Promise<{ error?: string; id?: string; slug?: string; versao?: string }> {
   try {
     const { supabase } = await soQuemEscreve();
     const titulo = input.titulo.trim();
@@ -77,21 +79,35 @@ export async function salvarArtigo(input: {
       ? imagensDoConteudo((await supabase.from("conhecimento_artigos").select("conteudo").eq("id", input.id).maybeSingle()).data?.conteudo ?? "")
       : [];
 
+    // Só grava sobre a versão que o editor abriu (LUIZ editava numa aba enquanto
+    // os prints eram refeitos na outra): sem isso, a aba antiga apagava o que a
+    // nova salvou, e a limpeza de imagens levaria as novas junto.
+    if (input.id && !input.versao) return { error: "Recarregue a página antes de salvar." };
     const r = input.id
-      ? await supabase.from("conhecimento_artigos").update(linha).eq("id", input.id).select("id, slug").maybeSingle()
-      : await supabase.from("conhecimento_artigos").insert(linha).select("id, slug").maybeSingle();
+      ? await supabase.from("conhecimento_artigos").update(linha)
+          .eq("id", input.id).eq("updated_at", input.versao as string)
+          .select("id, slug, updated_at").maybeSingle()
+      : await supabase.from("conhecimento_artigos").insert(linha).select("id, slug, updated_at").maybeSingle();
     if (r.error) {
       if (r.error.code === "23505") return { error: `Já existe um artigo no endereço "${slug}".` };
       return { error: r.error.message };
     }
-    if (!r.data) return { error: "Artigo não encontrado." };
+    if (!r.data) {
+      if (input.id) {
+        const { data: existe } = await supabase.from("conhecimento_artigos").select("id").eq("id", input.id).maybeSingle();
+        if (existe) {
+          return { error: "Este artigo foi alterado depois que o editor foi aberto (em outra aba ou por outra pessoa). Copie o que escreveu, recarregue a página e salve de novo." };
+        }
+      }
+      return { error: "Artigo não encontrado." };
+    }
 
     const agora = new Set(imagensDoConteudo(input.conteudo));
     await apagarImagensQueSairam(supabase, r.data.id, antes.filter((a) => !agora.has(a)));
 
     revalidatePath("/conhecimento");
     revalidatePath(`/conhecimento/${r.data.slug}`);
-    return { id: r.data.id, slug: r.data.slug };
+    return { id: r.data.id, slug: r.data.slug, versao: r.data.updated_at };
   } catch (e) {
     return erro(e);
   }
