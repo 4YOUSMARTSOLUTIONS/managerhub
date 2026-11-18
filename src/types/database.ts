@@ -817,6 +817,15 @@ export type Database = {
         Update: { code?: string; description?: string }
         Relationships: []
       }
+      // Banco de conhecimento (18/11/2026): manual dos módulos, GLOBAL (sem
+      // tenant). Lê quem está logado (rascunho só o super admin); escreve só o
+      // super admin. `modulo` é a key de src/lib/modules.ts, nulo = geral.
+      conhecimento_artigos: {
+        Row: { id: string; slug: string; modulo: string | null; titulo: string; resumo: string | null; conteudo: string; ordem: number; publicado: boolean; created_by: string | null; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; slug: string; modulo?: string | null; titulo: string; resumo?: string | null; conteudo?: string; ordem?: number; publicado?: boolean; created_at?: string; updated_at?: string }
+        Update: { slug?: string; modulo?: string | null; titulo?: string; resumo?: string | null; conteudo?: string; ordem?: number; publicado?: boolean }
+        Relationships: []
+      }
       // Quem recebe o comunicado de não comparecimento. Guarda e-mail e não
       // `user_id` de propósito: quem precisa saber costuma ser gente de fora do
       // organograma (portaria, contabilidade, transporte). `unit_id` nulo recebe

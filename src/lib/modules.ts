@@ -13,7 +13,7 @@
 
 export type ModuleKey =
   // base: sempre liberados, fora da venda
-  | "dashboard" | "auditoria" | "configuracoes" | "admin" | "minha_equipe"
+  | "dashboard" | "auditoria" | "configuracoes" | "admin" | "minha_equipe" | "conhecimento"
   // vendáveis
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
@@ -125,6 +125,11 @@ export const MODULES: ModuleDef[] = [
   { key: "multas_avarias", label: "Multas e Avarias", href: "/multas-avarias", group: null },
   { key: "cinco_s", label: "5S", href: "/cinco-s", group: null },
   { key: "padroes", label: "Padrões", href: "/padroes", group: null },
+  // Banco de conhecimento (LUIZ, 18/11/2026): o manual de cada módulo. Tela
+  // base, sem venda: cada artigo aparece para quem tem acesso ao módulo dele,
+  // então ninguém vê manual de tela que não usa. Segue o acesso por nível
+  // como qualquer tela (o Operacional só a vê se a empresa liberar).
+  { key: "conhecimento", label: "Banco de conhecimento", href: "/conhecimento", group: null, core: true },
 
   { key: "seg_piramide", label: "Pirâmide", href: "/seguranca/piramide", group: "g_seguranca" },
   { key: "seg_acidentes", label: "Acidentes", href: "/seguranca/acidentes", group: "g_seguranca" },
