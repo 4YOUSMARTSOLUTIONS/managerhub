@@ -114,7 +114,31 @@ const BAR_COLOR: Record<FarolStatus, string> = { atingida: "var(--mh-success)", 
  */
 const MAX_AVISO = 5;
 
-type Row = { goal: GoalRow; pct: number | null; status: FarolStatus; target: number | null; actual: number | null; weight: number; partial: number | null; rvShare: number | null; rvPay: number; entryStatus: Enums<"goal_entry_status"> | null; reprovalNote: string | null };
+type Row = {
+  goal: GoalRow; pct: number | null; status: FarolStatus; target: number | null; actual: number | null; weight: number; partial: number | null; rvShare: number | null; rvPay: number; entryStatus: Enums<"goal_entry_status"> | null; reprovalNote: string | null;
+  /** só na visão Ano: quantos meses em cada situação, e quantos têm realizado */
+  meses?: Record<FarolStatus, number> & { lancados: number };
+};
+
+/**
+ * O selo da linha na visão Ano (LUIZ, 18/11/2026): o ano é feito dos meses, e
+ * "Parcial" ali significaria o limiar parcial da meta, não "bateu alguns meses".
+ */
+function seloDoAno(m: NonNullable<Row["meses"]>, status: FarolStatus): string {
+  if (status === "pendente" || status === "atingida" || status === "nao_atingida") return FAROL_LABEL[status];
+  if (m.parcial === m.lancados) return FAROL_LABEL.parcial;
+  return `${m.atingida} de ${m.lancados} ${m.lancados === 1 ? "mês" : "meses"}`;
+}
+
+function dicaDoAno(m: NonNullable<Row["meses"]>): string {
+  const partes = [
+    `${m.atingida} atingido${m.atingida === 1 ? "" : "s"}`,
+    m.parcial ? `${m.parcial} parcial${m.parcial === 1 ? "" : "is"}` : null,
+    m.nao_atingida ? `${m.nao_atingida} não atingido${m.nao_atingida === 1 ? "" : "s"}` : null,
+  ].filter(Boolean).join(", ");
+  const pend = m.pendente ? `; ${m.pendente} sem realizado` : "";
+  return `${m.lancados} ${m.lancados === 1 ? "mês lançado" : "meses lançados"}: ${partes}${pend}`;
+}
 
 export function IndividualGoalsFarol({
   goals, canManageOthers, canCreateGoals, isAdmin, podeMetaPropria = false, reportIds,
@@ -340,7 +364,12 @@ export function IndividualGoalsFarol({
       for (const g of filtered) {
         const pp = g.partialPct ?? 0;
         const ye = g.entries.filter((e) => e.period.startsWith(prefix));
-        let tSum = 0, aSum = 0, pSum = 0, hasP = false, has = false;
+        // A linha do ano é feita dos MESES (LUIZ, 18/11/2026): somar meta e
+        // realizado dava 380% num KPI de 95% ao mês, e o status saía das somas,
+        // então um KPI que perdeu 2 de 3 meses aparecia como atingido.
+        const meses = { atingida: 0, parcial: 0, nao_atingida: 0, pendente: 0, lancados: 0 };
+        let creditoMeses = 0;
+        const metas: number[] = [], realizados: number[] = [], parciais: number[] = [];
         for (const e of ye) {
           tot += 1;
           const st = farolAttainment(g.direction, e.target, e.actual, e.partial).status;
@@ -353,12 +382,27 @@ export function IndividualGoalsFarol({
           const arr = byOwnerMonth.get(k) ?? [];
           arr.push({ goalId: g.id, ownerId: g.ownerId, period: e.period, weight: e.weight, credit });
           byOwnerMonth.set(k, arr);
-          if (e.actual != null) { tSum += e.target; aSum += e.actual; has = true; }
-          if (e.partial != null) { pSum += e.partial; hasP = true; }
+          meses[st] += 1;
+          if (e.actual != null) {
+            meses.lancados += 1;
+            creditoMeses += credit;
+            metas.push(e.target);
+            realizados.push(e.actual);
+            if (e.partial != null) parciais.push(e.partial);
+          }
         }
         if (ye.length === 0) continue;
-        const r = farolAttainment(g.direction, tSum, has ? aSum : null, hasP ? pSum : null);
-        rows.push({ goal: g, pct: r.pct, status: r.status, target: has ? tSum : null, actual: has ? aSum : null, weight: 0, partial: hasP ? pSum : null, rvShare: null, rvPay: 0, entryStatus: null, reprovalNote: null });
+        // sem nenhum realizado, a meta média vem de todos os meses do ano
+        if (meses.lancados === 0) for (const e of ye) { metas.push(e.target); if (e.partial != null) parciais.push(e.partial); }
+        const media = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+        // atingimento = meses atingidos ÷ meses lançados, o parcial pelo % dele:
+        // a mesma conta do card Acumulado e da RV, que paga mês a mês
+        const pct = meses.lancados ? Math.round((creditoMeses / meses.lancados) * 100) : null;
+        const status: FarolStatus = meses.lancados === 0 ? "pendente"
+          : meses.atingida === meses.lancados ? "atingida"
+          : creditoMeses === 0 ? "nao_atingida"
+          : "parcial";
+        rows.push({ goal: g, pct, status, target: media(metas), actual: media(realizados), weight: 0, partial: media(parciais), rvShare: null, rvPay: 0, entryStatus: null, reprovalNote: null, meses });
       }
       for (const [, items] of byOwnerMonth) {
         const moeda = moedaFor(items[0].ownerId, items[0].period);
@@ -475,7 +519,11 @@ export function IndividualGoalsFarol({
       ? () => setFiltroBruto((atual) => (atual === status ? null : status))
       : undefined;
 
-  const linhasVisiveis = filtroStatus ? view.rows.filter((r) => r.status === filtroStatus) : view.rows;
+  // no ano o card conta metas-mês: o filtro mostra os KPIs que tiveram ao menos
+  // um mês naquela situação
+  const linhasVisiveis = filtroStatus
+    ? view.rows.filter((r) => (r.meses ? r.meses[filtroStatus] > 0 : r.status === filtroStatus))
+    : view.rows;
 
   // quantos filtros estao ligados: e o selo no botao, para o funil nao esconder
   // que a tela esta recortada. Sem ele, filtro fechado vira filtro esquecido.
@@ -867,9 +915,10 @@ export function IndividualGoalsFarol({
                 <th>Conceito</th>
                 <th style={{ textAlign: "right" }}>Peso</th>
                 {showOwner && <th>Colaborador</th>}
-                <th style={{ textAlign: "right" }}>Meta</th>
-                <th style={{ textAlign: "right" }}>Meta parcial</th>
-                <th style={{ textAlign: "right" }}>Realizado</th>
+                {/* no ano, a média dos meses lançados: somar 95% ao mês dava 380% */}
+                <th style={{ textAlign: "right" }} title={mode === "ano" ? "Média mensal dos meses lançados" : undefined}>{mode === "ano" ? "Meta média" : "Meta"}</th>
+                <th style={{ textAlign: "right" }} title={mode === "ano" ? "Média mensal dos meses lançados" : undefined}>{mode === "ano" ? "Meta parcial média" : "Meta parcial"}</th>
+                <th style={{ textAlign: "right" }} title={mode === "ano" ? "Média mensal dos meses lançados" : undefined}>{mode === "ano" ? "Realizado médio" : "Realizado"}</th>
                 <th>Status</th>
                 <th style={{ minWidth: 180 }}>Atingimento</th>
                 {mode === "mes" && <th>Fechamento</th>}
@@ -878,7 +927,7 @@ export function IndividualGoalsFarol({
               </tr>
             </thead>
             <tbody>
-              {linhasVisiveis.map(({ goal: g, pct, status, target, actual, weight, partial, rvShare, rvPay, entryStatus, reprovalNote }) => (
+              {linhasVisiveis.map(({ goal: g, pct, status, target, actual, weight, partial, rvShare, rvPay, entryStatus, reprovalNote, meses }) => (
                 <tr key={g.id} style={entryStatus === "reprovada" ? { background: "rgba(220,38,38,0.06)" } : undefined}>
                   {/* Nome do KPI em uma linha só. Quebrado em quatro, ele
                       esticava a altura da linha inteira e desalinhava as
@@ -950,8 +999,17 @@ export function IndividualGoalsFarol({
                       precisa ver OK/NOK; a meta e o parcial nem fazem sentido ali */}
                   <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{isMetaBinaria(g.direction) ? "—" : formatMetaValor(target, false, g.unit)}</td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }} className="muted">{isMetaBinaria(g.direction) ? "—" : formatMetaValor(partial, false, g.unit)}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatMetaValor(actual, isMetaBinaria(g.direction), g.unit)}</td>
-                  <td><Badge tone={FAROL_TONE[status]}>{FAROL_LABEL[status]}</Badge></td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {/* OK/NOK não tem média: no ano, quantos meses deram OK */}
+                    {meses && isMetaBinaria(g.direction)
+                      ? (meses.lancados ? `${meses.atingida} de ${meses.lancados} OK` : "—")
+                      : formatMetaValor(actual, isMetaBinaria(g.direction), g.unit)}
+                  </td>
+                  <td>
+                    {meses
+                      ? <span title={dicaDoAno(meses)}><Badge tone={FAROL_TONE[status]}>{seloDoAno(meses, status)}</Badge></span>
+                      : <Badge tone={FAROL_TONE[status]}>{FAROL_LABEL[status]}</Badge>}
+                  </td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <div className="progress-track" style={{ flex: 1 }}>
