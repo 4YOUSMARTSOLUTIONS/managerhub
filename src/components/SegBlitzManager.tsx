@@ -58,6 +58,8 @@ export type BlitzRow = {
   /** a primeira blitz da pessoa, fora de toda a conta (LUIZ, 18/11/2026) */
   educativa: boolean;
   avaliador: string | null;
+  /** quem lançou (o avaliador corrige só as que lançou) */
+  createdBy: string;
   /** a última correção (LUIZ, 18/11/2026); o histórico abre na ficha */
   editadaEm: string | null;
   editadaPor: string | null;
@@ -133,7 +135,7 @@ const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
 
 export function SegBlitzManager({
   rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null, jaPassaram,
-  ultimaComNok, regras, educativaPara, podeCorrigir = false,
+  ultimaComNok, regras, educativaPara, podeCorrigir = null,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -165,8 +167,11 @@ export function SegBlitzManager({
   regras?: BlitzRegras;
   /** quem terá a blitz educativa */
   educativaPara?: string[];
-  /** avaliador da blitz, equipe de segurança ou administração (LUIZ, 18/11/2026) */
-  podeCorrigir?: boolean;
+  /**
+   * "todas": equipe de segurança e administração; "lancadas": o avaliador da
+   * blitz, nas que ele lançou (LUIZ, 18/11/2026). O banco confere de novo
+   */
+  podeCorrigir?: "todas" | "lancadas" | null;
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -294,7 +299,9 @@ export function SegBlitzManager({
     })();
   };
 
-  const podeCorrigirEsta = (r: BlitzRow) => podeCorrigir && r.occurredOn >= inicioDaCorrecao();
+  const podeCorrigirEsta = (r: BlitzRow) =>
+    (podeCorrigir === "todas" || (podeCorrigir === "lancadas" && r.createdBy === dono))
+    && r.occurredOn >= inicioDaCorrecao();
   const corrigir = () => {
     if (!detalhe || !Array.isArray(respostasDoDetalhe)) return;
     setCorrigindo({

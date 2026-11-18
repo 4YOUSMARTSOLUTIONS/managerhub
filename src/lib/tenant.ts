@@ -32,10 +32,15 @@ export type ActiveContext = {
   /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
   isDp: boolean;
   /**
-   * marca de avaliador da blitz (`memberships.is_avaliador_blitz`): vê a blitz
-   * da empresa inteira e, por isso, não fica travado na própria unidade
+   * marca de avaliador da blitz (`memberships.is_avaliador_blitz`): lança blitz
+   * e corrige as que lançou. Não amplia o que ele vê
    */
   isAvaliadorBlitz: boolean;
+  /**
+   * equipe de segurança (`seg_equipe`): vê a segurança da empresa inteira e, por
+   * isso, não fica travada na própria unidade (LUIZ, 18/11/2026)
+   */
+  isSeguranca: boolean;
   unitScope: UnitScope;
   isSuperAdmin: boolean;
   /** presente só p/ super admin: lista de empresas + a selecionada no topo */
@@ -112,15 +117,19 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   // Os módulos (unidades contratadas, telas liberadas, em construção) começam
   // aqui e o `getModuleAccess` só aproveita o resultado, sem rodada própria.
   void dadosDeModulos(tenantId).catch(() => undefined);
-  const [{ data: unitRows }, { data: mu }, superAdmin, cookieStore] = await Promise.all([
+  const [{ data: unitRows }, { data: muDoVinculo }, { data: daSeguranca }, superAdmin, cookieStore] = await Promise.all([
     supabase.from("units").select("id, name").eq("tenant_id", tenantId).order("name"),
-    // admin enxerga todas as unidades: nem chega a perguntar. O avaliador da
-    // blitz também (LUIZ, 18/11/2026): ele aborda gente de qualquer unidade, e
-    // preso à dele não via nem as blitz que lançou na outra. Nas demais telas
-    // o seletor só recorta; o que ele alcança continua decidido pela RLS
-    !isAdmin && !isAvaliadorBlitz && membershipId
+    // admin enxerga todas as unidades: nem chega a perguntar
+    !isAdmin && membershipId
       ? supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId)
       : Promise.resolve({ data: null as { unit_id: string }[] | null }),
+    // a equipe de segurança também vê todas (LUIZ, 18/11/2026): a segurança é
+    // da empresa inteira, sucessores inclusive. Pergunta junto com as unidades
+    // para não custar rodada. Nas demais telas o seletor só recorta; o que ela
+    // alcança continua decidido pela RLS
+    membershipId
+      ? supabase.rpc("is_safety_member", { p_tenant: tenantId })
+      : Promise.resolve({ data: false }),
     // o super admin precisa da linha da empresa e da lista do seletor
     isSuperAdmin
       ? Promise.all([
@@ -146,6 +155,8 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   // ----- escopo de unidade (dentro da empresa ativa) -----
   const allUnits: UnitOpt[] = unitRows ?? [];
 
+  const isSeguranca = daSeguranca === true;
+  const mu = isSeguranca ? null : muDoVinculo;
   let allowed: UnitOpt[] = allUnits;
   if (mu) {
     const muIds = new Set(mu.map((x) => x.unit_id));
@@ -169,6 +180,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     isHr,
     isDp: isAdmin || isHr,
     isAvaliadorBlitz,
+    isSeguranca,
     unitScope: { units: allowed, allowedUnitIds, unrestricted, activeUnitId, locked: allowed.length === 1 },
     isSuperAdmin,
     companyScope,

@@ -37,16 +37,16 @@ export default async function SegurancaBlitzPage() {
 
   /**
    * A aba Análises (indicadores e recorrência) é de quem tem alçada: gestor,
-   * gerência, administração, equipe de segurança e, desde 18/11/2026, o
-   * avaliador da blitz, que vê a empresa inteira (LUIZ). O colaborador comum
-   * fica só com a lista das próprias.
+   * gerência, administração e equipe de segurança. O avaliador da blitz que só
+   * tem a marca fica, como o colaborador, com a lista do que alcança: as que
+   * lançou e as próprias (LUIZ, 18/11/2026: a empresa inteira é da segurança)
    */
   const temAlcadaP = daSegurancaP.then(({ data }) =>
-    role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || data === true || isAvaliadorBlitz);
+    role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || data === true);
   // "Todos | Minha gestão" (LUIZ, 11/11/2026): para quem vê a empresa inteira e
   // também tem gente embaixo. O Gestor já vê só a cadeia dele
   const veAEmpresaP = daSegurancaP.then(({ data }) =>
-    role === "owner" || role === "admin" || role === "manager" || data === true || isAvaliadorBlitz);
+    role === "owner" || role === "admin" || role === "manager" || data === true);
 
   // Análises do mês corrente (o filtro da tela troca o período). O público
   // da blitz se configura em Configurações > Segurança.
@@ -61,9 +61,10 @@ export default async function SegurancaBlitzPage() {
       ])
     : null)();
   // Registros: com alçada, o mês corrente (o período das Análises busca o resto);
-  // sem alçada, tudo que a pessoa alcança. Paginado, sem o antigo corte em 500
+  // sem alçada, tudo que a pessoa alcança, e as que ela lançou em qualquer
+  // unidade (o avaliador corrige as dele). Paginado, sem o antigo corte em 500
   const registrosP = (async () => lerRegistrosDaBlitz(
-    tenant.id, (await temAlcadaP) ? { de: argsDoMes.p_de, ate: fimDoMes, unidades } : { unidades },
+    tenant.id, (await temAlcadaP) ? { de: argsDoMes.p_de, ate: fimDoMes, unidades } : { unidades, ouLancadasPor: user.id },
   ))();
   const diretosP = (async () => (await veAEmpresaP)
     ? (await supabase.from("memberships").select("id", { count: "exact", head: true })
@@ -175,9 +176,10 @@ export default async function SegurancaBlitzPage() {
         ultimaComNok={ultimaComNok}
         regras={regrasDaLinha(regrasLinha)}
         educativaPara={(educativaParaRes ?? []) as unknown as string[]}
-        // corrige: avaliador da blitz, equipe de segurança e administração; Gestor e
-        // Gerencial não (LUIZ, 18/11/2026). O banco confere de novo
-        podeCorrigir={isAvaliadorBlitz || role === "owner" || role === "admin" || daSeguranca === true}
+        // corrige: equipe de segurança e administração, qualquer uma; o avaliador
+        // da blitz, as que lançou; Gestor e Gerencial não (LUIZ, 18/11/2026).
+        // O banco confere de novo
+        podeCorrigir={role === "owner" || role === "admin" || daSeguranca === true ? "todas" : isAvaliadorBlitz ? "lancadas" : null}
         dono={user.id}
         tenantId={tenant.id}
         rows={rows}

@@ -20,7 +20,11 @@ import type { BlitzRow } from "@/components/SegBlitzManager";
  */
 export async function lerRegistrosDaBlitz(
   tenantId: string,
-  opcoes: { de?: string; ate?: string; unidades: string[] | null },
+  opcoes: {
+    de?: string; ate?: string; unidades: string[] | null;
+    /** as que esta pessoa lançou entram em qualquer unidade (o avaliador corrige as dele) */
+    ouLancadasPor?: string;
+  },
 ): Promise<{ data: BlitzRow[]; error: null } | { data: null; error: string }> {
   const supabase = await createClient();
   const [lidas, membros, motivos] = await Promise.all([
@@ -35,7 +39,10 @@ export async function lerRegistrosDaBlitz(
         .eq("tenant_id", tenantId);
       if (opcoes.de) q = q.gte("occurred_on", opcoes.de);
       if (opcoes.ate) q = q.lte("occurred_on", opcoes.ate);
-      if (opcoes.unidades) q = q.or(`unit_id.in.(${opcoes.unidades.join(",")}),unit_id.is.null`);
+      if (opcoes.unidades) {
+        const lancadas = opcoes.ouLancadasPor ? `,created_by.eq.${opcoes.ouLancadasPor}` : "";
+        q = q.or(`unit_id.in.(${opcoes.unidades.join(",")}),unit_id.is.null${lancadas}`);
+      }
       // ordem estável até o fim (o id desempata): sem isso a página 2 repete e pula linha
       return q.order("occurred_on", { ascending: false }).order("created_at", { ascending: false }).order("id");
     }),
@@ -89,6 +96,7 @@ export async function lerRegistrosDaBlitz(
     conforme: b.conforme,
     educativa: b.educativa,
     avaliador: nomeDoUser.get(b.created_by) ?? null,
+    createdBy: b.created_by,
     editadaEm: b.editada_em,
     editadaPor: b.editada_por ? nomeDoUser.get(b.editada_por) ?? null : null,
   }));
