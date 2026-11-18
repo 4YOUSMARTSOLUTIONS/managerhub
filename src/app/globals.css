@@ -1995,7 +1995,7 @@ a.tab {
   align-items: start;
 }
 @media (min-width: 1100px) {
-  .mh-artigo-layout { grid-template-columns: minmax(0, 860px) 220px; }
+  .mh-artigo-layout { grid-template-columns: minmax(0, 1040px) 220px; }
 }
 .mh-artigo-indice {
   position: sticky;
@@ -2013,7 +2013,10 @@ a.tab {
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--mh-text-3); margin-bottom: 0.35rem;
 }
-.mh-artigo { color: var(--mh-text-1); font-size: 0.95rem; line-height: 1.65; max-width: 72ch; }
+.mh-artigo { color: var(--mh-text-1); font-size: 0.95rem; line-height: 1.65; }
+/* texto na largura de leitura; prints e tabelas usam a largura toda do cartão */
+.mh-artigo > p, .mh-artigo > ul, .mh-artigo > ol, .mh-artigo > h2, .mh-artigo > h3,
+.mh-artigo > h4, .mh-artigo > aside { max-width: 76ch; }
 .mh-artigo > :first-child { margin-top: 0; }
 .mh-artigo h2 {
   font-size: 1.22rem; font-weight: 700; letter-spacing: -0.01em;
@@ -2060,6 +2063,7 @@ a.tab {
 .mh-artigo-figura img {
   display: block; max-width: 100%; height: auto;
   border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--mh-shadow-e1, none);
+  cursor: zoom-in;
 }
 .mh-artigo-figura figcaption { font-size: 0.8rem; color: var(--mh-text-3); margin-top: 0.45rem; }
 .mh-artigo-sem-imagem {
