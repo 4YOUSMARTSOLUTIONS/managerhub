@@ -42,6 +42,17 @@ const nextConfig: NextConfig = {
        */
       bodySizeLimit: "25mb",
     },
+    /**
+     * Desempenho (LUIZ, 18/11/2026): voltar a uma tela vista há menos de 30 s
+     * reaproveita o que o navegador já tem, em vez de refazer tudo no servidor
+     * (o padrão do Next 16 é 0 s, sem cache). Gravações não ficam velhas: o
+     * `revalidatePath` das actions e o `router.refresh()` limpam esse cache.
+     * Dado mudado por OUTRA pessoa pode levar até 30 s para aparecer numa tela
+     * revisitada; a primeira visita sempre vem do servidor.
+     */
+    staleTimes: {
+      dynamic: 30,
+    },
   },
 
   async headers() {
