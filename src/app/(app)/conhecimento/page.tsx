@@ -1,32 +1,31 @@
 import Link from "next/link";
 import { BookOpen, Plus } from "lucide-react";
-import { requireContext } from "@/lib/tenant";
 import { exigirTelaBase } from "@/lib/module-gate";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ListaDeArtigos, type CartaoDeArtigo } from "@/components/conhecimento/ListaDeArtigos";
-import { quemVeArtigo } from "@/lib/conhecimento-servidor";
+import { podeEscreverConhecimento, quemVeArtigo } from "@/lib/conhecimento-servidor";
 import { textoParaBusca } from "@/lib/conhecimento";
 import { MODULE_BY_KEY, MODULE_GROUPS, type ModuleKey } from "@/lib/modules";
 
 /**
  * Banco de conhecimento (LUIZ, 18/11/2026): o manual de cada módulo, escrito
- * pelo dono da plataforma e igual para todas as empresas. Cada pessoa vê os
+ * pelo Proprietário e igual para todas as empresas. Cada pessoa vê os
  * artigos dos módulos que acessa.
  */
 export default async function ConhecimentoPage() {
   await exigirTelaBase("conhecimento");
-  const { isSuperAdmin } = await requireContext();
   const supabase = await createClient();
 
-  const [{ data }, ve] = await Promise.all([
+  const [{ data }, ve, escreve] = await Promise.all([
     supabase
       .from("conhecimento_artigos")
       .select("id, slug, modulo, titulo, resumo, conteudo, ordem, publicado, updated_at")
       .order("ordem")
       .order("titulo"),
     quemVeArtigo(),
+    podeEscreverConhecimento(),
   ]);
 
   const grupoDe = new Map(MODULE_GROUPS.map((g) => [g.key, g.label]));
@@ -53,7 +52,7 @@ export default async function ConhecimentoPage() {
       <PageHeader
         title="Banco de conhecimento"
         subtitle="Como funciona e como usar cada tela do portal"
-        action={isSuperAdmin ? (
+        action={escreve ? (
           <Link href="/conhecimento/novo" className="btn btn-primary btn-sm">
             <Plus size={15} /> Novo artigo
           </Link>

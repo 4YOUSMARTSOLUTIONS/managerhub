@@ -10,13 +10,16 @@ import {
 } from "@/lib/conhecimento";
 
 /**
- * Escrita do Banco de conhecimento: só o dono da plataforma (LUIZ, 18/11/2026).
- * A RLS e as políticas do bucket conferem de novo; a checagem aqui é para a
- * mensagem sair em português antes de qualquer ida ao banco.
+ * Escrita do Banco de conhecimento: o perfil Proprietário (LUIZ, 18/11/2026) e
+ * o dono da plataforma. A RLS e as políticas do bucket conferem de novo
+ * (`pode_escrever_conhecimento`); a checagem aqui é para a mensagem sair em
+ * português antes de qualquer ida ao banco.
  */
-async function soDonoDaPlataforma() {
+async function soQuemEscreve() {
   const ctx = await actionContext();
-  if (!(await getIsSuperAdmin())) throw new Error("Só o proprietário da plataforma edita o Banco de conhecimento.");
+  if (ctx.role !== "owner" && !(await getIsSuperAdmin())) {
+    throw new Error("Só o proprietário edita o Banco de conhecimento.");
+  }
   return ctx;
 }
 
@@ -33,7 +36,7 @@ export async function salvarArtigo(input: {
   publicado: boolean;
 }): Promise<{ error?: string; id?: string; slug?: string }> {
   try {
-    const { supabase } = await soDonoDaPlataforma();
+    const { supabase } = await soQuemEscreve();
     const titulo = input.titulo.trim();
     const slug = input.slug.trim();
     if (!titulo) return { error: "Informe o título." };
@@ -71,7 +74,7 @@ export async function salvarArtigo(input: {
 
 export async function apagarArtigo(id: string): Promise<{ error?: string }> {
   try {
-    const { supabase } = await soDonoDaPlataforma();
+    const { supabase } = await soQuemEscreve();
     const { data, error } = await supabase.from("conhecimento_artigos").delete().eq("id", id).select("conteudo").maybeSingle();
     if (error) return { error: error.message };
     if (!data) return { error: "Artigo não encontrado." };
@@ -85,7 +88,7 @@ export async function apagarArtigo(id: string): Promise<{ error?: string }> {
 /** Sobe um print para o artigo e devolve o arquivo e o link para a prévia. */
 export async function enviarImagemConhecimento(formData: FormData): Promise<{ error?: string; arquivo?: string; url?: string }> {
   try {
-    const { supabase } = await soDonoDaPlataforma();
+    const { supabase } = await soQuemEscreve();
     const file = formData.get("file");
     if (!(file instanceof File)) return { error: "Escolha a imagem." };
     const recusa = recusaDeUpload(file, TAMANHO_IMAGEM_CONHECIMENTO, MIMES_IMAGEM_CONHECIMENTO);

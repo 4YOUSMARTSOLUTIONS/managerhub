@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink, Pencil } from "lucide-react";
-import { requireContext } from "@/lib/tenant";
 import { exigirTelaBase } from "@/lib/module-gate";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Markdown } from "@/components/conhecimento/Markdown";
-import { assinarImagens, quemVeArtigo } from "@/lib/conhecimento-servidor";
+import { assinarImagens, podeEscreverConhecimento, quemVeArtigo } from "@/lib/conhecimento-servidor";
 import { imagensDoConteudo, sumario } from "@/lib/conhecimento";
 import { MODULE_BY_KEY, type ModuleKey } from "@/lib/modules";
 import { formatDate } from "@/lib/format";
@@ -15,16 +14,16 @@ import { formatDate } from "@/lib/format";
 export default async function ArtigoPage({ params }: { params: Promise<{ slug: string }> }) {
   await exigirTelaBase("conhecimento");
   const { slug } = await params;
-  const { isSuperAdmin } = await requireContext();
   const supabase = await createClient();
 
-  const [{ data: artigo }, ve] = await Promise.all([
+  const [{ data: artigo }, ve, escreve] = await Promise.all([
     supabase
       .from("conhecimento_artigos")
       .select("id, slug, modulo, titulo, resumo, conteudo, publicado, updated_at")
       .eq("slug", slug)
       .maybeSingle(),
     quemVeArtigo(),
+    podeEscreverConhecimento(),
   ]);
   // manual de tela que a pessoa não usa não existe para ela
   if (!artigo || !ve(artigo.modulo)) notFound();
@@ -48,7 +47,7 @@ export default async function ArtigoPage({ params }: { params: Promise<{ slug: s
                 <ExternalLink size={15} /> Abrir {modulo.label}
               </Link>
             )}
-            {isSuperAdmin && (
+            {escreve && (
               <Link href={`/conhecimento/${artigo.slug}/editar`} className="btn btn-primary btn-sm">
                 <Pencil size={15} /> Editar
               </Link>
