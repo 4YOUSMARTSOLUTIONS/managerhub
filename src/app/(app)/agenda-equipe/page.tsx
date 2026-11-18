@@ -6,6 +6,6 @@ export default async function AgendaEquipePage() {
   const gate = await moduleGate("agenda_equipe");
   if (gate) return gate;
 
-  const data = await loadAgendaData();
+  const data = await loadAgendaData("equipe");
   return <AgendaManager section="equipe" {...data} />;
 }

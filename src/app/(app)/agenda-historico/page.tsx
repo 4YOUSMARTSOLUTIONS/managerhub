@@ -6,6 +6,6 @@ export default async function AgendaHistoricoPage() {
   const gate = await moduleGate("agenda_historico");
   if (gate) return gate;
 
-  const data = await loadAgendaData();
+  const data = await loadAgendaData("historico");
   return <AgendaManager section="historico" {...data} />;
 }

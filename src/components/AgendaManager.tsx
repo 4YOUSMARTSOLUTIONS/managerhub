@@ -52,6 +52,8 @@ export function AgendaManager(props: {
   checklistRuns: ChecklistRunLite[];
   holidays: { day: string; name: string }[];
   logsComAnexoOuComentario?: string[];
+  /** de quem é o diário em tela (`?de=`), já conferido no servidor */
+  diarioDe?: string;
 }) {
   const section: AgendaSection = props.section ?? "diario";
   const { currentUserId, isAdmin, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, plannerTasks, holidays } = props;
@@ -70,7 +72,20 @@ export function AgendaManager(props: {
   // Diário de bordo de outra pessoa. Começa sempre no próprio usuário; a lista de
   // quem pode ser escolhido repete a regra que o banco já aplica em
   // agenda_can_view: owner/admin alcançam a empresa, gestor alcança a cadeia dele.
-  const [subject, setSubject] = useState(currentUserId);
+  //
+  // A pessoa vem da URL (`?de=`): o servidor manda só os registros dela, e não
+  // os da empresa ou da equipe inteira (desempenho, LUIZ 18/11/2026). Trocar no
+  // seletor navega; até a pessoa nova chegar, a tela anterior fica, esmaecida, e
+  // o seletor já mostra a escolha.
+  const subject = props.diarioDe ?? currentUserId;
+  const [trocandoDiario, iniciarTrocaDiario] = useTransition();
+  const [diarioEscolhido, setDiarioEscolhido] = useState<string | null>(null);
+  const trocarDiario = (id: string) => {
+    setDiarioEscolhido(id);
+    iniciarTrocaDiario(() => {
+      router.replace(id === currentUserId ? "/agenda" : `/agenda?de=${id}`, { scroll: false });
+    });
+  };
 
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<AgendaFull | null>(null);
@@ -660,8 +675,8 @@ export function AgendaManager(props: {
       <span className="soft" style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}>Diário de:</span>
       <select
         className="select"
-        value={subjectId}
-        onChange={(e) => setSubject(e.target.value)}
+        value={trocandoDiario && diarioEscolhido ? diarioEscolhido : subjectId}
+        onChange={(e) => trocarDiario(e.target.value)}
         style={{ width: "auto", maxWidth: 260 }}
         title="Escolha de quem é o diário de bordo em tela"
       >
@@ -692,7 +707,11 @@ export function AgendaManager(props: {
           )
           : undefined}
       />
-      {section === "diario" && <Tabs tabs={diarioTabs} />}
+      {section === "diario" && (
+        <div style={{ opacity: trocandoDiario ? 0.55 : 1, transition: "opacity 0.15s" }} aria-busy={trocandoDiario}>
+          <Tabs tabs={diarioTabs} />
+        </div>
+      )}
       {section === "agendas" && agendasTab}
       {section === "equipe" && teamTab}
       {section === "historico" && historyTab}
