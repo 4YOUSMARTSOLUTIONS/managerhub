@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle, Ban, CalendarPlus, Check, Download, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
 import { DetailSection, Field, FieldGrid } from "@/components/ui/Field";
 import { DetailModal } from "@/components/ui/DetailModal";
@@ -34,11 +35,14 @@ import {
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
 import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
 import { nomeParaBaixar, rotuloTipoDocumento } from "@/lib/absenteismo-documento";
-import { ImportarHistoricoAbsenteismo } from "@/components/ImportarHistoricoAbsenteismo";
-import { ImportarComunicadosAbsenteismo } from "@/components/ImportarComunicadosAbsenteismo";
 // só o tipo: o módulo é de servidor, e "use server" não pode reexportar tipo (quebra o arquivo de actions inteiro)
 import type { AtestadoLidoPorIA } from "@/lib/atestado-ia";
 import type { Enums } from "@/types/database";
+
+// Janelas que só existem quando alguém as abre: o código delas sai do pacote da
+// tela e vem sob demanda, no primeiro clique (desempenho, LUIZ 18/11/2026).
+const ImportarHistoricoAbsenteismo = dynamic(() => import("@/components/ImportarHistoricoAbsenteismo").then((m) => m.ImportarHistoricoAbsenteismo));
+const ImportarComunicadosAbsenteismo = dynamic(() => import("@/components/ImportarComunicadosAbsenteismo").then((m) => m.ImportarComunicadosAbsenteismo));
 
 export type AbsenteismoRow = {
   id: string;
@@ -842,11 +846,13 @@ export function AbsenteismosManager({
       {podeDecidir && (
         <RelatorioAbsenteismoDialog unidades={unidades} aberto={relatorioAberto} onFechar={() => setRelatorioAberto(false)} />
       )}
-      {podeImportarHistorico && (
-        <ImportarHistoricoAbsenteismo aberto={importarAberto} onFechar={() => setImportarAberto(false)} />
+      {/* montadas só abertas: as duas já zeram o próprio estado ao fechar, e
+          assim o código delas só desce quando alguém abre */}
+      {podeImportarHistorico && importarAberto && (
+        <ImportarHistoricoAbsenteismo aberto onFechar={() => setImportarAberto(false)} />
       )}
-      {podeImportarHistorico && (
-        <ImportarComunicadosAbsenteismo aberto={importarComunicados} onFechar={() => setImportarComunicados(false)} />
+      {podeImportarHistorico && importarComunicados && (
+        <ImportarComunicadosAbsenteismo aberto onFechar={() => setImportarComunicados(false)} />
       )}
 
       {erro && !novo && !confirmando && !aberto && (

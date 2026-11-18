@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   Ban, CalendarPlus, CalendarRange, Check, ChevronRight, FileSpreadsheet, Pencil, Plane, Send, Settings, Trash2, Undo2, Upload,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
 import { Dropdown, ItemDeMenu } from "@/components/ui/Dropdown";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -17,10 +18,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ExportButton } from "@/components/ui/ExportButton";
 import { confirmDialog } from "@/components/ui/confirm";
 import type { Person } from "@/components/PeoplePicker";
-import { FeriasSolicitarDialog } from "@/components/FeriasSolicitarDialog";
-import { FeriasImportarFolhaDialog } from "@/components/FeriasImportarFolhaDialog";
 import { FeriasCalendario } from "@/components/FeriasCalendario";
-import { FeriasLancarPlanilhaDialog } from "@/components/FeriasLancarPlanilhaDialog";
 import { FeriasProgramacao } from "@/components/FeriasProgramacao";
 import { FeriasTimeline, type TimelineLinha } from "@/components/FeriasTimeline";
 import {
@@ -43,6 +41,12 @@ import {
   type ContextoEfetivacao,
 } from "@/lib/actions/ferias";
 import type { Enums } from "@/types/database";
+
+// Janelas que só existem quando alguém as abre: o código delas sai do pacote da
+// tela e vem sob demanda, no primeiro clique (desempenho, LUIZ 18/11/2026).
+const FeriasSolicitarDialog = dynamic(() => import("@/components/FeriasSolicitarDialog").then((m) => m.FeriasSolicitarDialog));
+const FeriasImportarFolhaDialog = dynamic(() => import("@/components/FeriasImportarFolhaDialog").then((m) => m.FeriasImportarFolhaDialog));
+const FeriasLancarPlanilhaDialog = dynamic(() => import("@/components/FeriasLancarPlanilhaDialog").then((m) => m.FeriasLancarPlanilhaDialog));
 
 /** o retorno de `ferias_painel` (o escopo já vem recortado pela alçada) */
 export type FeriasPainel = {
