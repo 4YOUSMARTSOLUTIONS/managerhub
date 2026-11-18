@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 import { COOKIE_LIMITE, COOKIE_USO, FOLGA_DO_SERVIDOR_S, horaDoLogin } from "@/lib/sessao";
+import { CABECALHO_CAMINHO } from "@/lib/destino-antecipado";
 
 // `/esqueci-senha` e `/redefinir-senha` entram aqui porque quem chega nelas,
 // por definição, não consegue entrar no sistema. `/instalar` é o link que o RH
@@ -18,8 +19,22 @@ const PUBLIC_PATHS = ["/login", "/auth", "/esqueci-senha", "/redefinir-senha", "
  */
 const LIVRES_DA_TROCA = ["/trocar-senha", "/suspenso", "/auth", "/redefinir-senha", "/instalar"];
 
+/**
+ * Segue adiante levando o caminho pedido ao layout autenticado, que decide ali
+ * os redirecionamentos previsíveis antes do streaming (ver destino-antecipado.ts).
+ *
+ * Os cabeçalhos são copiados NA HORA, e não uma vez no começo: o `setAll`
+ * abaixo regrava os cookies da sessão renovada dentro do próprio `request`, e
+ * uma cópia antiga mandaria o token velho para as telas.
+ */
+function seguir(request: NextRequest) {
+  const headers = new Headers(request.headers);
+  headers.set(CABECALHO_CAMINHO, request.nextUrl.pathname);
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  let response = seguir(request);
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,7 +48,7 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
-          response = NextResponse.next({ request });
+          response = seguir(request);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );

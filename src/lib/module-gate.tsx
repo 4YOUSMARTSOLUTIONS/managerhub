@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getModuleAccess } from "@/lib/module-access";
-import { MODULE_BY_KEY, modulesInGroup, type GroupKey, type ModuleKey } from "@/lib/modules";
+import { MODULE_BY_KEY, type GroupKey, type ModuleKey } from "@/lib/modules";
+import { primeiroVisivel } from "@/lib/destino-antecipado";
 import { requireContext } from "@/lib/tenant";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ComingSoon } from "@/components/ui/ComingSoon";
@@ -34,8 +35,8 @@ export async function exigirTelaBase(key: ModuleKey): Promise<void> {
 
 export async function redirectToFirstVisible(group: GroupKey): Promise<never> {
   const { state } = await getModuleAccess();
-  const first = modulesInGroup(group).find((m) => state[m.key] !== "hidden");
-  redirect(first?.href ?? "/dashboard");
+  // a mesma escolha que o layout faz antes, na carga fria (destino-antecipado.ts)
+  redirect(primeiroVisivel(group, state));
 }
 
 export async function moduleGate(key: ModuleKey): Promise<React.ReactNode | null> {

@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireContext } from "@/lib/tenant";
@@ -11,7 +12,8 @@ import { AppShell } from "@/components/AppShell";
 import { SessaoInatividade } from "@/components/SessaoInatividade";
 import { EnvioDasBlitzGuardadas } from "@/components/BlitzGuardadas";
 import { getMinhaInatividade } from "@/lib/sessao-servidor";
-import { MODULES, type ModuleKey, type ModuleState } from "@/lib/modules";
+import { MODULES, permitidoPeloPapel, type ModuleKey, type ModuleState } from "@/lib/modules";
+import { CABECALHO_CAMINHO, destinoAntecipado } from "@/lib/destino-antecipado";
 
 // moduleState só-core (usado apenas no shell reduzido, quando não há empresa)
 const CORE_ONLY_STATE = Object.fromEntries(
@@ -123,6 +125,20 @@ export default async function AppLayout({
     getMinhaInatividade(ctx.tenant.id),
     getConversas().catch(() => []),
   ]);
+
+  /**
+   * Redirecionamento previsível (módulo escondido, índice de grupo, início de
+   * quem não vê o Dashboard) sai AQUI, antes do AppShell: daqui o `redirect()`
+   * ainda é um 307. Na página, já dentro do Suspense do shell, viraria meta
+   * refresh e recarga completa no meio da hidratação (destino-antecipado.ts).
+   * As páginas mantêm as próprias guardas; isto só chega antes.
+   */
+  const caminho = (await headers()).get(CABECALHO_CAMINHO);
+  const destino = caminho
+    ? destinoAntecipado(caminho, moduleState, (m) =>
+        permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isSuperAdmin: ctx.isSuperAdmin }))
+    : null;
+  if (destino) redirect(destino);
 
   /**
    * O chat inteiro (presença, tempo real e o balão do canto) vive no shell, e
