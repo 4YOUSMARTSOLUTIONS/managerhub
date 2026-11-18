@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
+import { AbasPorLink } from "@/components/ui/AbasPorLink";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormModal } from "@/components/ui/FormModal";
@@ -127,30 +128,58 @@ export default async function SettingsPage({
   /** Importar é escrita; exportar é leitura. Quem só lê fica com a segunda. */
   const seEdita = (node: React.ReactNode) => (canEdit ? node : null);
 
+  // Uma aba por visita (desempenho, LUIZ 18/11/2026).
+  //
+  // A tela montava as 13 abas a cada visita para mostrar uma: 55 consultas e
+  // 2,6 MB baixados, com qualquer aba aberta. Agora cada aba de topo é um link
+  // (`?aba=...`, ver AbasPorLink) e só as consultas da aba aberta saem. As
+  // subabas continuam trocando na hora, sem ir ao servidor.
+  //
+  // A ordem aqui é a da barra (a primeira visível é a padrão) e TEM de bater
+  // com a lista `tabs` lá embaixo, que monta o conteúdo.
+  //
+  // O RH não é um administrador com menos botões: é um funcionário com uma
+  // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
+  // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as
+  // abas que SÃO o departamento pessoal.
+  const ABAS = [
+    "empresa", "estrutura", "usuarios", "sdpo", "chamados", "rv", "feedbacks",
+    "punicoes", "absenteismos", "ferias", "seguranca", "salas", "feriados",
+  ];
+  const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos", "ferias"]);
+  const abasDaPessoa = isHr && !isGerencial ? ABAS.filter((id) => DP_TABS.has(id)) : ABAS;
+  const abaAtiva = aba && abasDaPessoa.includes(aba) ? aba : abasDaPessoa[0];
+  /** a consulta só sai quando uma das abas que a usam está aberta */
+  const em = (...ids: string[]) => ids.includes(abaAtiva);
+  // o que fica no lugar da consulta que não sai: `data` nulo, que as abas já
+  // tratam como lista vazia (`?? []`)
+  const nada = Promise.resolve({ data: null, count: null });
+
   const supabase = await createClient();
   // A aba de Absenteísmos precisa saber se a integração de e-mail existe, para
   // dizer que nenhum comunicado sairá em vez de deixar o silêncio parecer falha.
   // Sai junto com o resto, sem onda própria.
-  const flagsP = getPlatformIntegrationFlags();
+  const flagsP = em("absenteismos") ? getPlatformIntegrationFlags() : Promise.resolve(null);
   // acesso às telas (Colaboradores > Acesso às telas); falha não derruba a página
-  const acessoP = lerRegrasDeAcesso(supabase, tenant.id).catch((e: unknown) => {
+  const acessoP = !em("usuarios") ? Promise.resolve(null) : lerRegrasDeAcesso(supabase, tenant.id).catch((e: unknown) => {
     console.error("[acesso] regras", e instanceof Error ? e.message : e);
     return null;
   });
   // quem cada regra do comunicado de absenteísmo alcança hoje (só o DP vê a lista)
-  const alcanceP = canEditDP
+  const alcanceP = canEditDP && em("absenteismos")
     ? supabase.rpc("absenteismo_alcance_das_regras", { p_tenant: tenant.id }).then((r) => {
         if (r.error) console.error("[absenteismo] alcance das regras", r.error.message);
         return r.data ?? [];
       })
     : Promise.resolve([]);
-  const sessaoP = lerRegrasDeSessao(supabase, tenant.id).catch((e: unknown) => {
+  const sessaoP = !em("usuarios") ? Promise.resolve(null) : lerRegrasDeSessao(supabase, tenant.id).catch((e: unknown) => {
     console.error("[sessao] regras", e instanceof Error ? e.message : e);
     return null;
   });
-  // Tudo o que a tela precisa numa rodada só. Antes eram 6 ondas em sequência, e
-  // como nenhuma dependia da anterior, a espera era pura soma de latência: com o
-  // banco em São Paulo, cada onda custava um ida e volta que não precisava existir.
+  // Tudo o que a aba aberta precisa numa rodada só. Antes eram 6 ondas em
+  // sequência, e como nenhuma dependia da anterior, a espera era pura soma de
+  // latência: com o banco em São Paulo, cada onda custava um ida e volta que não
+  // precisava existir. Cada consulta diz em quais abas é usada.
   const [
     { data: memberships }, { data: units }, { data: departments },
     { data: subdepartments }, { data: positions }, { data: levels }, { data: hierarchies }, { data: rooms }, { data: holidays },
@@ -167,141 +196,151 @@ export default async function SettingsPage({
     { data: blitzMotivosData }, { data: veiculosData },
     { data: feriasBloqueadosData }, { data: situacoesData }, { data: feriasConfigData },
     equipeDoGestor,
+    { count: cidTotal }, { data: mgrSectors }, { data: blitzForaData }, { data: blitzExcData },
   ] = await Promise.all([
-    fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")),
-    supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("departments").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("subdepartments").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name"),
+    em("estrutura", "usuarios", "chamados", "rv", "punicoes", "ferias", "seguranca") ? fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")) : nada,
+    em("empresa", "usuarios", "rv", "punicoes", "ferias", "absenteismos", "seguranca") ? supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("estrutura", "usuarios", "feedbacks") ? supabase.from("departments").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("estrutura", "usuarios") ? supabase.from("subdepartments").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("estrutura", "usuarios", "rv", "feedbacks", "absenteismos", "seguranca") ? supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("estrutura", "usuarios") ? supabase.from("position_levels").select("*").eq("tenant_id", tenant.id).order("name") : nada,
     // ordena por `rank`, nao por nome: hierarquia tem ordem propria, e
     // alfabetica poria "Analista" acima de "Diretoria"
-    supabase.from("hierarchy_levels").select("*").eq("tenant_id", tenant.id).order("rank").order("name"),
-    supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("holidays").select("*").eq("tenant_id", tenant.id).order("day"),
-    supabase.from("sdpo_programas").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_pilares").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_secoes").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_blocos").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("sdpo_itens").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_kpis").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("action_tools").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("ticket_sectors").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("ticket_categories").select("*").eq("tenant_id", tenant.id).order("name"),
-    supabase.from("ticket_slas").select("*").eq("tenant_id", tenant.id),
-    supabase.from("individual_rv_config").select("id, scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id).order("effective_from", { ascending: false }),
-    supabase.from("feedback_competencies").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("feedback_cadence_rules").select("id, department_id, position_id, cadence_days").eq("tenant_id", tenant.id),
-    supabase.rpc("catalog_usage", { p_tenant: tenant.id }),
+    em("estrutura", "usuarios", "absenteismos", "ferias") ? supabase.from("hierarchy_levels").select("*").eq("tenant_id", tenant.id).order("rank").order("name") : nada,
+    em("salas") ? supabase.from("rooms").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("feriados") ? supabase.from("holidays").select("*").eq("tenant_id", tenant.id).order("day") : nada,
+    em("sdpo", "seguranca") ? supabase.from("sdpo_programas").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("sdpo", "seguranca") ? supabase.from("sdpo_pilares").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("sdpo", "seguranca") ? supabase.from("sdpo_secoes").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("sdpo", "seguranca") ? supabase.from("sdpo_blocos").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("sdpo", "seguranca") ? supabase.from("sdpo_itens").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("sdpo") ? supabase.from("action_kpis").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("sdpo") ? supabase.from("action_tools").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("chamados") ? supabase.from("ticket_sectors").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("chamados") ? supabase.from("ticket_categories").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("chamados") ? supabase.from("ticket_slas").select("*").eq("tenant_id", tenant.id) : nada,
+    em("rv") ? supabase.from("individual_rv_config").select("id, scope, position_id, user_id, effective_from, value").eq("tenant_id", tenant.id).order("effective_from", { ascending: false }) : nada,
+    em("feedbacks") ? supabase.from("feedback_competencies").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("feedbacks") ? supabase.from("feedback_cadence_rules").select("id, department_id, position_id, cadence_days").eq("tenant_id", tenant.id) : nada,
+    em("estrutura", "sdpo", "chamados", "feedbacks") ? supabase.rpc("catalog_usage", { p_tenant: tenant.id }) : nada,
     // RLS já limita ao tenant — evita .in() com centenas de ids (estoura a URL do PostgREST)
-    fetchAll(() => supabase.from("profiles").select("id, full_name, email").order("id")),
+    em("usuarios", "chamados", "rv", "punicoes", "ferias", "seguranca") ? fetchAll(() => supabase.from("profiles").select("id, full_name, email").order("id")) : nada,
     // CPF, telefone, nascimento e sexo saíram do alcance da chave pública: a RLS
     // libera a LINHA do colega e não tem granularidade de coluna, então qualquer
     // funcionário lia a base inteira pelo PostgREST. Vêm por RPC: a da empresa
     // (owner/admin/manager/hr) ou, para o Gestor, a da própria equipe.
-    isGestor
-      ? supabase.rpc("equipe_dados_pessoais", { p_tenant: tenant.id })
-      : supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
-    fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")),
+    !em("usuarios")
+      ? nada
+      : isGestor
+        ? supabase.rpc("equipe_dados_pessoais", { p_tenant: tenant.id })
+        : supabase.rpc("tenant_dados_pessoais", { p_tenant: tenant.id }),
+    em("usuarios", "rv", "punicoes", "ferias", "seguranca") ? fetchAll(() => supabase.from("membership_units").select("membership_id, unit_id").order("membership_id").order("unit_id")) : nada,
     // contratos encerrados: as importações aceitam lançar histórico pela
     // matrícula antiga, e a PRÉVIA precisa reconhecê-la igual ao servidor
-    supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenant.id),
+    em("usuarios", "rv", "punicoes", "ferias") ? supabase.from("employee_contracts").select("user_id, employee_code").eq("tenant_id", tenant.id) : nada,
     // férias e afastamentos: a RLS é owner/admin, e esta tela já é. fetchAll:
     // são várias por pessoa e crescem com o tempo; o id desempata a ordem
-    fetchAll(() => supabase
+    em("usuarios", "ferias") ? fetchAll(() => supabase
       .from("employee_absences")
       .select("id, user_id, kind, start_date, end_date, discounts_rv, note, motivo")
       .eq("tenant_id", tenant.id)
       .order("start_date", { ascending: false })
-      .order("id")),
+      .order("id")) : nada,
     // Redutores da RV. Catálogo e regras são configuração (qualquer membro lê);
     // a punição em si é disciplinar, e a RLS é owner/admin/manager.
-    supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name"),
+    em("rv", "punicoes") ? supabase.from("sanction_types").select("id, name, active").eq("tenant_id", tenant.id).order("sort").order("name") : nada,
     // catálogo de infrações: o que a pessoa fez, com a gravidade que o
     // regulamento define. Leitura é de qualquer membro (o gestor precisa dele
     // para lançar), escrita é do departamento pessoal.
-    supabase
+    em("punicoes") ? supabase
       .from("infraction_types")
       .select("id, code, name, description, severity, active")
       .eq("tenant_id", tenant.id)
-      .order("sort").order("code"),
-    fetchAll(() => supabase
+      .order("sort").order("code") : nada,
+    em("punicoes") ? fetchAll(() => supabase
       .from("employee_sanctions")
       .select("id, user_id, sanction_type_id, occurred_on, note")
       .eq("tenant_id", tenant.id)
       .order("occurred_on", { ascending: false })
-      .order("id")),
-    supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id, active").eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("rv_reducer_bands").select("id, rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd"),
+      .order("id")) : nada,
+    em("rv", "punicoes", "absenteismos") ? supabase.from("rv_reducer_rules").select("id, name, source, absence_kind, absence_kinds, sanction_type_id, active").eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("rv", "punicoes", "absenteismos") ? supabase.from("rv_reducer_bands").select("id, rule_id, min_qtd, max_qtd, reduction_pct").eq("tenant_id", tenant.id).order("min_qtd") : nada,
     // quais punições nasceram de um lançamento aprovado: essas não se editam nem
     // se excluem por aqui, para o processo e o fato não passarem a divergir
-    supabase.from("punicao_lancamentos").select("sanction_id").eq("tenant_id", tenant.id).not("sanction_id", "is", null),
-    supabase
+    em("punicoes") ? supabase.from("punicao_lancamentos").select("sanction_id").eq("tenant_id", tenant.id).not("sanction_id", "is", null) : nada,
+    em("absenteismos") ? supabase
       .from("absence_types")
       .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, counts_as_absenteeism, active")
       .eq("tenant_id", tenant.id)
-      .order("sort").order("name"),
+      .order("sort").order("name") : nada,
     // a lista de destinatários é do DP: a policy é `owner/admin/hr`, e para o
     // Gerencial esta consulta volta vazia em vez de erro
-    supabase
+    em("absenteismos") ? supabase
       .from("absenteismo_email_recipients")
       .select("id, tipo, email, name, hierarchy_level_id, alcance, position_id, unit_id, active")
       .eq("tenant_id", tenant.id)
-      .order("created_at"),
+      .order("created_at") : nada,
     // quais ausências nasceram de um lançamento aprovado: essas não se editam
     // nem se excluem por aqui, para o processo e o fato não divergirem
-    supabase.from("absenteismo_lancamentos").select("absence_id").eq("tenant_id", tenant.id).not("absence_id", "is", null),
+    em("usuarios", "ferias") ? supabase.from("absenteismo_lancamentos").select("absence_id").eq("tenant_id", tenant.id).not("absence_id", "is", null) : nada,
     // Segurança do trabalho: os três catálogos do relato e a equipe que tria.
     // Leitura é de qualquer membro (o formulário precisa deles), escrita é
     // owner/admin — o RH não configura segurança.
-    supabase
+    em("seguranca") ? supabase
       .from("seg_tipos_relato")
       .select("id, name, natureza, description, image_path, active")
       .eq("tenant_id", tenant.id)
-      .order("sort").order("name"),
-    supabase
+      .order("sort").order("name") : nada,
+    em("seguranca") ? supabase
       .from("seg_locais")
       .select("id, name, description, image_path, active")
       .eq("tenant_id", tenant.id)
-      .order("sort").order("name"),
-    supabase
+      .order("sort").order("name") : nada,
+    em("seguranca") ? supabase
       .from("seg_areas")
       .select("id, name, local_id, description, image_path, active")
       .eq("tenant_id", tenant.id)
-      .order("sort").order("name"),
-    supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id),
+      .order("sort").order("name") : nada,
+    em("seguranca") ? supabase.from("seg_equipe").select("user_id").eq("tenant_id", tenant.id) : nada,
     // a que item do Programa as ações de relato se amarram
-    supabase.from("seg_settings").select("relato_item_id, acidente_item_id").eq("tenant_id", tenant.id).maybeSingle(),
-    supabase.from("seg_causas").select("id, name, description, active")
-      .eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("seg_ocorrencias").select("id, name, description, image_path, active")
-      .eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id),
-    supabase.from("seg_ocorrencia_locais").select("ocorrencia_id, local_id").eq("tenant_id", tenant.id),
-    supabase.from("seg_ocorrencia_areas").select("ocorrencia_id, area_id").eq("tenant_id", tenant.id),
+    em("seguranca") ? supabase.from("seg_settings").select("relato_item_id, acidente_item_id").eq("tenant_id", tenant.id).maybeSingle() : nada,
+    em("seguranca") ? supabase.from("seg_causas").select("id, name, description, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("seguranca") ? supabase.from("seg_ocorrencias").select("id, name, description, image_path, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("seguranca") ? supabase.from("seg_ocorrencia_tipos").select("ocorrencia_id, tipo_id").eq("tenant_id", tenant.id) : nada,
+    em("seguranca") ? supabase.from("seg_ocorrencia_locais").select("ocorrencia_id, local_id").eq("tenant_id", tenant.id) : nada,
+    em("seguranca") ? supabase.from("seg_ocorrencia_areas").select("ocorrencia_id, area_id").eq("tenant_id", tenant.id) : nada,
     // blitz de trajeto: catálogos e o cadastro de veículos
-    supabase.from("seg_blitz_meios").select("id, name, image_path, tem_veiculo, active")
-      .eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("seg_blitz_perguntas").select("id, name, active")
-      .eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("seg_blitz_pergunta_meios").select("pergunta_id, meio_id").eq("tenant_id", tenant.id),
-    supabase.from("seg_blitz_motivos").select("id, name, active")
-      .eq("tenant_id", tenant.id).order("sort").order("name"),
-    supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, cor, active")
-      .eq("tenant_id", tenant.id).order("placa"),
+    em("seguranca") ? supabase.from("seg_blitz_meios").select("id, name, image_path, tem_veiculo, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("seguranca") ? supabase.from("seg_blitz_perguntas").select("id, name, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("seguranca") ? supabase.from("seg_blitz_pergunta_meios").select("pergunta_id, meio_id").eq("tenant_id", tenant.id) : nada,
+    em("seguranca") ? supabase.from("seg_blitz_motivos").select("id, name, active")
+      .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
+    em("seguranca") ? supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, cor, active")
+      .eq("tenant_id", tenant.id).order("placa") : nada,
     // níveis de hierarquia que não solicitam as próprias férias
-    supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id),
+    em("ferias") ? supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id) : nada,
     // situação do colaborador: o afastamento ou a licença em vigor hoje (fuso do
     // Brasil, decidido dentro da RPC)
-    supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }),
+    em("usuarios") ? supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }) : nada,
     // parâmetros do módulo Férias (sem linha = padrões)
-    supabase
+    em("ferias") ? supabase
       .from("ferias_config")
       .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo, decimo_prazo")
       .eq("tenant_id", tenant.id)
-      .maybeSingle(),
+      .maybeSingle() : nada,
     // a cadeia do Gestor (os outros perfis não usam o recorte)
-    isGestor ? minhaEquipe(supabase, tenant.id) : Promise.resolve(null),
+    isGestor && em("usuarios", "rv") ? minhaEquipe(supabase, tenant.id) : Promise.resolve(null),
+    // estas quatro eram rodadas próprias, uma depois da outra, no meio da montagem
+    // só o número, para a aba Tabela CID dizer o tamanho sem carregar 14 mil linhas
+    em("absenteismos") ? supabase.from("cid10").select("code", { count: "exact", head: true }) : nada,
+    em("chamados") ? supabase.from("ticket_manager_sectors").select("user_id, sector_id").eq("tenant_id", tenant.id) : nada,
+    // Público da blitz: funções de fora e exceções por pessoa
+    em("seguranca") ? supabase.from("seg_blitz_publico_funcoes").select("position_id").eq("tenant_id", tenant.id) : nada,
+    em("seguranca") ? supabase.from("seg_blitz_publico_pessoas").select("user_id, participa").eq("tenant_id", tenant.id) : nada,
   ]);
   const equipe = equipeDoGestor ? new Set(equipeDoGestor) : null;
   // Equipe de segurança inclui e desativa/reativa perguntas da blitz (LUIZ,
@@ -510,10 +549,6 @@ export default async function SettingsPage({
     description: i.description, severity: i.severity, active: i.active,
   }));
   const integrationFlags = await flagsP;
-  // só o número, para a aba Tabela CID dizer o tamanho sem carregar 14 mil linhas
-  const { count: cidTotal } = await supabase
-    .from("cid10")
-    .select("code", { count: "exact", head: true });
   const absenceTypeRows: TipoAbsenteismoRow[] = (absenceTypesData ?? []).map((t) => ({
     id: t.id, name: t.name, description: t.description, kind: t.kind,
     requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
@@ -1038,10 +1073,6 @@ export default async function SettingsPage({
 
   // Público da blitz: funções de fora (com quantas pessoas ativas há em cada
   // uma) e exceções por pessoa. Só leitura para o Gerencial; owner/admin gravam.
-  const [{ data: blitzForaData }, { data: blitzExcData }] = await Promise.all([
-    supabase.from("seg_blitz_publico_funcoes").select("position_id").eq("tenant_id", tenant.id),
-    supabase.from("seg_blitz_publico_pessoas").select("user_id, participa").eq("tenant_id", tenant.id),
-  ]);
   const ativosPorFuncao = new Map<string, number>();
   for (const m of mems) if (m.is_active && m.position_id) ativosPorFuncao.set(m.position_id, (ativosPorFuncao.get(m.position_id) ?? 0) + 1);
   const blitzPublicoConfig = {
@@ -1315,7 +1346,6 @@ export default async function SettingsPage({
       TICKET_SLA_UNIT[s.sla_unit] ?? "",
     ];
   });
-  const { data: mgrSectors } = await supabase.from("ticket_manager_sectors").select("user_id, sector_id").eq("tenant_id", tenant.id);
   const sectorsByManager = new Map<string, string[]>();
   for (const r of mgrSectors ?? []) { const a = sectorsByManager.get(r.user_id) ?? []; a.push(r.sector_id); sectorsByManager.set(r.user_id, a); }
   const ticketManagers = mems
@@ -1519,7 +1549,7 @@ export default async function SettingsPage({
                   cargos={(positions ?? []).filter((p) => p.active).map((p) => ({ id: p.id, name: p.name }))}
                   unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
                   canEdit={canEditDP}
-                  temChaveDeEmail={integrationFlags.hasResend}
+                  temChaveDeEmail={integrationFlags?.hasResend ?? false}
                 />
               ),
             },
@@ -1729,12 +1759,9 @@ export default async function SettingsPage({
     { id: "feriados", label: "Calendário e Feriados", content: feriadosTab },
   ];
 
-  // O RH não é um administrador com menos botões: é um funcionário com uma
-  // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
-  // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as duas
-  // abas que SÃO o departamento pessoal.
-  const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos", "ferias"]);
-  const tabsVisiveis = isHr && !isGerencial ? tabs.filter((t) => DP_TABS.has(t.id)) : tabs;
+  // a barra mostra as abas da pessoa (ver ABAS lá em cima); o conteúdo, só a aberta
+  const tabsVisiveis = tabs.filter((t) => abasDaPessoa.includes(t.id));
+  const conteudoDaAba = tabs.find((t) => t.id === abaAtiva)?.content ?? null;
 
   return (
     <div>
@@ -1764,7 +1791,9 @@ export default async function SettingsPage({
         </div>
       )}
       {/* `?aba=ferias` abre direto numa aba (o atalho do módulo Férias usa) */}
-      <Tabs tabs={tabsVisiveis} initialId={aba} />
+      <AbasPorLink abas={tabsVisiveis.map(({ id, label }) => ({ id, label }))} ativa={abaAtiva}>
+        {conteudoDaAba}
+      </AbasPorLink>
     </div>
   );
 }

@@ -19,7 +19,7 @@ export function destinoDaNotificacao(n: {
   if (n.type.startsWith("absenteismo_")) return "/absenteismos";
   if (n.type.startsWith("ferias_")) return "/ferias";
   // quem não tem e-mail cadastrado é o RH que resolve, na ficha do colaborador
-  if (n.type === "senha_sem_email") return "/configuracoes?tab=usuarios";
+  if (n.type === "senha_sem_email") return "/configuracoes?aba=usuarios";
   if (n.type.startsWith("seg_relato_")) return "/seguranca/relatos";
   if (n.type.startsWith("seg_acidente_")) return "/seguranca/acidentes";
   if (n.type.startsWith("seg_blitz_")) return "/seguranca/blitz";
