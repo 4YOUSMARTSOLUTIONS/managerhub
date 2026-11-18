@@ -96,11 +96,11 @@ export function Sidebar({
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const groupChildren = (g: GroupKey) => modulesInGroup(g).filter(visible);
 
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    for (const g of MODULE_GROUPS) if (groupChildren(g.key).some((c) => isActive(c.href))) init[g.key] = true;
-    return init;
-  });
+  // Um grupo aberto por vez (sanfona): abrir outro fecha o anterior. Começa
+  // aberto o grupo da tela atual (LUIZ, 18/11/2026).
+  const [openGroup, setOpenGroup] = useState<GroupKey | null>(
+    () => MODULE_GROUPS.find((g) => groupChildren(g.key).some((c) => isActive(c.href)))?.key ?? null,
+  );
 
   return (
     <aside className={`app-sidebar${open ? " app-sidebar-open" : ""}`}>
@@ -143,13 +143,13 @@ export function Sidebar({
           const children = groupChildren(entry.key);
           if (children.length === 0) return null;
           const active = children.some((c) => isActive(c.href));
-          const isOpen = openGroups[entry.key] ?? false;
+          const isOpen = openGroup === entry.key;
           return (
             <div key={entry.key}>
               <button
                 type="button"
                 aria-expanded={isOpen}
-                onClick={() => setOpenGroups((s) => ({ ...s, [entry.key]: !isOpen }))}
+                onClick={() => setOpenGroup(isOpen ? null : entry.key)}
                 className={`nav-item nav-group${active ? " nav-group-active" : ""}`}
               >
                 {GROUP_ICONS[entry.key]}
