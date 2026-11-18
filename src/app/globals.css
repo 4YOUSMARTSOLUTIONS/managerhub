@@ -2063,9 +2063,34 @@ a.tab {
 .mh-artigo-figura img {
   display: block; max-width: 100%; height: auto;
   border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--mh-shadow-e1, none);
-  cursor: zoom-in;
 }
 .mh-artigo-figura figcaption { font-size: 0.8rem; color: var(--mh-text-3); margin-top: 0.45rem; }
+.mh-artigo-ampliar {
+  display: block; width: 100%; padding: 0; border: none; background: none;
+  text-align: left; cursor: zoom-in;
+}
+/* a imagem ampliada no meio da tela, inteira, no tamanho que a janela comporta */
+.mh-artigo-visor {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem;
+  padding: 3.75rem 1.5rem 1.5rem;
+  background: rgba(3, 6, 14, 0.86);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.mh-artigo-visor img {
+  display: block; max-width: 100%; max-height: calc(100vh - 8.5rem);
+  width: auto; height: auto; object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px;
+  box-shadow: var(--mh-shadow-e3, none);
+}
+.mh-artigo-visor p { margin: 0; font-size: 0.85rem; color: rgba(255, 255, 255, 0.82); text-align: center; }
+.mh-artigo-visor-fechar {
+  position: absolute; top: 1rem; right: 1rem; width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.92);
+}
+.mh-artigo-visor-fechar:hover { background: rgba(255, 255, 255, 0.16); }
 .mh-artigo-sem-imagem {
   padding: 2rem; text-align: center; font-size: 0.82rem; color: var(--mh-text-3);
   border: 1px dashed var(--border); border-radius: 10px;

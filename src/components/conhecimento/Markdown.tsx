@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { AlertTriangle, Lightbulb } from "lucide-react";
 import { blocos, trechos, type Trecho } from "@/lib/conhecimento";
+import { FiguraDoArtigo } from "@/components/conhecimento/FiguraDoArtigo";
 
 /**
  * Desenha o artigo do Banco de conhecimento. Sem "use client": a página do
@@ -72,11 +73,8 @@ export function Markdown({ conteudo, imagens }: { conteudo: string; imagens: Rec
             return (
               <figure key={k} className="mh-artigo-figura">
                 {url ? (
-                  // o link é assinado e vence: abrir em outra aba mostra no tamanho real
-                  <a href={url} target="_blank" rel="noopener noreferrer" title="Abrir a imagem no tamanho real">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt={b.legenda} loading="lazy" />
-                  </a>
+                  // clique amplia no meio da tela, sem sair do artigo
+                  <FiguraDoArtigo url={url} legenda={b.legenda} />
                 ) : (
                   <div className="mh-artigo-sem-imagem">Imagem indisponível</div>
                 )}
