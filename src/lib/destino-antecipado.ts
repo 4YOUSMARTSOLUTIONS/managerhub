@@ -13,7 +13,9 @@
  *
  * A saída é decidir o destino no LAYOUT autenticado, que roda antes do
  * Suspense: lá o `redirect()` ainda vira um 307 de verdade. O layout não sabe o
- * caminho pedido, então o proxy o repassa em `CABECALHO_CAMINHO`.
+ * caminho pedido, então o proxy o repassa em `CABECALHO_CAMINHO`, e SÓ na
+ * abertura de página: na troca de tela por dentro o redirect do layout deixava
+ * a tela preta quando se vinha de fora do sistema (ver `seguir` no proxy).
  *
  * Isto é atalho, não guarda. As páginas continuam com `moduleGate`,
  * `exigirTelaBase` e `redirectToFirstVisible`, que valem na navegação suave e

@@ -20,8 +20,31 @@ const PUBLIC_PATHS = ["/login", "/auth", "/esqueci-senha", "/redefinir-senha", "
 const LIVRES_DA_TROCA = ["/trocar-senha", "/suspenso", "/auth", "/redefinir-senha", "/instalar"];
 
 /**
+ * Abertura de página (o navegador pedindo o documento), e não troca de tela
+ * por dentro do app. O Next tira do proxy o cabeçalho `RSC` que marcaria a
+ * segunda, então o sinal vem do próprio navegador: `Sec-Fetch-Dest: document`
+ * e, nos que não mandam esse, o `Accept` com HTML. O pedido interno do Next
+ * depois de uma action com `redirect()` (login, troca de senha) leva os
+ * cabeçalhos da action, sem nenhum dos dois, e cai fora como deve.
+ */
+function aberturaDePagina(request: NextRequest): boolean {
+  const destino = request.headers.get("sec-fetch-dest");
+  if (destino) return destino === "document";
+  return (request.headers.get("accept") ?? "").includes("text/html");
+}
+
+/**
  * Segue adiante levando o caminho pedido ao layout autenticado, que decide ali
  * os redirecionamentos previsíveis antes do streaming (ver destino-antecipado.ts).
+ *
+ * SÓ na abertura de página (LUIZ, 18/11/2026). Na troca de tela por dentro, o
+ * `redirect()` do layout não vira 307: vai dentro da resposta parcial, e
+ * quando a tela vem de FORA do sistema (login, troca obrigatória de senha,
+ * /instalar) o Next registra o shell como montado sem ele ter montado; a tela
+ * seguinte chega só com a página e fica tudo preto. Era o primeiro acesso do
+ * Operacional, que entra pelo /dashboard e é mandado para Férias. Sem o
+ * cabeçalho, quem redireciona é a própria página, já dentro do shell montado.
+ * O `delete` impede que um valor vindo de fora chegue ao layout.
  *
  * Os cabeçalhos são copiados NA HORA, e não uma vez no começo: o `setAll`
  * abaixo regrava os cookies da sessão renovada dentro do próprio `request`, e
@@ -29,7 +52,8 @@ const LIVRES_DA_TROCA = ["/trocar-senha", "/suspenso", "/auth", "/redefinir-senh
  */
 function seguir(request: NextRequest) {
   const headers = new Headers(request.headers);
-  headers.set(CABECALHO_CAMINHO, request.nextUrl.pathname);
+  if (aberturaDePagina(request)) headers.set(CABECALHO_CAMINHO, request.nextUrl.pathname);
+  else headers.delete(CABECALHO_CAMINHO);
   return NextResponse.next({ request: { headers } });
 }
 
