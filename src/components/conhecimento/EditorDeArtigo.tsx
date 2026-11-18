@@ -215,7 +215,7 @@ export function EditorDeArtigo({ inicial, imagens: imagensIniciais }: {
           />
           <p className="soft" style={{ fontSize: "0.74rem", margin: 0 }}>
             ## seção · ### subseção · **negrito** · _itálico_ · - lista · 1. passo · &gt; aviso · | tabela | ·
-            [texto](/caminho). Print: botão Inserir imagem, Ctrl+V ou arrastar. Troque &quot;Legenda da imagem&quot; pela legenda.
+            [texto](/caminho). Print: botão Inserir imagem, Ctrl+V ou arrastar. Troque &quot;Legenda da imagem&quot; pela legenda. Imagem tirada do texto é apagada ao salvar.
           </p>
         </div>
 

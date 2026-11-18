@@ -6,7 +6,7 @@ import { getIsSuperAdmin } from "@/lib/auth-cache";
 import { MODULE_BY_KEY, type ModuleKey } from "@/lib/modules";
 import { recusaDeUpload } from "@/lib/uploads";
 import {
-  BUCKET_CONHECIMENTO, MIMES_IMAGEM_CONHECIMENTO, SLUG_VALIDO, TAMANHO_IMAGEM_CONHECIMENTO,
+  BUCKET_CONHECIMENTO, MIMES_IMAGEM_CONHECIMENTO, SLUG_VALIDO, TAMANHO_IMAGEM_CONHECIMENTO, imagensDoConteudo,
 } from "@/lib/conhecimento";
 
 /**
@@ -24,6 +24,23 @@ async function soQuemEscreve() {
 }
 
 const erro = (e: unknown) => ({ error: e instanceof Error ? e.message : "Não foi possível concluir." });
+
+type Cliente = Awaited<ReturnType<typeof actionContext>>["supabase"];
+
+/**
+ * Imagem que saiu do texto é apagada do armazenamento (LUIZ, 18/11/2026: os
+ * prints refeitos deixavam os antigos órfãos). Só a que nenhum outro artigo
+ * usa; falha aqui não desfaz o que já foi salvo.
+ */
+async function apagarImagensQueSairam(supabase: Cliente, artigoId: string, sairam: string[]) {
+  if (!sairam.length) return;
+  const { data: outros } = await supabase.from("conhecimento_artigos").select("conteudo").neq("id", artigoId);
+  const emUso = new Set((outros ?? []).flatMap((o) => imagensDoConteudo(o.conteudo)));
+  const apagar = sairam.filter((a) => !emUso.has(a));
+  if (!apagar.length) return;
+  const { error } = await supabase.storage.from(BUCKET_CONHECIMENTO).remove(apagar);
+  if (error) console.error("[conhecimento] imagens que saíram", error.message);
+}
 
 export async function salvarArtigo(input: {
   id: string | null;
@@ -55,6 +72,11 @@ export async function salvarArtigo(input: {
       publicado: input.publicado,
     };
 
+    // as imagens de antes, para apagar as que saírem do texto
+    const antes = input.id
+      ? imagensDoConteudo((await supabase.from("conhecimento_artigos").select("conteudo").eq("id", input.id).maybeSingle()).data?.conteudo ?? "")
+      : [];
+
     const r = input.id
       ? await supabase.from("conhecimento_artigos").update(linha).eq("id", input.id).select("id, slug").maybeSingle()
       : await supabase.from("conhecimento_artigos").insert(linha).select("id, slug").maybeSingle();
@@ -63,6 +85,9 @@ export async function salvarArtigo(input: {
       return { error: r.error.message };
     }
     if (!r.data) return { error: "Artigo não encontrado." };
+
+    const agora = new Set(imagensDoConteudo(input.conteudo));
+    await apagarImagensQueSairam(supabase, r.data.id, antes.filter((a) => !agora.has(a)));
 
     revalidatePath("/conhecimento");
     revalidatePath(`/conhecimento/${r.data.slug}`);
@@ -78,6 +103,7 @@ export async function apagarArtigo(id: string): Promise<{ error?: string }> {
     const { data, error } = await supabase.from("conhecimento_artigos").delete().eq("id", id).select("conteudo").maybeSingle();
     if (error) return { error: error.message };
     if (!data) return { error: "Artigo não encontrado." };
+    await apagarImagensQueSairam(supabase, id, imagensDoConteudo(data.conteudo));
     revalidatePath("/conhecimento");
     return {};
   } catch (e) {
