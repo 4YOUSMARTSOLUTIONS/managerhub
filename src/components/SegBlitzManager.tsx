@@ -18,7 +18,7 @@ import { passaNoFiltro } from "@/components/BlitzAderencia";
 import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
-  SegBlitzDialog, type BlitzJaPassou, type BlitzMeioOpt, type BlitzPerguntaOpt, type VeiculoSugestao,
+  SegBlitzDialog, type BlitzJaPassou, type BlitzMeioOpt, type BlitzPerguntaOpt, type BlitzUltimaComNok, type VeiculoSugestao,
 } from "@/components/SegBlitzDialog";
 import { SegBlitzTratativas } from "@/components/SegBlitzTratativas";
 import type { BlitzAlerta } from "@/lib/actions/seguranca";
@@ -98,6 +98,7 @@ const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
 
 export function SegBlitzManager({
   rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null, jaPassaram,
+  ultimaComNok,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -123,6 +124,8 @@ export function SegBlitzManager({
   tenantId: string;
   /** quem já passou pela blitz neste mês (para o aviso do formulário) */
   jaPassaram?: Record<string, BlitzJaPassou>;
+  /** o que deu "não" na última blitz de cada um (para o aviso do formulário) */
+  ultimaComNok?: Record<string, BlitzUltimaComNok>;
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -540,7 +543,7 @@ export function SegBlitzManager({
       <SegBlitzDialog
         open={novo} onClose={() => setNovo(false)}
         pessoas={pessoas} meios={meios} perguntas={perguntas} motivos={motivos} veiculos={veiculos}
-        dono={dono} tenantId={tenantId} jaPassaram={jaPassaram}
+        dono={dono} tenantId={tenantId} jaPassaram={jaPassaram} ultimaComNok={ultimaComNok}
       />
     </div>
   );

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { moduleGate } from "@/lib/module-gate";
 import { SegBlitzManager } from "@/components/SegBlitzManager";
-import type { BlitzJaPassou } from "@/components/SegBlitzDialog";
+import type { BlitzJaPassou, BlitzUltimaComNok } from "@/components/SegBlitzDialog";
 import { getBlitzAlertas } from "@/lib/actions/seguranca";
 import type { BlitzAlertaAnalise, BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import { lerRegistrosDaBlitz } from "@/lib/blitz-registros";
@@ -72,13 +72,18 @@ export default async function SegurancaBlitzPage() {
   const jaPassaramP = (async () => (await podeAvaliarP).data === true
     ? (await supabase.rpc("seg_blitz_ja_passaram_no_mes")).data
     : null)();
+  // o que deu "não" na última blitz de cada um: o formulário avisa ao escolher
+  // a pessoa (LUIZ, 18/11/2026). Vem com a página para valer sem sinal
+  const ultimaComNokP = (async () => (await podeAvaliarP).data === true
+    ? (await supabase.rpc("seg_blitz_ultima_com_nok")).data
+    : null)();
 
   const [
     { data: podeAvaliar }, membros,
     { data: meios }, { data: perguntas }, { data: perguntaMeios },
     { data: motivos }, { data: veiculos },
     alertas,
-    veAEmpresa, analiseDoMes, registros, diretos, jaPassaramRes,
+    veAEmpresa, analiseDoMes, registros, diretos, jaPassaramRes, ultimaComNokRes,
   ] = await Promise.all([
     podeAvaliarP,
     getMembers(tenant.id),
@@ -100,6 +105,7 @@ export default async function SegurancaBlitzPage() {
     registrosP,
     diretosP,
     jaPassaramP,
+    ultimaComNokP,
   ]);
   const [analiseRes, alertasRes] = analiseDoMes ?? [{ data: null }, { data: null }];
   if (registros.error !== null) console.error("[blitz] registros:", registros.error);
@@ -138,10 +144,21 @@ export default async function SegurancaBlitzPage() {
       }),
   );
 
+  const ultimaComNok: Record<string, BlitzUltimaComNok> = Object.fromEntries(
+    ((ultimaComNokRes ?? []) as unknown as {
+      user_id: string; occurred_on: string; liberado: boolean; motivo: string | null;
+      nao: { pergunta_id: string | null; pergunta: string }[];
+    }[]).map((x) => [x.user_id, {
+      dia: x.occurred_on, liberado: x.liberado, motivo: x.motivo,
+      itens: x.nao.map((n) => ({ perguntaId: n.pergunta_id, pergunta: n.pergunta })),
+    }]),
+  );
+
   return (
     <div>
       <SegBlitzManager
         jaPassaram={jaPassaram}
+        ultimaComNok={ultimaComNok}
         dono={user.id}
         tenantId={tenant.id}
         rows={rows}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransiti
 import { useRouter } from "next/navigation";
 import { CircleCheck, CloudOff, Plus, TriangleAlert } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
+import { Badge } from "@/components/ui/Badge";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, type SegVeiculoCor } from "@/lib/constants";
 import { formatDate, hojeYmd, shortName } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
@@ -14,6 +15,16 @@ import {
 
 /** A última blitz do mês de um colaborador, de qualquer avaliador (só o necessário para o aviso). */
 export type BlitzJaPassou = { vezes: number; dia: string; hora: string | null };
+/**
+ * A última blitz de um colaborador, quando ela teve "não" ou bloqueio: o
+ * formulário avisa o que conferir com mais atenção (LUIZ, 18/11/2026).
+ */
+export type BlitzUltimaComNok = {
+  dia: string;
+  liberado: boolean;
+  motivo: string | null;
+  itens: { perguntaId: string | null; pergunta: string }[];
+};
 import type { Enums } from "@/types/database";
 
 export type BlitzMeioOpt = {
@@ -84,7 +95,7 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  * todas") transformaria a blitz em carimbo. O avaliador toca cada resposta.
  */
 export function SegBlitzDialog({
-  open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId, jaPassaram,
+  open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId, jaPassaram, ultimaComNok,
 }: {
   open: boolean;
   onClose: () => void;
@@ -99,6 +110,8 @@ export function SegBlitzDialog({
   veiculos: VeiculoSugestao[];
   /** quem já passou pela blitz neste mês: avisa ao escolher (LUIZ, 11/11/2026) */
   jaPassaram?: Record<string, BlitzJaPassou>;
+  /** o que deu "não" na última blitz de cada um (LUIZ, 18/11/2026) */
+  ultimaComNok?: Record<string, BlitzUltimaComNok>;
 }) {
   const hoje = hojeYmd();
   const inicioDoMes = `${hoje.slice(0, 7)}-01`;
@@ -128,6 +141,12 @@ export function SegBlitzDialog({
   // guardadas neste aparelho sem sinal, que o sistema ainda não conhece
   const guardadas = useBlitzGuardadas(dono, tenantId);
   const anterior = userId ? jaPassaram?.[userId] : undefined;
+  // a última blitz da pessoa, quando teve "não" ou bloqueio; as perguntas que
+  // deram "não" ganham a marca na verificação (pelo id; pelo texto, se a
+  // pergunta mudou de cadastro)
+  const nokAnterior = userId ? ultimaComNok?.[userId] : undefined;
+  const nokIds = new Set(nokAnterior?.itens.map((i) => i.perguntaId).filter((x): x is string => !!x));
+  const nokTextos = new Set(nokAnterior?.itens.map((i) => i.pergunta));
   const guardadasDele = userId
     ? guardadas.filter((g) => g.input.userId === userId && g.input.occurredOn >= inicioDoMes).length
     : 0;
@@ -380,6 +399,28 @@ export function SegBlitzDialog({
                   </span>
                 </p>
               )}
+              {/* a última blitz teve "não" ou bloqueio: avisa o que conferir (LUIZ, 18/11/2026) */}
+              {nokAnterior && (
+                <div role="status" style={{
+                  display: "flex", gap: "0.45rem", alignItems: "flex-start", fontSize: "0.8rem", margin: "0.45rem 0 0",
+                  background: "var(--mh-warning-soft)", padding: "0.5rem 0.7rem", borderRadius: 8,
+                }}>
+                  <TriangleAlert size={15} style={{ color: "var(--mh-warning)", flexShrink: 0, marginTop: 1 }} aria-hidden />
+                  <div style={{ minWidth: 0 }}>
+                    <strong>Atenção!</strong> Na última blitz de {shortName(pessoas.find((p) => p.id === userId)?.name)},
+                    em {formatDate(nokAnterior.dia)},{" "}
+                    {!nokAnterior.liberado && <>houve bloqueio{nokAnterior.motivo ? ` (${nokAnterior.motivo})` : ""}{nokAnterior.itens.length > 0 ? " e " : "."}</>}
+                    {nokAnterior.itens.length > 0 && (
+                      <>
+                        {nokAnterior.itens.length === 1 ? "este item ficou NOK:" : "estes itens ficaram NOK:"}
+                        <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.1rem" }}>
+                          {nokAnterior.itens.map((i) => <li key={i.perguntaId ?? i.pergunta}>{i.pergunta}</li>)}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* a data quase sempre é hoje: fica fechada até alguém precisar mudar */}
               <div className="soft" style={{ fontSize: "0.8rem", marginTop: "0.45rem", display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
                 {editarData ? (
@@ -505,7 +546,12 @@ export function SegBlitzDialog({
                         flexWrap: "wrap", border: `1px solid ${borda}`,
                       }}
                     >
-                      <span style={{ fontSize: "0.86rem", flex: "1 1 240px" }}>{q.name}</span>
+                      <span style={{ fontSize: "0.86rem", flex: "1 1 240px" }}>
+                        {q.name}
+                        {(nokIds.has(q.id) || nokTextos.has(q.name)) && (
+                          <> <Badge variant="quiet" tone="amber">NOK na última</Badge></>
+                        )}
+                      </span>
                       <span className="grade-3-no-celular" style={{ display: "inline-flex", gap: "0.35rem", flex: "1 1 220px", justifyContent: "flex-end" }}>
                         {(["sim", "nao", "na"] as Enums<"seg_blitz_resposta">[]).map((op) => {
                           const on = r === op;
