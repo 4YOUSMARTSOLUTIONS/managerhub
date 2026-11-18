@@ -41,7 +41,12 @@ export default async function MinhaEquipePage() {
   }
 
   const supabase = await createClient();
-  const equipe = await minhaEquipe(supabase, tenant.id);
+  // A cadeia e o quadro saem JUNTOS (desempenho, LUIZ 18/11/2026): o quadro não
+  // depende da cadeia, que antes era uma rodada inteira à frente dele. A cadeia
+  // só decide se a tela é a de "ninguém responde a você".
+  const equipeP = minhaEquipe(supabase, tenant.id);
+  const quadroP = lerQuadro(supabase, tenant.id);
+  const equipe = await equipeP;
 
   if (equipe.length === 0) {
     return (
@@ -57,35 +62,9 @@ export default async function MinhaEquipePage() {
 
   const setor = new Set(equipe);
 
-  // Sem `.in("user_id", equipe)` de propósito: um gestor de topo pode ter
-  // centenas de liderados, e a lista de UUIDs na URL estoura o limite do
-  // PostgREST (vira HTTP 400). A leitura da empresa é a mesma que a tela de
-  // Colaboradores já faz, e o recorte acontece aqui em memória.
-  //
-  // O hint `!memberships_user_id_fkey` é obrigatório: memberships tem DUAS
-  // chaves para profiles (user_id e manager_id) e sem ele a consulta falha.
-  // Catálogos vêm como mapas por id, e não como embed, porque `memberships` não
-  // declara essas relações no PostgREST. É o mesmo caminho que a tela de
-  // Colaboradores já usa, então não invento um segundo jeito de fazer o mesmo.
+  // a leitura do quadro e o porquê de ser a empresa inteira: ver lerQuadro
   const [{ data: vinculos }, { data: deps }, { data: subs }, { data: cargos }, { data: niveis }, { data: hierarquias }, { data: perfis }] =
-    await Promise.all([
-      // a empresa passa de 1000 vínculos: sem `fetchAll` o PostgREST corta calado
-      // e parte da equipe some da lista e do organograma
-      fetchAll(() => supabase
-        .from("memberships")
-        .select("user_id, employee_code, admission_date, is_active, manager_id, role, department_id, subdepartment_id, position_id, position_level_id, hierarchy_level_id")
-        .eq("tenant_id", tenant.id)
-        .order("user_id")),
-      supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
-      supabase.from("subdepartments").select("id, name").eq("tenant_id", tenant.id),
-      supabase.from("positions").select("id, name").eq("tenant_id", tenant.id),
-      supabase.from("position_levels").select("id, name").eq("tenant_id", tenant.id),
-      // o `rank` entra por causa do organograma: é ele que ordena os irmãos por
-      // senioridade (menor = mais alto), em vez de alfabeticamente
-      supabase.from("hierarchy_levels").select("id, name, rank").eq("tenant_id", tenant.id),
-      // só as colunas que `authenticated` tem privilégio de ler (ver AGENTS.md)
-      fetchAll(() => supabase.from("profiles").select("id, full_name, email, avatar_url").order("id")),
-    ]);
+    await quadroP;
 
   const nome = new Map((deps ?? []).map((d) => [d.id, d.name]));
   const nomeSub = new Map((subs ?? []).map((s) => [s.id, s.name]));
@@ -174,4 +153,39 @@ export default async function MinhaEquipePage() {
       <Tabs tabs={abas} />
     </div>
   );
+}
+
+/**
+ * O quadro da empresa e os catálogos que dão nome a ele.
+ *
+ * Sem `.in("user_id", equipe)` de propósito: um gestor de topo pode ter
+ * centenas de liderados, e a lista de UUIDs na URL estoura o limite do
+ * PostgREST (vira HTTP 400). A leitura da empresa é a mesma que a tela de
+ * Colaboradores já faz, e o recorte acontece na página, em memória.
+ *
+ * O hint `!memberships_user_id_fkey` é obrigatório: memberships tem DUAS
+ * chaves para profiles (user_id e manager_id) e sem ele a consulta falha.
+ * Catálogos vêm como mapas por id, e não como embed, porque `memberships` não
+ * declara essas relações no PostgREST. É o mesmo caminho que a tela de
+ * Colaboradores já usa, então não invento um segundo jeito de fazer o mesmo.
+ */
+function lerQuadro(supabase: Awaited<ReturnType<typeof createClient>>, tenantId: string) {
+  return Promise.all([
+    // a empresa passa de 1000 vínculos: sem `fetchAll` o PostgREST corta calado
+    // e parte da equipe some da lista e do organograma
+    fetchAll(() => supabase
+      .from("memberships")
+      .select("user_id, employee_code, admission_date, is_active, manager_id, role, department_id, subdepartment_id, position_id, position_level_id, hierarchy_level_id")
+      .eq("tenant_id", tenantId)
+      .order("user_id")),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenantId),
+    supabase.from("subdepartments").select("id, name").eq("tenant_id", tenantId),
+    supabase.from("positions").select("id, name").eq("tenant_id", tenantId),
+    supabase.from("position_levels").select("id, name").eq("tenant_id", tenantId),
+    // o `rank` entra por causa do organograma: é ele que ordena os irmãos por
+    // senioridade (menor = mais alto), em vez de alfabeticamente
+    supabase.from("hierarchy_levels").select("id, name, rank").eq("tenant_id", tenantId),
+    // só as colunas que `authenticated` tem privilégio de ler (ver AGENTS.md)
+    fetchAll(() => supabase.from("profiles").select("id, full_name, email, avatar_url").order("id")),
+  ]);
 }

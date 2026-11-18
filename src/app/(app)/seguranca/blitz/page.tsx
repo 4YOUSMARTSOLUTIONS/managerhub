@@ -26,13 +26,61 @@ export default async function SegurancaBlitzPage() {
 
   const unidades = effectiveUnitFilter(unitScope);
 
+  // Uma rodada só (desempenho, LUIZ 18/11/2026). Antes eram quatro em fila: o
+  // lote, depois análises e registros, depois a contagem de diretos, depois
+  // "quem já passou no mês". As três últimas dependem só de duas perguntas
+  // rápidas (é da segurança? pode avaliar?), então cada uma sai assim que a
+  // sua pergunta responde, em paralelo com o lote.
+  const podeAvaliarP = supabase.rpc("pode_avaliar_blitz", { p_tenant: tenant.id });
+  const daSegurancaP = supabase.rpc("is_safety_member", { p_tenant: tenant.id });
+
+  /**
+   * A aba Análises (indicadores e recorrência) é de quem tem alçada: gestor,
+   * gerência, administração e equipe de segurança. O avaliador da blitz (e o
+   * colaborador comum) fica só com a lista: decisão do LUIZ, 10/11/2026.
+   */
+  const temAlcadaP = daSegurancaP.then(({ data }) =>
+    role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || data === true);
+  // "Todos | Minha gestão" (LUIZ, 11/11/2026): para quem vê a empresa inteira e
+  // também tem gente embaixo. O Gestor já vê só a cadeia dele
+  const veAEmpresaP = daSegurancaP.then(({ data }) =>
+    role === "owner" || role === "admin" || role === "manager" || data === true);
+
+  // Análises do mês corrente (o filtro da tela troca o período). O público
+  // da blitz se configura em Configurações > Segurança.
+  const hojeSp = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+  const [anoAtual, mesNum] = hojeSp.split("-").map(Number);
+  const fimDoMes = `${hojeSp.slice(0, 7)}-${String(new Date(anoAtual, mesNum, 0).getDate()).padStart(2, "0")}`;
+  const argsDoMes = { p_de: `${hojeSp.slice(0, 7)}-01`, p_ate: fimDoMes, p_unit_ids: unidades };
+  const analiseDoMesP = (async () => (await temAlcadaP)
+    ? Promise.all([
+        supabase.rpc("seg_blitz_analise", argsDoMes),
+        supabase.rpc("seg_blitz_alertas_do_periodo", argsDoMes),
+      ])
+    : null)();
+  // Registros: com alçada, o mês corrente (o período das Análises busca o resto);
+  // sem alçada, tudo que a pessoa alcança. Paginado, sem o antigo corte em 500
+  const registrosP = (async () => lerRegistrosDaBlitz(
+    tenant.id, (await temAlcadaP) ? { de: argsDoMes.p_de, ate: fimDoMes, unidades } : { unidades },
+  ))();
+  const diretosP = (async () => (await veAEmpresaP)
+    ? (await supabase.from("memberships").select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id).eq("manager_id", user.id).eq("is_active", true)).count
+    : 0)();
+  // quem já passou pela blitz neste mês, de qualquer avaliador: o formulário
+  // avisa ao escolher a pessoa (LUIZ, 11/11/2026: Arthur lançado duas vezes)
+  const jaPassaramP = (async () => (await podeAvaliarP).data === true
+    ? (await supabase.rpc("seg_blitz_ja_passaram_no_mes")).data
+    : null)();
+
   const [
     { data: podeAvaliar }, membros,
     { data: meios }, { data: perguntas }, { data: perguntaMeios },
     { data: motivos }, { data: veiculos },
-    alertas, { data: daSeguranca },
+    alertas,
+    veAEmpresa, analiseDoMes, registros, diretos, jaPassaramRes,
   ] = await Promise.all([
-    supabase.rpc("pode_avaliar_blitz", { p_tenant: tenant.id }),
+    podeAvaliarP,
     getMembers(tenant.id),
     supabase.from("seg_blitz_meios").select("id, name, image_path, tem_veiculo, active")
       .eq("tenant_id", tenant.id).order("sort").order("name"),
@@ -47,43 +95,15 @@ export default async function SegurancaBlitzPage() {
       .eq("tenant_id", tenant.id).eq("active", true).order("updated_at", { ascending: false }).order("id")),
     // os alertas do usuário logado como gestor
     getBlitzAlertas(),
-    supabase.rpc("is_safety_member", { p_tenant: tenant.id }),
+    veAEmpresaP,
+    analiseDoMesP,
+    registrosP,
+    diretosP,
+    jaPassaramP,
   ]);
-  /**
-   * A aba Análises (indicadores e recorrência) é de quem tem alçada: gestor,
-   * gerência, administração e equipe de segurança. O avaliador da blitz (e o
-   * colaborador comum) fica só com a lista: decisão do LUIZ, 10/11/2026.
-   */
-  const temAlcada = role === "owner" || role === "admin" || role === "manager" || role === "team_lead" || daSeguranca === true;
-
-  // Análises do mês corrente (o filtro da tela troca o período). O público
-  // da blitz se configura em Configurações > Segurança.
-  const hojeSp = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-  const [anoAtual, mesNum] = hojeSp.split("-").map(Number);
-  const fimDoMes = `${hojeSp.slice(0, 7)}-${String(new Date(anoAtual, mesNum, 0).getDate()).padStart(2, "0")}`;
-  const argsDoMes = { p_de: `${hojeSp.slice(0, 7)}-01`, p_ate: fimDoMes, p_unit_ids: unidades };
-  const analiseDoMes = temAlcada
-    ? Promise.all([
-        supabase.rpc("seg_blitz_analise", argsDoMes),
-        supabase.rpc("seg_blitz_alertas_do_periodo", argsDoMes),
-      ])
-    : null;
-  // Registros: com alçada, o mês corrente (o período das Análises busca o resto);
-  // sem alçada, tudo que a pessoa alcança. Paginado, sem o antigo corte em 500
-  const registrosLidos = lerRegistrosDaBlitz(
-    tenant.id, temAlcada ? { de: argsDoMes.p_de, ate: fimDoMes, unidades } : { unidades },
-  );
-  const [analiseRes, alertasRes] = analiseDoMes ? await analiseDoMes : [{ data: null }, { data: null }];
-  const registros = await registrosLidos;
+  const [analiseRes, alertasRes] = analiseDoMes ?? [{ data: null }, { data: null }];
   if (registros.error !== null) console.error("[blitz] registros:", registros.error);
   const rows = registros.data ?? [];
-  // "Todos | Minha gestão" (LUIZ, 11/11/2026): para quem vê a empresa inteira e
-  // também tem gente embaixo. O Gestor já vê só a cadeia dele
-  const veAEmpresa = role === "owner" || role === "admin" || role === "manager" || daSeguranca === true;
-  const { count: diretos } = veAEmpresa
-    ? await supabase.from("memberships").select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenant.id).eq("manager_id", user.id).eq("is_active", true)
-    : { count: 0 };
   const podeEscolherGestao = veAEmpresa && (diretos ?? 0) > 0;
   const analise = analiseRes.data
     ? {
@@ -109,11 +129,6 @@ export default async function SegurancaBlitzPage() {
   const diaSp = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
   const horaSp = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 
-  // quem já passou pela blitz neste mês, de qualquer avaliador: o formulário
-  // avisa ao escolher a pessoa (LUIZ, 11/11/2026: Arthur lançado duas vezes)
-  const { data: jaPassaramRes } = podeAvaliar === true
-    ? await supabase.rpc("seg_blitz_ja_passaram_no_mes")
-    : { data: null };
   const jaPassaram: Record<string, BlitzJaPassou> = Object.fromEntries(
     ((jaPassaramRes ?? []) as unknown as { user_id: string; vezes: number; occurred_on: string; registrada_em: string }[])
       .map((x) => {
