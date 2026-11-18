@@ -174,6 +174,11 @@ export function BlitzAlertasLista({ alertas, rotuloPeriodo, chaveArquivo, situac
             {detalhe.observacao && (
               <p className="soft" style={{ margin: "0.6rem 0 0", fontSize: "0.83rem", whiteSpace: "pre-wrap" }}>{detalhe.observacao}</p>
             )}
+            {detalhe.editada && (
+              <p className="soft" style={{ margin: "0.6rem 0 0", fontSize: "0.8rem" }}>
+                A blitz foi corrigida depois do alerta; o histórico está na ficha dela, em Registros.
+              </p>
+            )}
           </DetailSection>
           <DetailSection title="Tratativa">
             <FieldGrid>

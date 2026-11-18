@@ -83,6 +83,9 @@ export function SegBlitzTratativas({ alertas }: { alertas: BlitzAlerta[] }) {
                     {a.respostas_nao.map((q, i) => <li key={i}>{q}</li>)}
                   </ul>
                 )}
+                {a.editada && !ehRecorrencia(a) && (
+                  <p className="soft" style={{ fontSize: "0.74rem", margin: "0.35rem 0 0" }}>A blitz foi corrigida depois do alerta.</p>
+                )}
                 {a.tratativa_resumo && (
                   <p style={{ fontSize: "0.8rem", margin: "0.45rem 0 0", paddingLeft: "0.6rem", borderLeft: "2px solid var(--border)" }}>
                     {a.tratativa_resumo}

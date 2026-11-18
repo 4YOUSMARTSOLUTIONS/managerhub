@@ -91,7 +91,7 @@ export default async function SegurancaBlitzPage() {
     { data: motivos }, { data: veiculos },
     alertas,
     veAEmpresa, analiseDoMes, registros, diretos, jaPassaramRes, ultimaComNokRes, educativaParaRes,
-    { data: regrasLinha },
+    { data: regrasLinha }, { data: daSeguranca },
   ] = await Promise.all([
     podeAvaliarP,
     getMembers(tenant.id),
@@ -119,6 +119,7 @@ export default async function SegurancaBlitzPage() {
     supabase.from("seg_settings")
       .select("blitz_educativa_ativa, blitz_educativa_desde, blitz_tratativa_modo, blitz_recorrencia_qtd, blitz_recorrencia_dias, blitz_bloqueio_imediato")
       .eq("tenant_id", tenant.id).maybeSingle(),
+    daSegurancaP,
   ]);
   const [analiseRes, alertasRes] = analiseDoMes ?? [{ data: null }, { data: null }];
   if (registros.error !== null) console.error("[blitz] registros:", registros.error);
@@ -174,6 +175,9 @@ export default async function SegurancaBlitzPage() {
         ultimaComNok={ultimaComNok}
         regras={regrasDaLinha(regrasLinha)}
         educativaPara={(educativaParaRes ?? []) as unknown as string[]}
+        // corrige: avaliador da blitz, equipe de segurança e administração; Gestor e
+        // Gerencial não (LUIZ, 18/11/2026). O banco confere de novo
+        podeCorrigir={isAvaliadorBlitz || role === "owner" || role === "admin" || daSeguranca === true}
         dono={user.id}
         tenantId={tenant.id}
         rows={rows}

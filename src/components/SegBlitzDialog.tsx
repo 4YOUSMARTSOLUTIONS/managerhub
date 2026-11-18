@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { CircleCheck, CloudOff, Info, Plus, TriangleAlert } from "lucide-react";
 import { PeoplePicker, type Person } from "@/components/PeoplePicker";
 import { Badge } from "@/components/ui/Badge";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_COR, SEG_VEICULO_PROPRIEDADE, type SegVeiculoCor } from "@/lib/constants";
 import { formatDate, hojeYmd, shortName } from "@/lib/format";
 import { segIconeSrc } from "@/lib/avatar";
-import { criarBlitz, type BlitzInput } from "@/lib/actions/seguranca";
+import { criarBlitz, editarBlitz, type BlitzInput } from "@/lib/actions/seguranca";
 import { REGRAS_PADRAO, abreNaHora, textoDaRecorrencia, type BlitzRegras } from "@/lib/blitz-regras";
 import {
   comLimite, guardarBlitz, novoCodigoDeBlitz, removerBlitzGuardada, useBlitzGuardadas, useConectado, type BlitzGuardada,
@@ -29,6 +30,28 @@ export type BlitzUltimaComNok = {
   itens: { perguntaId: string | null; pergunta: string }[];
 };
 import type { Enums } from "@/types/database";
+
+/**
+ * A blitz que está sendo corrigida (LUIZ, 18/11/2026): o formulário abre
+ * preenchido, sem fila do aparelho (a correção só salva com internet) e pede
+ * o motivo.
+ */
+export type BlitzEmEdicao = {
+  id: string;
+  userId: string;
+  occurredOn: string;
+  /** o dia do registro (YYYY-MM-DD): a data da blitz fica no mês dele, até ele */
+  registroDia: string;
+  meioId: string;
+  placa: string | null;
+  veiculoTipo: string | null;
+  propriedade: Enums<"seg_veiculo_propriedade"> | null;
+  cor: string | null;
+  liberado: boolean;
+  motivoBloqueioId: string | null;
+  observacao: string | null;
+  respostas: { perguntaId: string | null; resposta: Enums<"seg_blitz_resposta"> }[];
+};
 
 export type BlitzMeioOpt = {
   id: string;
@@ -56,7 +79,7 @@ export type VeiculoSugestao = {
 };
 
 /** Onde está o que falta: o erro rola a tela até lá. */
-type Secao = "colaborador" | "meio" | "veiculo" | "perguntas" | "decisao";
+type Secao = "colaborador" | "meio" | "veiculo" | "perguntas" | "decisao" | "correcao";
 
 /** O bloco de cada etapa, na ordem em que aparecem no celular. */
 const BLOCO_DA_ETAPA: Record<number, Secao> = { 1: "meio", 2: "veiculo", 3: "perguntas", 4: "decisao" };
@@ -99,7 +122,7 @@ const obrigatorio = <span style={{ color: "var(--mh-danger)" }}>*</span>;
  */
 export function SegBlitzDialog({
   open, onClose, pessoas, meios, perguntas, motivos, veiculos, dono, tenantId, jaPassaram, ultimaComNok,
-  regras = REGRAS_PADRAO, educativaPara,
+  regras = REGRAS_PADRAO, educativaPara, editando = null, onCorrigida,
 }: {
   open: boolean;
   onClose: () => void;
@@ -120,23 +143,30 @@ export function SegBlitzDialog({
   regras?: BlitzRegras;
   /** quem terá a blitz educativa: contratado a partir da data e nunca passou */
   educativaPara?: string[];
+  /** a correção de uma blitz lançada (LUIZ, 18/11/2026) */
+  editando?: BlitzEmEdicao | null;
+  onCorrigida?: () => void;
 }) {
-  const hoje = hojeYmd();
+  // na correção, a data segue a regra do lançamento: o mês do registro, até o dia dele
+  const hoje = editando ? editando.registroDia : hojeYmd();
   const inicioDoMes = `${hoje.slice(0, 7)}-01`;
-  const [userId, setUserId] = useState("");
-  const [data, setData] = useState(hoje);
-  const [editarData, setEditarData] = useState(false);
-  const [meioId, setMeioId] = useState("");
-  const [placa, setPlaca] = useState("");
-  const [tipo, setTipo] = useState("");
+  const [userId, setUserId] = useState(editando?.userId ?? "");
+  const [data, setData] = useState(editando?.occurredOn ?? hoje);
+  const [editarData, setEditarData] = useState(!!editando);
+  const [meioId, setMeioId] = useState(editando?.meioId ?? "");
+  const [placa, setPlaca] = useState(editando?.placa ?? "");
+  const [tipo, setTipo] = useState(editando?.veiculoTipo ?? "");
   // sem valor inicial: propriedade e cor são escolha de quem avalia (ou vêm da última blitz)
-  const [propriedade, setPropriedade] = useState<Enums<"seg_veiculo_propriedade"> | "">("");
-  const [cor, setCor] = useState<SegVeiculoCor | "">("");
+  const [propriedade, setPropriedade] = useState<Enums<"seg_veiculo_propriedade"> | "">(editando?.propriedade ?? "");
+  const [cor, setCor] = useState<SegVeiculoCor | "">(
+    editando?.cor && editando.cor in SEG_VEICULO_COR ? (editando.cor as SegVeiculoCor) : "");
   const [sugerido, setSugerido] = useState(false);
-  const [respostas, setRespostas] = useState<Record<string, Enums<"seg_blitz_resposta">>>({});
-  const [liberado, setLiberado] = useState<boolean | null>(null);
-  const [motivoId, setMotivoId] = useState("");
-  const [observacao, setObservacao] = useState("");
+  const [respostas, setRespostas] = useState<Record<string, Enums<"seg_blitz_resposta">>>(() =>
+    Object.fromEntries((editando?.respostas ?? []).filter((r) => r.perguntaId).map((r) => [r.perguntaId!, r.resposta])));
+  const [liberado, setLiberado] = useState<boolean | null>(editando ? editando.liberado : null);
+  const [motivoId, setMotivoId] = useState(editando?.motivoBloqueioId ?? "");
+  const [observacao, setObservacao] = useState(editando?.observacao ?? "");
+  const [motivoCorrecao, setMotivoCorrecao] = useState("");
   const [verObservacao, setVerObservacao] = useState(false);
   const [erro, setErro] = useState("");
   /** a blitz acabou de ser registrada (ou guardada sem sinal): a tela confirma e oferece a próxima */
@@ -148,19 +178,20 @@ export function SegBlitzDialog({
   // o aviso de blitz repetida no mês: as do sistema (qualquer avaliador) e as
   // guardadas neste aparelho sem sinal, que o sistema ainda não conhece
   const guardadas = useBlitzGuardadas(dono, tenantId);
-  const anterior = userId ? jaPassaram?.[userId] : undefined;
+  // os avisos ao escolher a pessoa são do lançamento; na correção, a "última blitz" seria a própria
+  const anterior = !editando && userId ? jaPassaram?.[userId] : undefined;
   // a última blitz da pessoa, quando teve "não" ou bloqueio; as perguntas que
   // deram "não" ganham a marca na verificação (pelo id; pelo texto, se a
   // pergunta mudou de cadastro)
-  const nokAnterior = userId ? ultimaComNok?.[userId] : undefined;
+  const nokAnterior = !editando && userId ? ultimaComNok?.[userId] : undefined;
   // a primeira blitz da vida de quem entrou depois da data é educativa; uma
   // guardada no aparelho para a pessoa já seria a primeira. Quem decide de
   // verdade é o banco: aqui é só para avisar
-  const educativa = !!userId && (educativaPara?.includes(userId) ?? false)
+  const educativa = !editando && !!userId && (educativaPara?.includes(userId) ?? false)
     && !guardadas.some((g) => g.input.userId === userId);
   const nokIds = new Set(nokAnterior?.itens.map((i) => i.perguntaId).filter((x): x is string => !!x));
   const nokTextos = new Set(nokAnterior?.itens.map((i) => i.pergunta));
-  const guardadasDele = userId
+  const guardadasDele = !editando && userId
     ? guardadas.filter((g) => g.input.userId === userId && g.input.occurredOn >= inicioDoMes).length
     : 0;
   const [pendente, iniciar] = useTransition();
@@ -168,15 +199,24 @@ export function SegBlitzDialog({
   const secoes = useRef<Partial<Record<Secao, HTMLDivElement | null>>>({});
   const celular = useSyncExternalStore(assinarTela, ehCelular, () => false);
   // até onde o formulário já se mostrou (no celular); só cresce, nada some
-  const [revelado, setRevelado] = useState(0);
+  const [revelado, setRevelado] = useState(editando ? 4 : 0);
 
-  const meiosAtivos = useMemo(() => meios.filter((m) => m.active), [meios]);
+  // na correção, o que a blitz já usava continua à mão mesmo se saiu do cadastro
+  const meiosAtivos = useMemo(() => meios.filter((m) => m.active || m.id === editando?.meioId), [meios, editando?.meioId]);
+  const respondidasNaBlitz = useMemo(
+    () => new Set((editando?.respostas ?? []).map((r) => r.perguntaId).filter((x): x is string => !!x)), [editando]);
   const meio = useMemo(() => meios.find((m) => m.id === meioId) ?? null, [meios, meioId]);
 
   // a cascata: pergunta sem vínculo vale para todos os meios
   const perguntasDoMeio = useMemo(
-    () => perguntas.filter((q) => q.active && (q.meioIds.length === 0 || (!!meioId && q.meioIds.includes(meioId)))),
-    [perguntas, meioId],
+    () => perguntas.filter((q) => {
+      // corrigindo com o mesmo meio: as perguntas que a blitz teve, nem mais nem menos
+      // (pergunta criada depois não entra numa blitz que já aconteceu)
+      if (editando && meioId === editando.meioId) return respondidasNaBlitz.has(q.id);
+      return (q.active || respondidasNaBlitz.has(q.id))
+        && (q.meioIds.length === 0 || (!!meioId && q.meioIds.includes(meioId)));
+    }),
+    [perguntas, meioId, respondidasNaBlitz, editando],
   );
   const respondidas = perguntasDoMeio.filter((q) => respostas[q.id]).length;
 
@@ -196,7 +236,7 @@ export function SegBlitzDialog({
   const mostra = (etapa: number) => !celular || revelado >= etapa;
 
   // a tela desce até o bloco que acabou de aparecer (abaixo da dobra, ele passaria batido)
-  const reveladoAntes = useRef(0);
+  const reveladoAntes = useRef(editando ? 4 : 0);
   useEffect(() => {
     const anterior = reveladoAntes.current;
     reveladoAntes.current = revelado;
@@ -284,6 +324,23 @@ export function SegBlitzDialog({
       clientId,
       registradaEm: new Date().toISOString(),
     };
+    // a correção: sem fila do aparelho, com o motivo, e o banco registra o antes e depois
+    if (editando) {
+      if (motivoCorrecao.trim().length < 5) return falta("Escreva o motivo da correção.", "correcao");
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setErro("Sem conexão: a correção só salva com internet. Tente de novo quando o sinal voltar.");
+        return;
+      }
+      iniciar(async () => {
+        const r = await editarBlitz(editando.id, input, motivoCorrecao);
+        if (r.error) { setErro(r.error); return; }
+        toast.success(r.message ?? "Blitz corrigida.");
+        onCorrigida?.();
+        router.refresh();
+      });
+      return;
+    }
+
     const item: BlitzGuardada = { clientId, dono, tenantId, input, nome, situacao, guardadaEm: new Date().toISOString() };
 
     /** Sem sinal: guarda no aparelho. Se nem isso der, o formulário continua preenchido. */
@@ -343,7 +400,7 @@ export function SegBlitzDialog({
       <div className="card mh-folha" style={{ width: "100%", maxWidth: 620, boxShadow: "var(--mh-shadow-e3)" }}>
         <div className="mh-folha-topo" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.9rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>
-            {registrada ? (registrada.guardada ? "Blitz guardada" : "Blitz registrada") : "Nova blitz"}
+            {registrada ? (registrada.guardada ? "Blitz guardada" : "Blitz registrada") : editando ? "Corrigir blitz" : "Nova blitz"}
           </h2>
           <button
             type="button" onClick={fechar} className="icon-btn" aria-label="Fechar"
@@ -392,7 +449,9 @@ export function SegBlitzDialog({
             {!conectado && (
               <p role="status" style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: "0.8rem", margin: 0, background: "var(--mh-warning-soft)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
                 <CloudOff size={15} style={{ color: "var(--mh-warning)", flexShrink: 0 }} aria-hidden />
-                Sem conexão. Pode seguir: a blitz fica guardada no aparelho e vai sozinha quando o sinal voltar.
+                {editando
+                  ? "Sem conexão: a correção só salva com internet."
+                  : "Sem conexão. Pode seguir: a blitz fica guardada no aparelho e vai sozinha quando o sinal voltar."}
               </p>
             )}
             <div ref={(el) => { secoes.current.colaborador = el; }}>
@@ -643,7 +702,7 @@ export function SegBlitzDialog({
                   <label className="label" htmlFor="blitz-motivo">Motivo do bloqueio {obrigatorio}</label>
                   <select id="blitz-motivo" className="select" value={motivoId} onChange={(e) => setMotivoId(e.target.value)}>
                     <option value="">Escolha o motivo</option>
-                    {motivos.filter((m) => m.active).map((m) => (
+                    {motivos.filter((m) => m.active || m.id === editando?.motivoBloqueioId).map((m) => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
@@ -667,7 +726,22 @@ export function SegBlitzDialog({
               </button>
             )}
 
-            {userId && (
+            {editando && (
+              <div ref={(el) => { secoes.current.correcao = el; }}>
+                <label className="label" htmlFor="blitz-correcao">Motivo da correção {obrigatorio}</label>
+                <textarea
+                  id="blitz-correcao" className="input" rows={2} value={motivoCorrecao}
+                  placeholder="O que estava errado no lançamento."
+                  onChange={(e) => setMotivoCorrecao(e.target.value)}
+                />
+                <p className="soft" style={{ fontSize: "0.74rem", margin: "0.3rem 0 0" }}>
+                  A correção fica registrada na blitz, com quem corrigiu, o motivo e o antes e depois. Se a situação
+                  mudar, a tratativa se ajusta: a pendente que deixar de valer é retirada (o gestor é avisado), e a
+                  blitz que passar a não conforme segue a regra da empresa.
+                </p>
+              </div>
+            )}
+            {userId && !editando && (
               <p className="soft" style={{ fontSize: "0.74rem", margin: 0 }}>
                 {educativa
                   ? "Blitz educativa: o gestor não é avisado e ela não conta nos resultados."
@@ -702,7 +776,7 @@ export function SegBlitzDialog({
               <>
                 <button type="button" className="btn btn-ghost" disabled={pendente} onClick={fechar}>Cancelar</button>
                 <button type="button" className="btn btn-primary" disabled={pendente} onClick={salvar}>
-                  {pendente ? "Registrando…" : "Registrar blitz"}
+                  {pendente ? (editando ? "Salvando…" : "Registrando…") : editando ? "Salvar correção" : "Registrar blitz"}
                 </button>
               </>
             )}

@@ -80,6 +80,9 @@ export type BlitzDaTratativa = {
   id: string;
   occurred_on: string;
   liberado: boolean;
+  /** como a blitz está hoje (pode ter sido corrigida depois da tratativa) */
+  conforme?: boolean;
+  editada?: boolean;
   meio: string | null;
   motivo: string | null;
   nao: string[];
@@ -144,6 +147,8 @@ export type BlitzAlertaAnalise = {
   tipo?: "ocorrencia" | "recorrencia";
   /** as blitz que a tratativa cobre */
   blitz?: BlitzDaTratativa[];
+  /** a blitz foi corrigida depois do alerta */
+  editada?: boolean;
 };
 
 export type BlitzAnaliseDados = {
@@ -174,6 +179,8 @@ export const pct = (ok: number, total: number) => (total > 0 ? Math.round((ok / 
 export function linhaDaBlitzDaTratativa(b: BlitzDaTratativa): string {
   const [, m, d] = b.occurred_on.slice(0, 10).split("-");
   const dia = `${d}/${m}`;
-  if (!b.liberado) return `${dia} · Bloqueado${b.motivo ? `: ${b.motivo}` : ""}`;
-  return `${dia} · Liberado com desvio${b.nao.length ? `: ${b.nao.join("; ")}` : ""}`;
+  const corrigida = b.editada ? " (corrigida depois)" : "";
+  if (!b.liberado) return `${dia} · Bloqueado${b.motivo ? `: ${b.motivo}` : ""}${corrigida}`;
+  if (b.conforme) return `${dia} · Conforme${corrigida}`;
+  return `${dia} · Liberado com desvio${b.nao.length ? `: ${b.nao.join("; ")}` : ""}${corrigida}`;
 }

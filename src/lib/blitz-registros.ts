@@ -30,7 +30,7 @@ export async function lerRegistrosDaBlitz(
         .select(
           "id, occurred_on, registrada_em, user_id, snap_full_name, snap_department_name, snap_manager_name, " +
           "snap_unit_name, snap_position_name, meio_id, placa, veiculo_tipo, propriedade, cor, liberado, " +
-          "motivo_bloqueio_id, observacao, conforme, educativa, created_by",
+          "motivo_bloqueio_id, observacao, conforme, educativa, created_by, editada_em, editada_por",
         )
         .eq("tenant_id", tenantId);
       if (opcoes.de) q = q.gte("occurred_on", opcoes.de);
@@ -63,6 +63,7 @@ export async function lerRegistrosDaBlitz(
     snap_position_name: string | null; meio_id: string; placa: string | null; veiculo_tipo: string | null;
     propriedade: BlitzRow["propriedade"]; cor: string | null; liberado: boolean; motivo_bloqueio_id: string | null;
     observacao: string | null; conforme: boolean; educativa: boolean; created_by: string;
+    editada_em: string | null; editada_por: string | null;
   };
   const data = ((lidas.data ?? []) as unknown as Lida[]).map((b): BlitzRow => ({
     id: b.id,
@@ -82,11 +83,14 @@ export async function lerRegistrosDaBlitz(
     propriedade: b.propriedade,
     cor: b.cor,
     liberado: b.liberado,
+    motivoBloqueioId: b.motivo_bloqueio_id,
     motivoNome: b.motivo_bloqueio_id ? nomeMotivo.get(b.motivo_bloqueio_id) ?? null : null,
     observacao: b.observacao,
     conforme: b.conforme,
     educativa: b.educativa,
     avaliador: nomeDoUser.get(b.created_by) ?? null,
+    editadaEm: b.editada_em,
+    editadaPor: b.editada_por ? nomeDoUser.get(b.editada_por) ?? null : null,
   }));
   return { data, error: null };
 }

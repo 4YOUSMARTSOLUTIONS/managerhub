@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { PencilLine, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -19,13 +19,15 @@ import type { BlitzAnaliseDados } from "@/lib/blitz-aderencia";
 import type { BlitzRegras } from "@/lib/blitz-regras";
 import { AvisoBlitzGuardadas } from "@/components/BlitzGuardadas";
 import {
-  SegBlitzDialog, type BlitzJaPassou, type BlitzMeioOpt, type BlitzPerguntaOpt, type BlitzUltimaComNok, type VeiculoSugestao,
+  SegBlitzDialog, type BlitzEmEdicao, type BlitzJaPassou, type BlitzMeioOpt, type BlitzPerguntaOpt, type BlitzUltimaComNok,
+  type VeiculoSugestao,
 } from "@/components/SegBlitzDialog";
+import type { BlitzEdicao } from "@/lib/blitz-edicoes";
 import { SegBlitzTratativas } from "@/components/SegBlitzTratativas";
 import type { BlitzAlerta } from "@/lib/actions/seguranca";
 import { SEG_BLITZ_RESPOSTA, SEG_VEICULO_PROPRIEDADE, nomeDaCor } from "@/lib/constants";
-import { normalizar, shortName } from "@/lib/format";
-import { excluirBlitz, getBlitzRegistros, getBlitzRespostas } from "@/lib/actions/seguranca";
+import { formatDateTime, hojeYmd, normalizar, shortName } from "@/lib/format";
+import { excluirBlitz, getBlitzEdicoes, getBlitzRegistros, getBlitzRespostas } from "@/lib/actions/seguranca";
 import type { Enums } from "@/types/database";
 
 export type BlitzRow = {
@@ -49,12 +51,16 @@ export type BlitzRow = {
   propriedade: Enums<"seg_veiculo_propriedade"> | null;
   cor: string | null;
   liberado: boolean;
+  motivoBloqueioId: string | null;
   motivoNome: string | null;
   observacao: string | null;
   conforme: boolean;
   /** a primeira blitz da pessoa, fora de toda a conta (LUIZ, 18/11/2026) */
   educativa: boolean;
   avaliador: string | null;
+  /** a última correção (LUIZ, 18/11/2026); o histórico abre na ficha */
+  editadaEm: string | null;
+  editadaPor: string | null;
 };
 
 /** Uma resposta da blitz, lida quando a ficha abre (`getBlitzRespostas`). */
@@ -103,6 +109,20 @@ function PilulaDaSituacao({ r }: { r: BlitzRow }) {
     : <Badge tone={s.tone}>{s.label}</Badge>;
 }
 
+/** A correção vale para blitz deste mês e do anterior (LUIZ, 18/11/2026; o banco trava também). */
+function inicioDaCorrecao(): string {
+  const [a, m] = hojeYmd().split("-").map(Number);
+  const ano = m === 1 ? a - 1 : a;
+  const mes = m === 1 ? 12 : m - 1;
+  return `${ano}-${String(mes).padStart(2, "0")}-01`;
+}
+
+/** "Corrigida por Fulano em 18/11/2026 14:32" */
+function rotuloDaCorrecao(r: BlitzRow): string | undefined {
+  if (!r.editadaEm) return undefined;
+  return `Corrigida${r.editadaPor ? ` por ${shortName(r.editadaPor)}` : ""} em ${formatDateTime(r.editadaEm)}`;
+}
+
 const TELA_DE_CELULAR = "(max-width: 719px)";
 function assinarTela(avisar: () => void) {
   const mq = window.matchMedia(TELA_DE_CELULAR);
@@ -113,7 +133,7 @@ const ehCelular = () => window.matchMedia(TELA_DE_CELULAR).matches;
 
 export function SegBlitzManager({
   rows, podeAvaliar, ehProprietario, pessoas, meios, perguntas, motivos, veiculos, alertas, dono, tenantId, analise = null, jaPassaram,
-  ultimaComNok, regras, educativaPara,
+  ultimaComNok, regras, educativaPara, podeCorrigir = false,
 }: {
   rows: BlitzRow[];
   podeAvaliar: boolean;
@@ -145,6 +165,8 @@ export function SegBlitzManager({
   regras?: BlitzRegras;
   /** quem terá a blitz educativa */
   educativaPara?: string[];
+  /** avaliador da blitz, equipe de segurança ou administração (LUIZ, 18/11/2026) */
+  podeCorrigir?: boolean;
 }) {
   const [novo, setNovo] = useState(false);
   const [busca, setBusca] = useState("");
@@ -186,9 +208,16 @@ export function SegBlitzManager({
 
   // as respostas de cada blitz, lidas quando a ficha abre (vinham todas com a lista)
   const [respostas, setRespostas] = useState<Record<string, BlitzResposta[] | "erro">>({});
+  // as correções de cada blitz, lidas quando a ficha de uma blitz corrigida abre
+  const [edicoes, setEdicoes] = useState<Record<string, BlitzEdicao[] | "erro">>({});
+  const [corrigindo, setCorrigindo] = useState<BlitzEmEdicao | null>(null);
   const ordemDaPergunta = useMemo(() => new Map(perguntas.map((q, i) => [q.id, i])), [perguntas]);
   const abrir = (id: string) => {
     setAberto(id);
+    const linha = linhas.find((r) => r.id === id);
+    if (linha?.editadaEm && !edicoes[id]) {
+      void getBlitzEdicoes(id).then((r) => setEdicoes((m) => ({ ...m, [id]: r.data ?? "erro" })));
+    }
     const ja = respostas[id];
     if (ja && ja !== "erro") return;
     void getBlitzRespostas(id).then((r) => {
@@ -265,6 +294,39 @@ export function SegBlitzManager({
     })();
   };
 
+  const podeCorrigirEsta = (r: BlitzRow) => podeCorrigir && r.occurredOn >= inicioDaCorrecao();
+  const corrigir = () => {
+    if (!detalhe || !Array.isArray(respostasDoDetalhe)) return;
+    setCorrigindo({
+      id: detalhe.id,
+      userId: detalhe.userId,
+      occurredOn: detalhe.occurredOn,
+      registroDia: detalhe.registroDia,
+      meioId: detalhe.meioId,
+      placa: detalhe.placa,
+      veiculoTipo: detalhe.veiculoTipo,
+      propriedade: detalhe.propriedade,
+      cor: detalhe.cor,
+      liberado: detalhe.liberado,
+      motivoBloqueioId: detalhe.motivoBloqueioId,
+      observacao: detalhe.observacao,
+      respostas: respostasDoDetalhe.map((x) => ({ perguntaId: x.perguntaId, resposta: x.resposta })),
+    });
+    setAberto(null);
+  };
+  /** Depois da correção: a ficha relê respostas e histórico, e o período de fora da página volta fresco. */
+  const corrigida = () => {
+    const id = corrigindo?.id;
+    setCorrigindo(null);
+    if (!id) return;
+    setRespostas((m) => { const n = { ...m }; delete n[id]; return n; });
+    setEdicoes((m) => { const n = { ...m }; delete n[id]; return n; });
+    if (doPeriodo) {
+      const { de, ate } = doPeriodo;
+      void getBlitzRegistros({ de, ate }).then((r) => { if (r.data) setDoPeriodo({ de, ate, rows: r.data }); });
+    }
+  };
+
   // tratativas que o gestor logado ainda deve: aparecem no título da aba
   const tratativasPendentes = alertas.filter((a) => !a.tratativa_em).length;
   const temAnalises = alertas.length > 0 || !!analise;
@@ -303,7 +365,7 @@ export function SegBlitzManager({
             sheetName="Blitz"
             headers={[
               "Data", "Hora do registro", "Matrícula", "Colaborador", "Setor", "Gestor", "Unidade", "Meio", "Placa", "Modelo",
-              "Propriedade", "Cor", "Situação", "Motivo do bloqueio", "Observação", "Avaliador",
+              "Propriedade", "Cor", "Situação", "Motivo do bloqueio", "Observação", "Avaliador", "Corrigida em",
             ]}
             rows={lista.map((r) => [
               dataBr(r.occurredOn), horaDoRegistro(r), r.matricula ?? "", r.pessoa ?? "", r.setor ?? "", r.gestor ?? "", r.unidade ?? "",
@@ -311,6 +373,7 @@ export function SegBlitzManager({
               r.propriedade ? SEG_VEICULO_PROPRIEDADE[r.propriedade] : "",
               nomeDaCor(r.cor),
               r.educativa ? `Educativa (${situacao(r).label})` : situacao(r).label, r.motivoNome ?? "", r.observacao ?? "", r.avaliador ?? "",
+              r.editadaEm ? formatDateTime(r.editadaEm) : "",
             ])}
           />
         </div>
@@ -332,7 +395,8 @@ export function SegBlitzManager({
             larga empurrando a tela para o lado */}
         <div className="so-celular" style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
           {lista.map((r) => {
-            const rodape = [r.setor, r.avaliador ? `por ${shortName(r.avaliador)}` : null].filter(Boolean).join(" · ");
+            const rodape = [r.setor, r.avaliador ? `por ${shortName(r.avaliador)}` : null, r.editadaEm ? "corrigida" : null]
+              .filter(Boolean).join(" · ");
             return (
               <button
                 key={r.id} type="button" className="card" onClick={() => abrir(r.id)}
@@ -378,7 +442,11 @@ export function SegBlitzManager({
               return (
                 <tr key={r.id} onClick={() => abrir(r.id)} style={{ cursor: "pointer" }} title="Abrir a blitz">
                   <td>{dataBr(r.occurredOn)}</td>
-                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title={tituloDaHora(r)}>{horaDoRegistro(r)}</td>
+                  <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title={rotuloDaCorrecao(r) ?? tituloDaHora(r)}>
+                    {horaDoRegistro(r)}
+                    {/* corrigida depois do lançamento (LUIZ, 18/11/2026): o histórico abre na ficha */}
+                    {r.editadaEm && <PencilLine size={12} aria-label="Corrigida" style={{ marginLeft: 4, verticalAlign: "-1px" }} />}
+                  </td>
                   <td className="muted" style={{ fontSize: "0.82rem", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{r.matricula ?? "—"}</td>
                   <td style={{ fontWeight: 600 }}>{shortName(r.pessoa)}</td>
                   <td className="muted" style={{ fontSize: "0.82rem" }}>{r.setor ?? "—"}</td>
@@ -491,10 +559,26 @@ export function SegBlitzManager({
                   <Trash2 size={14} /> Excluir
                 </button>
               ) : <span />}
-              <button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button>
+              <span style={{ display: "flex", gap: "0.5rem" }}>
+                {podeCorrigirEsta(detalhe) && (
+                  <button
+                    type="button" className="btn btn-ghost" onClick={corrigir}
+                    disabled={!Array.isArray(respostasDoDetalhe)}
+                    title={Array.isArray(respostasDoDetalhe) ? "Corrigir o que foi lançado errado" : "Carregando as respostas…"}
+                  >
+                    <PencilLine size={14} /> Corrigir
+                  </button>
+                )}
+                <button type="button" className="btn btn-ghost" onClick={() => setAberto(null)}>Fechar</button>
+              </span>
             </>
           }
         >
+          {detalhe.editadaEm && (
+            <p style={{ margin: 0, fontSize: "0.83rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <PencilLine size={14} aria-hidden /> {rotuloDaCorrecao(detalhe)}. O que mudou está em Correções, abaixo.
+            </p>
+          )}
           {detalhe.educativa && (
             <p className="soft" style={{ margin: 0, fontSize: "0.83rem" }}>
               Primeira blitz da pessoa, educativa: não conta na aderência nem nos resultados, e não abriu tratativa.
@@ -562,7 +646,41 @@ export function SegBlitzManager({
               As perguntas são as da época da blitz; mudanças no cadastro não reescrevem o histórico.
             </p>
           </DetailSection>
+
+          {detalhe.editadaEm && (
+            <DetailSection title="Correções">
+              {edicoes[detalhe.id] === undefined ? (
+                <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Carregando as correções…</p>
+              ) : edicoes[detalhe.id] === "erro" ? (
+                <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>Não foi possível carregar as correções. Feche e abra de novo.</p>
+              ) : (
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                  {(edicoes[detalhe.id] as BlitzEdicao[]).map((e) => (
+                    <li key={e.id} style={{ background: "var(--surface-2)", borderRadius: "var(--mh-radius-md)", padding: "0.55rem 0.75rem", fontSize: "0.82rem" }}>
+                      <div style={{ fontWeight: 600 }}>
+                        {formatDateTime(e.em)}{e.por ? `, por ${shortName(e.por)}` : ""}
+                      </div>
+                      <div className="soft" style={{ margin: "0.15rem 0 0.35rem", whiteSpace: "pre-wrap" }}>Motivo: {e.motivo}</div>
+                      <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+                        {e.mudancas.map((m, i) => (
+                          <li key={i}><span className="soft">{m.campo}:</span> {m.de} → {m.para}</li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DetailSection>
+          )}
         </DetailModal>
+      )}
+
+      {corrigindo && (
+        <SegBlitzDialog
+          key={corrigindo.id} open editando={corrigindo} onClose={() => setCorrigindo(null)} onCorrigida={corrigida}
+          pessoas={pessoas} meios={meios} perguntas={perguntas} motivos={motivos} veiculos={veiculos}
+          dono={dono} tenantId={tenantId} regras={regras}
+        />
       )}
 
       <SegBlitzDialog

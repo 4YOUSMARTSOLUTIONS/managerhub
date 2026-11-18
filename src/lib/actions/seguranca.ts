@@ -10,6 +10,7 @@ import { SEG_VEICULO_COR } from "@/lib/constants";
 import type { ActionState } from "./types";
 import type { BlitzAlertaAnalise, BlitzAnaliseDados, BlitzDaTratativa } from "@/lib/blitz-aderencia";
 import { LIMITES_DA_RECORRENCIA, type BlitzRegras } from "@/lib/blitz-regras";
+import { mudancasDaBlitz, type BlitzEdicao, type BlitzFoto } from "@/lib/blitz-edicoes";
 import { lerRegistrosDaBlitz } from "@/lib/blitz-registros";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
@@ -1397,6 +1398,72 @@ export async function criarBlitz(input: BlitzInput): Promise<ActionState> {
   }
 }
 
+/**
+ * Corrige uma blitz lançada errado (LUIZ, 18/11/2026). Corrigem o avaliador
+ * da blitz, a equipe de segurança e a administração; Gestor e Gerencial não.
+ * Tudo mora na RPC: prazo (mês corrente e anterior), as mesmas conferências
+ * do lançamento, o registro do antes e depois com o motivo e o efeito nas
+ * tratativas (a pendente que a correção desfaz é retirada).
+ */
+export async function editarBlitz(id: string, input: BlitzInput, motivo: string): Promise<ActionState> {
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Blitz inválida." };
+    const { supabase } = await actionContext();
+    const { error } = await supabase.rpc("seg_editar_blitz", {
+      p_id: id,
+      p_data: {
+        user_id: input.userId,
+        occurred_on: input.occurredOn,
+        meio_id: input.meioId,
+        placa: input.placa ?? null,
+        veiculo_tipo: input.veiculoTipo ?? null,
+        propriedade: input.propriedade ?? null,
+        cor: input.cor ?? null,
+        liberado: input.liberado,
+        motivo_bloqueio_id: input.motivoBloqueioId ?? null,
+        observacao: input.observacao ?? null,
+        respostas: input.respostas.map((r) => ({ pergunta_id: r.perguntaId, resposta: r.resposta })),
+      },
+      p_motivo: motivo,
+    });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true, message: "Blitz corrigida." };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** O histórico de correções de uma blitz, do mais novo ao mais velho (a RLS segue a da blitz). */
+export async function getBlitzEdicoes(avaliacaoId: string): Promise<{ data?: BlitzEdicao[]; error?: string }> {
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(avaliacaoId)) return { error: "Blitz inválida." };
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase
+      .from("seg_blitz_edicoes")
+      .select("id, editado_por, editado_em, motivo, antes, depois")
+      .eq("avaliacao_id", avaliacaoId)
+      .order("editado_em", { ascending: false });
+    if (error) return { error: error.message };
+    const ids = [...new Set((data ?? []).map((e) => e.editado_por).filter((x): x is string => !!x))];
+    const { data: nomes } = ids.length
+      ? await supabase.from("profiles").select("id, full_name").in("id", ids)
+      : { data: [] as { id: string; full_name: string | null }[] };
+    const nomeDe = new Map((nomes ?? []).map((p) => [p.id, p.full_name]));
+    return {
+      data: (data ?? []).map((e) => ({
+        id: e.id,
+        em: e.editado_em,
+        por: e.editado_por ? nomeDe.get(e.editado_por) ?? null : null,
+        motivo: e.motivo,
+        mudancas: mudancasDaBlitz(e.antes as unknown as BlitzFoto, e.depois as unknown as BlitzFoto),
+      })),
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function excluirBlitz(id: string): Promise<ActionState> {
   try {
     const { supabase } = await actionContext();
@@ -1426,6 +1493,8 @@ export type BlitzAlerta = {
   tipo?: "ocorrencia" | "recorrencia";
   /** as blitz que a tratativa cobre */
   blitz?: BlitzDaTratativa[];
+  /** a blitz foi corrigida depois do alerta */
+  editada?: boolean;
 };
 
 /**
