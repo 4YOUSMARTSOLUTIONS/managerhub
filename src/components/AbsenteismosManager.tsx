@@ -1580,6 +1580,24 @@ function PainelConfirmacao({
       onErro("Informe o tipo de documento do afastamento: Médico ou Perícia INSS.");
       return;
     }
+    // Os dados do atestado que o envio exige (CRM e local desde 18/11/2026,
+    // pedido do LUIZ: todo atestado traz os dois). Conferidos aqui, antes de
+    // criar o lançamento novo: a recusa do banco viria depois, com o lançamento
+    // já gravado em aberto. O banco confere de novo em absenteismo_confirmar.
+    if (tipo?.requiresMedical) {
+      const faltam = [
+        !c.medico.trim() && "o profissional",
+        !c.crm.trim() && "o CRM ou registro",
+        !c.local.trim() && "o hospital, clínica ou local",
+        !c.emitidoEm && "a data de emissão",
+        tipo.requiresCompanion && !c.acompanhado.trim() && "quem foi acompanhado",
+      ].filter(Boolean) as string[];
+      if (faltam.length) {
+        const lista = faltam.length === 1 ? faltam[0] : `${faltam.slice(0, -1).join(", ")} e ${faltam[faltam.length - 1]}`;
+        onErro(`Preencha nos dados do atestado: ${lista}.`);
+        return;
+      }
+    }
     if (sem && foraDoDocumento === null) {
       onErro(`O período informado não cobre nenhum dos dias sem comparecer (${intervalo([sem.inicio, sem.fim])}).`);
       return;
@@ -2113,14 +2131,14 @@ function PainelConfirmacao({
               />
             </div>
             <div>
-              <label className="label">CRM ou registro{marcaIA("crm")}</label>
+              <label className="label">CRM ou registro <span style={{ color: "var(--mh-danger)" }}>*</span>{marcaIA("crm")}</label>
               <input
                 className="input" value={c.crm} placeholder="CRM-BA 12345" style={bordaIA("crm")}
                 onChange={(e) => { setC((x) => ({ ...x, crm: e.target.value })); revisado("crm"); }}
               />
             </div>
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
-              <label className="label">Hospital, clínica ou local{marcaIA("local")}</label>
+              <label className="label">Hospital, clínica ou local <span style={{ color: "var(--mh-danger)" }}>*</span>{marcaIA("local")}</label>
               <input
                 className="input" value={c.local} placeholder="Hospital Santa Izabel" style={bordaIA("local")}
                 onChange={(e) => { setC((x) => ({ ...x, local: e.target.value })); revisado("local"); }}
