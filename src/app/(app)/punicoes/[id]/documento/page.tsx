@@ -141,7 +141,7 @@ export default async function DocumentoDePunicaoPage({
         </section>
 
         <section className="doc-assinaturas">
-          {["Colaborador", "Gestor imediato", "Recursos Humanos", "Diretoria"].map((quem) => (
+          {["Colaborador", "Gestor imediato", "Departamento Pessoal", "Diretoria"].map((quem) => (
             <div key={quem} className="doc-assinatura">
               <div className="doc-linha-assinatura" />
               <div className="doc-quem">{quem}</div>

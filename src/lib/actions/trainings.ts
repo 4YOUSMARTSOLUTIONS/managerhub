@@ -85,7 +85,7 @@ export async function saveTraining(input: TrainingInput): Promise<ActionState & 
       // transforma a recusa em frase em vez de erro cru de RLS
       const { data: gere } = await supabase.rpc("gere_treinamentos", { p_tenant: tenantId });
       if (gere !== true) {
-        return { error: "Apenas proprietário, administrador, RH e quem tem a gestão de treinamentos cadastram treinamentos." };
+        return { error: "Apenas proprietário, administrador, DP e quem tem a gestão de treinamentos cadastram treinamentos." };
       }
       const { data, error } = await supabase
         .from("trainings")

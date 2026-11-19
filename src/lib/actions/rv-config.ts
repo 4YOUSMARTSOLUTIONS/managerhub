@@ -9,7 +9,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /** Espelha o `dpActionContext`. Estas actions devolvem `ActionState`, então a
  *  recusa precisa virar mensagem na tela em vez de exceção. */
-const SO_DP = "Apenas proprietário, administrador e RH configuram a remuneração variável.";
+const SO_DP = "Apenas proprietário, administrador e DP configuram a remuneração variável.";
 
 const parseNum = (v: unknown): number | null => {
   if (v == null || v === "") return null;

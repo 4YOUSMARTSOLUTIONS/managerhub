@@ -86,7 +86,7 @@ const hoje = () => new Date().toISOString().slice(0, 10);
  * A tela do processo de punição.
  *
  * As três abas são recortes da MESMA lista, e não telas diferentes: "Aguardando
- * o RH" é a fila de quem decide, "Meus lançamentos" é o que a pessoa abriu e
+ * o DP" é a fila de quem decide, "Meus lançamentos" é o que a pessoa abriu e
  * "Histórico" é o que já foi decidido. Molde do `TicketsManager`.
  *
  * O formulário não tem campo de gravidade, e isso é de propósito: ela vem do
@@ -101,7 +101,7 @@ export function PunicoesManager({
   infracoes: Infracao[];
   punicoes: { id: string; name: string; active: boolean }[];
   meuId: string;
-  /** RH, administrador e proprietário: quem aprova ou reprova */
+  /** DP, administrador e proprietário: quem aprova ou reprova */
   podeDecidir: boolean;
   /** só administrador e proprietário desfazem uma punição já aprovada */
   podeCancelar: boolean;
@@ -172,7 +172,7 @@ export function PunicoesManager({
       title: "Excluir rascunho",
       tone: "danger",
       confirmLabel: "Excluir",
-      message: `Excluir o rascunho da punição de ${r.fullName ?? "colaborador"}? Nada foi enviado ao RH, então nada se perde além do que está preenchido.`,
+      message: `Excluir o rascunho da punição de ${r.fullName ?? "colaborador"}? Nada foi enviado ao DP, então nada se perde além do que está preenchido.`,
     });
     if (!ok) return;
     const fd = new FormData();
@@ -186,9 +186,9 @@ export function PunicoesManager({
 
   const enviar = async (id: string) => {
     const ok = await confirmDialog({
-      title: "Enviar ao RH",
+      title: "Enviar ao DP",
       confirmLabel: "Enviar",
-      message: "Depois de enviado o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.",
+      message: "Depois de enviado o lançamento fica congelado até o DP decidir. Para corrigir algo, será preciso pedir a reprovação.",
     });
     if (!ok) return;
     const fd = new FormData();
@@ -278,7 +278,7 @@ export function PunicoesManager({
   ];
   if (podeDecidir) {
     abas.push({
-      id: "fila", label: `Aguardando o RH (${fila.length})`,
+      id: "fila", label: `Aguardando o DP (${fila.length})`,
       content: tabela(fila, true, "Nenhum lançamento aguardando decisão."),
     });
   }
@@ -326,7 +326,7 @@ export function PunicoesManager({
         <Dialogo titulo={rascunho.id ? "Lançamento de punição" : "Nova punição"} onFechar={() => setRascunho(null)}>
           {infracoesAtivas.length === 0 || punicoesAtivas.length === 0 ? (
             <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>
-              Antes de lançar, o RH precisa cadastrar os tipos de infração e de punição em
+              Antes de lançar, o DP precisa cadastrar os tipos de infração e de punição em
               Configurações, na aba Punições.
             </p>
           ) : (
@@ -349,7 +349,7 @@ export function PunicoesManager({
               {pessoaEscolhida && (
                 <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", background: "var(--surface-2)", padding: "0.75rem" }}>
                   <p className="soft" style={{ fontSize: "0.72rem", margin: "0 0 0.4rem" }}>
-                    Do cadastro do colaborador, congelado no lançamento assim que ele for enviado ao RH.
+                    Do cadastro do colaborador, congelado no lançamento assim que ele for enviado ao DP.
                   </p>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.5rem 1rem" }}>
                     <Campo rotulo="Matrícula" valor={pessoaEscolhida.matricula} />
@@ -443,7 +443,7 @@ export function PunicoesManager({
                     title={salvo?.signedPath ? undefined : "Anexe o documento assinado primeiro"}
                     onClick={() => enviar(rascunho.id as string)}
                   >
-                    <Send size={15} /> Enviar ao RH
+                    <Send size={15} /> Enviar ao DP
                   </button>
                 )}
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRascunho(null)}>Fechar</button>
@@ -451,7 +451,7 @@ export function PunicoesManager({
 
               <p className="soft" style={{ fontSize: "0.75rem", margin: 0 }}>
                 Rascunho não vale como punição e não altera remuneração variável. O lançamento só
-                passa a valer depois que o RH aprovar.
+                passa a valer depois que o DP aprovar.
               </p>
             </>
           )}
@@ -556,7 +556,7 @@ function Anexo({
     <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.75rem" }}>
       <div style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.3rem" }}>Documento assinado</div>
       <p className="soft" style={{ fontSize: "0.75rem", margin: "0 0 0.6rem" }}>
-        Imprima o documento, colha as assinaturas do colaborador, do gestor, do RH e da diretoria,
+        Imprima o documento, colha as assinaturas do colaborador, do gestor, do DP e da diretoria,
         e anexe aqui o papel digitalizado. PDF ou foto, até 10 MB.
       </p>
       {linha.signedPath ? (
@@ -627,7 +627,7 @@ function Detalhe({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem 1rem" }}>
         <Campo rotulo="Lançada por" valor={linha.createdByName} />
-        <Campo rotulo="Enviada ao RH em" valor={linha.submittedAt ? formatDate(linha.submittedAt) : null} />
+        <Campo rotulo="Enviada ao DP em" valor={linha.submittedAt ? formatDate(linha.submittedAt) : null} />
         <Campo rotulo="Decidida por" valor={linha.decidedByName} />
         <Campo rotulo="Decidida em" valor={linha.decidedAt ? formatDate(linha.decidedAt) : null} />
       </div>

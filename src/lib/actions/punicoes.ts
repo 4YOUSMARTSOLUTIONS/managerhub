@@ -9,7 +9,7 @@ import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 
 /**
- * Punições: catálogo de infrações e, adiante, o lançamento com aprovação do RH.
+ * Punições: catálogo de infrações e, adiante, o lançamento com aprovação do DP.
  *
  * Arquivo separado de `rv-redutores.ts` de propósito. Aquele é sobre o que CORTA
  * remuneração variável: os tipos de punição existem lá porque cada um tem uma
@@ -235,7 +235,7 @@ export type PunicaoInput = {
 /**
  * Salva o rascunho.
  *
- * Só rascunho: depois de enviado ao RH o lançamento é congelado pelo trigger, e
+ * Só rascunho: depois de enviado ao DP o lançamento é congelado pelo trigger, e
  * a tela nem oferece edição. Quem precisar corrigir pede a reprovação.
  */
 export async function salvarRascunhoPunicao(input: PunicaoInput): Promise<ActionState & { id?: string }> {
@@ -314,7 +314,7 @@ export async function anexarDocumentoAssinado(formData: FormData): Promise<Actio
       .maybeSingle();
     if (!atual) return { error: "Lançamento não encontrado." };
     if (atual.status !== "rascunho" && atual.status !== "reprovada") {
-      return { error: "Este lançamento já foi enviado ao RH." };
+      return { error: "Este lançamento já foi enviado ao DP." };
     }
 
     const limpo = file.name.replace(/[^\w.\- ]+/g, "_");
@@ -366,7 +366,7 @@ export async function removerDocumentoAssinado(formData: FormData): Promise<Acti
       .maybeSingle();
     if (!atual) return { error: "Lançamento não encontrado." };
     if (atual.status !== "rascunho" && atual.status !== "reprovada") {
-      return { error: "Este lançamento já foi enviado ao RH." };
+      return { error: "Este lançamento já foi enviado ao DP." };
     }
 
     const { error } = await supabase
@@ -405,7 +405,7 @@ export async function submeterPunicao(formData: FormData): Promise<ActionState> 
     if (error) return { error: error.message };
 
     revalidar();
-    return { ok: true, message: "Enviado ao RH." };
+    return { ok: true, message: "Enviado ao DP." };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -439,7 +439,7 @@ export async function excluirRascunhoPunicao(formData: FormData): Promise<Action
 }
 
 /**
- * A decisão do RH.
+ * A decisão do DP.
  *
  * A guarda de papel mora na RPC, e não aqui: é ela que grava, e é lá que a
  * verificação precisa estar para valer também contra quem chame o PostgREST
@@ -493,7 +493,7 @@ export async function cancelarPunicao(formData: FormData): Promise<ActionState> 
 function mensagemDoLancamento(e: { code?: string; message?: string }): string {
   const msg = e.message ?? "";
   if (msg.includes("punicao_anexo_para_sair_do_rascunho")) {
-    return "Anexe o documento assinado antes de enviar ao RH.";
+    return "Anexe o documento assinado antes de enviar ao DP.";
   }
   if (msg.includes("punicao_campos_para_sair_do_rascunho")) {
     return "Preencha a data, a infração e a punição aplicada antes de enviar.";

@@ -133,7 +133,7 @@ const CAMPOS: { chave: keyof AntecedenciaFerias; rotulo: string; ajuda: string }
   },
   {
     chave: "dp", rotulo: "Departamento pessoal",
-    ajuda: "O lançamento feito por proprietário, administrador ou RH. Deixe 0 para regularizações de última hora.",
+    ajuda: "O lançamento feito por proprietário, administrador ou DP. Deixe 0 para regularizações de última hora.",
   },
 ];
 

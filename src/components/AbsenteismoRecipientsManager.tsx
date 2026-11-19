@@ -172,7 +172,7 @@ export function AbsenteismoRecipientsManager({
         <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Comunicado por e-mail</h3>
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
           Quem é avisado assim que um gestor lança uma ausência, e depois quando o motivo é
-          confirmado e quando o RH decide. O gestor imediato do colaborador e quem lançou recebem
+          confirmado e quando o DP decide. O gestor imediato do colaborador e quem lançou recebem
           sempre. As regras abaixo acrescentam outras pessoas por e-mail, por hierarquia ou por
           cargo, e são conferidas a cada envio pelo cadastro do momento. Com unidade, a regra vale
           só para os lançamentos daquela unidade. Dados do atestado nunca vão por e-mail.

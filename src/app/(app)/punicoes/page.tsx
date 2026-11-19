@@ -11,12 +11,12 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
  * Lançamento de punições.
  *
  * O gestor preenche, imprime para colher assinaturas, anexa o documento
- * assinado e envia ao RH. Só a aprovação do RH cria a punição de verdade, em
+ * assinado e envia ao DP. Só a aprovação do DP cria a punição de verdade, em
  * `employee_sanctions`, que é a tabela que o redutor da remuneração variável lê.
  * Enquanto o lançamento não for aprovado, ele não vale nada, e a tela diz isso.
  *
  * O recorte de quem vê o quê é da RLS (`pode_ver_punicao`): autor, gestor da
- * pessoa, ou RH/administrador/proprietário. A tela não repete esse filtro; o que
+ * pessoa, ou DP/administrador/proprietário. A tela não repete esse filtro; o que
  * ela faz é separar em abas o que já veio filtrado.
  */
 export default async function PunicoesPage() {
@@ -38,7 +38,7 @@ export default async function PunicoesPage() {
         <PageHeader title="Punições" />
         <EmptyState
           title="Acesso restrito"
-          description="Punição é lançada pelo gestor da pessoa e aprovada pelo RH. Quem não faz nem uma coisa nem outra não acompanha lançamentos por aqui."
+          description="Punição é lançada pelo gestor da pessoa e aprovada pelo DP. Quem não faz nem uma coisa nem outra não acompanha lançamentos por aqui."
         />
       </div>
     );
@@ -52,7 +52,7 @@ export default async function PunicoesPage() {
         <PageHeader title="Punições" subtitle={tenant.name} />
         <EmptyState
           title="Nada para lançar por aqui"
-          description="Punição é lançada pelo gestor da pessoa e aprovada pelo RH. Assim que houver alguém sob sua gestão, o formulário aparece nesta tela."
+          description="Punição é lançada pelo gestor da pessoa e aprovada pelo DP. Assim que houver alguém sob sua gestão, o formulário aparece nesta tela."
         />
       </div>
     );
@@ -110,7 +110,7 @@ export default async function PunicoesPage() {
     if (m.profile?.id) nomePorId.set(m.profile.id, m.profile.full_name ?? "");
   }
 
-  // A quem este usuário pode aplicar punição. Para o RH e a administração é o
+  // A quem este usuário pode aplicar punição. Para o DP e a administração é o
   // quadro inteiro; para o gestor, a cadeia abaixo dele. É o mesmo conjunto que
   // a policy de insert aceita, então a lista não oferece o que o banco recusaria.
   const alcance = ehDp ? [...nomePorId.keys()] : equipe;
@@ -177,7 +177,7 @@ export default async function PunicoesPage() {
     <div>
       <PageHeader
         title="Punições"
-        subtitle="O lançamento vira punição de verdade só depois que o RH aprova"
+        subtitle="O lançamento vira punição de verdade só depois que o DP aprova"
       />
       <PunicoesManager
         rows={rows}

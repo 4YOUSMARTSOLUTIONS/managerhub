@@ -22,7 +22,7 @@ type Edicao =
  * Configurações > Colaboradores > Acesso às telas.
  *
  * Cada nível vê todas as telas contratadas, ou só as escolhidas. A exceção da
- * pessoa vale mais que a regra do nível. Proprietário, administrador e RH
+ * pessoa vale mais que a regra do nível. Proprietário, administrador e DP
  * nunca são restringidos (a regra mora no banco, em `minhas_telas`).
  */
 export function AcessoTelasManager({
@@ -30,7 +30,7 @@ export function AcessoTelasManager({
 }: {
   niveis: NivelDeAcesso[];
   excecoes: ExcecaoDeAcesso[];
-  /** quem pode ganhar exceção (já sem proprietário, administrador e RH) */
+  /** quem pode ganhar exceção (já sem proprietário, administrador e DP) */
   pessoas: PessoaDeAcesso[];
   opcoes: GrupoDeTelas[];
   canEdit: boolean;
@@ -66,7 +66,7 @@ export function AcessoTelasManager({
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", paddingTop: "0.6rem" }}>
       <p className="muted" style={{ fontSize: "0.85rem", margin: 0, lineHeight: 1.55, maxWidth: 820 }}>
         Escolha quais telas cada nível vê. Nível sem regra vê todas as telas contratadas. A exceção de uma
-        pessoa vale mais que a regra do nível dela. Proprietário, Administrador e RH sempre veem todas as
+        pessoa vale mais que a regra do nível dela. Proprietário, Administrador e DP sempre veem todas as
         telas contratadas. Quem não tem o Dashboard liberado entra direto na primeira tela que tem.
       </p>
 

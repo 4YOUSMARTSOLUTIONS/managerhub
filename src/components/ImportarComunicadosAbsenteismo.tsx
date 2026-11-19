@@ -83,7 +83,7 @@ export function ImportarComunicadosAbsenteismo({ aberto, onFechar }: { aberto: b
         ["Data", "Sim", "O dia em que a pessoa não compareceu, DD/MM/AAAA. Precisa ser antes de hoje: o que acontece de hoje em diante segue pelo Lançar ausência."],
         ["Observação", "Não", "O que se sabe até agora (o mesmo campo do Lançar ausência)."],
         ["", "", ""],
-        ["Como entra", "", "Cada linha entra EM ABERTO, como o \"Ainda não sei o motivo\": sem e-mail e sem aviso no sino. Depois segue o fluxo normal, pelo Efetivar (motivo e atestado) e o envio ao RH, que aí dispara o e-mail."],
+        ["Como entra", "", "Cada linha entra EM ABERTO, como o \"Ainda não sei o motivo\": sem e-mail e sem aviso no sino. Depois segue o fluxo normal, pelo Efetivar (motivo e atestado) e o envio ao DP, que aí dispara o e-mail."],
         ["Com quem fica", "", "No nome do gestor atual de cada colaborador: ele efetiva e recebe o lembrete diário das 08:00. Quem não tem gestor ativo fica com quem importou. O DP efetiva qualquer um. Na lista, Lançado por mostra Importação."],
         ["Linhas recusadas", "", "Ficam de fora, com o motivo: CPF ou ID não encontrado, data de hoje em diante, antes da admissão, depois do desligamento, dia que já tem absenteísmo (inclusive em outra linha da planilha) ou que cai em férias ou afastamento. Antes de importar, a tela mostra quais e por quê."],
         ["Reimportar a mesma planilha", "", "Não duplica: o que já entrou volta como recusado."],

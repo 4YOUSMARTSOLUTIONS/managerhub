@@ -244,7 +244,7 @@ export const INFRACTION_SEVERITY_TONE: Record<Enums<"infraction_severity">, Tone
 // entra no cálculo da remuneração variável.
 export const PUNICAO_STATUS: Record<Enums<"punicao_status">, string> = {
   rascunho: "Rascunho",
-  pendente: "Aguardando o RH",
+  pendente: "Aguardando o DP",
   aprovada: "Aprovada",
   reprovada: "Reprovada",
   cancelada: "Cancelada",
@@ -277,7 +277,7 @@ export const ABSENCE_KIND_TONE: Record<Enums<"absence_kind">, Tone> = {
 
 /**
  * Graus de parentesco para a licença nojo (falecimento). Lista fechada de
- * propósito: campo livre viraria "tio", "TIO", "meu tio" e o RH não filtraria
+ * propósito: campo livre viraria "tio", "TIO", "meu tio" e o DP não filtraria
  * nada depois. "Outro" cobre o resto sem abrir o campo.
  */
 export const GRAUS_PARENTESCO = [
@@ -330,7 +330,7 @@ export const ABSENCE_DESCONTA_PADRAO: Record<Enums<"absence_kind">, boolean> = {
  */
 export const ABSENTEISMO_STATUS: Record<Enums<"absenteismo_status">, string> = {
   aberto: "Em aberto",
-  pendente: "Aguardando o RH",
+  pendente: "Aguardando o DP",
   aprovado: "Aprovado",
   reprovado: "Reprovado",
   cancelado: "Cancelado",
@@ -673,7 +673,7 @@ export const ROLE: Record<Enums<"member_role">, string> = {
   admin: "Administrador",
   manager: "Gerencial",
   team_lead: "Gestor",
-  hr: "RH",
+  hr: "DP",
   member: "Membro",
 };
 
@@ -703,7 +703,7 @@ export const UNIT_KIND: Record<Enums<"unit_kind">, string> = {
  * - `team_lead` (Gestor): só a própria equipe, mas a cadeia inteira abaixo dele.
  *   Não é atalho para nada de empresa: sem chamados de terceiros, sem logs.
  *
- * `hr` (RH) é de outra natureza: não é um degrau da hierarquia, é um funcionário
+ * `hr` (DP) é de outra natureza: não é um degrau da hierarquia, é um funcionário
  * comum com alçada num assunto. Ele edita departamento pessoal (cadastro, férias,
  * punições e remuneração variável) e mais nada; não redefine senha e não muda o
  * perfil de ninguém. Por isso aparece depois de Gestor e antes de Funcionário.
@@ -712,7 +712,7 @@ export const USER_TYPE: Partial<Record<Enums<"member_role">, string>> = {
   admin: "Administrador",
   manager: "Gerencial",
   team_lead: "Gestor",
-  hr: "RH",
+  hr: "DP",
   member: "Funcionário",
 };
 

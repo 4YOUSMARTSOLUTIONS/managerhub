@@ -13,7 +13,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
  * O gestor registra que alguém não veio (ou saiu por algumas horas), sem saber o motivo, e o comunicado
  * por e-mail sai na hora. Depois, com a situação esclarecida, ele
  * confirma o que foi (falta, atestado, licença), anexa o documento e envia ao
- * RH. Só a aprovação do RH cria a linha em `employee_absences`, que é a base
+ * DP. Só a aprovação do DP cria a linha em `employee_absences`, que é a base
  * que a remuneração variável lê.
  *
  * O dado clínico (CID, médico, local) NÃO vem nesta consulta: ele mora em
@@ -43,7 +43,7 @@ export default async function AbsenteismosPage() {
         <PageHeader title="Absenteísmos" />
         <EmptyState
           title="Acesso restrito"
-          description="A ausência é lançada pelo gestor da pessoa e aprovada pelo RH. Quem não faz nem uma coisa nem outra não acompanha lançamentos por aqui."
+          description="A ausência é lançada pelo gestor da pessoa e aprovada pelo DP. Quem não faz nem uma coisa nem outra não acompanha lançamentos por aqui."
         />
       </div>
     );
@@ -203,7 +203,7 @@ export default async function AbsenteismosPage() {
     <div>
       <PageHeader
         title="Absenteísmos"
-        subtitle="A ausência só vale de verdade depois que o RH aprova"
+        subtitle="A ausência só vale de verdade depois que o DP aprova"
       />
       <AbsenteismosManager
         rows={rows}

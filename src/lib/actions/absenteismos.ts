@@ -16,13 +16,13 @@ import { SEM_RETORNO } from "@/lib/constants";
 
 /**
  * Absenteísmos: o catálogo de tipos, a lista de quem recebe o comunicado e,
- * adiante, o lançamento de ausência com aprovação do RH.
+ * adiante, o lançamento de ausência com aprovação do DP.
  *
  * Arquivo separado de `absences.ts` de propósito. Aquele é o cadastro
  * ADMINISTRATIVO que grava direto em `employee_absences` (a base que a
  * remuneração variável lê), usado pelo departamento pessoal e pela importação
  * em lote. Este é o PROCESSO: quem lança é o gestor, e a ausência só nasce
- * quando o RH aprova.
+ * quando o DP aprova.
  *
  * Catálogo e destinatários são do departamento pessoal (`dpActionContext`): a
  * RLS já recusa quem não pode, mas recusa em silêncio, e um update fora da
@@ -351,7 +351,7 @@ async function montarCarimbo(ctx: Contexto, userId: string) {
  *
  * AS HORAS JÁ NASCEM AQUI, e não só na efetivação. Quem saiu duas horas para o
  * médico não "não compareceu", e lançar isso como dia inteiro fazia o comunicado
- * chegar ao RH dizendo que a pessoa não veio trabalhar. As colunas e as
+ * chegar ao DP dizendo que a pessoa não veio trabalhar. As colunas e as
  * constraints já existiam (`absenteismo_horas_coerentes` e
  * `absenteismo_horas_um_dia_so`, que aceitam horas com `start_date` nulo): só
  * faltava o primeiro passo preenchê-las.
@@ -365,12 +365,12 @@ export async function lancarNaoComparecimento(input: {
   horaFim?: string;
   /**
    * Trabalhou parte do dia (LUIZ, 12/11/2026): no "Ainda não sei o motivo" o
-   * horário é opcional; ele passa a ser exigido no envio ao RH.
+   * horário é opcional; ele passa a ser exigido no envio ao DP.
    */
   parcial?: boolean;
   /**
    * false no caminho "já sei o motivo" (LUIZ, 11/11/2026): o comunicado sai uma
-   * vez só, no envio ao RH; se o gestor desistir antes, sai o de abertura
+   * vez só, no envio ao DP; se o gestor desistir antes, sai o de abertura
    * (`comunicarAberturaPendente`).
    */
   comunicar?: boolean;
@@ -456,7 +456,7 @@ export type ConfirmacaoInput = {
   tipoAtestado?: string;
   /**
    * Afastamento: de onde vem o documento, "medico" | "pericia_inss" (LUIZ,
-   * 17/11/2026). Dá o nome do arquivo que o RH baixa. Grava na mesma coluna do
+   * 17/11/2026). Dá o nome do arquivo que o DP baixa. Grava na mesma coluna do
    * tipo de atestado (`certificate_kind`).
    */
   tipoDocumento?: string;
@@ -476,7 +476,7 @@ export type ConfirmacaoInput = {
    */
   horaInicio?: string;
   horaFim?: string;
-  /** trabalhou parte do dia; o horário pode ficar para depois até o envio ao RH */
+  /** trabalhou parte do dia; o horário pode ficar para depois até o envio ao DP */
   parcial?: boolean;
   /**
    * Primeiro dia do atestado (LUIZ, 12/11/2026), só em período de 2 dias ou
@@ -600,7 +600,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
         .some((v) => v.trim());
       if (temAlgo) {
         // Os dias de afastamento são CALCULADOS do período, nunca digitados: o
-        // número na filha não pode divergir das datas que o RH vai aprovar.
+        // número na filha não pode divergir das datas que o DP vai aprovar.
         // Ausência de horas não conta dia nenhum, e o primeiro dia trabalhado
         // (todo ou parte) também não.
         const diasCorridos = diasDoDocumento - (primeiroDia === "integral" ? 0 : 1);
@@ -644,7 +644,7 @@ function recusaDoAnexo(
   if (atual.importado && atual.status === "aprovado") {
     return isDp ? null : "Só o DP anexa documento a lançamento importado.";
   }
-  return "Este lançamento já foi enviado ao RH.";
+  return "Este lançamento já foi enviado ao DP.";
 }
 
 /**
@@ -879,7 +879,7 @@ export async function getAtestado(id: string): Promise<AtestadoLido | null> {
 /**
  * Busca na tabela CID-10 oficial (catálogo global, carregado do DATASUS).
  *
- * A descrição deixa de ser digitada: quem digita descrição erra, e o RH recebe
+ * A descrição deixa de ser digitada: quem digita descrição erra, e o DP recebe
  * "gripe" onde o documento diz outra coisa. O gestor busca pelo código ou por
  * um pedaço da descrição e a tela preenche o resto.
  */
@@ -925,7 +925,7 @@ export async function getAlertaInss(userId: string, ate?: string): Promise<Alert
 }
 
 /**
- * O relatório do RH.
+ * O relatório do DP.
  *
  * É a única saída que junta CPF e dado clínico na mesma linha, então a guarda
  * de papel está no corpo da RPC e o botão só aparece para quem decide. A
@@ -960,7 +960,7 @@ export async function gerarRelatorioAbsenteismo(
         .flatMap((r) => (r.absence_kinds?.length ? r.absence_kinds : r.absence_kind ? [r.absence_kind] : []) as string[]),
     )];
     const STATUS_DA_SITUACAO: Record<string, Enums<"absenteismo_status">> = {
-      "Não comparecimento": "aberto", "Aguardando o RH": "pendente", Aprovado: "aprovado", Reprovado: "reprovado",
+      "Não comparecimento": "aberto", "Aguardando o DP": "pendente", Aprovado: "aprovado", Reprovado: "reprovado",
     };
 
     // A planilha única do DP (LUIZ, 16/11/2026): ganhou as colunas que só a
@@ -1011,7 +1011,7 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
     if (!id) return { error: "Lançamento inválido." };
 
     // Com "Continua ausente", os dias que o documento não cobre viram falta à
-    // parte, já enviada ao RH na mesma transação (LUIZ, 17/11/2026)
+    // parte, já enviada ao DP na mesma transação (LUIZ, 17/11/2026)
     const { data: faltas, error } = await supabase.rpc("absenteismo_confirmar_e_separar", { p_id: id });
     if (error) return { error: error.message };
 
@@ -1024,7 +1024,7 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
     const n = faltas?.length ?? 0;
     return {
       ok: true,
-      message: n ? `Enviado ao RH, com ${n === 1 ? "a falta dos dias" : `${n} lançamentos de falta para os dias`} que o documento não cobre.` : "Enviado ao RH.",
+      message: n ? `Enviado ao DP, com ${n === 1 ? "a falta dos dias" : `${n} lançamentos de falta para os dias`} que o documento não cobre.` : "Enviado ao DP.",
       ...avisoDoEnvio(falhou),
     };
   } catch (e) {
@@ -1033,7 +1033,7 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
 }
 
 /**
- * O gestor começou o lançamento com o motivo e fechou sem enviar ao RH: o
+ * O gestor começou o lançamento com o motivo e fechou sem enviar ao DP: o
  * lançamento ficou em aberto sem aviso nenhum. Manda o de abertura (uma vez).
  */
 export async function comunicarAberturaPendente(id: string): Promise<ActionState> {
@@ -1056,7 +1056,7 @@ export async function comunicarAberturaPendente(id: string): Promise<ActionState
     if (!envio) return { ok: true };
     return {
       ok: true,
-      message: "A ausência ficou em aberto, e o RH foi avisado. Efetive quando tiver o motivo.",
+      message: "A ausência ficou em aberto, e o DP foi avisado. Efetive quando tiver o motivo.",
       ...avisoDoEnvio(envio),
     };
   } catch (e) {
@@ -1129,7 +1129,7 @@ export async function reenviarComunicado(formData: FormData): Promise<ActionStat
 }
 
 /**
- * A decisão do RH.
+ * A decisão do DP.
  *
  * A guarda de papel mora na RPC, e não aqui: é ela que grava, e é lá que a
  * verificação precisa estar para valer contra quem chame o PostgREST direto.
@@ -1194,7 +1194,7 @@ export async function cancelarAbsenteismo(formData: FormData): Promise<ActionSta
       return {
         ok: true,
         message: "Lançamento cancelado.",
-        warning: "Lançamento cancelado, mas o e-mail pedindo para desconsiderar o comunicado não saiu. Avise o RH.",
+        warning: "Lançamento cancelado, mas o e-mail pedindo para desconsiderar o comunicado não saiu. Avise o DP.",
       };
     }
     return { ok: true, message: "Lançamento cancelado." };

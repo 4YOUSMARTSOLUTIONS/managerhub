@@ -46,7 +46,7 @@ export default function EsqueciSenhaPage() {
           </p>
           <p className="soft" style={{ fontSize: "0.8rem", margin: "1rem 0 0", lineHeight: 1.55 }}>
             Não chegou? Confira o spam. Se você não tem e-mail cadastrado, quem
-            redefine a sua senha é o RH.
+            redefine a sua senha é o DP.
           </p>
         </div>
       ) : (
@@ -77,7 +77,7 @@ export default function EsqueciSenhaPage() {
             }}
           >
             <strong>Sem e-mail cadastrado, não é possível recuperar a senha por aqui.</strong>{" "}
-            Se a mensagem não chegar em alguns minutos, procure o RH: ele poderá
+            Se a mensagem não chegar em alguns minutos, procure o DP: ele poderá
             redefinir o seu acesso.
           </p>
 

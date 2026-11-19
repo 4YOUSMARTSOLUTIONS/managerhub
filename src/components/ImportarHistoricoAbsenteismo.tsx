@@ -121,7 +121,7 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
         ["Acidente de trabalho", "Não", "Sim ou Não. Em branco vale Não."],
         ["Abonada", "Não", "Sim ou Não, só para falta. Em branco vale Não."],
         ["", "", ""],
-        ["Como entra", "", "Cada linha entra JÁ APROVADA, sem comunicado por e-mail, sem aviso no sino e sem anexo. Passa a contar no relatório, na soma de 15 dias do INSS, na situação do colaborador e na remuneração variável (desconto e redutor do motivo, como na aprovação do RH)."],
+        ["Como entra", "", "Cada linha entra JÁ APROVADA, sem comunicado por e-mail, sem aviso no sino e sem anexo. Passa a contar no relatório, na soma de 15 dias do INSS, na situação do colaborador e na remuneração variável (desconto e redutor do motivo, como na aprovação do DP)."],
         ["O vínculo da época", "", "Setor, função, gestor e unidade gravados no lançamento são os da data do absenteísmo (histórico de movimentações), não os de hoje."],
         ["Linhas recusadas", "", "Ficam de fora, com o motivo: período que cruza com férias, afastamento ou outro absenteísmo da pessoa (inclusive de outra linha da planilha), antes da admissão, depois do desligamento, de hoje em diante, CID inexistente. Antes de importar, a tela mostra quais e por quê."],
         ["Reimportar a mesma planilha", "", "Não duplica: o que já entrou volta como recusado, por cruzar com o absenteísmo importado antes."],

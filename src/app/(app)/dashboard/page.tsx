@@ -22,7 +22,7 @@ export default async function DashboardPage() {
       <div className="card">
         <EmptyState
           title="Nenhuma tela liberada"
-          description="O seu acesso ainda não tem telas liberadas. Procure o RH ou a administração da empresa."
+          description="O seu acesso ainda não tem telas liberadas. Procure o DP ou a administração da empresa."
         />
       </div>
     );

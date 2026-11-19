@@ -77,7 +77,7 @@ export async function saveTrilha(input: TrilhaInput): Promise<ActionState & { id
     } else {
       const { data: gere } = await supabase.rpc("gere_treinamentos", { p_tenant: tenantId });
       if (gere !== true) {
-        return { error: "Apenas proprietário, administrador, RH e quem tem a gestão de treinamentos cadastram trilhas." };
+        return { error: "Apenas proprietário, administrador, DP e quem tem a gestão de treinamentos cadastram trilhas." };
       }
       const { data, error } = await supabase
         .from("training_paths")

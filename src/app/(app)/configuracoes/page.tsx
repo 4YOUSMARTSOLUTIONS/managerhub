@@ -95,7 +95,7 @@ export default async function SettingsPage({
   // três camadas atrás dele: a RLS, o `adminActionContext` das server actions e
   // as guardas dentro das RPCs `admin_*`. A tela é só a primeira.
   //
-  // O RH entra por um terceiro caminho: ele NÃO lê a tela toda, e edita a parte
+  // O DP entra por um terceiro caminho: ele NÃO lê a tela toda, e edita a parte
   // dele. Só as abas Colaboradores e Remuneração variável aparecem, e nelas o
   // `canEditDP` faz o papel do `canEdit`. Duas coisas ficam fora da alçada dele
   // dentro da própria aba de Colaboradores, e são travadas pelo `canManageAccess`:
@@ -107,7 +107,7 @@ export default async function SettingsPage({
   // RV individual chegam recortadas pela RLS. Regras e cadastros sem dado de
   // pessoa ele vê inteiros.
   //
-  // RH é atribuição, não perfil (06/11/2026): combina com Gestor e Gerencial.
+  // DP é atribuição, não perfil (06/11/2026): combina com Gestor e Gerencial.
   // Com a marca, o departamento pessoal manda nesta tela: a pessoa vê a empresa
   // inteira (não só a equipe) e edita as abas do DP. Gerencial com a marca
   // continua lendo o resto; Gestor e Funcionário com a marca veem só o DP.
@@ -127,7 +127,7 @@ export default async function SettingsPage({
     return (
       <div>
         <PageHeader title="Configurações" />
-        <EmptyState title="Acesso restrito" description="Apenas proprietários, administradores, RH, Gerencial e Gestores acessam as configurações." />
+        <EmptyState title="Acesso restrito" description="Apenas proprietários, administradores, DP, Área de Gente, Gerencial e Gestores acessam as configurações." />
       </div>
     );
   }
@@ -145,7 +145,7 @@ export default async function SettingsPage({
   // A ordem aqui é a da barra (a primeira visível é a padrão) e TEM de bater
   // com a lista `tabs` lá embaixo, que monta o conteúdo.
   //
-  // O RH não é um administrador com menos botões: é um funcionário com uma
+  // O DP não é um administrador com menos botões: é um funcionário com uma
   // alçada. Mostrar a empresa, a estrutura, o Programa de Excelência e o SLA em
   // modo consulta seria dar a ele uma visão que o cargo não pede. Sobram as
   // abas que SÃO o departamento pessoal.
@@ -296,7 +296,7 @@ export default async function SettingsPage({
     em("usuarios", "ferias") ? supabase.from("absenteismo_lancamentos").select("absence_id").eq("tenant_id", tenant.id).not("absence_id", "is", null) : nada,
     // Segurança do trabalho: os três catálogos do relato e a equipe que tria.
     // Leitura é de qualquer membro (o formulário precisa deles), escrita é
-    // owner/admin — o RH não configura segurança.
+    // owner/admin — o DP não configura segurança.
     em("seguranca") ? supabase
       .from("seg_tipos_relato")
       .select("id, name, natureza, description, image_path, active")
@@ -742,7 +742,7 @@ export default async function SettingsPage({
               canEdit={canEditDP}
               kinds={["licenca", "afastamento", "atestado", "falta"]}
               title="Absenteísmos e afastamentos"
-              description="Licenças, afastamentos, atestados e faltas. As linhas com origem em lançamento vieram do módulo de Absenteísmos, já aprovadas pelo RH, e são editadas por lá. O registro direto serve para o histórico, para quem não usa o módulo e para afastamentos longos, como aposentadoria por invalidez ou INSS, que podem ficar sem data de retorno. O afastamento ou a licença em vigor aparece como status do colaborador em Colaboradores e em Férias."
+              description="Licenças, afastamentos, atestados e faltas. As linhas com origem em lançamento vieram do módulo de Absenteísmos, já aprovadas pelo DP, e são editadas por lá. O registro direto serve para o histórico, para quem não usa o módulo e para afastamentos longos, como aposentadoria por invalidez ou INSS, que podem ficar sem data de retorno. O afastamento ou a licença em vigor aparece como status do colaborador em Colaboradores e em Férias."
               exportFilename="absenteismos_e_afastamentos.xlsx"
             />
           ),
@@ -1805,7 +1805,7 @@ export default async function SettingsPage({
               {isGente && !isGerencial
                 ? "Você enxerga os colaboradores da empresa inteira, com dados pessoais, afastamentos e histórico. Alterações são feitas pelo departamento pessoal, pelo proprietário ou por um administrador."
                 : isGestor
-                ? "Você enxerga as regras e os cadastros da empresa e, onde há dados de pessoas (colaboradores, ausências, punições e remuneração variável), só a sua equipe. Alterações são feitas pelo proprietário, por um administrador ou pelo RH."
+                ? "Você enxerga as regras e os cadastros da empresa e, onde há dados de pessoas (colaboradores, ausências, punições e remuneração variável), só a sua equipe. Alterações são feitas pelo proprietário, por um administrador ou pelo DP."
                 : isHr
                   ? "Você altera as abas do departamento pessoal. O resto da configuração da empresa fica em consulta: alterações ali são feitas pelo proprietário ou por um administrador."
                   : "Você enxerga toda a configuração da empresa, mas alterações são feitas pelo proprietário ou por um administrador."}

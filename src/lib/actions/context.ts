@@ -73,11 +73,11 @@ export const actionContext = cache(async function actionContext() {
     userId: user.id,
     tenantId: membership.tenant_id,
     role: membership.role,
-    /** Departamento Pessoal (`memberships.is_hr`, a antiga marca RH): atribuição, não perfil */
+    /** Departamento Pessoal (`memberships.is_hr`, que a tela chamava de RH): atribuição, não perfil */
     isHr: membership.is_hr,
     /** Área de Gente: só LÊ o pessoal da empresa; nenhuma action de escrita a aceita */
     isGente: membership.is_gente === true,
-    /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
+    /** departamento pessoal: proprietário, administrador ou quem tem a marca DP */
     isDp: membership.role === "owner" || membership.role === "admin" || membership.is_hr,
   };
 });
@@ -104,13 +104,13 @@ export async function adminActionContext() {
 }
 
 /**
- * A mesma trava, um degrau mais larga: passa também o RH.
+ * A mesma trava, um degrau mais larga: passa também o DP.
  *
  * Vale só no departamento pessoal (cadastro de colaborador, férias e
  * afastamentos, punições e remuneração variável). Todo o resto de
  * /configuracoes continua no `adminActionContext`, e a divisão precisa ser feita
  * action por action: trocar uma pela outra por engano é o tipo de erro que a RLS
- * não denuncia, porque lá o RH também está autorizado nessas tabelas.
+ * não denuncia, porque lá o DP também está autorizado nessas tabelas.
  *
  * O que esta função NÃO cobre, de propósito: `setUserPassword` e `removeUser`.
  * E a troca de perfil de acesso é barrada no banco, pelo trigger
@@ -119,7 +119,7 @@ export async function adminActionContext() {
 export async function dpActionContext() {
   const ctx = await actionContext();
   if (!ctx.isDp) {
-    throw new Error("Apenas proprietário, administrador e RH podem alterar o departamento pessoal.");
+    throw new Error("Apenas proprietário, administrador e DP podem alterar o departamento pessoal.");
   }
   return ctx;
 }

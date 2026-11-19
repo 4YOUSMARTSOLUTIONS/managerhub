@@ -26,12 +26,12 @@ import { sendMail } from "@/lib/mailer";
  */
 
 /**
- * `direto`: lançado já com o motivo e enviado ao RH de uma vez, sem o aviso de
+ * `direto`: lançado já com o motivo e enviado ao DP de uma vez, sem o aviso de
  * abertura antes (LUIZ, 11/11/2026). Quem decide é o próprio envio: um
  * "confirmado" sem aviso de abertura registrado vira `direto`.
  *
  * `cancelado`: o lançamento em aberto foi cancelado (a pessoa chegou depois
- * das primeiras horas) e o RH precisa desconsiderar o comunicado anterior
+ * das primeiras horas) e o DP precisa desconsiderar o comunicado anterior
  * (LUIZ, 12/11/2026). Só sai quando um comunicado já tinha saído.
  *
  * `continua`: o lançamento em aberto ganhou mais um dia sem comparecer ("Continua
@@ -145,7 +145,7 @@ function assunto(evento: EventoComunicado, l: Linha): string {
     const s = diasSemComparecer(l);
     return `Continua ausente: ${quem} em ${dataBr(l.ausente_ate ?? l.occurred_on)}${s ? ` (${s.dias}º dia)` : ""}`;
   }
-  // Quem saiu duas horas não "não compareceu". O assunto é o que o RH lê na
+  // Quem saiu duas horas não "não compareceu". O assunto é o que o DP lê na
   // caixa de entrada antes de abrir, então a diferença precisa estar ali.
   const horas = faixaDeHoras(l);
   const parcial = Boolean(l.partial_day);
@@ -189,7 +189,7 @@ function corpo(
     if (l.start_date && l.end_date) {
       const primeiro = l.primeiro_dia === "trabalhou" || l.primeiro_dia === "parcial" ? l.primeiro_dia : null;
       // Primeiro dia trabalhado (LUIZ, 12/11/2026): o período é o do documento,
-      // e a ausência que vale vem logo abaixo, para o RH não descontar a mais.
+      // e a ausência que vale vem logo abaixo, para o DP não descontar a mais.
       linhas.push([
         primeiro ? "Período do atestado" : "Período",
         l.end_date === SEM_TERMINO
@@ -213,7 +213,7 @@ function corpo(
         }
       }
     }
-    // O e-mail de motivo informado leva o que o RH precisa para agir (LUIZ,
+    // O e-mail de motivo informado leva o que o DP precisa para agir (LUIZ,
     // 17/11/2026): dias, retorno, tipo do documento, acidente de trabalho e o
     // alerta de INSS. O CID ficou de fora por decisão dele: vai para dezenas de
     // pessoas.
@@ -261,14 +261,14 @@ function corpo(
           ? `A falta, lançada sem data de término, foi encerrada no desligamento do colaborador. O último dia de falta é ${dataBr(l.end_date)}.`
           : `A falta, lançada sem data de término, foi encerrada pelo DP. O último dia de falta é ${dataBr(l.end_date)}.`
       : evento === "confirmado"
-        ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do RH."
+        ? "O gestor confirmou o motivo e enviou o lançamento para aprovação do DP."
       : evento === "direto"
         ? parcial
-          ? "Ausência parcial lançada pelo gestor já com o motivo e enviada para aprovação do RH."
-          : "O gestor lançou a ausência já com o motivo e enviou para aprovação do RH."
+          ? "Ausência parcial lançada pelo gestor já com o motivo e enviada para aprovação do DP."
+          : "O gestor lançou a ausência já com o motivo e enviou para aprovação do DP."
         : evento === "aprovado"
-          ? "O RH aprovou o lançamento, que passa a valer como ausência registrada."
-          : "O RH reprovou o lançamento, que não vale como ausência.";
+          ? "O DP aprovou o lançamento, que passa a valer como ausência registrada."
+          : "O DP reprovou o lançamento, que não vale como ausência.";
 
   const nota = evento === "reprovado" && l.decision_note
     ? `<p style="margin:0 0 12px"><strong>Motivo da reprovação:</strong> ${escapeHtml(l.decision_note)}</p>`
@@ -306,7 +306,7 @@ export async function dispatchComunicadoAbsenteismo(
   atorId?: string,
 ): Promise<ResultadoComunicado> {
   const admin = createServiceClient();
-  // "confirmado" sem aviso de abertura antes = lançado direto com o motivo: o RH
+  // "confirmado" sem aviso de abertura antes = lançado direto com o motivo: o DP
   // não sabe da ausência, então o texto não pode falar em "motivo confirmado"
   const evento: EventoComunicado = eventoPedido === "confirmado" && !(await avisouAbertura(lancamentoId))
     ? "direto"
@@ -359,7 +359,7 @@ export async function dispatchComunicadoAbsenteismo(
       admin.from("tenants").select("name").eq("id", linha.tenant_id).maybeSingle(),
       admin.from("profiles").select("full_name, email").eq("id", linha.created_by).maybeSingle(),
       getPlatformResend(),
-      // quem cancelou pode não ser quem lançou (o RH, o gestor da pessoa)
+      // quem cancelou pode não ser quem lançou (o DP, o gestor da pessoa)
       modelo === "cancelado" && atorId
         ? admin.from("profiles").select("full_name").eq("id", atorId).maybeSingle()
         : Promise.resolve({ data: null as { full_name: string | null } | null }),
@@ -416,7 +416,7 @@ async function modeloDoReenvio(lancamentoId: string, l: Pick<Linha, "status" | "
   if (l.status === "aprovado") return "aprovado";
   if (l.status === "reprovado") return "reprovado";
   if (l.status === "cancelado") return "cancelado";
-  // no RH: "motivo confirmado" se o aviso de abertura saiu antes; senão, "lançada"
+  // no DP: "motivo confirmado" se o aviso de abertura saiu antes; senão, "lançada"
   if (l.status === "pendente") return (await avisouAbertura(lancamentoId)) ? "confirmado" : "direto";
   // em aberto com dias acumulados: a versão mais recente é a do "Continua ausente"
   return l.ausente_ate && l.ausente_ate > l.occurred_on ? "continua" : "aberto";
@@ -434,8 +434,8 @@ async function avisouAbertura(lancamentoId: string): Promise<boolean> {
 
 /**
  * O aviso de abertura que ficou para trás: o gestor começou a lançar com o
- * motivo (sem aviso) e fechou sem enviar ao RH. O lançamento fica em aberto, e
- * o RH precisa saber da ausência como em qualquer outro. Não repete: só manda
+ * motivo (sem aviso) e fechou sem enviar ao DP. O lançamento fica em aberto, e
+ * o DP precisa saber da ausência como em qualquer outro. Não repete: só manda
  * se nenhum comunicado saiu ainda.
  */
 export async function comunicarAberturaSeFaltar(lancamentoId: string, atorId?: string): Promise<ResultadoComunicado | null> {

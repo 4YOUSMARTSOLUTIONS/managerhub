@@ -119,7 +119,7 @@ export type AbsenteismoRow = {
 /** altura dos botões da coluna Ações: todos iguais, para a linha não pular */
 const ALTURA_ACAO = 28;
 
-/** a falta sem término que ainda segue (enviada ao RH ou aprovada) */
+/** a falta sem término que ainda segue (enviada ao DP ou aprovada) */
 function semTerminoAberto(r: Pick<AbsenteismoRow, "faltaContinua" | "endDate" | "status">): boolean {
   return r.faltaContinua && r.endDate === SEM_RETORNO && (r.status === "pendente" || r.status === "aprovado");
 }
@@ -232,7 +232,7 @@ function semComparecer(r: Pick<AbsenteismoRow, "occurredOn" | "ausenteAte">): { 
 }
 
 /**
- * Os dias sem comparecer que o documento não cobre: no envio ao RH eles viram
+ * Os dias sem comparecer que o documento não cobre: no envio ao DP eles viram
  * falta, num lançamento à parte. Mesma conta da RPC
  * `absenteismo_confirmar_e_separar`. null = o documento não cobre nenhum deles.
  */
@@ -260,7 +260,7 @@ function primeiroDiaQueVale(c: Pick<Confirmacao, "emHoras" | "startDate" | "endD
 }
 
 /**
- * O resumo do "Enviar ao RH": rótulo e valor em duas colunas, o motivo maior
+ * O resumo do "Enviar ao DP": rótulo e valor em duas colunas, o motivo maior
  * e em negrito, o aviso da falta à parte em amarelo e a trava no fim.
  */
 function ResumoDoEnvio({ itens, avisoFalta }: { itens: [string, string, boolean?][]; avisoFalta: string }) {
@@ -285,7 +285,7 @@ function ResumoDoEnvio({ itens, avisoFalta }: { itens: [string, string, boolean?
           {avisoFalta}
         </p>
       )}
-      <span>Depois de enviado, o lançamento fica congelado até o RH decidir. Para corrigir algo, será preciso pedir a reprovação.</span>
+      <span>Depois de enviado, o lançamento fica congelado até o DP decidir. Para corrigir algo, será preciso pedir a reprovação.</span>
     </div>
   );
 }
@@ -302,7 +302,7 @@ const hoje = () => {
  * A tela do processo de absenteísmo.
  *
  * Três abas sobre a mesma lista: "Em aberto" é o que foi lançado e ainda não tem
- * motivo confirmado; "Aguardando o RH" é a fila de quem decide; "Histórico" é o
+ * motivo confirmado; "Aguardando o DP" é a fila de quem decide; "Histórico" é o
  * que já foi decidido.
  *
  * O bloco de atestado (CID, médico, local) só aparece quando o TIPO exige, e o
@@ -314,7 +314,7 @@ export function AbsenteismosManager({
   rows: AbsenteismoRow[];
   pessoas: Pessoa[];
   tipos: Tipo[];
-  /** para o filtro do relatório do RH */
+  /** para o filtro do relatório do DP */
   unidades: { id: string; name: string }[];
   /**
    * Comportamentos que já têm faixa de redutor ativa em Remuneração variável.
@@ -325,7 +325,7 @@ export function AbsenteismosManager({
   meuId: string;
   podeDecidir: boolean;
   /**
-   * Vê o que o DP vê (a fila do RH e o Relatório completo): o próprio DP e a
+   * Vê o que o DP vê (a fila do DP e o Relatório completo): o próprio DP e a
    * Área de Gente, que só lê (LUIZ, 19/11/2026). Agir continua em `podeDecidir`.
    */
   veEmpresa: boolean;
@@ -338,13 +338,13 @@ export function AbsenteismosManager({
       userId: string; occurredOn: string; reasonNote: string; emHoras: boolean; horaInicio: string; horaFim: string;
       /**
        * "Já sei o motivo e já recebi o documento" (LUIZ, 11/11/2026): a janela já
-       * é o formulário do Efetivar, e o lançamento só nasce no envio ao RH
+       * é o formulário do Efetivar, e o lançamento só nasce no envio ao DP
        */
       comMotivo: boolean;
     } | null
   >(null);
   const [confirmando, setConfirmando] = useState<AbsenteismoRow | null>(null);
-  // o lançamento do "Já sei o motivo" que foi gravado mas não chegou ao RH (o
+  // o lançamento do "Já sei o motivo" que foi gravado mas não chegou ao DP (o
   // envio falhou no meio): ao fechar a janela, sai o aviso de abertura
   const [semComunicado, setSemComunicado] = useState<string | null>(null);
   // o mesmo valor em ref: o fechamento logo depois do envio ainda enxergaria o estado velho
@@ -416,7 +416,7 @@ export function AbsenteismosManager({
 
   /**
    * Fecha o "Lançar ausência". Se o caminho com o motivo gravou o lançamento e o
-   * envio ao RH falhou depois, ele fica em aberto como qualquer outro, e o RH
+   * envio ao DP falhou depois, ele fica em aberto como qualquer outro, e o DP
    * precisa saber: sai o aviso de abertura (uma vez só).
    */
   const fecharNovo = () => {
@@ -567,7 +567,7 @@ export function AbsenteismosManager({
         <td style={{ textAlign: "center" }}>
           <span style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
             {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
-                escondê-lo num lápis fez parecer que o comunicado ia direto ao RH. */}
+                escondê-lo num lápis fez parecer que o comunicado ia direto ao DP. */}
             {vagas.efetivar && (
               <Vaga mostra={acoes.efetivar}>
               <button
@@ -596,7 +596,7 @@ export function AbsenteismosManager({
               </Vaga>
             )}
             {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
-                horas): cancela e pede ao RH para desconsiderar o comunicado */}
+                horas): cancela e pede ao DP para desconsiderar o comunicado */}
             {vagas.cancelar && (
               <Vaga mostra={acoes.cancelar}>
               <button
@@ -668,8 +668,8 @@ export function AbsenteismosManager({
           <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", maxWidth: 300 }}>
             <Badge tone={ABSENTEISMO_STATUS_TONE[r.status]}>{ABSENTEISMO_STATUS[r.status]}</Badge>
             {r.status === "reprovado" && r.decisionNote && (
-              <span className="cell-trunc soft" style={{ maxWidth: 100 }} title={`RH: ${r.decisionNote}`}>
-                RH: {r.decisionNote}
+              <span className="cell-trunc soft" style={{ maxWidth: 100 }} title={`DP: ${r.decisionNote}`}>
+                DP: {r.decisionNote}
               </span>
             )}
           </span>
@@ -760,10 +760,10 @@ export function AbsenteismosManager({
       content: (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-            Comunicados registrados, ainda sem definição. Nada daqui foi ao RH nem conta como
+            Comunicados registrados, ainda sem definição. Nada daqui foi ao DP nem conta como
             ausência: quando a situação estiver confirmada (atestado em mãos, falta assumida),
             use <strong>Efetivar</strong> para informar o motivo, o período real e os documentos.
-            Os lançamentos reprovados pelo RH também voltam para cá, no topo: corrija pelo
+            Os lançamentos reprovados pelo DP também voltam para cá, no topo: corrija pelo
             <strong> Efetivar</strong> e envie de novo.
           </p>
           {tabela(emAberto, true, "Nenhuma ausência em aberto. Quando alguém faltar ou sair por algumas horas, lance por aqui.")}
@@ -773,7 +773,7 @@ export function AbsenteismosManager({
   ];
   if (podeDecidir || veEmpresa) {
     abas.push({
-      id: "fila", label: `Aguardando o RH (${fila.length})`,
+      id: "fila", label: `Aguardando o DP (${fila.length})`,
       content: tabela(fila, true, "Nenhum lançamento aguardando decisão."),
     });
   }
@@ -839,7 +839,7 @@ export function AbsenteismosManager({
               />
             );
             // A exportação simples é a do GESTOR, que não vê CPF nem dado de
-            // saúde. Quem decide (proprietário, administrador, RH) usa só o
+            // saúde. Quem decide (proprietário, administrador, DP) usa só o
             // Relatório completo, que tem tudo o que a simples tinha (LUIZ,
             // 16/11/2026): as duas lado a lado só confundiam.
             if (!podeDecidir && !veEmpresa) return exportar;
@@ -907,7 +907,7 @@ export function AbsenteismosManager({
           <div role="group" aria-label="Você já sabe o motivo?" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.5rem" }}>
             {([
               [false, "Ainda não sei o motivo e/ou ainda não recebi o atestado/documento comprobatório", "Comunica agora. O motivo e o documento entram depois, pelo Efetivar."],
-              [true, "Já sei o motivo e já recebi o atestado/documento comprobatório", "Lança e envia ao RH de uma vez."],
+              [true, "Já sei o motivo e já recebi o atestado/documento comprobatório", "Lança e envia ao DP de uma vez."],
             ] as [boolean, string, string][]).map(([v, titulo, texto]) => {
               const ativo = novo.comMotivo === v;
               return (
@@ -932,7 +932,7 @@ export function AbsenteismosManager({
 
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
             {novo.comMotivo
-              ? "Preencha o motivo, o período e o documento. O lançamento é gravado no envio, e um comunicado só sai para o RH."
+              ? "Preencha o motivo, o período e o documento. O lançamento é gravado no envio, e um comunicado só sai para o DP."
               : <>
                   {novo.emHoras
                     ? "Use quando o colaborador trabalhou parte do dia (chegou atrasado ou saiu mais cedo) e o motivo ainda não é conhecido ou o atestado ainda não foi entregue."
@@ -986,7 +986,7 @@ export function AbsenteismosManager({
                 onAbrirDocumento={abrirDocumento}
                 onBaixarDocumento={baixarDocumento}
                 onCriado={marcarSemComunicado}
-                // enviado ao RH: o comunicado saiu no envio, não há aviso pendente
+                // enviado ao DP: o comunicado saiu no envio, não há aviso pendente
                 onEnviado={() => { marcarSemComunicado(null); setNovo(null); setErro(""); }}
                 onFechar={fecharNovo}
               />
@@ -1049,7 +1049,7 @@ export function AbsenteismosManager({
           {novo.emHoras && (
             <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
               Se souber o horário, informe; senão, ele entra no Efetivar, onde passa a ser obrigatório.
-              O horário sai no relatório do RH, para o desconto ser feito na folha. Ausência parcial
+              O horário sai no relatório do DP, para o desconto ser feito na folha. Ausência parcial
               não entra no cálculo da remuneração variável.
             </p>
           )}
@@ -1317,7 +1317,7 @@ function Dialogo({ titulo, children, onFechar }: { titulo: string; children: Rea
  * Busca na tabela CID-10 oficial (DATASUS), no servidor: são ~14 mil códigos,
  * e mandar o catálogo inteiro ao navegador por causa de um campo não faz
  * sentido. Escolher preenche código E descrição; digitada, a descrição chegava
- * errada ao RH.
+ * errada ao DP.
  */
 function BuscaCid({
   code, onEscolha, destaque,
@@ -1411,14 +1411,14 @@ function PainelConfirmacao({
   onBaixarDocumento: (path: string, nome: string) => void;
   /** o lançamento novo foi gravado (o envio pode ainda falhar depois) */
   onCriado?: (id: string) => void;
-  /** chamado depois do envio ao RH dar certo, antes de fechar */
+  /** chamado depois do envio ao DP dar certo, antes de fechar */
   onEnviado?: () => void;
   onFechar: () => void;
 }) {
   const userId = linha?.userId ?? novoPara?.userId ?? "";
   // O motivo começa em branco nos dois caminhos (LUIZ, 16 e 17/11/2026): vindo
   // preenchido com o primeiro do catálogo ("Licença"), passava sem ninguém
-  // conferir e um atestado foi ao RH como licença. Só volta o que já foi
+  // conferir e um atestado foi ao DP como licença. Só volta o que já foi
   // gravado (rascunho ou reprovado). No lançamento novo as datas também
   // começam em branco; no Efetivar elas partem do dia já lançado.
   const [c, setC] = useState<Confirmacao>({
@@ -1480,7 +1480,7 @@ function PainelConfirmacao({
   const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument) ?? null;
   const umDiaFora = foraDoDocumento?.length === 1 && foraDoDocumento[0][0] === foraDoDocumento[0][1];
   const avisoFalta = foraDoDocumento?.length
-    ? `O período informado não cobre ${foraDoDocumento.map(intervalo).join(" e ")}. ${umDiaFora ? "Esse dia será lançado" : "Esses dias serão lançados"} como ${tipoFalta?.name ?? "falta"}, num lançamento à parte que vai ao RH junto.`
+    ? `O período informado não cobre ${foraDoDocumento.map(intervalo).join(" e ")}. ${umDiaFora ? "Esse dia será lançado" : "Esses dias serão lançados"} como ${tipoFalta?.name ?? "falta"}, num lançamento à parte que vai ao DP junto.`
     : "";
   // o horário vai ao servidor na ausência de horas e no primeiro dia parcial
   const levaHoras = c.emHoras || primeiroDia === "parcial";
@@ -1544,13 +1544,13 @@ function PainelConfirmacao({
       // Sem isto o botão não dizia nada: o diálogo fica aberto de propósito
       // (salvar sem enviar é para continuar depois), então nada na tela mudava
       // e a gravação parecia não ter acontecido.
-      if (!depois) toast.success("Rascunho salvo. O lançamento segue em aberto, sem ir ao RH.");
+      if (!depois) toast.success("Rascunho salvo. O lançamento segue em aberto, sem ir ao DP.");
       if (depois) depois();
     });
   };
 
   /**
-   * O que vai ao RH, para conferir antes do envio (LUIZ, 17/11/2026): com só
+   * O que vai ao DP, para conferir antes do envio (LUIZ, 17/11/2026): com só
    * as datas, um atestado foi como "Licença" sem ninguém perceber. O motivo
    * vem primeiro e em destaque.
    */
@@ -1616,7 +1616,7 @@ function PainelConfirmacao({
       return;
     }
     const ok = await confirmDialog({
-      title: ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH",
+      title: ehNovo ? "Lançar e enviar ao DP" : "Enviar ao DP",
       confirmLabel: "Enviar",
       message: <ResumoDoEnvio itens={resumoDoEnvio()} avisoFalta={avisoFalta} />,
     });
@@ -1663,7 +1663,7 @@ function PainelConfirmacao({
       onEnviado?.();
       onFechar();
       if (r.warning) toast.warning(r.warning);
-      else toast.success(ehNovo ? "Ausência lançada e enviada ao RH." : "Enviado ao RH.");
+      else toast.success(ehNovo ? "Ausência lançada e enviada ao DP." : "Enviado ao DP.");
     });
   };
 
@@ -1768,11 +1768,11 @@ function PainelConfirmacao({
         </>
       )}
 
-      {/* devolvido pelo RH: o que corrigir vem antes de tudo */}
+      {/* devolvido pelo DP: o que corrigir vem antes de tudo */}
       {linha?.status === "reprovado" && (
         <p style={{ fontSize: "0.84rem", margin: 0, color: "var(--mh-text-1)", background: "var(--mh-danger-soft)", padding: "0.6rem 0.7rem", borderRadius: 8, borderLeft: "3px solid var(--mh-danger)" }}>
           <strong>
-            Reprovado pelo RH{linha.decidedByName ? ` (${shortName(linha.decidedByName)}` : ""}
+            Reprovado pelo DP{linha.decidedByName ? ` (${shortName(linha.decidedByName)}` : ""}
             {linha.decidedByName && linha.decidedAt ? `, ${formatDate(linha.decidedAt)})` : linha.decidedByName ? ")" : ""}:
           </strong>{" "}
           {linha.decisionNote ?? "sem observação."} Corrija o que for preciso e envie de novo.
@@ -1817,7 +1817,7 @@ function PainelConfirmacao({
           )}
         </div>
         {/* A conta é feita aqui e gravada pelo servidor: dias digitados à mão
-            divergiam das datas que o RH aprova. */}
+            divergiam das datas que o DP aprova. */}
         <div>
           <label className="label">Dias de afastamento</label>
           <div className="input" style={{ display: "flex", alignItems: "center", background: "var(--surface-2)" }}>
@@ -1895,7 +1895,7 @@ function PainelConfirmacao({
       {/* Primeiro dia (LUIZ, 12/11/2026): atestado de 09 a 11 de quem foi ao
           médico depois do expediente do dia 09 descontava um dia trabalhado.
           O período segue o documento; a resposta decide a ausência que vale.
-          "Não trabalhou" vem marcado: é o caso comum, e o RH revisa. */}
+          "Não trabalhou" vem marcado: é o caso comum, e o DP revisa. */}
       {!c.emHoras && (diasNoDocumento ?? 0) >= 2 && (
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.7rem 0.8rem", display: "flex", flexDirection: "column", gap: "0.45rem" }}>
           <span className="label" style={{ margin: 0 }}>
@@ -1946,7 +1946,7 @@ function PainelConfirmacao({
                 return (
                   <>
                     Conta como ausência: <strong>{formatDate(c.startDate)} {faixa}</strong> e <strong>{inteiros}</strong>.
-                    As horas do primeiro dia não entram no cálculo da remuneração variável: saem no relatório do RH, com o horário, para o desconto ser feito na folha.
+                    As horas do primeiro dia não entram no cálculo da remuneração variável: saem no relatório do DP, com o horário, para o desconto ser feito na folha.
                   </>
                 );
               })()}
@@ -2005,7 +2005,7 @@ function PainelConfirmacao({
       {c.emHoras && (
         <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
           Ausência de horas não entra no cálculo da remuneração variável: ela sai no relatório do
-          RH, com o horário, para o desconto ser feito na folha.
+          DP, com o horário, para o desconto ser feito na folha.
         </p>
       )}
 
@@ -2057,7 +2057,7 @@ function PainelConfirmacao({
             />
           </div>
           <p className="soft" style={{ fontSize: "0.74rem", margin: "0 0 0.7rem" }}>
-            Ficam guardados à parte, com acesso restrito a você e ao RH. Não saem em e-mail, não
+            Ficam guardados à parte, com acesso restrito a você e ao DP. Não saem em e-mail, não
             entram na planilha exportada e não aparecem em Logs do sistema. O &quot;Preencher com IA&quot;
             é opcional: ele envia a foto ou o PDF do atestado à OpenAI só para a leitura, e só preenche
             o que três leituras confirmarem; o que ficar em dúvida fica em branco
@@ -2122,7 +2122,7 @@ function PainelConfirmacao({
             <div style={{ gridColumn: "span 2", minWidth: 0 }}>
               <label className="label">Descrição do CID</label>
               {/* Vem da tabela oficial junto com o código; digitada, ela chegava
-                  errada ao RH ("gripe" onde o documento diz outra coisa). */}
+                  errada ao DP ("gripe" onde o documento diz outra coisa). */}
               <div className="input" style={{ background: "var(--surface-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.cidDescricao || undefined}>
                 {c.cidDescricao || <span className="soft">Preenchida ao escolher o CID</span>}
               </div>
@@ -2216,7 +2216,7 @@ function PainelConfirmacao({
         <label className="label">Observação</label>
         <textarea
           className="input" rows={2} value={c.note}
-          placeholder="O que o RH precisa saber para conferir."
+          placeholder="O que o DP precisa saber para conferir."
           onChange={(e) => setC((x) => ({ ...x, note: e.target.value }))}
         />
       </div>
@@ -2236,13 +2236,13 @@ function PainelConfirmacao({
           title={tipo?.requiresDocument && !docOk ? "Anexe o documento primeiro" : undefined}
           onClick={enviar}
         >
-          <Send size={15} /> {pendente && ehNovo ? "Enviando…" : ehNovo ? "Lançar e enviar ao RH" : "Enviar ao RH"}
+          <Send size={15} /> {pendente && ehNovo ? "Enviando…" : ehNovo ? "Lançar e enviar ao DP" : "Enviar ao DP"}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onFechar}>{ehNovo ? "Cancelar" : "Fechar"}</button>
       </div>
 
       <p className="soft" style={{ fontSize: "0.75rem", margin: 0 }}>
-        Enquanto o RH não aprovar, este lançamento não conta como ausência e não altera
+        Enquanto o DP não aprovar, este lançamento não conta como ausência e não altera
         remuneração variável.
       </p>
     </>
@@ -2449,7 +2449,7 @@ function EncerrarFalta({ linha, onErro }: { linha: AbsenteismoRow; onErro: (m: s
   );
 }
 
-/** A ficha completa, com a decisão do RH quando for o caso. */
+/** A ficha completa, com a decisão do DP quando for o caso. */
 function Ficha({
   linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, podeReenviar, erro, onErro, onAbrirDocumento, onBaixarDocumento, onEfetivar, onFechar,
 }: {
@@ -2709,7 +2709,7 @@ function Ficha({
         <FieldGrid min={150}>
         {linha.importado ? (
           <>
-            {/* sem envio ao RH nem decisão: entrou aprovado pela importação de histórico */}
+            {/* sem envio ao DP nem decisão: entrou aprovado pela importação de histórico */}
             <Campo rotulo="Origem" valor="Importação de histórico, sem comunicado" />
             <Campo rotulo="Importado por" valor={linha.createdByName} />
             <Campo rotulo="Importado em" valor={linha.decidedAt ? formatDate(linha.decidedAt) : null} />
@@ -2726,7 +2726,7 @@ function Ficha({
             ) : (
               <Campo rotulo="Lançado por" valor={linha.createdByName} />
             )}
-            <Campo rotulo="Enviado ao RH em" valor={linha.submittedAt ? formatDate(linha.submittedAt) : null} />
+            <Campo rotulo="Enviado ao DP em" valor={linha.submittedAt ? formatDate(linha.submittedAt) : null} />
             <Campo rotulo="Decidido por" valor={linha.decidedByName} />
             <Campo rotulo="Decidido em" valor={linha.decidedAt ? formatDate(linha.decidedAt) : null} />
           </>
@@ -2795,7 +2795,7 @@ function Ficha({
         )}
         {/* Sem fila e sem retry automático, reenviar é a única recuperação. O
             cancelado não reenvia: o e-mail de "desconsidere" já saiu no cancelamento. */}
-        {/* o comunicado importado não teve e-mail (decisão do LUIZ): o primeiro sai no envio ao RH */}
+        {/* o comunicado importado não teve e-mail (decisão do LUIZ): o primeiro sai no envio ao DP */}
         {podeReenviar && linha.status !== "cancelado" && !linha.importado && !(linha.comunicadoImportado && !linha.emailStatus) && <button
           type="button" className="btn btn-ghost btn-sm" disabled={pendente}
           onClick={() => {

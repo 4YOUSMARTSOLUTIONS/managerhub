@@ -37,7 +37,7 @@ export function SessaoManager({ padrao, niveis, canEdit }: {
         <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>Encerrar a sessão sem uso</div>
         <p className="soft" style={{ fontSize: "0.8rem", margin: "0.15rem 0 0", lineHeight: 1.5, maxWidth: 820 }}>
           Depois desse tempo sem tocar no sistema, a pessoa precisa entrar de novo. Um minuto antes aparece um
-          aviso para continuar. Vale para todos, inclusive Proprietário, Administrador e RH, e protege o celular
+          aviso para continuar. Vale para todos, inclusive Proprietário, Administrador e DP, e protege o celular
           usado por mais de uma pessoa.
         </p>
       </div>

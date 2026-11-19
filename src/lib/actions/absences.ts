@@ -14,7 +14,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 /**
  * Férias e afastamentos do colaborador.
  *
- * Owner, admin e RH: é aqui que se decide quantos dias do mês entram na conta da
+ * Owner, admin e DP: é aqui que se decide quantos dias do mês entram na conta da
  * RV, então mexer nisto é mexer no que a pessoa recebe, e é justamente por isso
  * que faz parte da alçada do departamento pessoal.
  *
@@ -23,7 +23,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
  */
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
-const SO_ADMIN = "Apenas proprietário, administrador e RH lançam férias e afastamentos.";
+const SO_ADMIN = "Apenas proprietário, administrador e DP lançam férias e afastamentos.";
 
 // Espelham o `dpActionContext` (`isDp`): aqui a recusa vira mensagem na tela em
 // vez de exceção, porque estas três actions devolvem `ActionState`.
