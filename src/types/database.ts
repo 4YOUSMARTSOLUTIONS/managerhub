@@ -820,6 +820,33 @@ export type Database = {
       // Banco de conhecimento (18/11/2026): manual dos módulos, GLOBAL (sem
       // tenant). Lê quem está logado (rascunho só o super admin); escreve só o
       // super admin. `modulo` é a key de src/lib/modules.ts, nulo = geral.
+      // Sugestões (19/11/2026): comunidade ÚNICA entre empresas. O cliente só
+      // LÊ; toda escrita passa pelas RPCs sugestao_*. `texto_moderado` dos
+      // comentários fica fora do grant de leitura, e por isso fora do Row.
+      sugestoes: {
+        Row: { id: string; tenant_id: string | null; autor_id: string | null; autor_nome: string; empresa_nome: string; titulo: string; descricao: string; modulo: string | null; imagens: string[]; status: Database["public"]["Enums"]["sugestao_status"]; status_em: string; resposta: string | null; resposta_em: string | null; resposta_por_nome: string | null; duplicada_de: string | null; artigo_slug: string | null; oculta: boolean; oculta_motivo: string | null; curtidas: number; comentarios: number; created_at: string; updated_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      sugestao_curtidas: {
+        Row: { sugestao_id: string; user_id: string; user_nome: string; empresa_nome: string; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      sugestao_comentarios: {
+        Row: { id: string; sugestao_id: string; tenant_id: string | null; autor_id: string | null; autor_nome: string; empresa_nome: string; texto: string | null; oculto: boolean; editado_em: string | null; created_at: string; updated_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      sugestao_seguidores: {
+        Row: { sugestao_id: string; user_id: string; segue: boolean; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       conhecimento_artigos: {
         Row: { id: string; slug: string; modulo: string | null; titulo: string; resumo: string | null; conteudo: string; ordem: number; publicado: boolean; created_by: string | null; updated_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; slug: string; modulo?: string | null; titulo: string; resumo?: string | null; conteudo?: string; ordem?: number; publicado?: boolean; created_at?: string; updated_at?: string }
@@ -2055,6 +2082,20 @@ export type Database = {
         Returns: undefined
       }
       is_super_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      // Sugestões: toda escrita é por aqui (o cliente só lê as tabelas)
+      participa_sugestoes: { Args: Record<PropertyKey, never>; Returns: boolean }
+      pode_triar_sugestoes: { Args: Record<PropertyKey, never>; Returns: boolean }
+      sugestao_criar: { Args: { p_titulo: string; p_descricao: string; p_modulo: string | null; p_imagens: string[] }; Returns: string }
+      sugestao_editar: { Args: { p_id: string; p_titulo: string; p_descricao: string; p_modulo: string | null; p_imagens: string[] }; Returns: string[] }
+      sugestao_apagar: { Args: { p_id: string }; Returns: string[] }
+      sugestao_curtir: { Args: { p_id: string; p_curtir: boolean }; Returns: number }
+      sugestao_comentar: { Args: { p_id: string; p_texto: string }; Returns: string }
+      sugestao_editar_comentario: { Args: { p_id: string; p_texto: string }; Returns: undefined }
+      sugestao_apagar_comentario: { Args: { p_id: string }; Returns: undefined }
+      sugestao_seguir: { Args: { p_id: string; p_segue: boolean }; Returns: undefined }
+      sugestao_triar: { Args: { p_id: string; p_status: Database["public"]["Enums"]["sugestao_status"]; p_resposta: string | null; p_duplicada_de: string | null; p_artigo_slug: string | null }; Returns: undefined }
+      sugestao_moderar: { Args: { p_id: string; p_ocultar: boolean; p_motivo: string | null }; Returns: undefined }
+      sugestao_moderar_comentario: { Args: { p_id: string; p_ocultar: boolean }; Returns: undefined }
       // notificações no celular: as do app (sessão) e as da rota /api/push (service role)
       push_inscrever: { Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_aparelho: string }; Returns: undefined }
       push_cancelar: { Args: { p_endpoint: string }; Returns: undefined }
@@ -2581,6 +2622,7 @@ export type Database = {
       checklist_task_status: "pendente" | "em_andamento" | "concluida" | "cancelada"
       area_goal_kind: "ic" | "iv"
       area_consolidation: "soma" | "media" | "manual" | "razao"
+      sugestao_status: "nova" | "em_analise" | "planejada" | "em_desenvolvimento" | "entregue" | "recusada" | "duplicada"
       meeting_status: "scheduled" | "in_progress" | "done" | "cancelled"
       meeting_occurrence_status: "in_progress" | "finished" | "cancelled"
       // `team_lead` é o perfil "Gestor": vê os dados da própria equipe (cadeia

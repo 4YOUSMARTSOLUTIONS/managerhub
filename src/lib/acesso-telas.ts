@@ -12,8 +12,12 @@ import {
   type ModuleDef, type ModuleKey, type ModuleState,
 } from "@/lib/modules";
 
-/** Fora da regra: são de proprietário/administrador, que nunca são restringidos. */
-export const FORA_DA_REGRA = new Set<ModuleKey>(["admin", "auditoria"]);
+/**
+ * Fora da regra: Painel ADM e Logs são de proprietário/administrador, que nunca
+ * são restringidos; Sugestões é de todos, inclusive o Operacional (LUIZ,
+ * 18/11/2026), e por isso nenhum nível a esconde.
+ */
+export const FORA_DA_REGRA = new Set<ModuleKey>(["admin", "auditoria", "sugestoes"]);
 
 /** As telas na ordem do menu (Dashboard primeiro, grupos no meio). */
 export const ORDEM_DAS_TELAS: ModuleKey[] = NAV_ORDER.flatMap((n) =>

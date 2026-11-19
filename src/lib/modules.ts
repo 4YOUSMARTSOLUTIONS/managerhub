@@ -13,7 +13,7 @@
 
 export type ModuleKey =
   // base: sempre liberados, fora da venda
-  | "dashboard" | "auditoria" | "configuracoes" | "admin" | "minha_equipe" | "conhecimento"
+  | "dashboard" | "auditoria" | "configuracoes" | "admin" | "minha_equipe" | "conhecimento" | "sugestoes"
   // vendáveis
   | "reunioes" | "acoes" | "salas"
   | "agenda_diario" | "agendas" | "agenda_equipe" | "agenda_historico" | "tempos_movimentos" | "planner"
@@ -130,6 +130,10 @@ export const MODULES: ModuleDef[] = [
   // então ninguém vê manual de tela que não usa. Segue o acesso por nível
   // como qualquer tela (o Operacional só a vê se a empresa liberar).
   { key: "conhecimento", label: "Banco de conhecimento", href: "/conhecimento", group: null, core: true },
+  // Sugestões (LUIZ, 18/11/2026): todos sugerem melhorias para o portal, curtem
+  // e comentam; o Proprietário faz a triagem. Tela base e fora do acesso por
+  // nível (FORA_DA_REGRA): o Operacional também participa.
+  { key: "sugestoes", label: "Sugestões", href: "/sugestoes", group: null, core: true },
 
   { key: "seg_piramide", label: "Pirâmide", href: "/seguranca/piramide", group: "g_seguranca" },
   { key: "seg_acidentes", label: "Acidentes", href: "/seguranca/acidentes", group: "g_seguranca" },

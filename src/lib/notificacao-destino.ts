@@ -23,5 +23,6 @@ export function destinoDaNotificacao(n: {
   if (n.type.startsWith("seg_relato_")) return "/seguranca/relatos";
   if (n.type.startsWith("seg_acidente_")) return "/seguranca/acidentes";
   if (n.type.startsWith("seg_blitz_")) return "/seguranca/blitz";
+  if (n.type.startsWith("sugestao_")) return "/sugestoes";
   return null;
 }
