@@ -16,7 +16,7 @@ export default async function DashboardPage() {
    * logo do menu, tela bloqueada, ícone do app) passa por aqui.
    */
   if (state.dashboard === "hidden") {
-    const destino = primeiraTela(state, (m) => permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isSuperAdmin: ctx.isSuperAdmin }));
+    const destino = primeiraTela(state, (m) => permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isGente: ctx.isGente, isSuperAdmin: ctx.isSuperAdmin }));
     if (destino) redirect(destino);
     return (
       <div className="card">

@@ -18,6 +18,7 @@ import type { ModuleKey, ModuleState } from "@/lib/modules";
 export function AppShell({
   role,
   isHr = false,
+  isGente = false,
   isSuperAdmin,
   tenantName,
   userName,
@@ -37,8 +38,10 @@ export function AppShell({
   children,
 }: {
   role: Enums<"member_role">;
-  /** marca de RH (atribuição, independente do perfil) */
+  /** marca do Departamento Pessoal (atribuição, independente do perfil) */
   isHr?: boolean;
+  /** marca da Área de Gente (só leitura do pessoal) */
+  isGente?: boolean;
   isSuperAdmin: boolean;
   tenantName: string;
   userName: string | null | undefined;
@@ -80,6 +83,7 @@ export function AppShell({
       <Sidebar
         role={role}
         isHr={isHr}
+        isGente={isGente}
         isSuperAdmin={isSuperAdmin}
         moduleState={moduleState}
         construction={construction}

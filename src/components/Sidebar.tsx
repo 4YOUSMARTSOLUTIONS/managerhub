@@ -58,6 +58,7 @@ const GROUP_LABEL = Object.fromEntries(MODULE_GROUPS.map((g) => [g.key, g.label]
 export function Sidebar({
   role,
   isHr = false,
+  isGente = false,
   isSuperAdmin = false,
   moduleState,
   construction,
@@ -68,8 +69,10 @@ export function Sidebar({
   onNavigate,
 }: {
   role: Enums<"member_role">;
-  /** marca de RH (`memberships.is_hr`): atribuição, combina com qualquer perfil */
+  /** marca do Departamento Pessoal (`memberships.is_hr`): atribuição, combina com qualquer perfil */
   isHr?: boolean;
+  /** marca da Área de Gente (`memberships.is_gente`): só leitura do pessoal */
+  isGente?: boolean;
   isSuperAdmin?: boolean;
   /** estado resolvido no servidor (entitlement por unidade) */
   moduleState: Record<ModuleKey, ModuleState>;
@@ -91,7 +94,7 @@ export function Sidebar({
   const visible = (m: ModuleDef) => {
     // owner de plataforma sem empresa: só o Painel ADM
     if (platformOnly) return m.key === "admin";
-    if (!permitidoPeloPapel(m, { role, isHr, isSuperAdmin })) return false;
+    if (!permitidoPeloPapel(m, { role, isHr, isGente, isSuperAdmin })) return false;
     return moduleState[m.key] !== "hidden";
   };
 

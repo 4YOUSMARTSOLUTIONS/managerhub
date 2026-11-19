@@ -83,7 +83,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ aba?: string; sub?: string }>;
 }) {
   const { aba, sub } = await searchParams;
-  const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh } = await requireContext();
+  const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh, isGente: marcaGente } = await requireContext();
   // acesso por nível: quem não tem Configurações liberada vai para a tela dele
   await exigirTelaBase("configuracoes");
 
@@ -111,11 +111,16 @@ export default async function SettingsPage({
   // Com a marca, o departamento pessoal manda nesta tela: a pessoa vê a empresa
   // inteira (não só a equipe) e edita as abas do DP. Gerencial com a marca
   // continua lendo o resto; Gestor e Funcionário com a marca veem só o DP.
+  //
+  // A Área de Gente (LUIZ, 19/11/2026) entra por um quarto caminho: só a aba
+  // Colaboradores, da empresa inteira (não só a equipe), para LER. Com as duas
+  // marcas, a do Departamento Pessoal manda.
   const canEdit = role === "owner" || role === "admin";
   const isHr = marcaRh && !canEdit;
+  const isGente = marcaGente && !canEdit && !isHr;
   const isGerencial = role === "manager";
-  const isGestor = role === "team_lead" && !isHr;
-  const canView = canEdit || isGerencial || isHr || isGestor;
+  const isGestor = role === "team_lead" && !isHr && !isGente;
+  const canView = canEdit || isGerencial || isHr || isGente || isGestor;
   const canEditDP = canEdit || isHr;
 
   if (!canView) {
@@ -149,7 +154,11 @@ export default async function SettingsPage({
     "punicoes", "absenteismos", "ferias", "seguranca", "salas", "feriados",
   ];
   const DP_TABS = new Set(["usuarios", "rv", "punicoes", "absenteismos", "ferias"]);
-  const abasDaPessoa = isHr && !isGerencial ? ABAS.filter((id) => DP_TABS.has(id)) : ABAS;
+  const abasDaPessoa = isHr && !isGerencial
+    ? ABAS.filter((id) => DP_TABS.has(id))
+    : isGente && !isGerencial ? ["usuarios"] : ABAS;
+  // Acesso às telas e sessão são configuração, fora da alçada da Área de Gente
+  const veAcesso = !(isGente && !isGerencial);
   const abaAtiva = aba && abasDaPessoa.includes(aba) ? aba : abasDaPessoa[0];
   /** a consulta só sai quando uma das abas que a usam está aberta */
   const em = (...ids: string[]) => ids.includes(abaAtiva);
@@ -163,7 +172,7 @@ export default async function SettingsPage({
   // Sai junto com o resto, sem onda própria.
   const flagsP = em("absenteismos") ? getPlatformIntegrationFlags() : Promise.resolve(null);
   // acesso às telas (Colaboradores > Acesso às telas); falha não derruba a página
-  const acessoP = !em("usuarios") ? Promise.resolve(null) : lerRegrasDeAcesso(supabase, tenant.id).catch((e: unknown) => {
+  const acessoP = !em("usuarios") || !veAcesso ? Promise.resolve(null) : lerRegrasDeAcesso(supabase, tenant.id).catch((e: unknown) => {
     console.error("[acesso] regras", e instanceof Error ? e.message : e);
     return null;
   });
@@ -174,7 +183,7 @@ export default async function SettingsPage({
         return r.data ?? [];
       })
     : Promise.resolve([]);
-  const sessaoP = !em("usuarios") ? Promise.resolve(null) : lerRegrasDeSessao(supabase, tenant.id).catch((e: unknown) => {
+  const sessaoP = !em("usuarios") || !veAcesso ? Promise.resolve(null) : lerRegrasDeSessao(supabase, tenant.id).catch((e: unknown) => {
     console.error("[sessao] regras", e instanceof Error ? e.message : e);
     return null;
   });
@@ -427,6 +436,7 @@ export default async function SettingsPage({
       isTrainingManager: m.is_training_manager,
       isAvaliadorBlitz: m.is_avaliador_blitz,
       isHr: m.is_hr,
+      isGente: m.is_gente,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
       subdepartmentName: m.subdepartment_id ? subById.get(m.subdepartment_id)?.name ?? null : null,
       dismissedAt: m.dismissed_at ?? null,
@@ -739,7 +749,7 @@ export default async function SettingsPage({
         },
         // quem vê quais telas (por nível, com exceção por pessoa) e quanto tempo
         // sem uso encerra a sessão; só owner/admin grava
-        { id: "acesso", label: "Acesso e sessão", content: acessoTab },
+        ...(veAcesso ? [{ id: "acesso", label: "Acesso e sessão", content: acessoTab }] : []),
       ]}
     />
   );
@@ -1792,7 +1802,9 @@ export default async function SettingsPage({
           <span>
             <strong>{isHr ? "Consulta fora do departamento pessoal." : "Somente leitura."}</strong>{" "}
             <span className="muted">
-              {isGestor
+              {isGente && !isGerencial
+                ? "Você enxerga os colaboradores da empresa inteira, com dados pessoais, afastamentos e histórico. Alterações são feitas pelo departamento pessoal, pelo proprietário ou por um administrador."
+                : isGestor
                 ? "Você enxerga as regras e os cadastros da empresa e, onde há dados de pessoas (colaboradores, ausências, punições e remuneração variável), só a sua equipe. Alterações são feitas pelo proprietário, por um administrador ou pelo RH."
                 : isHr
                   ? "Você altera as abas do departamento pessoal. O resto da configuração da empresa fica em consulta: alterações ali são feitas pelo proprietário ou por um administrador."

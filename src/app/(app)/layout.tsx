@@ -136,7 +136,7 @@ export default async function AppLayout({
   const caminho = (await headers()).get(CABECALHO_CAMINHO);
   const destino = caminho
     ? destinoAntecipado(caminho, moduleState, (m) =>
-        permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isSuperAdmin: ctx.isSuperAdmin }))
+        permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isGente: ctx.isGente, isSuperAdmin: ctx.isSuperAdmin }))
     : null;
   if (destino) redirect(destino);
 
@@ -158,6 +158,7 @@ export default async function AppLayout({
     <AppShell
       role={ctx.role}
       isHr={ctx.isHr}
+      isGente={ctx.isGente}
       isSuperAdmin={ctx.isSuperAdmin}
       tenantName={ctx.tenant.name}
       userName={userName}

@@ -309,7 +309,7 @@ const hoje = () => {
  * dado é buscado sob demanda pela RPC, nunca junto da lista.
  */
 export function AbsenteismosManager({
-  rows, pessoas, tipos, unidades, kindsComRedutor, meuId, podeDecidir, podeCancelarAprovado, podeImportarHistorico,
+  rows, pessoas, tipos, unidades, kindsComRedutor, meuId, podeDecidir, veEmpresa, podeCancelarAprovado, podeImportarHistorico,
 }: {
   rows: AbsenteismoRow[];
   pessoas: Pessoa[];
@@ -324,6 +324,11 @@ export function AbsenteismosManager({
   kindsComRedutor: Enums<"absence_kind">[];
   meuId: string;
   podeDecidir: boolean;
+  /**
+   * Vê o que o DP vê (a fila do RH e o Relatório completo): o próprio DP e a
+   * Área de Gente, que só lê (LUIZ, 19/11/2026). Agir continua em `podeDecidir`.
+   */
+  veEmpresa: boolean;
   podeCancelarAprovado: boolean;
   /** importação do histórico: só o proprietário (LUIZ, 16/11/2026) */
   podeImportarHistorico: boolean;
@@ -453,6 +458,10 @@ export function AbsenteismosManager({
   const podeMexer = (r: AbsenteismoRow) =>
     (r.status === "aberto" || r.status === "reprovado")
     && (r.createdBy === meuId || podeDecidir);
+  // Reenviar o comunicado é agir: quem lançou, o gestor da pessoa e o DP. A Área
+  // de Gente só lê (LUIZ, 19/11/2026); a action confere de novo
+  const podeReenviar = (r: AbsenteismoRow) =>
+    podeDecidir || r.createdBy === meuId || pessoaPorId.has(r.userId);
 
   /** "09:00 às 11:00", ou vazio quando a ausência é do dia inteiro. */
   const faixaDeHoras = (inicio: string | null, fim: string | null) =>
@@ -762,7 +771,7 @@ export function AbsenteismosManager({
       ),
     },
   ];
-  if (podeDecidir) {
+  if (podeDecidir || veEmpresa) {
     abas.push({
       id: "fila", label: `Aguardando o RH (${fila.length})`,
       content: tabela(fila, true, "Nenhum lançamento aguardando decisão."),
@@ -833,14 +842,14 @@ export function AbsenteismosManager({
             // saúde. Quem decide (proprietário, administrador, RH) usa só o
             // Relatório completo, que tem tudo o que a simples tinha (LUIZ,
             // 16/11/2026): as duas lado a lado só confundiam.
-            if (!podeDecidir) return exportar;
+            if (!podeDecidir && !veEmpresa) return exportar;
             // Planilhas num menu só (LUIZ, 16/11/2026): botões lado a lado
             // pesavam na barra
             return (
               <Dropdown rotulo="Planilhas" pequeno alinharDireita largura={250}>
                 {(fechar) => (
                   <>
-                    {podeDecidir && (
+                    {(podeDecidir || veEmpresa) && (
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRelatorioAberto(true); fechar(); }}>
                         <FileSpreadsheet size={15} /> Relatório completo
                       </button>
@@ -861,16 +870,19 @@ export function AbsenteismosManager({
               </Dropdown>
             );
           })()}
-          <button
-            type="button" className="btn btn-primary btn-sm"
-            onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "", emHoras: false, horaInicio: "", horaFim: "", comMotivo: false }); }}
-          >
-            + Lançar ausência
-          </button>
+          {/* sem ninguém para quem lançar (a Área de Gente sem equipe), sem o botão */}
+          {pessoas.length > 0 && (
+            <button
+              type="button" className="btn btn-primary btn-sm"
+              onClick={() => { setErro(""); setNovo({ userId: "", occurredOn: hoje(), reasonNote: "", emHoras: false, horaInicio: "", horaFim: "", comMotivo: false }); }}
+            >
+              + Lançar ausência
+            </button>
+          )}
         </div>
       </div>
 
-      {podeDecidir && (
+      {(podeDecidir || veEmpresa) && (
         <RelatorioAbsenteismoDialog unidades={unidades} aberto={relatorioAberto} onFechar={() => setRelatorioAberto(false)} />
       )}
       {/* montadas só abertas: as duas já zeram o próprio estado ao fechar, e
@@ -1100,6 +1112,7 @@ export function AbsenteismosManager({
             podeDecidir={podeDecidir}
             podeCancelarAprovado={podeCancelarAprovado}
             podeCancelarProprio={aberto.createdBy === meuId || podeDecidir}
+            podeReenviar={podeReenviar(aberto)}
             erro={erro}
             onErro={setErro}
             onAbrirDocumento={abrirDocumento}
@@ -2438,13 +2451,15 @@ function EncerrarFalta({ linha, onErro }: { linha: AbsenteismoRow; onErro: (m: s
 
 /** A ficha completa, com a decisão do RH quando for o caso. */
 function Ficha({
-  linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, erro, onErro, onAbrirDocumento, onBaixarDocumento, onEfetivar, onFechar,
+  linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, podeReenviar, erro, onErro, onAbrirDocumento, onBaixarDocumento, onEfetivar, onFechar,
 }: {
   linha: AbsenteismoRow;
   kindsComRedutor: Enums<"absence_kind">[];
   podeDecidir: boolean;
   podeCancelarAprovado: boolean;
   podeCancelarProprio: boolean;
+  /** quem age no lançamento; a Área de Gente só lê */
+  podeReenviar: boolean;
   erro: string;
   onErro: (m: string) => void;
   onAbrirDocumento: (path: string) => void;
@@ -2781,7 +2796,7 @@ function Ficha({
         {/* Sem fila e sem retry automático, reenviar é a única recuperação. O
             cancelado não reenvia: o e-mail de "desconsidere" já saiu no cancelamento. */}
         {/* o comunicado importado não teve e-mail (decisão do LUIZ): o primeiro sai no envio ao RH */}
-        {linha.status !== "cancelado" && !linha.importado && !(linha.comunicadoImportado && !linha.emailStatus) && <button
+        {podeReenviar && linha.status !== "cancelado" && !linha.importado && !(linha.comunicadoImportado && !linha.emailStatus) && <button
           type="button" className="btn btn-ghost btn-sm" disabled={pendente}
           onClick={() => {
             onErro("");

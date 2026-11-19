@@ -155,13 +155,18 @@ const dataDoPedido = (iso: string) =>
  * decide quais abas e botões existem.
  */
 export function FeriasManager({
-  rows, meuId, ehDp, ehOwner, ehGestor, equipe, vejoEmpresa, podeSolicitar, avisoSolicitar,
+  rows, meuId, ehDp, veComoDp = false, ehOwner, ehGestor, equipe, vejoEmpresa, podeSolicitar, avisoSolicitar,
   pessoasLancar, meusAquisitivos, feriados, hoje, painel, usaFolha, ultimaImportacao, setores, unidades,
   antecedencia, prazos, escolhasDecimo, painelDecimo, aguardandoDecimo,
 }: {
   rows: FeriasRow[];
   meuId: string;
   ehDp: boolean;
+  /**
+   * Área de Gente (LUIZ, 19/11/2026): vê as abas e as filas do DP, sem os
+   * botões. Decidir e efetivar continuam de `ehDp` (e do gestor, na equipe dele)
+   */
+  veComoDp?: boolean;
   ehOwner: boolean;
   /** lidera equipe de fato (papel + subordinados) */
   ehGestor: boolean;
@@ -290,8 +295,8 @@ export function FeriasManager({
   // Gerencial enxerga a empresa toda, mas só decide a própria cadeia: os
   // pedidos dos outros na fila dele virariam botão que só devolve erro.
   const fila = useMemo(
-    () => rowsNoEscopo.filter((r) => r.status === "solicitada" && r.userId !== meuId && (ehDp || equipeSet.has(r.userId))),
-    [rowsNoEscopo, meuId, ehDp, equipeSet]);
+    () => rowsNoEscopo.filter((r) => r.status === "solicitada" && r.userId !== meuId && (ehDp || veComoDp || equipeSet.has(r.userId))),
+    [rowsNoEscopo, meuId, ehDp, veComoDp, equipeSet]);
   const filaDp = useMemo(
     () => rowsNoEscopo.filter((r) => r.status === "aprovada").sort((a, b) => a.startDate.localeCompare(b.startDate)),
     [rowsNoEscopo]);
@@ -316,7 +321,9 @@ export function FeriasManager({
   const vencidasAfastados = saldosNoEscopo.filter((s) => s.situacao === "vencida" && s.statusColaborador).length;
   const foraDaConta = (n: number) => `${n} afastado${n > 1 ? "s" : ""} fora da conta`;
 
-  const podeGerir = ehGestor || ehDp;
+  const podeGerir = ehGestor || ehDp || veComoDp;
+  // quem decide o pedido: o DP, ou o gestor na própria cadeia (`ferias_decidir`)
+  const decideOPedido = (r: FeriasRow) => ehDp || equipeSet.has(r.userId);
   // a escolha do 13º dos operacionais, no mesmo recorte do resto da tela
   const decimoNoEscopo = useMemo(
     () => (painelDecimo?.pessoas ?? []).filter((p) => !pessoasNoEscopo || pessoasNoEscopo.has(p.userId)),
@@ -357,8 +364,8 @@ export function FeriasManager({
               acao: "Ver na aba Aprovações", onClick: () => irPara("fila") },
             { valor: filaDp.length, rotulo: "efetivação do DP", pendencia: true,
               // o gestor não tem a aba Efetivação: vê as aprovadas em Todas as previsões
-              acao: ehDp ? "Ver na aba Efetivação" : "Ver em Todas as previsões",
-              onClick: () => irPara(ehDp ? "efetivacao" : "todas") },
+              acao: ehDp || veComoDp ? "Ver na aba Efetivação" : "Ver em Todas as previsões",
+              onClick: () => irPara(ehDp || veComoDp ? "efetivacao" : "todas") },
           ]}
         />
         {painelDecimo && decimoNoEscopo.length > 0 && (
@@ -412,7 +419,7 @@ export function FeriasManager({
           {painelNoEscopo ? (
             // importar períodos mora só no menu Ações (LUIZ, 06/11/2026): aqui
             // fica a leitura, com a data da última importação
-            <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp ? ultimaImportacao : null}
+            <VisaoGeral painel={painelNoEscopo} hoje={hoje} ultimaImportacao={ehDp || veComoDp ? ultimaImportacao : null}
               porSetor={porSetor} setores={setores} unidades={unidades} soUsuarios={pessoasNoEscopo} />
           ) : (
             <FeriasCalendario setores={setores} unidades={unidades} hoje={hoje} soUsuarios={pessoasNoEscopo} />
@@ -425,15 +432,15 @@ export function FeriasManager({
       { id: "fila", label: `Aprovações${fila.length ? ` (${fila.length})` : ""}`, content: (
         // o aviso de "as outras estão em Toda a empresa" só vale para o DP: o
         // Gerencial não decide as outras equipes, então elas nunca entram na fila dele
-        <FilaGestor fila={fila} soEquipe={soEquipe && ehDp} anteriorDe={anteriorDe}
+        <FilaGestor fila={fila} soEquipe={soEquipe && (ehDp || veComoDp)} anteriorDe={anteriorDe} decide={decideOPedido}
           onDetalhe={setDetalhe} onDevolver={(r) => setNota({ row: r, acao: "devolver" })}
           hoje={hoje} unidades={unidades} soUsuarios={pessoasNoEscopo} porSetor={porSetor} />
       ) },
     );
   }
-  if (ehDp) {
+  if (ehDp || veComoDp) {
     abas.push({ id: "efetivacao", label: `Efetivação${filaDp.length ? ` (${filaDp.length})` : ""}`, content: (
-      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} aguardandoDecimo={aguardandoDecimo}
+      <FilaDp fila={filaDp} soEquipe={soEquipe} anteriorDe={anteriorDe} aguardandoDecimo={aguardandoDecimo} soLeitura={!ehDp}
         onDetalhe={setDetalhe} onEfetivar={setEfetivando}
         onDevolver={(r) => setNota({ row: r, acao: "devolver" })} />
     ) });
@@ -1211,9 +1218,11 @@ function CartaoResumo({
 }
 
 function FilaGestor({
-  fila, onDetalhe, onDevolver, soEquipe, anteriorDe, hoje, unidades, soUsuarios, porSetor,
+  fila, onDetalhe, onDevolver, soEquipe, anteriorDe, hoje, unidades, soUsuarios, porSetor, decide,
 }: {
   fila: FeriasRow[];
+  /** quem está olhando decide este pedido? A Área de Gente vê a fila e não decide */
+  decide: (r: FeriasRow) => boolean;
   hoje: string;
   /** unidades do seletor do topo (null = todas) */
   unidades: string[] | null;
@@ -1265,6 +1274,8 @@ function FilaGestor({
   };
 
   const rotuloEquipe = `Ver as férias ${porSetor ? "por setor" : "da equipe"} na linha do tempo`;
+  // sem nenhum pedido que a pessoa decida, a coluna sai
+  const comDecisao = fila.some(decide);
 
   return (
     <div style={{ paddingTop: "0.9rem" }}>
@@ -1292,7 +1303,7 @@ function FilaGestor({
                 <th style={{ width: 70, textAlign: "right" }}>Dias</th>
                 <th style={{ width: 80, textAlign: "right" }}>Abono</th>
                 <th style={{ width: 190 }}>Prazo legal</th>
-                <th style={{ width: 250, textAlign: "right" }}>Decisão</th>
+                {comDecisao && <th style={{ width: 250, textAlign: "right" }}>Decisão</th>}
               </tr>
             </thead>
             <tbody>
@@ -1318,16 +1329,20 @@ function FilaGestor({
                       ? <Badge variant="quiet" tone="amber">{rotuloForaPrazo(r)}</Badge>
                       : <span className="soft">—</span>}
                   </td>
-                  <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: "inline-flex", gap: "0.35rem" }}>
-                      <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => aprovar(r)}>
-                        <Check size={13} aria-hidden /> Aprovar
-                      </button>
-                      <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
-                        <Undo2 size={13} aria-hidden /> Devolver
-                      </button>
-                    </div>
-                  </td>
+                  {comDecisao && (
+                    <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                      {decide(r) && (
+                        <div style={{ display: "inline-flex", gap: "0.35rem" }}>
+                          <button type="button" className="btn btn-primary btn-sm" disabled={decidindo} onClick={() => aprovar(r)}>
+                            <Check size={13} aria-hidden /> Aprovar
+                          </button>
+                          <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
+                            <Undo2 size={13} aria-hidden /> Devolver
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -1395,9 +1410,11 @@ function AlternadorDeEscopo({
 // ============================================================================
 
 function FilaDp({
-  fila, soEquipe, anteriorDe, aguardandoDecimo, onDetalhe, onEfetivar, onDevolver,
+  fila, soEquipe, anteriorDe, aguardandoDecimo, onDetalhe, onEfetivar, onDevolver, soLeitura = false,
 }: {
   fila: FeriasRow[];
+  /** Área de Gente: a fila sem os botões (só o DP efetiva e devolve) */
+  soLeitura?: boolean;
   /** id → prazo da escolha do 13º que ainda segura a efetivação */
   aguardandoDecimo: Record<string, string>;
   /** o período que um reagendamento troca (null se não for reagendamento) */
@@ -1466,14 +1483,18 @@ function FilaDp({
                     <span title={`O colaborador escolhe em Minhas férias até ${formatDate(aguardandoDecimo[r.id])}. A efetivação libera depois da escolha ou quando esse prazo terminar.`}>
                       <Badge tone="amber">Aguardando escolha do 13º</Badge>
                     </span>
+                  ) : soLeitura ? (
+                    <span className="soft" style={{ fontSize: "0.82rem" }}>Aguardando o DP</span>
                   ) : (
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => onEfetivar(r)}>
                       <Send size={13} aria-hidden /> Efetivar
                     </button>
                   )}
-                  <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
-                    <Undo2 size={13} aria-hidden /> Devolver
-                  </button>
+                  {!soLeitura && (
+                    <button type="button" className="btn btn-warning btn-sm" onClick={() => onDevolver(r)}>
+                      <Undo2 size={13} aria-hidden /> Devolver
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>

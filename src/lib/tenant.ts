@@ -28,10 +28,17 @@ export type ActiveContext = {
   tenant: Tables<"tenants">;
   role: Enums<"member_role">;
   /**
-   * RH é atribuição (`memberships.is_hr`), não perfil: combina com qualquer
-   * `role`. Não fica travado na própria unidade (LUIZ, 19/11/2026)
+   * Departamento Pessoal (a marca `memberships.is_hr`, que a tela chamava de
+   * RH): atribuição, não perfil, combina com qualquer `role`. Não fica travado
+   * na própria unidade (LUIZ, 19/11/2026)
    */
   isHr: boolean;
+  /**
+   * Área de Gente (`memberships.is_gente`, LUIZ 19/11/2026): LÊ o pessoal da
+   * empresa inteira (absenteísmo, férias, colaboradores) como o DP, sem agir.
+   * Também enxerga todas as unidades. Não entra em `isDp`
+   */
+  isGente: boolean;
   /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
   isDp: boolean;
   /**
@@ -79,7 +86,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     getIsSuperAdmin(),
     supabase
       .from("memberships")
-      .select("id, role, tenant_id, is_active, is_hr, is_avaliador_blitz, tenants(*)")
+      .select("id, role, tenant_id, is_active, is_hr, is_gente, is_avaliador_blitz, tenants(*)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1),
@@ -90,6 +97,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   let tenantDoVinculo: Tables<"tenants"> | null = null;
   let role: Enums<"member_role">;
   let isHr = false;
+  let isGente = false;
   let isAvaliadorBlitz = false;
   let isAdmin: boolean;
   let membershipId: string | null = null;
@@ -111,6 +119,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     tenantId = t.id;
     role = membership.role;
     isHr = membership.is_hr;
+    isGente = membership.is_gente === true;
     isAvaliadorBlitz = membership.is_avaliador_blitz === true;
     isAdmin = role === "owner" || role === "admin";
     membershipId = membership.id;
@@ -125,8 +134,9 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     // admin e RH enxergam todas as unidades: nem chega a perguntar. O RH (a
     // marca, com qualquer perfil) faz a gestão de pessoal da empresa inteira e
     // a RLS já lhe dá todas as unidades; travado na própria, recebia o aviso do
-    // atestado da Filial e não achava o lançamento (LUIZ, 19/11/2026)
-    !isAdmin && !isHr && membershipId
+    // atestado da Filial e não achava o lançamento (LUIZ, 19/11/2026). A Área
+    // de Gente lê a mesma empresa inteira, então vem junto
+    !isAdmin && !isHr && !isGente && membershipId
       ? supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId)
       : Promise.resolve({ data: null as { unit_id: string }[] | null }),
     // a equipe de segurança também vê todas (LUIZ, 18/11/2026): a segurança é
@@ -184,6 +194,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     tenant,
     role,
     isHr,
+    isGente,
     isDp: isAdmin || isHr,
     isAvaliadorBlitz,
     isSeguranca,

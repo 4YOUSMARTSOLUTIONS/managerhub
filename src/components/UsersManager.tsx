@@ -323,8 +323,9 @@ export function UsersManager({
                   <td>
                     <span style={{ display: "inline-flex", gap: "0.3rem", flexWrap: "wrap", alignItems: "center" }}>
                       <Badge tone={roleTone(e.role)}>{roleLabel(e.role)}</Badge>
-                      {/* RH é atribuição: selo neutro ao lado do perfil */}
-                      {e.isHr && e.role !== "hr" && <Badge variant="quiet">RH</Badge>}
+                      {/* DP e Área de Gente são atribuições: selo neutro ao lado do perfil */}
+                      {e.isHr && e.role !== "hr" && <Badge variant="quiet">DP</Badge>}
+                      {e.isGente && <Badge variant="quiet">Área de Gente</Badge>}
                     </span>
                   </td>
                   <td>

@@ -28,10 +28,13 @@ export default async function AbsenteismosPage() {
   const gate = await moduleGate("absenteismos");
   if (gate) return gate;
 
-  const { tenant, user, role, unitScope, isDp } = await requireContext();
+  const { tenant, user, role, unitScope, isDp, isGente } = await requireContext();
   const ehDp = isDp;
+  // A Área de Gente (LUIZ, 19/11/2026) vê a empresa inteira como o DP, sem
+  // agir: a RLS dá a leitura e as RPCs de escrita a recusam
+  const veEmpresa = ehDp || isGente;
   // Menu não é autorização: quem digitar a URL na mão para aqui.
-  const podeAbrir = ehDp || role === "manager" || role === "team_lead";
+  const podeAbrir = veEmpresa || role === "manager" || role === "team_lead";
   const supabase = await createClient();
 
   if (!podeAbrir) {
@@ -48,7 +51,7 @@ export default async function AbsenteismosPage() {
 
   const equipe = ehDp ? [] : await minhaEquipe(supabase, tenant.id);
 
-  if (!ehDp && equipe.length === 0) {
+  if (!veEmpresa && equipe.length === 0) {
     return (
       <div>
         <PageHeader title="Absenteísmos" subtitle={tenant.name} />
@@ -217,6 +220,7 @@ export default async function AbsenteismosPage() {
         kindsComRedutor={kindsComRedutor}
         meuId={user.id}
         podeDecidir={ehDp}
+        veEmpresa={veEmpresa}
         podeCancelarAprovado={role === "owner" || role === "admin"}
         // só o proprietário (LUIZ, 16/11/2026); a action e a RPC conferem de novo
         podeImportarHistorico={role === "owner"}

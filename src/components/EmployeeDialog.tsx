@@ -36,8 +36,10 @@ export type EmployeeData = {
   isTrainingManager?: boolean;
   /** marca de avaliador da blitz de trajeto (lança a blitz sem ser gestor) */
   isAvaliadorBlitz?: boolean;
-  /** marca de RH, o departamento pessoal (atribuição, independente do perfil) */
+  /** marca do Departamento Pessoal, a antiga "RH" (atribuição, independente do perfil) */
   isHr?: boolean;
+  /** marca da Área de Gente: lê o pessoal da empresa, sem agir (LUIZ, 19/11/2026) */
+  isGente?: boolean;
   /** data de desligamento (demissão); null = vínculo ativo */
   dismissedAt?: string | null;
 };
@@ -291,16 +293,29 @@ export function EmployeeDialog({
             {canSetRole && isEdit && (
               <>
                 <input type="hidden" name="gestao_treinamentos_presente" value="1" />
-                {/* RH: atribuição, não perfil. Combina com qualquer tipo de usuário:
-                    a pessoa do DP que também chefia gente fica Gestor e marca isto. */}
+                {/* Departamento Pessoal (a antiga marca "RH"): atribuição, não perfil.
+                    Combina com qualquer tipo de usuário: a pessoa do DP que também
+                    chefia gente fica Gestor e marca isto. */}
                 <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
                   <input type="checkbox" name="is_hr" value="1" defaultChecked={employee?.isHr ?? false} style={{ marginTop: 3 }} />
                   <span>
-                    <strong>RH (departamento pessoal)</strong>
+                    <strong>Departamento Pessoal</strong>
                     <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
-                      Cuida do cadastro de colaboradores, férias, afastamentos, absenteísmos, punições e
-                      remuneração variável da empresa inteira. Não muda o tipo de usuário: quem chefia uma
-                      equipe continua vendo a equipe como Gestor.
+                      Opera o pessoal da empresa inteira: aprova atestados, efetiva férias, cuida do cadastro de
+                      colaboradores, afastamentos, punições e remuneração variável. Não muda o tipo de usuário:
+                      quem chefia uma equipe continua vendo a equipe como Gestor.
+                    </span>
+                  </span>
+                </label>
+                {/* Área de Gente (LUIZ, 19/11/2026): enxerga o mesmo que o DP, sem agir */}
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                  <input type="checkbox" name="is_gente" value="1" defaultChecked={employee?.isGente ?? false} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>Área de Gente</strong>
+                    <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                      Acompanha, só para consulta, os absenteísmos (com CID e atestado), as férias e o cadastro de
+                      colaboradores da empresa inteira, com dados pessoais e histórico. Não aprova, não lança e
+                      não edita nada.
                     </span>
                   </span>
                 </label>

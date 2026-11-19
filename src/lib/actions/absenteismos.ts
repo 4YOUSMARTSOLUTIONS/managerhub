@@ -255,6 +255,32 @@ async function podeLancarPara(ctx: Contexto, userId: string): Promise<boolean> {
 }
 
 /**
+ * Quem AGE num lançamento que já enxerga: quem lançou, o gestor da pessoa e o
+ * DP. Desde a Área de Gente (LUIZ, 19/11/2026) ver a linha não basta: ela lê a
+ * empresa inteira e não age. As actions que autorizavam pela leitura da linha
+ * (reenviar, avisar a abertura, ler com IA) passam por aqui.
+ */
+async function ageNoLancamento(ctx: Contexto, l: { created_by: string; user_id: string }): Promise<boolean> {
+  // fora da Área de Gente, quem enxerga a linha sempre pôde agir nela: a RLS de
+  // leitura e a de escrita eram a mesma alçada (sem consulta a mais para eles)
+  if (!ctx.isGente || ctx.isDp || l.created_by === ctx.userId) return true;
+  return souGestorDe(ctx.supabase, l.user_id, ctx.tenantId);
+}
+const SO_LEITURA = "A Área de Gente acompanha os lançamentos, mas não age neles.";
+
+/**
+ * Para as actions que gravam pela RLS: sem isto, o `update` da Área de Gente
+ * afetaria zero linha e voltaria sem erro, parecendo salvo.
+ */
+async function recusaDaAreaDeGente(ctx: Contexto, id: string): Promise<string | null> {
+  if (!ctx.isGente || ctx.isDp) return null;
+  const { data: l } = await ctx.supabase
+    .from("absenteismo_lancamentos").select("created_by, user_id").eq("id", id).maybeSingle();
+  if (!l) return null; // a leitura seguinte da action responde "não encontrado"
+  return (await ageNoLancamento(ctx, l)) ? null : SO_LEITURA;
+}
+
+/**
  * O carimbo do vínculo, montado no SERVIDOR.
  *
  * Sem CPF: o documento de absenteísmo não precisa dele, e a coluna está
@@ -486,8 +512,11 @@ export type ConfirmacaoInput = {
  */
 export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase, tenantId, userId } = ctx;
     if (!input.id) return { error: "Lançamento inválido." };
+    const daGente = await recusaDaAreaDeGente(ctx, input.id);
+    if (daGente) return { error: daGente };
     if (!input.absenceTypeId) return { error: "Escolha o tipo de absenteísmo." };
     if (!input.startDate || (!input.semTermino && !input.endDate)) return { error: "Informe o período." };
 
@@ -651,10 +680,13 @@ export async function encerrarFaltaSemTermino(input: { id: string; ultimoDia: st
 
 export async function anexarDocumentoAbsenteismo(formData: FormData): Promise<ActionState> {
   try {
-    const { supabase, tenantId, userId, isDp } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase, tenantId, userId, isDp } = ctx;
     const id = String(formData.get("id") ?? "");
     const file = formData.get("file");
     if (!id) return { error: "Lançamento inválido." };
+    const daGente = await recusaDaAreaDeGente(ctx, id);
+    if (daGente) return { error: daGente };
     if (!(file instanceof File)) return { error: "Escolha o arquivo." };
 
     const recusa = recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO);
@@ -705,9 +737,12 @@ export async function anexarDocumentoAbsenteismo(formData: FormData): Promise<Ac
 
 export async function removerDocumentoAbsenteismo(formData: FormData): Promise<ActionState> {
   try {
-    const { supabase, isDp } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase, isDp } = ctx;
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Lançamento inválido." };
+    const daGente = await recusaDaAreaDeGente(ctx, id);
+    if (daGente) return { error: daGente };
 
     const { data: atual } = await supabase
       .from("absenteismo_lancamentos")
@@ -786,7 +821,8 @@ export type AtestadoLido = {
  */
 export async function lerAtestadoComIA(formData: FormData): Promise<{ data?: AtestadoLidoPorIA; error?: string }> {
   try {
-    const { supabase } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase } = ctx;
 
     let bytes: ArrayBuffer;
     let tipo: string;
@@ -801,9 +837,10 @@ export async function lerAtestadoComIA(formData: FormData): Promise<{ data?: Ate
     } else if (id) {
       const { data: l } = await supabase
         .from("absenteismo_lancamentos")
-        .select("doc_path, doc_content_type, doc_filename")
+        .select("doc_path, doc_content_type, doc_filename, created_by, user_id")
         .eq("id", id)
         .maybeSingle();
+      if (l && !(await ageNoLancamento(ctx, l))) return { error: SO_LEITURA };
       if (!l?.doc_path) return { error: "Anexe o atestado primeiro." };
       const { data: blob, error } = await supabase.storage.from(BUCKET_DOC).download(l.doc_path);
       if (error || !blob) return { error: "Não foi possível abrir o anexo para a leitura." };
@@ -1001,15 +1038,18 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
  */
 export async function comunicarAberturaPendente(id: string): Promise<ActionState> {
   try {
-    const { supabase, userId } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase, userId } = ctx;
     if (!id) return { error: "Lançamento inválido." };
-    // a RLS decide se esta pessoa alcança o lançamento (id adivinhado não manda e-mail)
+    // a RLS decide se esta pessoa alcança o lançamento (id adivinhado não manda
+    // e-mail); alcançar não é agir (a Área de Gente só lê)
     const { data: linha } = await supabase
       .from("absenteismo_lancamentos")
-      .select("id, status")
+      .select("id, status, created_by, user_id")
       .eq("id", id)
       .maybeSingle();
     if (!linha) return { error: "Lançamento não encontrado." };
+    if (!(await ageNoLancamento(ctx, linha))) return { error: SO_LEITURA };
     if (linha.status !== "aberto") return { ok: true };
     const envio = await comunicarAberturaSeFaltar(id, userId);
     revalidar();
@@ -1059,18 +1099,21 @@ export async function continuaAusente(id: string, ate: string): Promise<ActionSt
  */
 export async function reenviarComunicado(formData: FormData): Promise<ActionState> {
   try {
-    const { supabase, userId } = await actionContext();
+    const ctx = await actionContext();
+    const { supabase, userId } = ctx;
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Lançamento inválido." };
 
     // A RLS decide se esta pessoa alcança o lançamento; sem isso, um id
-    // adivinhado mandaria e-mail sobre gente de outra equipe.
+    // adivinhado mandaria e-mail sobre gente de outra equipe. E alcançar não é
+    // agir: a Área de Gente vê a empresa inteira e não reenvia nada.
     const { data: linha } = await supabase
       .from("absenteismo_lancamentos")
-      .select("id, status")
+      .select("id, status, created_by, user_id")
       .eq("id", id)
       .maybeSingle();
     if (!linha) return { error: "Lançamento não encontrado." };
+    if (!(await ageNoLancamento(ctx, linha))) return { error: SO_LEITURA };
     // o pedido de "desconsidere" já saiu no cancelamento (a tela nem oferece o botão)
     if (linha.status === "cancelado") return { error: "Lançamento cancelado não reenvia comunicado." };
 

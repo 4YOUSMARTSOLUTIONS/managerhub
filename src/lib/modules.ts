@@ -196,7 +196,7 @@ export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; k
  * e o acesso por nível (getModuleAccess) vêm depois e só tiram mais telas.
  * O menu (Sidebar) e a escolha da tela inicial usam a mesma regra.
  */
-export function permitidoPeloPapel(m: ModuleDef, p: { role: string; isHr: boolean; isSuperAdmin: boolean }): boolean {
+export function permitidoPeloPapel(m: ModuleDef, p: { role: string; isHr: boolean; isGente?: boolean; isSuperAdmin: boolean }): boolean {
   // `team_lead` (Gestor) fica FORA de "canManage" de propósito. Gestor tem alçada
   // da própria equipe, não da empresa: nada de Logs do sistema nem de triagem de
   // chamados. O RH (marca `isHr`, não perfil) entra porque Configurações é a única
@@ -208,8 +208,10 @@ export function permitidoPeloPapel(m: ModuleDef, p: { role: string; isHr: boolea
   const canLeadTeam = canAdmin || p.role === "manager" || p.role === "team_lead";
   switch (m.minRole) {
     case "team_lead": return canLeadTeam;
-    // Punições e Absenteísmos: o gestor lança e o RH aprova, nenhum dos dois fica de fora
-    case "team_lead_hr": return canLeadTeam || p.isHr;
+    // Punições e Absenteísmos: o gestor lança e o RH aprova, nenhum dos dois fica de fora.
+    // A Área de Gente (LUIZ, 19/11/2026) lê Absenteísmos e a aba Colaboradores de
+    // Configurações; Punições não é da alçada dela
+    case "team_lead_hr": return canLeadTeam || p.isHr || (p.isGente === true && m.key !== "punicoes");
     case "manager": return canManage;
     case "admin": return canAdmin;
     // super admin de plataforma entra na empresa já como "owner" (requireContext)

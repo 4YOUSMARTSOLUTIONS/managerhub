@@ -23,7 +23,7 @@ export async function podeEscreverConhecimento(): Promise<boolean> {
  * inclusive.
  */
 export async function quemVeArtigo(): Promise<(modulo: string | null) => boolean> {
-  const [{ role, isHr, isSuperAdmin }, { state, construction }] = await Promise.all([
+  const [{ role, isHr, isGente, isSuperAdmin }, { state, construction }] = await Promise.all([
     requireContext(),
     getModuleAccess(),
   ]);
@@ -32,7 +32,7 @@ export async function quemVeArtigo(): Promise<(modulo: string | null) => boolean
     if (!modulo) return true;
     const m = MODULE_BY_KEY[modulo as ModuleKey];
     if (!m) return false;
-    return state[m.key] === "on" && !construction.has(m.key) && permitidoPeloPapel(m, { role, isHr, isSuperAdmin });
+    return state[m.key] === "on" && !construction.has(m.key) && permitidoPeloPapel(m, { role, isHr, isGente, isSuperAdmin });
   };
 }
 

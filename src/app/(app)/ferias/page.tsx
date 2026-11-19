@@ -26,10 +26,12 @@ export default async function FeriasPage() {
   const gate = await moduleGate("ferias");
   if (gate) return gate;
 
-  const { tenant, user, role, unitScope, isDp } = await requireContext();
+  const { tenant, user, role, unitScope, isDp, isGente } = await requireContext();
   const supabase = await createClient();
 
   const ehDp = isDp;
+  // Área de Gente (LUIZ, 19/11/2026): as abas do DP, só para ler
+  const veComoDp = isGente && !ehDp;
   const podeLiderar = ehDp || role === "manager" || role === "team_lead";
 
   // "hoje" no fuso do Brasil: o servidor está em UTC e às 21h o dia já teria
@@ -72,7 +74,7 @@ export default async function FeriasPage() {
     : null)();
   // quem acompanha equipe vê se os operacionais já escolheram o 13º do ano
   const anoDecimoP = configP.then(({ data }) => anoDaEscolhaDecimo(hoje, data?.decimo_prazo ?? "01-31"));
-  const escolhasDaEquipeP = (async () => (ehDp || role === "manager" || podeLiderar)
+  const escolhasDaEquipeP = (async () => (ehDp || veComoDp || role === "manager" || podeLiderar)
     ? (await supabase.rpc("ferias_painel_decimo", { p_tenant: tenant.id, p_ano: await anoDecimoP, p_unit_ids: unidades })).data
     : null)();
 
@@ -106,7 +108,7 @@ export default async function FeriasPage() {
     anoDecimoP,
     escolhasDaEquipeP,
     // DP: o banco recusa efetivar enquanto o operacional não escolhe o 13º do ano
-    ehDp
+    ehDp || veComoDp
       ? supabase.rpc("ferias_efetivacao_aguardando_decimo", { p_tenant: tenant.id })
       : Promise.resolve({ data: null }),
   ]);
@@ -202,11 +204,12 @@ export default async function FeriasPage() {
         rows={rows}
         meuId={user.id}
         ehDp={ehDp}
+        veComoDp={veComoDp}
         ehOwner={role === "owner"}
         ehGestor={podeLiderar && (ehDp || equipe.length > 0)}
         equipe={equipe}
-        // a RLS (`pode_ver_ferias`) abre a empresa toda ao DP e ao Gerencial
-        vejoEmpresa={ehDp || role === "manager"}
+        // a RLS abre a empresa toda ao DP, ao Gerencial e à Área de Gente
+        vejoEmpresa={ehDp || veComoDp || role === "manager"}
         podeSolicitar={podeSolicitar}
         avisoSolicitar={avisoSolicitar}
         pessoasLancar={pessoasLancar}

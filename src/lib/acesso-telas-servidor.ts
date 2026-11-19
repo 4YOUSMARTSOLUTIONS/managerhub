@@ -48,6 +48,6 @@ export async function lerRegrasDeSessao(supabase: SupabaseClient<Database>, tena
 export function isentoDoAcesso(role: string, isHr: boolean): string | null {
   if (role === "owner") return "Proprietário";
   if (role === "admin") return "Administrador";
-  if (isHr) return "RH";
+  if (isHr) return "Departamento Pessoal";
   return null;
 }

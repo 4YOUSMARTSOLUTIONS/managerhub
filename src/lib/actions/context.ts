@@ -41,14 +41,14 @@ export const actionContext = cache(async function actionContext() {
     if (activeId) {
       return {
         supabase, userId: user.id, tenantId: activeId as string, role: "owner" as Enums<"member_role">,
-        isHr: false, isDp: true,
+        isHr: false, isGente: false, isDp: true,
       };
     }
   }
 
   const { data } = await supabase
     .from("memberships")
-    .select("tenant_id, role, is_active, is_hr, tenants(status)")
+    .select("tenant_id, role, is_active, is_hr, is_gente, tenants(status)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: true })
     .limit(1);
@@ -73,8 +73,10 @@ export const actionContext = cache(async function actionContext() {
     userId: user.id,
     tenantId: membership.tenant_id,
     role: membership.role,
-    /** RH é atribuição (`memberships.is_hr`), não perfil: combina com qualquer `role` */
+    /** Departamento Pessoal (`memberships.is_hr`, a antiga marca RH): atribuição, não perfil */
     isHr: membership.is_hr,
+    /** Área de Gente: só LÊ o pessoal da empresa; nenhuma action de escrita a aceita */
+    isGente: membership.is_gente === true,
     /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
     isDp: membership.role === "owner" || membership.role === "admin" || membership.is_hr,
   };

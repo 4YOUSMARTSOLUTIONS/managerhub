@@ -402,8 +402,10 @@ export type Database = {
           employee_code: string | null
           id: string
           is_active: boolean
-          /** RH (departamento pessoal): atribuição, não perfil. Só owner/admin concedem. */
+          /** Departamento Pessoal (era "RH"): atribuição, não perfil. Só owner/admin concedem. */
           is_hr: boolean
+          /** Área de Gente: lê o pessoal da empresa inteira, sem agir. Só owner/admin concedem. */
+          is_gente: boolean
           is_ticket_manager: boolean
           is_training_manager: boolean
           is_avaliador_blitz: boolean
@@ -425,6 +427,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_hr?: boolean
+          is_gente?: boolean
           is_ticket_manager?: boolean
           is_training_manager?: boolean
           is_avaliador_blitz?: boolean
@@ -446,6 +449,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_hr?: boolean
+          is_gente?: boolean
           is_ticket_manager?: boolean
           is_training_manager?: boolean
           is_avaliador_blitz?: boolean
