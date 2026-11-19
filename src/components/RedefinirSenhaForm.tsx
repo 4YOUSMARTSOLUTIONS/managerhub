@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { redefinirSenhaComToken } from "@/lib/actions/recuperacao";
 import { initialActionState } from "@/lib/actions/types";
+import { useEntrarNoPortal } from "@/components/useEntrarNoPortal";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
@@ -19,6 +20,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
  */
 export function RedefinirSenhaForm({ token }: { token: string }) {
   const [state, action] = useActionState(redefinirSenhaComToken, initialActionState);
+  useEntrarNoPortal(state.destino);
 
   return (
     <form action={action} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -69,7 +71,7 @@ export function RedefinirSenhaForm({ token }: { token: string }) {
         </div>
       )}
 
-      <SubmitButton className="btn btn-primary btn-block" pendingLabel="Salvando…">
+      <SubmitButton className="btn btn-primary btn-block" pendingLabel="Salvando…" travado={Boolean(state.destino)}>
         Salvar e entrar
       </SubmitButton>
     </form>

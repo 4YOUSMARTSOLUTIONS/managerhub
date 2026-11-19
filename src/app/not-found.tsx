@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Compass } from "lucide-react";
 import { BrandLogo, BrandWordmark } from "@/components/BrandLogo";
 
@@ -51,9 +50,10 @@ export default function NotFound() {
         </p>
       </div>
 
-      <Link href="/dashboard" className="btn btn-primary">
+      {/* <a>, e não <Link>: a 404 pode estar fora do portal (ver useEntrarNoPortal) */}
+      <a href="/dashboard" className="btn btn-primary">
         Voltar ao Dashboard
-      </Link>
+      </a>
     </div>
   );
 }

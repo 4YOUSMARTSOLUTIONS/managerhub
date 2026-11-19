@@ -1,7 +1,6 @@
 "use server";
 
 import { after } from "next/server";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { chaveDeRecuperacao, dispararRecuperacao } from "@/lib/reset-senha";
@@ -152,7 +151,6 @@ export async function redefinirSenhaComToken(
     await supabase.auth.signInWithPassword({ email: usuario.email, password: nova });
   }
 
-  // FORA de qualquer try/catch: `redirect` funciona lançando, e um catch em
-  // volta o engoliria deixando a pessoa parada com a senha já trocada.
-  redirect("/dashboard");
+  // entrada com carga completa (useEntrarNoPortal), ver signIn
+  return { destino: "/dashboard" };
 }

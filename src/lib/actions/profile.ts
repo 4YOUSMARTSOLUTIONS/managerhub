@@ -159,7 +159,8 @@ export async function trocarSenhaObrigatoria(prev: ActionState, formData: FormDa
     redirect("/login");
   }
 
-  redirect("/dashboard");
+  // entrada com carga completa (useEntrarNoPortal), ver signIn
+  return { destino: "/dashboard" };
 }
 
 /**

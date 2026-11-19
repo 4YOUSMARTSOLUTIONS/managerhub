@@ -72,7 +72,10 @@ export async function signIn(
   const pendente =
     (data.user?.app_metadata as { must_change_password?: boolean } | undefined)
       ?.must_change_password === true;
-  redirect(pendente ? "/trocar-senha" : "/dashboard");
+  // entrada com carga completa (useEntrarNoPortal): o redirect daqui era
+  // navegação interna, e o Operacional, desviado do Dashboard no meio dela,
+  // caía na tela de erro no primeiro acesso (LUIZ, 19/11/2026)
+  return { destino: pendente ? "/trocar-senha" : "/dashboard" };
 }
 
 export async function signOut(): Promise<void> {

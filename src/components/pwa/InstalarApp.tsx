@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import {
   Check, CircleCheck, Copy, Download, Ellipsis, EllipsisVertical, MonitorDown, Share, Share2, SquarePlus,
@@ -176,7 +175,10 @@ function Pronto({ titulo, texto }: { titulo: string; texto: string }) {
         <CircleCheck size={18} style={{ flexShrink: 0, marginTop: "0.1rem" }} />
         <span><strong>{titulo}</strong> {texto}</span>
       </div>
-      <Link href="/dashboard" className="btn btn-primary btn-block">Abrir o portal</Link>
+      {/* <a>, e não <Link>: entrar no portal vindo de fora dele é carga
+          completa (ver useEntrarNoPortal); a navegação interna deixava o
+          Operacional na tela preta ou de erro */}
+      <a href="/dashboard" className="btn btn-primary btn-block">Abrir o portal</a>
     </div>
   );
 }

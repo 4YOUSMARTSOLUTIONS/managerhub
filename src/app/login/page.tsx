@@ -9,9 +9,11 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useInstalacao } from "@/components/pwa/useInstalacao";
 import { rotuloDoTempo } from "@/lib/sessao";
+import { useEntrarNoPortal } from "@/components/useEntrarNoPortal";
 
 export default function LoginPage({ searchParams }: { searchParams: Promise<{ motivo?: string; min?: string }> }) {
   const [state, action] = useActionState(signIn, initialActionState);
+  useEntrarNoPortal(state.destino);
   // sessão encerrada por falta de uso (pelo app aberto ou pelo servidor)
   const { motivo, min } = use(searchParams);
   const minutos = Number(min);
@@ -63,7 +65,7 @@ export default function LoginPage({ searchParams }: { searchParams: Promise<{ mo
             {state.error}
           </p>
         )}
-        <SubmitButton className="btn btn-primary btn-block" pendingLabel="Entrando…">Entrar</SubmitButton>
+        <SubmitButton className="btn btn-primary btn-block" pendingLabel="Entrando…" travado={Boolean(state.destino)}>Entrar</SubmitButton>
         <p style={{ textAlign: "center", margin: "-0.35rem 0 0" }}>
           <Link href="/esqueci-senha" className="muted" style={{ fontSize: "0.72rem" }}>
             Esqueci minha senha

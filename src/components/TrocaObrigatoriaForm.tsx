@@ -5,17 +5,19 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { trocarSenhaObrigatoria } from "@/lib/actions/profile";
 import { initialActionState } from "@/lib/actions/types";
+import { useEntrarNoPortal } from "@/components/useEntrarNoPortal";
 
 /**
  * Formulário da troca obrigatória, no molde do bloco de senha do perfil.
  *
  * A senha atual continua sendo pedida: assim a troca passa pela mesma action de
  * sempre, sem abrir no sistema um caminho que altere senha só com o cookie. Não
- * há tratamento de sucesso porque não existe: a action redireciona para o
- * sistema com a sessão já renovada.
+ * há mensagem de sucesso: a action devolve o destino e o formulário entra no
+ * portal com carga completa, com a sessão já renovada (useEntrarNoPortal).
  */
 export function TrocaObrigatoriaForm() {
   const [state, formAction] = useActionState(trocarSenhaObrigatoria, initialActionState);
+  useEntrarNoPortal(state.destino);
 
   return (
     <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
@@ -39,7 +41,7 @@ export function TrocaObrigatoriaForm() {
           {state.error}
         </p>
       )}
-      <SubmitButton className="btn btn-primary" pendingLabel="Salvando…">
+      <SubmitButton className="btn btn-primary" pendingLabel="Salvando…" travado={Boolean(state.destino)}>
         Salvar e entrar
       </SubmitButton>
     </form>
