@@ -27,7 +27,10 @@ export type ActiveContext = {
   user: { id: string; email: string | null | undefined };
   tenant: Tables<"tenants">;
   role: Enums<"member_role">;
-  /** RH é atribuição (`memberships.is_hr`), não perfil: combina com qualquer `role` */
+  /**
+   * RH é atribuição (`memberships.is_hr`), não perfil: combina com qualquer
+   * `role`. Não fica travado na própria unidade (LUIZ, 19/11/2026)
+   */
   isHr: boolean;
   /** departamento pessoal: proprietário, administrador ou quem tem a marca RH */
   isDp: boolean;
@@ -119,8 +122,11 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   void dadosDeModulos(tenantId).catch(() => undefined);
   const [{ data: unitRows }, { data: muDoVinculo }, { data: daSeguranca }, superAdmin, cookieStore] = await Promise.all([
     supabase.from("units").select("id, name").eq("tenant_id", tenantId).order("name"),
-    // admin enxerga todas as unidades: nem chega a perguntar
-    !isAdmin && membershipId
+    // admin e RH enxergam todas as unidades: nem chega a perguntar. O RH (a
+    // marca, com qualquer perfil) faz a gestão de pessoal da empresa inteira e
+    // a RLS já lhe dá todas as unidades; travado na própria, recebia o aviso do
+    // atestado da Filial e não achava o lançamento (LUIZ, 19/11/2026)
+    !isAdmin && !isHr && membershipId
       ? supabase.from("membership_units").select("unit_id").eq("membership_id", membershipId)
       : Promise.resolve({ data: null as { unit_id: string }[] | null }),
     // a equipe de segurança também vê todas (LUIZ, 18/11/2026): a segurança é
