@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { appUrl as origemDoApp } from "@/lib/app-url";
 import { getPlatformResend } from "@/lib/platform-integrations";
 import { sendMail } from "@/lib/mailer";
+import { faixaDaAusencia } from "@/lib/absenteismo-horas";
 
 /**
  * O comunicado de absenteísmo.
@@ -122,10 +123,10 @@ function diaSeguinte(iso: string): string {
   return dataBr(d.toISOString());
 }
 
-/** "09:00 às 11:00", ou vazio quando o lançamento não é de horas. */
+/** "09:00 às 11:00" (ou "... do dia seguinte"), vazio quando o lançamento não é de horas. */
 function faixaDeHoras(l: Linha): string {
   if (!l.hours_start || !l.partial_day) return "";
-  return `${l.hours_start.slice(0, 5)} às ${l.hours_end?.slice(0, 5) ?? "?"}`;
+  return faixaDaAusencia(l.hours_start, l.hours_end);
 }
 
 /** Dias corridos entre duas datas ISO, contando as duas pontas. */
@@ -203,7 +204,7 @@ function corpo(
       if (primeiro && l.ausencia_inicio) {
         const dias = diasEntre(l.ausencia_inicio, l.end_date);
         const inteiros = `${dataBr(l.ausencia_inicio)} a ${dataBr(l.end_date)} (${dias} dia${dias === 1 ? "" : "s"})`;
-        const faixa = l.hours_start ? `das ${l.hours_start.slice(0, 5)} às ${l.hours_end?.slice(0, 5) ?? "?"}` : "horário a confirmar";
+        const faixa = l.hours_start ? `das ${faixaDaAusencia(l.hours_start, l.hours_end)}` : "horário a confirmar";
         if (primeiro === "trabalhou") {
           linhas.push(["Primeiro dia", `Trabalhou normalmente em ${dataBr(l.start_date)} (consulta depois do expediente)`]);
           linhas.push(["Ausência considerada", inteiros]);

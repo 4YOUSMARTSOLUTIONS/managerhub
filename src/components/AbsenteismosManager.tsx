@@ -34,6 +34,7 @@ import {
 } from "@/lib/actions/absenteismos";
 import { RelatorioAbsenteismoDialog } from "@/components/RelatorioAbsenteismoDialog";
 import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
+import { faixaDaAusencia, minutosDeAusencia, rotuloDeHoras, terminaNoDiaSeguinte } from "@/lib/absenteismo-horas";
 import { nomeParaBaixar, rotuloTipoDocumento } from "@/lib/absenteismo-documento";
 // só o tipo: o módulo é de servidor, e "use server" não pode reexportar tipo (quebra o arquivo de actions inteiro)
 import type { AtestadoLidoPorIA } from "@/lib/atestado-ia";
@@ -210,6 +211,31 @@ function diaSeguinte(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * A conta do horário digitado, logo abaixo dos campos (LUIZ, 21/11/2026): quanto
+ * dá a ausência e, no turno da noite, que o "Até" cai no dia seguinte. Também
+ * denuncia na hora quem digitou o horário trabalhado (das 10:00 às 17:00 = 7h).
+ */
+function ContaDasHoras({ dia, inicio, fim }: { dia: string; inicio: string; fim: string }) {
+  const minutos = minutosDeAusencia(inicio, fim);
+  if (minutos === null) return null;
+  if (minutos === 0) {
+    return (
+      <p style={{ fontSize: "0.78rem", margin: 0, color: "var(--mh-danger)" }}>
+        Os horários de início e fim da ausência não podem ser iguais.
+      </p>
+    );
+  }
+  return (
+    <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+      Ausência de <strong>{rotuloDeHoras(minutos)}</strong>
+      {terminaNoDiaSeguinte(inicio, fim) && (
+        <>, terminando às {fim.slice(0, 5)} {dia ? `de ${diaMes(diaSeguinte(dia))}` : "do dia seguinte"}</>
+      )}.
+    </p>
+  );
 }
 
 /** O dia anterior de uma data ISO (AAAA-MM-DD), sem passar por fuso. */
@@ -463,9 +489,8 @@ export function AbsenteismosManager({
   const podeReenviar = (r: AbsenteismoRow) =>
     podeDecidir || r.createdBy === meuId || pessoaPorId.has(r.userId);
 
-  /** "09:00 às 11:00", ou vazio quando a ausência é do dia inteiro. */
-  const faixaDeHoras = (inicio: string | null, fim: string | null) =>
-    inicio ? `${inicio.slice(0, 5)} às ${fim?.slice(0, 5) ?? "?"}` : "";
+  /** "09:00 às 11:00" (ou "... do dia seguinte"), vazio quando a ausência é do dia inteiro. */
+  const faixaDeHoras = (inicio: string | null, fim: string | null) => faixaDaAusencia(inicio, fim);
 
   /**
    * O horário da linha: o da ausência de horas, ou o do primeiro dia parcial
@@ -491,11 +516,9 @@ export function AbsenteismosManager({
   const duracao = (r: AbsenteismoRow): string => {
     if (r.partialDay) {
       if (!r.hoursStart || !r.hoursEnd) return "Parcial";
-      const minutos = Math.round((Date.parse(`1970-01-01T${r.hoursEnd}`) - Date.parse(`1970-01-01T${r.hoursStart}`)) / 60000);
-      if (!Number.isFinite(minutos) || minutos <= 0) return "";
-      const h = Math.floor(minutos / 60);
-      const m = minutos % 60;
-      return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+      // o "até" menor que o "das" é do dia seguinte (turno da noite)
+      const minutos = minutosDeAusencia(r.hoursStart, r.hoursEnd);
+      return minutos ? rotuloDeHoras(minutos) : "";
     }
     // falta sem término: os dias contados até hoje
     if (r.startDate && r.endDate === SEM_RETORNO) {
@@ -1034,6 +1057,7 @@ export function AbsenteismosManager({
               </>
             )}
           </div>
+          {novo.emHoras && <ContaDasHoras dia={novo.occurredOn} inicio={novo.horaInicio} fim={novo.horaFim} />}
 
           <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer" }}>
             <input
@@ -1050,8 +1074,9 @@ export function AbsenteismosManager({
             <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
               Informe o horário em que ele <strong>não trabalhou</strong>: é esse período que sai no
               relatório do DP, para o desconto ser feito na folha. Ex.: turno das 08:00 às 17:00 e chegou
-              às 10:00, ausente das 08:00 às 10:00. Se não souber o horário agora, ele entra no Efetivar,
-              onde passa a ser obrigatório. Ausência parcial não entra no cálculo da remuneração variável.
+              às 10:00, ausente das 08:00 às 10:00. Se passar da meia-noite, o Até é do dia seguinte. Se não
+              souber o horário agora, ele entra no Efetivar, onde passa a ser obrigatório. Ausência parcial
+              não entra no cálculo da remuneração variável.
             </p>
           )}
 
@@ -1568,7 +1593,10 @@ function PainelConfirmacao({
           `${intervalo([c.startDate, c.endDate])} (${dias} dia${dias === 1 ? "" : "s"})`,
         ]);
     if (semTermino) itens.push(["Falta sem término", "Conta todos os dias até o DP encerrar. O desligamento encerra sozinho."]);
-    const horario = c.horaInicio ? `das ${c.horaInicio} às ${c.horaFim || "?"}` : "horário a informar";
+    const minutosAusente = minutosDeAusencia(c.horaInicio, c.horaFim);
+    const horario = c.horaInicio
+      ? `das ${faixaDaAusencia(c.horaInicio, c.horaFim || null)}${minutosAusente ? ` (${rotuloDeHoras(minutosAusente)})` : ""}`
+      : "horário a informar";
     if (c.emHoras) itens.push(["Ausência de horas", horario]);
     if (primeiroDia === "trabalhou") {
       itens.push(["Primeiro dia", `Trabalhou normalmente em ${formatDate(c.startDate)}`]);
@@ -1934,6 +1962,11 @@ function PainelConfirmacao({
               </div>
             </div>
           )}
+          {c.primeiroDia === "parcial" && (
+            <div style={{ paddingLeft: "1.4rem" }}>
+              <ContaDasHoras dia={c.startDate} inicio={c.horaInicio} fim={c.horaFim} />
+            </div>
+          )}
           {primeiroDia !== "integral" && c.endDate && (
             <p style={{ fontSize: "0.8rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
               {(() => {
@@ -1943,7 +1976,7 @@ function PainelConfirmacao({
                 if (primeiroDia === "trabalhou") {
                   return <>Conta como ausência: <strong>{inteiros}</strong>. O dia {formatDate(c.startDate)} não é descontado.</>;
                 }
-                const faixa = c.horaInicio && c.horaFim ? `das ${c.horaInicio} às ${c.horaFim}` : "(horário a informar)";
+                const faixa = c.horaInicio && c.horaFim ? `das ${faixaDaAusencia(c.horaInicio, c.horaFim)}` : "(horário a informar)";
                 return (
                   <>
                     Conta como ausência: <strong>{formatDate(c.startDate)} {faixa}</strong> e <strong>{inteiros}</strong>.
@@ -2002,12 +2035,13 @@ function PainelConfirmacao({
           </label>
         )}
       </div>
+      {c.emHoras && <ContaDasHoras dia={c.startDate} inicio={c.horaInicio} fim={c.horaFim} />}
 
       {c.emHoras && (
         <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
           Informe o horário em que ele <strong>não trabalhou</strong>: é esse período que será
           descontado. Ex.: turno das 08:00 às 17:00 e chegou às 10:00, ausente das 08:00 às 10:00.
-          Ausência de horas não entra no cálculo da remuneração variável: ela sai no relatório do
+          Se passar da meia-noite, o Até é do dia seguinte. Ausência de horas não entra no cálculo da remuneração variável: ela sai no relatório do
           DP, com o horário, para o desconto ser feito na folha.
         </p>
       )}
@@ -2636,7 +2670,7 @@ function Ficha({
               rotulo="Primeiro dia"
               valor={linha.primeiroDia === "trabalhou"
                 ? `Trabalhou normalmente em ${formatDate(linha.startDate)}`
-                : `Trabalhou parte de ${formatDate(linha.startDate)}, ausente ${linha.hoursStart ? `das ${linha.hoursStart.slice(0, 5)} às ${linha.hoursEnd?.slice(0, 5) ?? "?"}` : "(horário a informar)"}`}
+                : `Trabalhou parte de ${formatDate(linha.startDate)}, ausente ${linha.hoursStart ? `das ${faixaDaAusencia(linha.hoursStart, linha.hoursEnd)}` : "(horário a informar)"}`}
             />
             <Campo
               rotulo="Ausência considerada"
@@ -2659,7 +2693,7 @@ function Ficha({
           <Campo
             rotulo="Horário da ausência"
             valor={linha.hoursStart
-              ? `${linha.hoursStart.slice(0, 5)} às ${linha.hoursEnd?.slice(0, 5) ?? "?"}`
+              ? faixaDaAusencia(linha.hoursStart, linha.hoursEnd)
               : "Parcial, horário a confirmar"}
           />
         )}

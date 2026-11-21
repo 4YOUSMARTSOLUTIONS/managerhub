@@ -10,6 +10,7 @@ import {
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
 import { efeitoNaRv } from "@/lib/absenteismo-efeito-rv";
+import { erroDosHorarios } from "@/lib/absenteismo-horas";
 import { wantsActive } from "@/lib/catalogGuard";
 import { lerAtestadoNaOpenAI, MIMES_LEITURA_IA, type AtestadoLidoPorIA } from "@/lib/atestado-ia";
 import { SEM_RETORNO } from "@/lib/constants";
@@ -386,16 +387,13 @@ export async function lancarNaoComparecimento(input: {
     }
     if (input.userId === userId) return { error: "Ninguém lança a própria ausência." };
 
-    // As duas horas ou nenhuma, e nessa ordem: é o que o banco exige, e aqui
-    // vira frase em vez de erro de constraint.
+    // As duas horas ou nenhuma, e diferentes: é o que o banco exige, e aqui
+    // vira frase em vez de erro de constraint. O "até" menor que o "das" é do
+    // dia seguinte (turno da noite), não erro.
     const inicio = input.horaInicio?.trim() ?? "";
     const fim = input.horaFim?.trim() ?? "";
-    if (Boolean(inicio) !== Boolean(fim)) {
-      return { error: "Na ausência de horas, informe os dois horários: das e até." };
-    }
-    if (inicio && fim <= inicio) {
-      return { error: "O horário final precisa ser maior que o inicial." };
-    }
+    const erroHoras = erroDosHorarios(inicio, fim);
+    if (erroHoras) return { error: erroHoras };
 
     const carimbo = await montarCarimbo(ctx, input.userId);
 
@@ -548,12 +546,8 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
     const horaIni = input.horaInicio?.trim() ?? "";
     const horaFim = input.horaFim?.trim() ?? "";
     const comHoras = Boolean(horaIni && horaFim);
-    if (Boolean(horaIni) !== Boolean(horaFim)) {
-      return { error: "Informe os dois horários: das e até." };
-    }
-    if (comHoras && horaFim <= horaIni) {
-      return { error: "O horário final precisa ser maior que o inicial." };
-    }
+    const erroHoras = erroDosHorarios(horaIni, horaFim);
+    if (erroHoras) return { error: erroHoras };
     const emHoras = !semTermino && (Boolean(input.parcial) || (primeiroDia === "integral" && comHoras));
     const gravaHoras = comHoras && (emHoras || primeiroDia === "parcial");
 
