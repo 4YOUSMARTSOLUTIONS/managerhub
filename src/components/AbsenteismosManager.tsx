@@ -1018,7 +1018,7 @@ export function AbsenteismosManager({
             {novo.emHoras && (
               <>
                 <div>
-                  <label className="label">Das <span className="soft" style={{ textTransform: "none", fontWeight: 400 }}>(se souber)</span></label>
+                  <label className="label">Ausente das <span className="soft" style={{ textTransform: "none", fontWeight: 400 }}>(se souber)</span></label>
                   <input
                     type="time" className="input" value={novo.horaInicio}
                     onChange={(e) => setNovo((n) => (n ? { ...n, horaInicio: e.target.value } : n))}
@@ -1048,9 +1048,10 @@ export function AbsenteismosManager({
 
           {novo.emHoras && (
             <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
-              Se souber o horário, informe; senão, ele entra no Efetivar, onde passa a ser obrigatório.
-              O horário sai no relatório do DP, para o desconto ser feito na folha. Ausência parcial
-              não entra no cálculo da remuneração variável.
+              Informe o horário em que ele <strong>não trabalhou</strong>: é esse período que sai no
+              relatório do DP, para o desconto ser feito na folha. Ex.: turno das 08:00 às 17:00 e chegou
+              às 10:00, ausente das 08:00 às 10:00. Se não souber o horário agora, ele entra no Efetivar,
+              onde passa a ser obrigatório. Ausência parcial não entra no cálculo da remuneração variável.
             </p>
           )}
 
@@ -1976,7 +1977,7 @@ function PainelConfirmacao({
         {c.emHoras && (
           <>
             <div>
-              <label className="label">Das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+              <label className="label">Ausente das <span style={{ color: "var(--mh-danger)" }}>*</span></label>
               <input
                 type="time" className="input" value={c.horaInicio}
                 onChange={(e) => setC((x) => ({ ...x, horaInicio: e.target.value }))}
@@ -2004,6 +2005,8 @@ function PainelConfirmacao({
 
       {c.emHoras && (
         <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
+          Informe o horário em que ele <strong>não trabalhou</strong>: é esse período que será
+          descontado. Ex.: turno das 08:00 às 17:00 e chegou às 10:00, ausente das 08:00 às 10:00.
           Ausência de horas não entra no cálculo da remuneração variável: ela sai no relatório do
           DP, com o horário, para o desconto ser feito na folha.
         </p>
