@@ -8,6 +8,7 @@ import { AuthShell } from "@/components/AuthShell";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useInstalacao } from "@/components/pwa/useInstalacao";
+import { ehAparelhoMovel } from "@/lib/pwa";
 import { rotuloDoTempo } from "@/lib/sessao";
 import { useEntrarNoPortal } from "@/components/useEntrarNoPortal";
 
@@ -18,14 +19,17 @@ export default function LoginPage({ searchParams }: { searchParams: Promise<{ mo
   const { motivo, min } = use(searchParams);
   const minutos = Number(min);
   const porInatividade = motivo === "inatividade";
-  // quem já abriu pelo ícone instalado não precisa do convite
+  // quem já abriu pelo ícone instalado não precisa do convite; no computador ele
+  // também não aparece (LUIZ, 22/11/2026): lá o portal é usado no navegador, e
+  // quem quiser instalar no PC ainda tem o link /instalar que o DP manda
   const app = useInstalacao();
+  const convidarParaInstalar = app.pronto && !app.instalado && ehAparelhoMovel(app.plataforma);
 
   return (
     <AuthShell
       title="Entrar"
       subtitle="Acesse o portal de gestão da sua empresa."
-      footer={app.pronto && !app.instalado ? <Link href="/instalar">Instalar o aplicativo no celular ou no computador</Link> : undefined}
+      footer={convidarParaInstalar ? <Link href="/instalar">Instalar o aplicativo no celular</Link> : undefined}
     >
       <form action={action} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {porInatividade && !state.error && (
