@@ -568,8 +568,10 @@ export async function getAttachmentUrl(path: string): Promise<string | null> {
 
 // ---------- Exportação (.xlsx) ----------
 /** Colunas iguais às do modelo de importação, para o arquivo poder ser reimportado. */
+// "ID" e não "ID da ação": a importação acha as colunas por trecho do nome, e
+// "ID da ação" contém "acao", seria lido como a descrição se a planilha voltar.
 const EXPORT_HEADERS = [
-  "Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo",
+  "ID", "Ação", "Responsáveis", "Solicitante", "Criada por", "Data de criação", "Reunião", "Prazo",
   "Data de conclusão", "Status", "Prioridade", "Unidade", "Setor", "Subsetor", "KPI", "Ferramenta", "SDPO", "Programa",
   "Pilar", "Seção", "Bloco", "Item", "Comentários",
 ];
@@ -693,6 +695,7 @@ export async function exportActions(
       const resp = [...(respByDemanda.get(d.id) ?? []), ...legacyResp];
       const status = awaitingByDemanda.has(d.id) ? "Aguardando aprovação" : (STATUS_LABEL[d.status] ?? d.status);
       return [
+        a.code ?? "",
         d.description,
         resp.join("; "),
         nm(a.requester_id, mUser, a.legacy_requester),
@@ -716,11 +719,11 @@ export async function exportActions(
         nm(a.item_id, mItem, a.legacy_item),
         (commentsByDemanda.get(d.id) ?? []).join("\n"),
       ];
-    }).filter((r): r is string[] => r !== null);
+    }).filter((r): r is (string | number)[] => r !== null);
 
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...rows]);
-    ws["!cols"] = [40, 26, 20, 20, 15, 28, 12, 16, 20, 12, 16, 18, 18, 16, 14, 8, 12, 16, 16, 16, 16, 40].map((wch) => ({ wch }));
+    ws["!cols"] = [8, 40, 26, 20, 20, 15, 28, 12, 16, 20, 12, 16, 18, 18, 16, 14, 8, 12, 16, 16, 16, 16, 40].map((wch) => ({ wch }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ações");
     const file = XLSX.write(wb, { type: "base64", bookType: "xlsx" }) as string;
