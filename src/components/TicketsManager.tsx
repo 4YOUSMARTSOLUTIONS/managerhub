@@ -109,7 +109,7 @@ export function TicketsManager({
         <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>+ Abrir chamado</button>
       </div>
 
-      <Section title={tituloLista} action={<BotoesFiltroChamados />} padded={false}>
+      <Section title={tituloLista} titleExtra={<BotoesFiltroChamados />} padded={false}>
         <PainelFiltrosChamados tickets={tickets} comPrioridade={showPriority} />
         {filtrados.length > 0 ? (
           <table className="table">

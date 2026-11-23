@@ -88,7 +88,7 @@ export function BotoesFiltroChamados() {
   const qtd = contarFiltros(filtros);
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-      {qtd > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={limpar}>Limpar filtros</button>}
+      {/* "Filtros" vem primeiro: ao lado do título, ele não muda de lugar quando o "Limpar" some */}
       <button
         type="button"
         className={`btn btn-sm ${painelAberto || qtd > 0 ? "btn-primary" : "btn-ghost"}`}
@@ -99,6 +99,7 @@ export function BotoesFiltroChamados() {
         Filtros
         {qtd > 0 && <Badge tone="blue">{qtd}</Badge>}
       </button>
+      {qtd > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={limpar}>Limpar filtros</button>}
     </div>
   );
 }
