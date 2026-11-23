@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
+import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { getOccurrenceDetail, type OccurrenceDetail } from "@/lib/actions/meeting-records";
 import { getRecordings, getRecordingUrl, type RecordingRow } from "@/lib/actions/meeting-recordings";
@@ -16,6 +17,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div>
       <div className="label" style={{ marginBottom: "0.35rem" }}>{title}</div>
       {children}
+    </div>
+  );
+}
+
+/**
+ * Seção que abre pela setinha (LUIZ, 23/11/2026): presença e ações abertas são
+ * listas longas e empurravam as anotações para baixo. O título já traz a contagem.
+ */
+function SecaoRecolhivel({ title, children }: { title: string; children: React.ReactNode }) {
+  const [aberta, setAberta] = useState(false);
+  const id = useId();
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: 9 }}>
+      <button
+        type="button"
+        aria-expanded={aberta}
+        aria-controls={id}
+        onClick={() => setAberta((v) => !v)}
+        style={{ display: "flex", alignItems: "center", gap: "0.4rem", width: "100%", background: "none", border: "none", cursor: "pointer", padding: "0.55rem 0.7rem", textAlign: "left", color: "var(--text-muted)" }}
+      >
+        <ChevronRight size={15} style={{ flexShrink: 0, transform: aberta ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+        <span className="label" style={{ margin: 0, cursor: "pointer" }}>{title}</span>
+      </button>
+      <div id={id} hidden={!aberta} style={{ padding: "0 0.7rem 0.65rem" }}>{children}</div>
     </div>
   );
 }
@@ -97,7 +122,7 @@ export function MeetingOccurrenceDetail({ occurrenceId, onClose }: { occurrenceI
                 </p>
               )}
 
-              <Section title={`Presença · ${presentCount}/${detail.attendance.length} presentes`}>
+              <SecaoRecolhivel title={`Presença · ${presentCount}/${detail.attendance.length} presentes`}>
                 {detail.attendance.length === 0 ? (
                   <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Sem registro de presença.</p>
                 ) : (
@@ -110,13 +135,13 @@ export function MeetingOccurrenceDetail({ occurrenceId, onClose }: { occurrenceI
                     ))}
                   </div>
                 )}
-              </Section>
+              </SecaoRecolhivel>
 
               <Section title="Anotações"><TextBlock value={detail.notes} /></Section>
               <Section title="Decisões"><TextBlock value={detail.decisions} /></Section>
               <Section title="Transcrição"><TextBlock value={detail.transcript} /></Section>
 
-              <Section title={`Ações abertas · ${detail.actions.length}`}>
+              <SecaoRecolhivel title={`Ações abertas · ${detail.actions.length}`}>
                 {detail.actions.length === 0 ? (
                   <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>Nenhuma ação aberta nesta reunião.</p>
                 ) : (
@@ -144,7 +169,7 @@ export function MeetingOccurrenceDetail({ occurrenceId, onClose }: { occurrenceI
                     ))}
                   </div>
                 )}
-              </Section>
+              </SecaoRecolhivel>
 
               <Section title={`Gravações · ${recordings.length}`}>
                 {recordings.length === 0 ? (
