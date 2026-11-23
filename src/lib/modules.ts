@@ -165,12 +165,12 @@ const comecaComNumero = (s: string) => /^\d/.test(s);
  * Compara rótulos como um leitor brasileiro leria: acento e caixa não separam.
  * O que começa com número (5S) vai para o fim da lista (LUIZ, 23/11/2026).
  */
-const porNome = (a: string, b: string) =>
+export const porNome = (a: string, b: string) =>
   Number(comecaComNumero(a)) - Number(comecaComNumero(b))
   || a.localeCompare(b, "pt-BR", { sensitivity: "base" });
 
-/** Telas que existem mas não ficam no menu lateral: Sugestões mora no menu do usuário (LUIZ, 23/11/2026). */
-export const FORA_DO_MENU: ModuleKey[] = ["sugestoes"];
+/** Telas que existem mas não ficam no menu lateral: moram no menu do usuário (LUIZ, 23/11/2026). */
+export const FORA_DO_MENU: ModuleKey[] = ["conhecimento", "sugestoes"];
 
 /**
  * Ordem exata do menu, derivada dos rótulos: tudo em ordem alfabética, inclusive

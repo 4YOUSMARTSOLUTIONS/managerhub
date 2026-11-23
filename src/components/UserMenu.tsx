@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronDown, Download, Lightbulb, LogOut, Moon, Smartphone, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellOff, BookOpen, ChevronDown, Download, Lightbulb, LogOut, Moon, Smartphone, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAvatars } from "@/components/AvatarProvider";
@@ -25,6 +25,7 @@ export function UserMenu({
   role,
   theme,
   variant = "topbar",
+  mostrarConhecimento = false,
   mostrarSugestoes = false,
   onNavigate,
 }: {
@@ -33,6 +34,8 @@ export function UserMenu({
   theme: Theme;
   /** "sidebar" = gatilho largo no rodapé, menu abre para cima */
   variant?: "topbar" | "sidebar";
+  /** falso para quem o nível não libera a tela */
+  mostrarConhecimento?: boolean;
   /** falso para quem não está numa empresa (owner de plataforma) */
   mostrarSugestoes?: boolean;
   /** fecha o menu lateral no celular ao trocar de tela */
@@ -253,7 +256,22 @@ export function UserMenu({
             Meu perfil
           </button>
 
-          {/* saiu do menu lateral (LUIZ, 23/11/2026); a tela segue sendo de todos */}
+          {/* os dois saíram do menu lateral (LUIZ, 23/11/2026). O Banco segue o
+              acesso por nível; Sugestões é de todos */}
+          {mostrarConhecimento && (
+            <Link
+              href="/conhecimento"
+              role="menuitem"
+              style={{ ...itemStyle, textDecoration: "none" }}
+              onClick={() => { setOpen(false); onNavigate?.(); }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              <BookOpen size={14} />
+              Banco de conhecimento
+            </Link>
+          )}
+
           {mostrarSugestoes && (
             <Link
               href="/sugestoes"

@@ -8,7 +8,7 @@
  * inicial de quem não vê o Dashboard.
  */
 import {
-  FORA_DO_MENU, MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup,
+  FORA_DO_MENU, MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup, porNome,
   type ModuleDef, type ModuleKey, type ModuleState,
 } from "@/lib/modules";
 
@@ -46,7 +46,8 @@ export function opcoesDeTelas(contratadas: Set<string>): GrupoDeTelas[] {
   const entra = (m: ModuleDef) => !FORA_DA_REGRA.has(m.key) && (m.core || contratadas.has(m.key));
   const soltas: GrupoDeTelas = { grupo: null, telas: [] };
   const grupos: GrupoDeTelas[] = [];
-  for (const n of NAV_ORDER) {
+  // o que mora no menu do usuário continua sendo liberado por nível (Banco de conhecimento)
+  for (const n of [...NAV_ORDER, ...FORA_DO_MENU.map((key) => ({ type: "module" as const, key }))]) {
     if (n.type === "module") {
       const m = MODULE_BY_KEY[n.key];
       if (entra(m)) soltas.telas.push({ key: m.key, label: m.label });
@@ -55,6 +56,7 @@ export function opcoesDeTelas(contratadas: Set<string>): GrupoDeTelas[] {
       if (telas.length) grupos.push({ grupo: MODULE_GROUPS.find((g) => g.key === n.key)?.label ?? null, telas });
     }
   }
+  soltas.telas.sort((a, b) => porNome(a.label, b.label));
   return soltas.telas.length ? [soltas, ...grupos] : grupos;
 }
 
