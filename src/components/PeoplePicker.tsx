@@ -15,6 +15,7 @@ export function PeoplePicker({
   maxVisible = 40,
   single = false,
   autoFocus = false,
+  ocultarSelecionados = false,
 }: {
   people: Person[];
   selected: string[];
@@ -24,6 +25,8 @@ export function PeoplePicker({
   single?: boolean;
   /** abre já com o cursor na busca (ex.: a blitz da portaria, uma pessoa atrás da outra) */
   autoFocus?: boolean;
+  /** quem usa já lista os escolhidos (ex.: a Presença da reunião): sem as pílulas repetidas */
+  ocultarSelecionados?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const selSet = useMemo(() => new Set(selected), [selected]);
@@ -48,7 +51,7 @@ export function PeoplePicker({
 
   return (
     <div>
-      {selected.length > 0 && (
+      {selected.length > 0 && !ocultarSelecionados && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.5rem" }}>
           {selected.map((id) => {
             const p = byId.get(id);

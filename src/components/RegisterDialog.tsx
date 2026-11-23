@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import { finishOccurrence, saveOccurrenceDraft, type OccurrenceDraft } from "@/lib/actions/meeting-records";
 import { createAction } from "@/lib/actions/actions";
 import { generateMeetingAI, generateActionsAI } from "@/lib/actions/ai";
@@ -321,17 +322,29 @@ export function RegisterDialog({
                 {attendees.map((id) => {
                   const p = byId.get(id);
                   return (
-                    <label key={id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 0.6rem", borderBottom: "1px solid var(--border)", cursor: "pointer", fontSize: "0.85rem" }}>
-                      <input type="checkbox" checked={!!present[id]} onChange={(e) => setPresent((prev) => ({ ...prev, [id]: e.target.checked }))} />
-                      <Avatar name={p?.name ?? "?"} userId={id} />
-                      <span style={{ flex: 1 }}>{p?.name ?? "—"}</span>
-                      <span className="soft" style={{ fontSize: "0.75rem" }}>{present[id] ? "Presente" : "Ausente"}</span>
-                    </label>
+                    <div key={id} style={{ display: "flex", alignItems: "center", gap: "0.25rem", paddingRight: "0.3rem", borderBottom: "1px solid var(--border)" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: 0, padding: "0.4rem 0.3rem 0.4rem 0.6rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                        <input type="checkbox" checked={!!present[id]} onChange={(e) => setPresent((prev) => ({ ...prev, [id]: e.target.checked }))} />
+                        <Avatar name={p?.name ?? "?"} userId={id} />
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p?.name}>{p?.name ?? "—"}</span>
+                        <span className="soft" style={{ fontSize: "0.75rem", flexShrink: 0 }}>{present[id] ? "Presente" : "Ausente"}</span>
+                      </label>
+                      {/* as pílulas saíram (LUIZ, 23/11/2026): repetiam esta lista; tirar da reunião é aqui */}
+                      <button
+                        type="button"
+                        aria-label={`Remover ${p?.name ?? "participante"} da reunião`}
+                        title="Remover da reunião"
+                        onClick={() => onAttendeesChange(attendees.filter((x) => x !== id))}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", width: 26, height: 26, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 6, flexShrink: 0 }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   );
                 })}
               </div>
             )}
-            <PeoplePicker people={people} selected={attendees} onChange={onAttendeesChange} placeholder="Adicionar participante…" />
+            <PeoplePicker people={people} selected={attendees} onChange={onAttendeesChange} placeholder="Adicionar participante…" ocultarSelecionados />
           </div>
 
           {occurrenceId && (
