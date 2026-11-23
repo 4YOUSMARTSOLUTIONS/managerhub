@@ -544,16 +544,30 @@ export async function getActionForEdit(actionId: string): Promise<
 }
 
 export async function deleteAction(formData: FormData): Promise<ActionState> {
-  const { supabase, tenantId } = await actionContext();
+  // O super admin já chega aqui como "owner" (actionContext).
+  const { supabase, tenantId, role } = await actionContext();
+  if (role !== "owner") return { error: "Apenas o proprietário pode excluir ações." };
   const id = String(formData.get("id"));
-  // remove anexos do storage (best-effort, mas registra falha p/ não deixar órfão silencioso)
-  const { data: atts } = await supabase.from("action_attachments").select("path").eq("action_id", id);
-  if (atts && atts.length) {
-    const { error: rmErr } = await supabase.storage.from(BUCKET).remove(atts.map((a) => a.path));
+
+  // Os caminhos são lidos antes porque o delete da ação leva as linhas de anexo (cascade).
+  const { data: atts, error: attsErr } = await supabase
+    .from("action_attachments").select("path").eq("action_id", id).eq("tenant_id", tenantId);
+  if (attsErr) return { error: attsErr.message };
+
+  // Sem o .select(), a RLS barra o delete com 0 linhas e nenhum erro.
+  const { data: apagadas, error } = await supabase
+    .from("actions").delete().eq("id", id).eq("tenant_id", tenantId).select("id");
+  if (error) return { error: error.message };
+  if (!apagadas?.length) return { error: "Ação não encontrada ou sem permissão para excluir." };
+
+  // Arquivo só sai com a ação já apagada. `path` é texto que quem vê a ação consegue
+  // gravar, então só vale o que está na pasta desta ação.
+  const pasta = `${tenantId}/${id}/`;
+  const paths = (atts ?? []).map((a) => a.path).filter((p) => p.startsWith(pasta));
+  if (paths.length) {
+    const { error: rmErr } = await supabase.storage.from(BUCKET).remove(paths);
     if (rmErr) console.error("[actions] falha ao remover anexos do storage:", rmErr.message);
   }
-  const { error } = await supabase.from("actions").delete().eq("id", id).eq("tenant_id", tenantId);
-  if (error) return { error: error.message };
   revalidatePath("/acoes");
   revalidatePath("/dashboard");
   return { ok: true };
