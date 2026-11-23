@@ -7,6 +7,7 @@ import { verifyOwnPassword } from "./verify-password";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isCatalogInUse, wantsActive } from "@/lib/catalogGuard";
 import { PRIORITY } from "@/lib/constants";
+import { numeroChamado } from "@/lib/format";
 import type { ActionState } from "./types";
 import type { Database, Enums, Json } from "@/types/database";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
@@ -240,7 +241,7 @@ export async function updateTicketTriage(input: TriageInput): Promise<ActionStat
         p_tenant: tenantId,
         p_users: [cur.requester_id],
         p_type: "ticket",
-        p_title: `Chamado ${cur.code ?? ""} atualizado`.trim(),
+        p_title: `Chamado ${numeroChamado(cur.code)} atualizado`.trim(),
         p_body: body,
         p_demanda: null,
       });
@@ -272,7 +273,7 @@ export async function requestTicketConclusion(ticketId: string): Promise<ActionS
         p_tenant: tenantId,
         p_users: [t.requester_id],
         p_type: "ticket",
-        p_title: `Chamado ${t.code ?? ""} aguardando seu de acordo`.trim(),
+        p_title: `Chamado ${numeroChamado(t.code)} aguardando seu de acordo`.trim(),
         p_body: `O atendimento de "${t.title}" foi concluído. Confirme se está de acordo para encerrar o chamado.`,
         p_demanda: null,
       });
@@ -308,7 +309,7 @@ export async function decideTicketConclusion(ticketId: string, approve: boolean,
         p_tenant: tenantId,
         p_users: [target],
         p_type: "ticket",
-        p_title: `Chamado ${t?.code ?? ""} ${approve ? "encerrado" : "reaberto"}`.trim(),
+        p_title: `Chamado ${numeroChamado(t?.code)} ${approve ? "encerrado" : "reaberto"}`.trim(),
         p_body: approve
           ? `O solicitante deu o de acordo e o chamado "${t?.title}" foi encerrado.`
           : `O solicitante recusou a conclusão de "${t?.title}"; o chamado voltou para atendimento.`,

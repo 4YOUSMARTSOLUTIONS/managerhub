@@ -7,7 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { SearchSelect } from "@/components/SearchSelect";
 import { NpsRating } from "@/components/NpsRating";
 import { PRIORITY, TICKET_STATUS, options } from "@/lib/constants";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, numeroChamado } from "@/lib/format";
 import { npsColor, npsFace } from "@/lib/nps";
 import type { Enums } from "@/types/database";
 import type { TicketRow, Opt, CatOpt, Member } from "./TicketsManager";
@@ -176,7 +176,7 @@ export function TicketPanel({
       <div className="card" style={{ width: "100%", maxWidth: 560, boxShadow: "var(--mh-shadow-e3)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
           <div>
-            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{ticket.code ? `${ticket.code} · ` : ""}{ticket.title}</h2>
+            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{ticket.code ? `${numeroChamado(ticket.code)} · ` : ""}{ticket.title}</h2>
             <p className="muted" style={{ margin: "0.15rem 0 0", fontSize: "0.83rem" }}>
               Solicitante: {ticket.requesterName ?? "—"} · pediu prioridade <strong>{ticket.requestedPriority ? PRIORITY[ticket.requestedPriority] : "—"}</strong>
             </p>

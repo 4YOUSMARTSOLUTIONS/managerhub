@@ -273,7 +273,8 @@ export function lerPlanilhaDeChamados(matriz: unknown[][]): { linhas: LinhaChama
     const txt = (k: keyof typeof COLUNAS) => (pos[k] >= 0 ? String(r[pos[k]] ?? "").trim() : "");
     const cel = (k: keyof typeof COLUNAS) => (pos[k] >= 0 ? r[pos[k]] : "");
 
-    const id = txt("id");
+    // o "#" é só exibição: "#1001" e "1001" são o mesmo chamado
+    const id = txt("id").replace(/^#+\s*/, "");
     const nome = id ? `Chamado ${id}` : "Chamado";
     const titulo = txt("titulo");
     if (!titulo) { recusas.push({ linha, motivo: `${nome} sem título.` }); continue; }

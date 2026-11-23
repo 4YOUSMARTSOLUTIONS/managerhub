@@ -12,7 +12,7 @@ import { NpsRating } from "@/components/NpsRating";
 import { deleteTicket, decideTicketConclusion } from "@/lib/actions/tickets";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
-import { formatDateTime, isOverdue, shortName } from "@/lib/format";
+import { formatDateTime, isOverdue, numeroChamado, shortName } from "@/lib/format";
 
 const TERMINAL = ["resolved", "closed", "cancelled"];
 const POR_PAGINA = 50;
@@ -135,7 +135,11 @@ export function TicketsManager({
                 const canDecide = t.requesterId === currentUserId && awaitingApproval;
                 return (
                   <tr key={t.id}>
-                    <td className="soft" style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{t.code}</td>
+                    <td style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", fontWeight: 600 }}>
+                      <button type="button" className="cell-link cell-link-id" onClick={() => setSelected(t)} title="Abrir o chamado">
+                        {numeroChamado(t.code)}
+                      </button>
+                    </td>
                     <td className="muted" style={{ fontSize: "0.75rem" }}>{t.unitName ?? "—"}</td>
                     <td style={{ fontWeight: 600 }}>
                       <button type="button" onClick={() => setSelected(t)} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 600, color: "var(--text)", cursor: "pointer", textAlign: "left" }}>
@@ -266,7 +270,7 @@ export function TicketsManager({
         <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 1rem", zIndex: 70, overflowY: "auto" }}>
           <div className="card" style={{ width: "100%", maxWidth: 460, boxShadow: "var(--mh-shadow-e3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Conclusão do chamado {decideTicket.code ?? ""}</h2>
+              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Conclusão do chamado {numeroChamado(decideTicket.code)}</h2>
               <button type="button" onClick={() => setDecideTicket(null)} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
             </div>
             <div style={{ padding: "1.1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.8rem" }}>
@@ -292,7 +296,7 @@ export function TicketsManager({
         <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 1rem", zIndex: 70, overflowY: "auto" }}>
           <div className="card" style={{ width: "100%", maxWidth: 460, boxShadow: "var(--mh-shadow-e3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)" }}>
-              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Avaliar chamado {ratingTicket.code ?? ""}</h2>
+              <h2 style={{ fontSize: "1.02rem", fontWeight: 700, margin: 0 }}>Avaliar chamado {numeroChamado(ratingTicket.code)}</h2>
               <button type="button" onClick={() => setRatingTicket(null)} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>
             </div>
             <div style={{ padding: "1.1rem 1.25rem" }}>

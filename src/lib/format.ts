@@ -147,3 +147,12 @@ export function formatValorComUnidade(valor: number | null | undefined, unidade:
   if (u === "%") return nfMeta.format(t) + "%";
   return nfMeta.format(t) + (u ? ` ${u}` : "");
 }
+
+/**
+ * Número do chamado como aparece para as pessoas: "#136369", no padrão das ações.
+ * O "#" é só exibição; no banco fica o número puro.
+ */
+export function numeroChamado(code: string | null | undefined): string {
+  const limpo = (code ?? "").replace(/^#+/, "").trim();
+  return limpo ? `#${limpo}` : "";
+}
