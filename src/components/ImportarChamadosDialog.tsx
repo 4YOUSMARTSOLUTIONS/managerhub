@@ -9,7 +9,10 @@ import { IconImport } from "@/components/ui/ImpExpIcons";
 import { useLeituraDePlanilha, AvisoLendoPlanilha } from "@/components/ui/LeituraDePlanilha";
 import { loadXlsx } from "@/lib/xlsx-lazy";
 import { importarChamados, type ResultadoImportacaoChamados } from "@/lib/actions/tickets";
-import { lerExportacao, mascararLinhas, type LinhaChamado, type RecusaChamado } from "@/lib/chamados-importacao";
+import {
+  MODELO_CABECALHO, MODELO_EXEMPLOS, MODELO_INSTRUCOES,
+  lerPlanilhaDeChamados, mascararLinhas, type LinhaChamado, type RecusaChamado,
+} from "@/lib/chamados-importacao";
 
 const LOTE = 150;
 const num = (n: number) => n.toLocaleString("pt-BR");
@@ -53,7 +56,7 @@ async function rodar(
 const lista = (o: Record<string, number>) => Object.entries(o).sort((a, b) => b[1] - a[1]);
 
 /**
- * Importa a exportação de chamados do sistema anterior. Só o Proprietário vê.
+ * Importa chamados pelo modelo (ou pela exportação do SAVI). Só o Proprietário vê.
  * Primeiro confere o arquivo inteiro sem gravar e mostra o que vai acontecer; a
  * gravação só começa depois de a pessoa ver esse resumo.
  */
@@ -82,13 +85,25 @@ export function ImportarChamadosDialog() {
     limpar();
   }
 
+  async function baixarModelo() {
+    const XLSX = await loadXlsx();
+    const ws = XLSX.utils.aoa_to_sheet([MODELO_CABECALHO, ...MODELO_EXEMPLOS]);
+    ws["!cols"] = [10, 30, 40, 18, 24, 11, 16, 24, 24, 24, 15, 17, 17, 17, 50].map((wch) => ({ wch }));
+    const instrucoes = XLSX.utils.aoa_to_sheet(MODELO_INSTRUCOES);
+    instrucoes["!cols"] = [{ wch: 20 }, { wch: 100 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Chamados");
+    XLSX.utils.book_append_sheet(wb, instrucoes, "Instruções");
+    XLSX.writeFile(wb, "modelo_chamados.xlsx");
+  }
+
   async function aoEscolher(file: File) {
     limpar();
     try {
       const XLSX = await loadXlsx();
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
       const matriz = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, blankrows: true });
-      const lido = lerExportacao(matriz);
+      const lido = lerPlanilhaDeChamados(matriz);
       if (lido.erro) { setErro(lido.erro); return; }
       if (lido.linhas.length === 0) { setErro("Nenhum chamado encontrado no arquivo."); return; }
 
@@ -154,9 +169,15 @@ export function ImportarChamadosDialog() {
         {!fim && (
           <div>
             <p className="soft" style={{ fontSize: "0.82rem", margin: "0 0 0.7rem" }}>
-              Use o arquivo exportado do sistema anterior, sem alterar as colunas. Nada é gravado antes de
-              você ver o resumo, ninguém recebe aviso, e importar o mesmo arquivo de novo não duplica.
+              Baixe o modelo, preencha e envie. A exportação do SAVI também é aceita como está. Nada é
+              gravado antes de você ver o resumo, ninguém recebe aviso, e importar o mesmo arquivo de novo
+              não duplica.
             </p>
+            <div style={{ marginBottom: "0.8rem" }}>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={ocupado} onClick={() => void baixarModelo()}>
+                ↓ Baixar modelo
+              </button>
+            </div>
             <label className="label">Arquivo</label>
             <input
               type="file" accept=".xlsx,.xls" className="input" disabled={ocupado}

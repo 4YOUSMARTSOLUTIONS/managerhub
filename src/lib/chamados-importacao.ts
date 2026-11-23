@@ -1,9 +1,10 @@
 /**
- * Leitura da exportação de chamados do sistema anterior (LUIZ, 22/11/2026).
+ * Leitura da planilha de importação de chamados (LUIZ, 22/11/2026).
  *
- * O arquivo entra como sai de lá, sem montar planilha: 14 colunas, datas em texto
- * "dd/mm/aaaa hh:mm" e todas as mensagens numa célula só, cada uma com o cabeçalho
- * "[dd/mm/aaaa hh:mm] NOME: texto".
+ * O formato oficial é o MODELO abaixo, porque cada revenda vem de um sistema
+ * diferente. As colunas são achadas pelo nome e aceitam sinônimos, e é assim que a
+ * exportação do SAVI entra sem ajuste: "Criado Por" vale como Solicitante, e
+ * "Mensagens" traz a conversa numa célula só, com o pedido na primeira mensagem.
  *
  * Módulo sem "use server": roda no navegador, e a gravação fica na RPC
  * `chamados_importar`, que confere tudo de novo.
@@ -14,11 +15,14 @@ export type MensagemChamado = { em: string; autor: string; texto: string };
 export type LinhaChamado = {
   /** linha da planilha, para apontar o que foi recusado */
   linha: number;
+  /** vazio = o sistema numera */
   id: string;
   unidade: string;
   titulo: string;
   setor: string;
   categoria: string;
+  /** low, medium, high, urgent; vazio = não informada */
+  prioridade: string;
   criador: string;
   responsavel: string;
   copia: string;
@@ -27,89 +31,166 @@ export type LinhaChamado = {
   criado_em: string;
   prazo: string;
   concluido_em: string;
-  /** a primeira mensagem é o pedido de quem abriu */
   descricao: string;
   mensagens: MensagemChamado[];
 };
 
 export type RecusaChamado = { linha: number; motivo: string };
 
+export const MODELO_CABECALHO = [
+  "ID", "Título", "Descrição", "Setor", "Categoria", "Prioridade", "Unidade", "Solicitante", "Responsável",
+  "Em cópia", "Status", "Data de criação", "Prazo", "Data de conclusão", "Comentários",
+];
+
+export const MODELO_EXEMPLOS: string[][] = [
+  [
+    "1001", "Computador não liga", "O computador do financeiro não liga desde a manhã.", "TI", "Computador", "Alta",
+    "MATRIZ", "Maria Souza", "João Silva", "Ana Lima; Pedro Santos", "Concluído", "10/08/2026 08:30", "12/08/2026 08:30",
+    "11/08/2026 16:45", "10/08/2026 09:10 | João Silva | Vou verificar a fonte\n11/08/2026 16:40 | João Silva | Fonte trocada",
+  ],
+  [
+    "", "Trocar lâmpada da recepção", "", "Serviços Gerais", "Manutenção Corretiva", "", "", "João Silva", "", "", "Aberto",
+    "05/09/2026", "15/09/2026", "", "",
+  ],
+];
+
+export const MODELO_INSTRUCOES: string[][] = [
+  ["Coluna", "Como preencher"],
+  ["ID", "Número do chamado no sistema de origem. Se preencher, o chamado mantém esse número. Vazio: o sistema numera."],
+  ["Título", "Obrigatório. Resumo do chamado."],
+  ["Descrição", "Detalhe do pedido. Opcional."],
+  ["Setor", "Nome do setor. Se não existir, é criado inativo."],
+  ["Categoria", "Nome da categoria dentro do setor. Se não existir, é criada inativa."],
+  ["Prioridade", "Baixa, Média, Alta ou Urgente (padrão: Média)."],
+  ["Unidade", "Nome da unidade cadastrada. Use \"Todas\" ou deixe vazio para valer para todas."],
+  ["Solicitante", "Nome completo de quem abriu, como no cadastro. Sem cadastro, fica só o nome escrito."],
+  ["Responsável", "Nome completo de quem atende, como no cadastro. Uma pessoa."],
+  ["Em cópia", "Nomes de quem acompanhava. Fica como informação na ficha e não dá acesso ao chamado."],
+  ["Status", "Aberto, Em atendimento, Aguardando, Concluído, Fechado ou Cancelado (padrão: Aberto; Concluído se houver data de conclusão)."],
+  ["Data de criação", "DD/MM/AAAA, com ou sem hora (DD/MM/AAAA HH:MM). Vazio: usa a data de hoje."],
+  ["Prazo", "DD/MM/AAAA, com ou sem hora. Sem hora, vale até o fim do dia."],
+  ["Data de conclusão", "DD/MM/AAAA, com ou sem hora. Só para chamado encerrado."],
+  ["Comentários", "Histórico da conversa. Um por linha na célula (Alt+Enter), no formato: data | autor | texto."],
+  ["Como funciona", "Nada é gravado antes do resumo, ninguém recebe aviso, e importar o mesmo arquivo de novo não duplica."],
+];
+
 const chave = (s: unknown) =>
   String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
+/** comparação exata: "Data de criação" não pode ser confundida com outra coluna por um trecho do nome */
 const COLUNAS = {
-  id: "id",
-  unidade: "unidade",
-  titulo: "titulo",
-  categoria: "categoria",
-  setor: "setor",
-  criador: "criado por",
-  responsavel: "responsavel",
-  copia: "em copia",
-  status: "status",
-  criacao: "data/hora de criacao",
-  prazo: "prazo",
-  conclusao: "data/hora de conclusao",
-  mensagens: "mensagens",
+  id: ["id", "codigo", "numero"],
+  titulo: ["titulo", "assunto"],
+  descricao: ["descricao"],
+  setor: ["setor"],
+  categoria: ["categoria"],
+  prioridade: ["prioridade"],
+  unidade: ["unidade"],
+  solicitante: ["solicitante", "criado por", "aberto por"],
+  responsavel: ["responsavel"],
+  copia: ["em copia", "copia"],
+  status: ["status", "situacao"],
+  criacao: ["data de criacao", "data/hora de criacao", "criado em", "aberto em", "data de abertura"],
+  prazo: ["prazo", "data limite"],
+  conclusao: ["data de conclusao", "data/hora de conclusao", "concluido em"],
+  comentarios: ["comentarios", "mensagens"],
 } as const;
 
 const STATUS: Record<string, string> = {
   novo: "open",
-  // no sistema anterior "Aberto" é o chamado que já tem responsável
-  aberto: "in_progress",
+  nova: "open",
+  pendente: "open",
   "em atendimento": "in_progress",
   "em andamento": "in_progress",
   aguardando: "waiting",
   concluido: "resolved",
+  concluida: "resolved",
   resolvido: "resolved",
+  resolvida: "resolved",
+  finalizado: "resolved",
+  finalizada: "resolved",
   fechado: "closed",
+  fechada: "closed",
   cancelado: "cancelled",
+  cancelada: "cancelled",
 };
+
+const PRIORIDADE: Record<string, string> = {
+  baixa: "low", baixo: "low",
+  media: "medium", medio: "medium", normal: "medium",
+  alta: "high", alto: "high",
+  urgente: "urgent",
+};
+
+/**
+ * "Aberto" depende de ter dono: no SAVI é o chamado que alguém já pegou, e o
+ * sistema chama isso de "Em atendimento". "Atrasado" não é status, sai do prazo.
+ */
+function statusDoChamado(bruto: string, responsavel: string, concluido: string): string | null {
+  const k = chave(bruto);
+  if (!k) return concluido ? "resolved" : "open";
+  if (["aberto", "aberta", "atrasado", "atrasada"].includes(k)) return responsavel ? "in_progress" : "open";
+  return STATUS[k] ?? null;
+}
 
 const doisDigitos = (n: number) => String(n).padStart(2, "0");
 
-/** "" = vazio; null = preenchido, mas ilegível */
-export function dataDoChamado(v: unknown): string | null {
+/**
+ * Data da célula em "AAAA-MM-DDTHH:MM". "" = vazia; null = preenchida, mas ilegível.
+ * `semHora` é o horário de quem só informou o dia: meio-dia nunca vira o dia, e o
+ * prazo usa 23:59 para o chamado não nascer atrasado no próprio dia do vencimento.
+ */
+export function dataDoChamado(v: unknown, semHora = "12:00"): string | null {
   if (v === null || v === undefined || v === "") return "";
-  let d: number, m: number, a: number, h: number, min: number;
+  let a: number, m: number, d: number;
+  let hora: string | null = null;
   if (v instanceof Date) {
     if (Number.isNaN(v.getTime())) return null;
-    [d, m, a, h, min] = [v.getDate(), v.getMonth() + 1, v.getFullYear(), v.getHours(), v.getMinutes()];
+    [a, m, d] = [v.getFullYear(), v.getMonth() + 1, v.getDate()];
+    if (v.getHours() !== 0 || v.getMinutes() !== 0) hora = `${doisDigitos(v.getHours())}:${doisDigitos(v.getMinutes())}`;
   } else {
-    const t = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::\d{2})?)?$/.exec(String(v).trim());
-    if (!t) return null;
-    [d, m, a, h, min] = [Number(t[1]), Number(t[2]), Number(t[3]), Number(t[4] ?? 0), Number(t[5] ?? 0)];
+    const s = String(v).trim();
+    const br = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})(?:[ T]+(\d{1,2}):(\d{2})(?::\d{2})?)?$/.exec(s);
+    const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]+(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?$/.exec(s);
+    if (br) {
+      [d, m, a] = [Number(br[1]), Number(br[2]), Number(br[3].length === 2 ? `20${br[3]}` : br[3])];
+      if (br[4]) hora = `${doisDigitos(Number(br[4]))}:${br[5]}`;
+    } else if (iso) {
+      [a, m, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+      if (iso[4]) hora = `${doisDigitos(Number(iso[4]))}:${iso[5]}`;
+    } else {
+      return null;
+    }
   }
   const u = new Date(Date.UTC(a, m - 1, d));
-  if (u.getUTCMonth() !== m - 1 || u.getUTCDate() !== d || h > 23 || min > 59) return null;
-  return `${a}-${doisDigitos(m)}-${doisDigitos(d)}T${doisDigitos(h)}:${doisDigitos(min)}`;
-}
-
-/**
- * Tira da categoria a sigla que só repete o setor: em TI, "TI - Acesso" vira
- * "Acesso"; em Serviços Gerais, "SG - Limpeza" vira "Limpeza". Sigla de outra área
- * fica ("BI - Criação de Dashboard" em Desenvolvimento), porque ali ela informa.
- */
-export function categoriaSemSigla(setor: string, categoria: string): string {
-  const t = /^([A-Za-zÀ-ÿ]{2,4})\s*-\s*(.+)$/.exec(categoria.trim());
-  if (!t) return categoria.trim();
-  const iniciais = chave(setor).split(" ").filter((p) => !["de", "da", "do", "e"].includes(p)).map((p) => p[0]).join("");
-  const sigla = chave(t[1]);
-  return sigla === chave(setor) || sigla === iniciais ? t[2].trim() : categoria.trim();
+  if (u.getUTCMonth() !== m - 1 || u.getUTCDate() !== d) return null;
+  if (hora && (Number(hora.slice(0, 2)) > 23 || Number(hora.slice(3)) > 59)) return null;
+  return `${a}-${doisDigitos(m)}-${doisDigitos(d)}T${hora ?? semHora}`;
 }
 
 // o cabeçalho só vale no começo da linha: um texto citando outra mensagem não corta a conversa
 const CABECALHO = /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2})(?::\d{2})?\]\s*([^:\n]+?):[ \t]*/gm;
 
+/** Aceita "[data hora] NOME: texto" (SAVI) ou uma linha por comentário, "data | autor | texto" (modelo). */
 export function separarMensagens(celula: unknown): MensagemChamado[] {
   const bruto = String(celula ?? "").replace(/\r\n/g, "\n").trim();
   if (!bruto) return [];
   const achados = [...bruto.matchAll(CABECALHO)];
-  if (achados.length === 0) return [{ em: "", autor: "", texto: bruto }];
-  return achados.map((h, i) => {
-    const inicio = (h.index ?? 0) + h[0].length;
-    const fim = i + 1 < achados.length ? (achados[i + 1].index ?? bruto.length) : bruto.length;
-    return { em: dataDoChamado(`${h[1]} ${h[2]}`) ?? "", autor: h[3].trim(), texto: bruto.slice(inicio, fim).trim() };
+  if (achados.length > 0) {
+    return achados.map((h, i) => {
+      const inicio = (h.index ?? 0) + h[0].length;
+      const fim = i + 1 < achados.length ? (achados[i + 1].index ?? bruto.length) : bruto.length;
+      return { em: dataDoChamado(`${h[1]} ${h[2]}`) ?? "", autor: h[3].trim(), texto: bruto.slice(inicio, fim).trim() };
+    });
+  }
+  return bruto.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+    const p = l.split("|").map((x) => x.trim());
+    if (p.length >= 3) return { em: dataDoChamado(p[0]) || "", autor: p[1], texto: p.slice(2).join(" | ") };
+    if (p.length === 2) {
+      const em = dataDoChamado(p[0]);
+      return em ? { em, autor: "", texto: p[1] } : { em: "", autor: p[0], texto: p[1] };
+    }
+    return { em: "", autor: "", texto: p[0] };
   });
 }
 
@@ -173,21 +254,14 @@ export function mascararLinhas(linhas: LinhaChamado[]): { linhas: LinhaChamado[]
   return { linhas: saida, chamados };
 }
 
-/** Lê a aba (matriz de células). `erro` = o arquivo não é a exportação de chamados. */
-export function lerExportacao(matriz: unknown[][]): { linhas: LinhaChamado[]; recusas: RecusaChamado[]; erro?: string } {
+/** Lê a aba (matriz de células). `erro` = a planilha não tem a coluna obrigatória. */
+export function lerPlanilhaDeChamados(matriz: unknown[][]): { linhas: LinhaChamado[]; recusas: RecusaChamado[]; erro?: string } {
   if (matriz.length < 2) return { linhas: [], recusas: [], erro: "A planilha está vazia." };
   const cabecalho = (matriz[0] ?? []).map(chave);
   const pos = Object.fromEntries(
-    Object.entries(COLUNAS).map(([k, nome]) => [k, cabecalho.indexOf(nome)]),
+    Object.entries(COLUNAS).map(([k, nomes]) => [k, cabecalho.findIndex((h) => (nomes as readonly string[]).includes(h))]),
   ) as Record<keyof typeof COLUNAS, number>;
-  const faltando = (Object.keys(COLUNAS) as (keyof typeof COLUNAS)[]).filter((k) => pos[k] < 0).map((k) => COLUNAS[k]);
-  if (faltando.length > 0) {
-    return {
-      linhas: [],
-      recusas: [],
-      erro: `Este arquivo não é a exportação de chamados. Colunas que faltam: ${faltando.join(", ")}.`,
-    };
-  }
+  if (pos.titulo < 0) return { linhas: [], recusas: [], erro: "Não encontrei a coluna \"Título\". Baixe o modelo." };
 
   const linhas: LinhaChamado[] = [];
   const recusas: RecusaChamado[] = [];
@@ -195,46 +269,56 @@ export function lerExportacao(matriz: unknown[][]): { linhas: LinhaChamado[]; re
   for (let i = 1; i < matriz.length; i++) {
     const r = matriz[i] ?? [];
     const linha = i + 1;
-    const txt = (k: keyof typeof COLUNAS) => String(r[pos[k]] ?? "").trim();
     if (r.every((c) => c === null || c === undefined || c === "")) continue;
+    const txt = (k: keyof typeof COLUNAS) => (pos[k] >= 0 ? String(r[pos[k]] ?? "").trim() : "");
+    const cel = (k: keyof typeof COLUNAS) => (pos[k] >= 0 ? r[pos[k]] : "");
 
     const id = txt("id");
+    const nome = id ? `Chamado ${id}` : "Chamado";
     const titulo = txt("titulo");
-    if (!id) { recusas.push({ linha, motivo: "Sem ID." }); continue; }
-    if (!titulo) { recusas.push({ linha, motivo: `Chamado ${id} sem título.` }); continue; }
-    if (vistos.has(id)) { recusas.push({ linha, motivo: `ID ${id} repetido na planilha.` }); continue; }
+    if (!titulo) { recusas.push({ linha, motivo: `${nome} sem título.` }); continue; }
+    if (id && vistos.has(id)) { recusas.push({ linha, motivo: `ID ${id} repetido na planilha.` }); continue; }
 
-    const status = STATUS[chave(txt("status"))];
-    if (!status) { recusas.push({ linha, motivo: `Chamado ${id}: status "${txt("status")}" não reconhecido.` }); continue; }
+    const criado = dataDoChamado(cel("criacao"));
+    const prazo = dataDoChamado(cel("prazo"), "23:59");
+    const concluido = dataDoChamado(cel("conclusao"));
+    if (criado === null) { recusas.push({ linha, motivo: `${nome}: data de criação ilegível.` }); continue; }
+    if (prazo === null) { recusas.push({ linha, motivo: `${nome}: prazo ilegível.` }); continue; }
+    if (concluido === null) { recusas.push({ linha, motivo: `${nome}: data de conclusão ilegível.` }); continue; }
 
-    const criado = dataDoChamado(r[pos.criacao]);
-    const prazo = dataDoChamado(r[pos.prazo]);
-    const concluido = dataDoChamado(r[pos.conclusao]);
-    if (!criado) { recusas.push({ linha, motivo: `Chamado ${id}: data de criação ilegível.` }); continue; }
-    if (prazo === null || concluido === null) { recusas.push({ linha, motivo: `Chamado ${id}: prazo ou conclusão ilegível.` }); continue; }
+    const responsavel = txt("responsavel");
+    const status = statusDoChamado(txt("status"), responsavel, concluido);
+    if (!status) { recusas.push({ linha, motivo: `${nome}: status "${txt("status")}" não reconhecido.` }); continue; }
 
-    const mensagens = separarMensagens(r[pos.mensagens]);
-    const [primeira, ...resto] = mensagens;
-    const setor = txt("setor");
-    vistos.add(id);
+    const prioridadeTxt = chave(txt("prioridade"));
+    const prioridade = prioridadeTxt ? PRIORIDADE[prioridadeTxt] : "";
+    if (prioridade === undefined) { recusas.push({ linha, motivo: `${nome}: prioridade "${txt("prioridade")}" não reconhecida.` }); continue; }
+
+    // sem coluna de descrição (SAVI), o pedido é a primeira mensagem da conversa
+    const conversa = separarMensagens(cel("comentarios"));
+    const temDescricao = pos.descricao >= 0;
+    const primeira = temDescricao ? undefined : conversa[0];
+    const seguintes = temDescricao ? conversa : conversa.slice(1);
+
+    if (id) vistos.add(id);
     linhas.push({
       linha,
       id,
       unidade: txt("unidade"),
       titulo,
-      setor,
-      categoria: categoriaSemSigla(setor, txt("categoria")),
-      // sem "Criado Por", quem abriu é quem escreveu a primeira mensagem
-      criador: txt("criador") || primeira?.autor || "",
-      responsavel: txt("responsavel"),
+      setor: txt("setor"),
+      categoria: txt("categoria"),
+      prioridade,
+      criador: txt("solicitante") || primeira?.autor || "",
+      responsavel,
       copia: txt("copia"),
       status,
       criado_em: criado,
       prazo,
       concluido_em: concluido,
-      descricao: primeira?.texto ?? "",
+      descricao: temDescricao ? txt("descricao") : (primeira?.texto ?? ""),
       // mensagem só com anexo chega sem texto no arquivo, e o anexo não vem junto
-      mensagens: resto.filter((m) => m.texto),
+      mensagens: seguintes.filter((m) => m.texto),
     });
   }
   return { linhas, recusas };
