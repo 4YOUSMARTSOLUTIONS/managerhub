@@ -178,10 +178,10 @@ export function UserMenu({
           style={{
             position: "absolute",
             zIndex: 60,
-            minWidth: 210,
             ...(isSidebar
-              ? { left: 0, right: 0, bottom: "calc(100% + 8px)" }
-              : { right: 0, top: "calc(100% + 8px)" }),
+              // pelo conteúdo: o menu lateral é mais estreito que a linha mais longa
+              ? { left: 0, minWidth: "100%", width: "max-content", bottom: "calc(100% + 8px)" }
+              : { minWidth: 210, right: 0, top: "calc(100% + 8px)" }),
             background: "var(--mh-surface-1)",
             border: "1px solid var(--mh-border)",
             boxShadow: "var(--mh-shadow-e2)",

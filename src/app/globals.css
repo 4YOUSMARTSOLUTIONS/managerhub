@@ -361,16 +361,21 @@ a {
   border-right: 1px solid var(--border);
   background: var(--surface);
   height: 100vh;
+  /* no celular 100vh passa da barra do navegador e esconderia o rodapé fixo */
+  height: 100dvh;
   position: sticky;
   top: 0;
   display: flex;
   flex-direction: column;
-  padding: var(--mh-space-4) var(--mh-space-3);
-  overflow-y: auto;
+  padding: var(--mh-space-4) var(--mh-space-3) max(var(--mh-space-3), env(safe-area-inset-bottom));
+  /* quem rola é só a .nav-list: a logo e o menu do usuário ficam sempre à vista
+     (LUIZ, 23/11/2026). Sem corte aqui, porque o menu do usuário abre por cima */
+  overflow: visible;
   z-index: 60;
 }
 
 .brand-block {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   position: relative; /* âncora da listra de .nav-pending */
@@ -387,9 +392,18 @@ a {
 }
 
 .nav-list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* vai até a borda do menu: a barrinha do item ativo mora nesse espaço. A
+     calha reservada evita os itens pularem quando a barra de rolagem aparece */
+  margin: 0 calc(-1 * var(--mh-space-3));
+  padding: 0 2px 0 var(--mh-space-3);
+  scrollbar-gutter: stable;
 }
 
 .nav-item {

@@ -189,7 +189,7 @@ export function Sidebar({
       </nav>
 
       {userName !== undefined && theme && (
-        <div style={{ marginTop: "auto", paddingTop: "0.6rem", borderTop: "1px solid var(--mh-border)" }}>
+        <div style={{ flexShrink: 0, marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid var(--mh-border)" }}>
           <UserMenu
             userName={userName}
             role={role}
