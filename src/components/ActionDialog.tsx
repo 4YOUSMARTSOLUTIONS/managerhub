@@ -22,6 +22,8 @@ export type CollectedAction = {
   payload: {
     is_sdpo: boolean; pilar_id: string; secao_id: string; bloco_id: string; item_id: string;
     meeting_series_id: string; kpi_id: string; tool_id: string; unit_id?: string;
+    /** data da reunião: vem ao editar uma ação existente e precisa voltar igual ao salvar */
+    occurrence_id?: string;
     department_id?: string; subdepartment_id?: string;
     requester_id: string; problem_statement: string; due_date: string; priority: string; cc: string[];
     /** `id` presente = demanda que JÁ existe (preserva histórico na edição) */
@@ -102,6 +104,8 @@ export function ActionDialog({
       const p = editing.payload;
       setIsSdpo(p.is_sdpo); setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
       setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setKpiId(p.kpi_id); setToolId(p.tool_id); setUnitId(p.unit_id || defaultUnitId || "all");
+      // sem isto, salvar a edição tirava a ação do histórico da reunião (LUIZ, 23/11/2026)
+      setOccurrenceId(p.occurrence_id ?? "");
       setDepartmentId(p.department_id ?? ""); setSubdepartmentId(p.subdepartment_id ?? "");
       setDueDate(p.due_date); setPriority(p.priority); setRequesterId(p.requester_id); setCc(p.cc);
       setProblema(p.problem_statement ?? "");
@@ -230,7 +234,9 @@ export function ActionDialog({
     const p = first.payload;
     setIsSdpo(p.is_sdpo);
     setPilarId(p.pilar_id); setSecaoId(p.secao_id); setBlocoId(p.bloco_id); setItemId(p.item_id);
-    setSeriesId(lockedSeries?.id ?? p.meeting_series_id); setOccurrenceId(lockedSeries ? "" : p.occurrence_id);
+    setSeriesId(lockedSeries?.id ?? p.meeting_series_id);
+    // a IA sem data identificada não desfaz o vínculo, salvo se trocou de reunião
+    setOccurrenceId((atual) => (lockedSeries ? "" : p.occurrence_id || (p.meeting_series_id === seriesId ? atual : "")));
     setKpiId(p.kpi_id); setToolId(p.tool_id);
     // A IA não sabe a unidade, então NÃO mexe no que o usuário já escolheu.
     // Antes este apply zerava a seleção e obrigava a reescolher depois de gerar.
