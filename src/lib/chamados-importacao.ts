@@ -15,7 +15,7 @@ export type MensagemChamado = { em: string; autor: string; texto: string };
 export type LinhaChamado = {
   /** linha da planilha, para apontar o que foi recusado */
   linha: number;
-  /** vazio = o sistema numera */
+  /** número no sistema de origem: só evita duplicar, o número do chamado é gerado */
   id: string;
   unidade: string;
   titulo: string;
@@ -56,7 +56,7 @@ export const MODELO_EXEMPLOS: string[][] = [
 
 export const MODELO_INSTRUCOES: string[][] = [
   ["Coluna", "Como preencher"],
-  ["ID", "Número do chamado no sistema de origem. Se preencher, o chamado mantém esse número. Vazio: o sistema numera."],
+  ["ID", "Número do chamado no sistema de origem. Opcional. Serve para importar de novo sem duplicar; o número no Manager HUB é gerado em ordem de abertura (#1, #2...)."],
   ["Título", "Obrigatório. Resumo do chamado."],
   ["Descrição", "Detalhe do pedido. Opcional."],
   ["Setor", "Nome do setor. Se não existir, é criado inativo."],
@@ -322,5 +322,8 @@ export function lerPlanilhaDeChamados(matriz: unknown[][]): { linhas: LinhaChama
       mensagens: seguintes.filter((m) => m.texto),
     });
   }
+  // o número é gerado na ordem de envio, e a planilha pode vir em qualquer ordem;
+  // sem data de criação entra por último, porque recebe a data de hoje
+  linhas.sort((a, b) => (a.criado_em || "9999").localeCompare(b.criado_em || "9999"));
   return { linhas, recusas };
 }
