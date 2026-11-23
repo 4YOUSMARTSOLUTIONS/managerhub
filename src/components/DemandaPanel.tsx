@@ -135,6 +135,8 @@ export function DemandaPanel({
   // reatribuir, cancelar, reabrir e decidir pedidos são de quem CADASTROU a
   // ação (mais admin/owner). O banco aplica a mesma regra em pode_gerir_acao.
   const canManage = currentUserId === createdById || isAdmin;
+  // prorrogação também é do solicitante (LUIZ, 23/11/2026), como a aprovação da conclusão
+  const podeDecidirPedido = (tipo: string) => canManage || (tipo === "prazo" && isRequester);
   const finalizada = status === "done" || status === "cancelled";
   const overdue = !!due && !finalizada && isOverdue(due);
   const hasPendingPrazo = requests.some((r) => r.type === "prazo");
@@ -222,16 +224,22 @@ export function DemandaPanel({
           {requests.map((r) => (
             <div key={r.id} style={{ border: "1px solid color-mix(in srgb, var(--mh-warning) 32%, transparent)", background: "var(--mh-warning-soft)", borderRadius: 9, padding: "0.7rem 0.9rem" }}>
               <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                {r.type === "prazo" ? `Pedido de prorrogação para ${r.newDueDate ? formatDate(r.newDueDate) : "—"}` : "Pedido de conclusão"}
+                {r.type === "prazo"
+                  ? `Pedido de prorrogação para ${r.newDueDate ? formatDate(r.newDueDate) : "—"}`
+                  : r.type === "reatribuicao" ? "Pedido de reatribuição" : "Pedido de conclusão"}
               </div>
               <div className="muted" style={{ fontSize: "0.8rem" }}>Por {r.requestedByName ?? "—"}{r.note ? ` · ${r.note}` : ""}</div>
-              {isRequester ? (
+              {podeDecidirPedido(r.type) ? (
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
                   <input className="input" placeholder="Observação (opcional)" value={mode === `dec:${r.id}` ? note : ""} onChange={(e) => { setMode(`dec:${r.id}`); setNote(e.target.value); }} style={{ flex: "1 1 200px", padding: "0.35rem 0.6rem", fontSize: "0.82rem" }} />
                   <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => run(() => demandaDecide(r.id, true, mode === `dec:${r.id}` ? note : ""))}>Aprovar</button>
                   <button type="button" className="btn btn-danger btn-sm" disabled={pending} onClick={() => run(() => demandaDecide(r.id, false, mode === `dec:${r.id}` ? note : ""))}>Reprovar</button>
                 </div>
-              ) : <div className="soft" style={{ fontSize: "0.78rem", marginTop: 4 }}>Aguardando aprovação do solicitante.</div>}
+              ) : (
+                <div className="soft" style={{ fontSize: "0.78rem", marginTop: 4 }}>
+                  {r.type === "prazo" ? "Aguardando aprovação do solicitante." : "Aguardando decisão de quem criou a ação."}
+                </div>
+              )}
             </div>
           ))}
 
