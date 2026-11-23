@@ -16,7 +16,7 @@ export default async function MeetingRecordsPage() {
 
   const [
     { data: series }, { data: parts }, { data: unitLinks },
-    { data: members }, { data: roomsData }, { data: occ }, flags,
+    { data: members }, { data: roomsData }, { data: occ }, flags, { data: podeCriar },
   ] = await Promise.all([
     supabase
       .from("meeting_series")
@@ -46,6 +46,8 @@ export default async function MeetingRecordsPage() {
     // antes isto era um await ESCONDIDO no meio do JSX, virando uma onda extra
     // depois de tudo, so para um booleano que o dialogo de finalizar usa
     getPlatformIntegrationFlags(),
+    // quem vê o botão Nova reunião: a mesma regra que o banco aplica ao salvar
+    supabase.rpc("pode_criar_reuniao", { p_tenant: tenant.id }),
   ]);
 
   const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
@@ -178,6 +180,7 @@ export default async function MeetingRecordsPage() {
       aiEnabled={flags.hasOpenAI}
       currentUserId={user.id}
       role={role}
+      canCreate={!!podeCriar}
     />
   );
 }

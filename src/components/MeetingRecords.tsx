@@ -81,6 +81,7 @@ export function MeetingRecords({
   aiEnabled,
   currentUserId,
   role,
+  canCreate,
 }: {
   series: SeriesRow[];
   occurrences: OccurrenceRow[];
@@ -90,9 +91,9 @@ export function MeetingRecords({
   aiEnabled: boolean;
   currentUserId: string;
   role: Enums<"member_role">;
+  /** proprietário, administrador, gerencial, Coordenação e Supervisão (`pode_criar_reuniao`) */
+  canCreate: boolean;
 }) {
-  // criação de reunião restrita a owner/admin/manager (member não cria)
-  const canCreate = role === "owner" || role === "admin" || role === "manager";
   // dono, gerencial (manager) e owner sempre; pública → admin também; privada → participantes também. Criador não edita.
   const canEditSeries = (s: SeriesRow) =>
     role === "owner" || role === "manager"
