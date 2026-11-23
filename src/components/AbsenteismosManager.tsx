@@ -335,10 +335,12 @@ const hoje = () => {
  * dado é buscado sob demanda pela RPC, nunca junto da lista.
  */
 export function AbsenteismosManager({
-  rows, pessoas, tipos, unidades, kindsComRedutor, meuId, podeDecidir, veEmpresa, podeCancelarAprovado, podeImportarHistorico,
+  rows, pessoas, equipe, tipos, unidades, kindsComRedutor, meuId, podeDecidir, veEmpresa, podeCancelarAprovado, podeImportarHistorico,
 }: {
   rows: AbsenteismoRow[];
   pessoas: Pessoa[];
+  /** quem está abaixo de mim na hierarquia, inclusive desligados: decide o Efetivar da gestão acima */
+  equipe: string[];
   tipos: Tipo[];
   /** para o filtro do relatório do DP */
   unidades: { id: string; name: string }[];
@@ -484,6 +486,16 @@ export function AbsenteismosManager({
   const podeMexer = (r: AbsenteismoRow) =>
     (r.status === "aberto" || r.status === "reprovado")
     && (r.createdBy === meuId || podeDecidir);
+  const abaixoDeMim = useMemo(() => new Set(equipe), [equipe]);
+  /**
+   * Efetivar vale também para a gestão acima de quem lançou (LUIZ, 23/11/2026):
+   * a gerente conclui o que a coordenadora dela abriu. O colaborador precisa estar
+   * na mesma cadeia, que é o que a RLS e `absenteismo_confirmar` exigem. Continua
+   * ausente e Cancelar seguem só com quem lançou e o DP.
+   */
+  const podeEfetivar = (r: AbsenteismoRow) =>
+    podeMexer(r)
+    || ((r.status === "aberto" || r.status === "reprovado") && abaixoDeMim.has(r.createdBy) && abaixoDeMim.has(r.userId));
   // Reenviar o comunicado é agir: quem lançou, o gestor da pessoa e o DP. A Área
   // de Gente só lê (LUIZ, 19/11/2026); a action confere de novo
   const podeReenviar = (r: AbsenteismoRow) =>
@@ -560,7 +572,7 @@ export function AbsenteismosManager({
   const acoesDa = (r: AbsenteismoRow) => {
     const mexe = podeMexer(r);
     const abertoMexe = r.status === "aberto" && mexe;
-    return { efetivar: mexe, continua: abertoMexe && !r.partialDay, cancelar: abertoMexe };
+    return { efetivar: podeEfetivar(r), continua: abertoMexe && !r.partialDay, cancelar: abertoMexe };
   };
 
   const linha = (r: AbsenteismoRow, comAutor: boolean, vagas: Vagas) => {
@@ -1143,7 +1155,7 @@ export function AbsenteismosManager({
             onErro={setErro}
             onAbrirDocumento={abrirDocumento}
             onBaixarDocumento={baixarDocumento}
-            onEfetivar={podeMexer(aberto) ? () => { const r = aberto; setAberto(null); setErro(""); setConfirmando(r); } : undefined}
+            onEfetivar={podeEfetivar(aberto) ? () => { const r = aberto; setAberto(null); setErro(""); setConfirmando(r); } : undefined}
             onFechar={() => { setAberto(null); setErro(""); }}
           />
         </Dialogo>

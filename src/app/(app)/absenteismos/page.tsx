@@ -208,6 +208,7 @@ export default async function AbsenteismosPage() {
       <AbsenteismosManager
         rows={rows}
         pessoas={pessoas}
+        equipe={equipe}
         tipos={(tipos ?? []).map((t) => ({
           id: t.id, name: t.name, description: t.description, kind: t.kind,
           requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
