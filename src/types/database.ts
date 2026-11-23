@@ -693,7 +693,7 @@ export type Database = {
       action_attachments: {
         Row: { id: string; action_id: string; demanda_id: string | null; tenant_id: string; path: string; filename: string; size: number | null; content_type: string | null; uploaded_by: string | null; created_at: string }
         Insert: { id?: string; action_id: string; demanda_id?: string | null; tenant_id: string; path: string; filename: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
-        Update: { id?: string; action_id?: string; demanda_id?: string | null; tenant_id?: string; path?: string; filename?: string; size?: number | null; content_type?: string | null; uploaded_by?: string | null; created_at?: string }
+        Update: never
         Relationships: []
       }
       ticket_sectors: {

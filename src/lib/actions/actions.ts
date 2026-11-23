@@ -573,9 +573,19 @@ export async function deleteAction(formData: FormData): Promise<ActionState> {
   return { ok: true };
 }
 
-// URL assinada para download de anexo
+// URL assinada para download de anexo. `path` vem do navegador: só assina o que for
+// anexo registrado de uma ação que a pessoa vê (a RLS da tabela segue can_view_action).
 export async function getAttachmentUrl(path: string): Promise<string | null> {
-  const { supabase } = await actionContext();
+  const { supabase, tenantId } = await actionContext();
+  const [pastaEmpresa, actionId] = String(path).split("/");
+  if (pastaEmpresa !== tenantId || !actionId) return null;
+
+  const { data: anexo } = await supabase
+    .from("action_attachments").select("id")
+    .eq("action_id", actionId).eq("tenant_id", tenantId).eq("path", path)
+    .limit(1).maybeSingle();
+  if (!anexo) return null;
+
   const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 10);
   return data?.signedUrl ?? null;
 }
