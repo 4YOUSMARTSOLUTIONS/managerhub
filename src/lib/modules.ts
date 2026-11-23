@@ -159,8 +159,15 @@ export const MODULES: ModuleDef[] = [
   { key: "admin", label: "Painel ADM", href: "/admin", group: null, core: true, minRole: "super" },
 ];
 
-/** Compara rótulos como um leitor brasileiro leria: acento e caixa não separam. */
-const porNome = (a: string, b: string) => a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+const comecaComNumero = (s: string) => /^\d/.test(s);
+
+/**
+ * Compara rótulos como um leitor brasileiro leria: acento e caixa não separam.
+ * O que começa com número (5S) vai para o fim da lista (LUIZ, 23/11/2026).
+ */
+const porNome = (a: string, b: string) =>
+  Number(comecaComNumero(a)) - Number(comecaComNumero(b))
+  || a.localeCompare(b, "pt-BR", { sensitivity: "base" });
 
 /** Telas que existem mas não ficam no menu lateral: Sugestões mora no menu do usuário (LUIZ, 23/11/2026). */
 export const FORA_DO_MENU: ModuleKey[] = ["sugestoes"];
