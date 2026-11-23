@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { FileText } from "lucide-react";
+import { ehPdf } from "@/lib/uploads";
 import { updateTicketTriage, requestTicketConclusion, decideTicketConclusion, getTicketAttachmentUrl, getTicketComments, getTicketDetalhe, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
 import { Avatar } from "@/components/ui/Avatar";
 import { SearchSelect } from "@/components/SearchSelect";
@@ -51,7 +53,7 @@ export function TicketPanel({
       setUrls({});
       setComments([]);
       setCommentText("");
-      // gera URLs assinadas das imagens
+      // gera URLs assinadas dos anexos
       (async () => {
         const entries = await Promise.all(
           ticket.attachments.map(async (a) => [a.id, (await getTicketAttachmentUrl(a.path)) ?? ""] as const),
@@ -201,13 +203,20 @@ export function TicketPanel({
 
           {ticket.attachments.length > 0 && (
             <div>
-              <label className="label">Evidências</label>
+              <label className="label">Anexos</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                 {ticket.attachments.map((a) => (
                   urls[a.id] ? (
                     <a key={a.id} href={urls[a.id]} target="_blank" rel="noreferrer" title={a.filename}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={urls[a.id]} alt={a.filename} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />
+                      {ehPdf(a.filename, a.contentType) ? (
+                        <span style={{ width: 80, height: 80, boxSizing: "border-box", padding: "0 6px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                          <FileText size={22} />
+                          <span style={{ fontSize: "0.66rem", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.filename}</span>
+                        </span>
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={urls[a.id]} alt={a.filename} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />
+                      )}
                     </a>
                   ) : (
                     <div key={a.id} style={{ width: 80, height: 80, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)" }} />

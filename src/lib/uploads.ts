@@ -29,6 +29,14 @@ export const MIMES_ANEXO = [
 
 export const MIMES_FOTO = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 
+/** Anexos de chamado: imagens e PDF (LUIZ, 23/11/2026). */
+export const MIMES_CHAMADO = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "application/pdf"];
+export const ACCEPT_CHAMADO = "image/jpeg,image/png,image/webp,image/gif,image/heic,.heic,application/pdf,.pdf";
+
+export function ehPdf(nome: string, tipo?: string | null): boolean {
+  return tipo === "application/pdf" || (!tipo && /\.pdf$/i.test(nome));
+}
+
 export const MIMES_AUDIO = [
   "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4",
   "audio/wav", "audio/x-m4a", "audio/aac", "video/webm",
@@ -54,4 +62,12 @@ export function recusaDeUpload(
     return `"${file.name}" é de um tipo não aceito aqui (${tipo}).`;
   }
   return null;
+}
+
+/** Como `recusaDeUpload`, mas sem tipo informado pelo navegador vale a extensão. */
+export function recusaDeAnexoDeChamado(file: File): string | null {
+  const tipo = (file.type || "").split(";")[0].trim().toLowerCase();
+  const aceito = tipo ? MIMES_CHAMADO.includes(tipo) : /\.(jpe?g|png|webp|gif|heic|pdf)$/i.test(file.name);
+  if (!aceito) return `"${file.name}" não é imagem nem PDF.`;
+  return recusaDeUpload(file, TAMANHO_ANEXO, MIMES_CHAMADO);
 }

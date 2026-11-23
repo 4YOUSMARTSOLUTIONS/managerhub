@@ -10,7 +10,7 @@ import { PRIORITY } from "@/lib/constants";
 import { numeroChamado } from "@/lib/format";
 import type { ActionState } from "./types";
 import type { Database, Enums, Json } from "@/types/database";
-import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
+import { ehPdf, recusaDeAnexoDeChamado } from "@/lib/uploads";
 
 type TicketUpdate = Database["public"]["Tables"]["tickets"]["Update"];
 type Ctx = Awaited<ReturnType<typeof actionContext>>;
@@ -139,29 +139,37 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
     if (error) return { error: error.message };
     const ticketId = ticket.id;
 
-    // anexos — somente imagens
+    // anexos: imagens e PDF
     const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    let falhas = 0;
     for (const file of files) {
-      if (!file.type.startsWith("image/")) continue;
-      if (recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO)) continue;
+      if (recusaDeAnexoDeChamado(file)) { falhas += 1; continue; }
       const safe = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `${tenantId}/${ticketId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
-      const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
-      if (up.error) continue;
-      await supabase.from("ticket_attachments").insert({
+      // há navegador que não informa o tipo do PDF, e o bucket recusaria sem ele
+      const contentType = file.type || (ehPdf(file.name) ? "application/pdf" : undefined);
+      const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType, upsert: false });
+      if (up.error) { falhas += 1; continue; }
+      const { error: erroAnexo } = await supabase.from("ticket_attachments").insert({
         tenant_id: tenantId,
         ticket_id: ticketId,
         path,
         filename: file.name,
         size: file.size,
-        content_type: file.type || null,
+        content_type: contentType ?? null,
         uploaded_by: userId,
       });
+      if (erroAnexo) {
+        falhas += 1;
+        await supabase.storage.from(BUCKET).remove([path]);
+      }
     }
 
     revalidatePath("/chamados");
     revalidatePath("/dashboard");
-    return { ok: true };
+    return falhas
+      ? { ok: true, warning: `O chamado foi aberto, mas ${falhas === 1 ? "1 anexo não foi enviado" : `${falhas} anexos não foram enviados`}.` }
+      : { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }

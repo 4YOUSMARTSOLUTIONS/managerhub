@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { FileText } from "lucide-react";
+import { toast } from "sonner";
 import { createTicket } from "@/lib/actions/tickets";
 import { initialActionState } from "@/lib/actions/types";
 import { PRIORITY, TICKET_SLA_UNIT, options } from "@/lib/constants";
+import { ACCEPT_CHAMADO, ehPdf, recusaDeAnexoDeChamado } from "@/lib/uploads";
 import type { Enums } from "@/types/database";
 
 export type Opt = { id: string; name: string; active?: boolean };
@@ -48,6 +51,13 @@ export function NewTicketDialog({
   };
   const close = () => { reset(); onClose(); };
 
+  // o que não passa é avisado na hora, em vez de sumir ao abrir o chamado
+  const adicionarArquivos = (lista: FileList | null) => {
+    const escolhidos = Array.from(lista ?? []);
+    setError(escolhidos.map(recusaDeAnexoDeChamado).filter(Boolean).join(" "));
+    setFiles((prev) => [...prev, ...escolhidos.filter((f) => !recusaDeAnexoDeChamado(f))]);
+  };
+
   const submit = () => {
     setError("");
     if (!title.trim()) { setError("Informe o título do chamado."); return; }
@@ -62,6 +72,7 @@ export function NewTicketDialog({
       for (const f of files) fd.append("files", f);
       const res = await createTicket(initialActionState, fd);
       if (res.error) { setError(res.error); return; }
+      if (res.warning) toast.warning(res.warning);
       reset();
       onClose();
     });
@@ -126,15 +137,22 @@ export function NewTicketDialog({
           </div>
 
           <div>
-            <label className="label">Anexos <span className="soft">(imagens — evidências)</span></label>
-            <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) setFiles((prev) => [...prev, ...Array.from(e.target.files!).filter((f) => f.type.startsWith("image/"))]); e.target.value = ""; }} />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()}>↑ Adicionar imagem</button>
+            <label className="label">Anexos <span className="soft">(imagens ou PDF, até 10 MB)</span></label>
+            <input ref={fileRef} type="file" accept={ACCEPT_CHAMADO} multiple hidden onChange={(e) => { adicionarArquivos(e.target.files); e.target.value = ""; }} />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()}>↑ Adicionar arquivo</button>
             {files.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
                 {files.map((f, i) => (
                   <div key={i} style={{ position: "relative" }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={URL.createObjectURL(f)} alt={f.name} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />
+                    {ehPdf(f.name, f.type) ? (
+                      <div title={f.name} style={{ width: 72, height: 72, boxSizing: "border-box", padding: "0 5px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text-muted)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+                        <FileText size={20} />
+                        <span style={{ fontSize: "0.62rem", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      </div>
+                    ) : (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={URL.createObjectURL(f)} alt={f.name} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />
+                    )}
                     <button type="button" onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))} aria-label="Remover" style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", border: "none", background: "var(--mh-danger)", color: "#fff", cursor: "pointer", fontSize: "0.8rem", lineHeight: 1 }}>×</button>
                   </div>
                 ))}
