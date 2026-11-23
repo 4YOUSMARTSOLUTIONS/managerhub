@@ -138,7 +138,10 @@ export function DemandaPanel({
   const overdue = !!due && !finalizada && isOverdue(due);
   const hasPendingPrazo = requests.some((r) => r.type === "prazo");
   const hasPendingReatribuicao = requests.some((r) => r.type === "reatribuicao");
-  const eff = effStatus(status, overdue, requests.length > 0);
+  // aguardando = pedido de prazo/reatribuição OU parte enviada sem aprovação, como
+  // na lista: sem a parte enviada, o topo dizia "Atrasada" e a lista "Aguardando"
+  const parteEmAprovacao = demanda.assigneeStates.some((a) => !!a.doneRequestedAt && !a.completedAt);
+  const eff = effStatus(status, overdue, requests.length > 0 || parteEmAprovacao);
 
   // a criação vira a linha de autoria no cabeçalho; o histórico fica só com o
   // que aconteceu depois (comentários e movimentações)
