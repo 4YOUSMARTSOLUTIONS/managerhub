@@ -488,10 +488,11 @@ export function AbsenteismosManager({
     && (r.createdBy === meuId || podeDecidir);
   const abaixoDeMim = useMemo(() => new Set(equipe), [equipe]);
   /**
-   * Efetivar vale também para a gestão acima de quem lançou (LUIZ, 23/11/2026):
-   * a gerente conclui o que a coordenadora dela abriu. O colaborador precisa estar
-   * na mesma cadeia, que é o que a RLS e `absenteismo_confirmar` exigem. Continua
-   * ausente e Cancelar seguem só com quem lançou e o DP.
+   * Efetivar e Continua ausente valem também para a gestão acima de quem lançou
+   * (LUIZ, 23/11/2026): a gerente conclui o que a coordenadora dela abriu. O
+   * colaborador precisa estar na mesma cadeia, que é o que a RLS,
+   * `absenteismo_confirmar` e `absenteismo_continua_ausente` exigem. Cancelar segue
+   * só com quem lançou e o DP.
    */
   const podeEfetivar = (r: AbsenteismoRow) =>
     podeMexer(r)
@@ -570,9 +571,12 @@ export function AbsenteismosManager({
   // dado completo na dica.
   // quais botões de ação esta linha mostra; a tabela reserva a vaga de cada um
   const acoesDa = (r: AbsenteismoRow) => {
-    const mexe = podeMexer(r);
-    const abertoMexe = r.status === "aberto" && mexe;
-    return { efetivar: podeEfetivar(r), continua: abertoMexe && !r.partialDay, cancelar: abertoMexe };
+    const efetivar = podeEfetivar(r);
+    return {
+      efetivar,
+      continua: r.status === "aberto" && efetivar && !r.partialDay,
+      cancelar: r.status === "aberto" && podeMexer(r),
+    };
   };
 
   const linha = (r: AbsenteismoRow, comAutor: boolean, vagas: Vagas) => {
