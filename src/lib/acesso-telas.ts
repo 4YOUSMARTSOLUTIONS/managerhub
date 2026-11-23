@@ -8,7 +8,7 @@
  * inicial de quem não vê o Dashboard.
  */
 import {
-  MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup,
+  FORA_DO_MENU, MODULE_BY_KEY, MODULE_GROUPS, NAV_ORDER, modulesInGroup,
   type ModuleDef, type ModuleKey, type ModuleState,
 } from "@/lib/modules";
 
@@ -19,10 +19,22 @@ import {
  */
 export const FORA_DA_REGRA = new Set<ModuleKey>(["admin", "auditoria", "sugestoes"]);
 
-/** As telas na ordem do menu (Dashboard primeiro, grupos no meio). */
-export const ORDEM_DAS_TELAS: ModuleKey[] = NAV_ORDER.flatMap((n) =>
-  n.type === "module" ? [n.key] : modulesInGroup(n.key).map((m) => m.key),
-);
+/** As telas na ordem do menu, e por fim as que moram fora dele. */
+export const ORDEM_DAS_TELAS: ModuleKey[] = [
+  ...NAV_ORDER.flatMap((n) => (n.type === "module" ? [n.key] : modulesInGroup(n.key).map((m) => m.key))),
+  ...FORA_DO_MENU,
+];
+
+/**
+ * A ordem do menu é alfabética, mas a tela inicial não pode ser decidida por ela:
+ * quem não vê o Dashboard entra numa tela de trabalho, e só cai em administração
+ * ou em Sugestões se não tiver outra.
+ */
+const POR_ULTIMO_NA_ENTRADA = new Set<ModuleKey>(["configuracoes", "auditoria", "admin", ...FORA_DO_MENU]);
+const ORDEM_DE_ENTRADA: ModuleKey[] = [
+  ...ORDEM_DAS_TELAS.filter((k) => !POR_ULTIMO_NA_ENTRADA.has(k)),
+  ...ORDEM_DAS_TELAS.filter((k) => POR_ULTIMO_NA_ENTRADA.has(k)),
+];
 
 export type GrupoDeTelas = { grupo: string | null; telas: { key: ModuleKey; label: string }[] };
 
@@ -65,8 +77,8 @@ export function resumoDasTelas(keys: string[] | null): string {
 }
 
 /**
- * Para onde vai quem não vê o Dashboard: a primeira tela liberada na ordem do
- * menu, preferindo a que está em uso de verdade ("on") à vitrine ("locked").
+ * Para onde vai quem não vê o Dashboard: a primeira tela de trabalho liberada,
+ * preferindo a que está em uso de verdade ("on") à vitrine ("locked").
  * `null` = nenhuma tela; a página inicial avisa em vez de redirecionar em ciclo.
  */
 export function primeiraTela(
@@ -74,7 +86,7 @@ export function primeiraTela(
   podeVer: (m: ModuleDef) => boolean,
 ): string | null {
   if (state.dashboard !== "hidden") return "/dashboard";
-  const candidatas = ORDEM_DAS_TELAS.filter((k) => k !== "dashboard" && podeVer(MODULE_BY_KEY[k]));
+  const candidatas = ORDEM_DE_ENTRADA.filter((k) => k !== "dashboard" && podeVer(MODULE_BY_KEY[k]));
   const destino = candidatas.find((k) => state[k] === "on") ?? candidatas.find((k) => state[k] === "locked");
   return destino ? MODULE_BY_KEY[destino].href : null;
 }

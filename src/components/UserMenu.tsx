@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, ChevronDown, Download, LogOut, Moon, Smartphone, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellOff, ChevronDown, Download, Lightbulb, LogOut, Moon, Smartphone, Sun, UserRound, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAvatars } from "@/components/AvatarProvider";
@@ -24,12 +25,18 @@ export function UserMenu({
   role,
   theme,
   variant = "topbar",
+  mostrarSugestoes = false,
+  onNavigate,
 }: {
   userName: string | null | undefined;
   role: Enums<"member_role">;
   theme: Theme;
   /** "sidebar" = gatilho largo no rodapé, menu abre para cima */
   variant?: "topbar" | "sidebar";
+  /** falso para quem não está numa empresa (owner de plataforma) */
+  mostrarSugestoes?: boolean;
+  /** fecha o menu lateral no celular ao trocar de tela */
+  onNavigate?: () => void;
 }) {
   const isSidebar = variant === "sidebar";
   const [open, setOpen] = useState(false);
@@ -245,6 +252,21 @@ export function UserMenu({
             <UserRound size={14} />
             Meu perfil
           </button>
+
+          {/* saiu do menu lateral (LUIZ, 23/11/2026); a tela segue sendo de todos */}
+          {mostrarSugestoes && (
+            <Link
+              href="/sugestoes"
+              role="menuitem"
+              style={{ ...itemStyle, textDecoration: "none" }}
+              onClick={() => { setOpen(false); onNavigate?.(); }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--mh-surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              <Lightbulb size={14} />
+              Sugestões
+            </Link>
+          )}
 
           <button
             type="button"

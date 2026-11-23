@@ -7,7 +7,7 @@ import {
   ClipboardList,
   AlertTriangle, CalendarCheck, ChevronDown, ClipboardCheck, DoorOpen, Lock,
   LayoutDashboard, LayoutGrid, Layers, MessageCircle, NotebookPen, Settings, ShieldCheck, Headset, Users, Wrench,
-  Boxes, BookMarked, BookOpen, Lightbulb, Presentation, Store, MessageSquareWarning, HeartPulse, Triangle,
+  Boxes, BookMarked, BookOpen, Presentation, Store, MessageSquareWarning, HeartPulse, Triangle,
 } from "lucide-react";
 import { BrandLogo, BrandWordmark, BrandOwnerSignature, SHOW_BRAND_OWNER } from "./BrandLogo";
 import { UserMenu } from "./UserMenu";
@@ -43,7 +43,6 @@ const MODULE_ICONS: Partial<Record<ModuleKey, React.ReactNode>> = {
   cinco_s: <Boxes size={SZ} />,
   padroes: <BookMarked size={SZ} />,
   conhecimento: <BookOpen size={SZ} />,
-  sugestoes: <Lightbulb size={SZ} />,
   auditoria: <ClipboardCheck size={SZ} />,
   configuracoes: <Settings size={SZ} />,
   admin: <Layers size={SZ} />,
@@ -192,7 +191,14 @@ export function Sidebar({
 
       {userName !== undefined && theme && (
         <div style={{ marginTop: "auto", paddingTop: "0.6rem", borderTop: "1px solid var(--mh-border)" }}>
-          <UserMenu userName={userName} role={role} theme={theme} variant="sidebar" />
+          <UserMenu
+            userName={userName}
+            role={role}
+            theme={theme}
+            variant="sidebar"
+            mostrarSugestoes={visible(MODULE_BY_KEY.sugestoes)}
+            onNavigate={onNavigate}
+          />
         </div>
       )}
     </aside>

@@ -162,34 +162,23 @@ export const MODULES: ModuleDef[] = [
 /** Compara rótulos como um leitor brasileiro leria: acento e caixa não separam. */
 const porNome = (a: string, b: string) => a.localeCompare(b, "pt-BR", { sensitivity: "base" });
 
+/** Telas que existem mas não ficam no menu lateral: Sugestões mora no menu do usuário (LUIZ, 23/11/2026). */
+export const FORA_DO_MENU: ModuleKey[] = ["sugestoes"];
+
 /**
- * O menu é alfabético, com duas âncoras que a ordem alfabética não deve mexer:
- * o Dashboard abre a lista (é a porta de entrada do sistema) e o bloco de
- * administração fecha (Configurações, Logs do sistema e Painel ADM não são
- * trabalho do dia a dia). Entre eles, grupos e itens soltos se misturam e são
- * ordenados pelo rótulo, que é o que a pessoa lê.
+ * Ordem exata do menu, derivada dos rótulos: tudo em ordem alfabética, inclusive
+ * Dashboard e Configurações (LUIZ, 23/11/2026). Grupos e itens soltos se misturam.
  */
-const NAV_TOPO: ModuleKey[] = ["dashboard"];
-const NAV_RODAPE: ModuleKey[] = ["configuracoes", "auditoria", "admin"];
-
-/** Ordem exata do menu (mistura itens de topo e grupos), derivada dos rótulos. */
-export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; key: GroupKey })[] = (() => {
-  const ancoras = new Set<ModuleKey>([...NAV_TOPO, ...NAV_RODAPE]);
-  const miolo = [
-    ...MODULE_GROUPS.map((g) => ({ type: "group" as const, key: g.key, label: g.label })),
-    ...MODULES
-      .filter((m) => m.group === null && !ancoras.has(m.key))
-      .map((m) => ({ type: "module" as const, key: m.key, label: m.label })),
-  ].sort((a, b) => porNome(a.label, b.label));
-
-  return [
-    ...NAV_TOPO.map((key) => ({ type: "module" as const, key })),
-    ...miolo.map(({ type, key }) => (type === "group"
-      ? { type: "group" as const, key: key as GroupKey }
-      : { type: "module" as const, key: key as ModuleKey })),
-    ...NAV_RODAPE.map((key) => ({ type: "module" as const, key })),
-  ];
-})();
+export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; key: GroupKey })[] = [
+  ...MODULE_GROUPS.map((g) => ({ type: "group" as const, key: g.key, label: g.label })),
+  ...MODULES
+    .filter((m) => m.group === null && !FORA_DO_MENU.includes(m.key))
+    .map((m) => ({ type: "module" as const, key: m.key, label: m.label })),
+]
+  .sort((a, b) => porNome(a.label, b.label))
+  .map(({ type, key }) => (type === "group"
+    ? { type: "group" as const, key: key as GroupKey }
+    : { type: "module" as const, key: key as ModuleKey }));
 
 /**
  * O papel permite ver a tela? É o primeiro filtro do menu; a venda da unidade
