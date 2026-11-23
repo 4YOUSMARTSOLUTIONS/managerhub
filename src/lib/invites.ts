@@ -142,16 +142,20 @@ export async function dispatchInvite(meetingId: string, method: IcsMethod, opts:
  * Envia (ou cancela) UM convite recorrente (RRULE) para a série inteira.
  * Best-effort: qualquer falha é engolida. Use "REQUEST" quando a série tem
  * auto-reserva ativa, e "CANCEL" quando a auto-reserva é desligada.
+ *
+ * `apenas` restringe o envio a quem entrou ou saiu da lista: quem saiu já não é
+ * participante, então as pessoas vêm direto do perfil.
  */
-export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod): Promise<InviteResult> {
+export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod, apenas?: string[]): Promise<InviteResult> {
   try {
     const admin = createServiceClient();
     const { data: s } = await admin
       .from("meeting_series")
-      .select("id, tenant_id, name, objetivo, periodicity, next_date, start_time, duration_min, duration_unit, ics_sequence, owner_user_id, rooms(name)")
+      .select("id, tenant_id, name, objetivo, periodicity, next_date, start_time, duration_min, duration_unit, ics_sequence, owner_user_id, auto_book, is_active, deleted_at, rooms(name)")
       .eq("id", seriesId)
       .maybeSingle();
     if (!s || !s.next_date || !s.start_time) return "skipped";
+    if (apenas && (apenas.length === 0 || !s.auto_book || !s.is_active || s.deleted_at)) return "skipped";
 
     // CANCEL só faz sentido se já enviamos algo antes
     if (method === "CANCEL" && (s.ics_sequence ?? 0) === 0) return "skipped";
@@ -159,13 +163,19 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
     const { apiKey } = await getPlatformResend();
     if (!apiKey) return "skipped";
 
-    const { data: parts } = await admin
-      .from("meeting_series_participants")
-      .select("profiles(full_name, email)")
-      .eq("series_id", seriesId);
+    let pessoas: ({ full_name: string | null; email: string | null } | null)[];
+    if (apenas) {
+      const { data } = await admin.from("profiles").select("full_name, email").in("id", apenas);
+      pessoas = data ?? [];
+    } else {
+      const { data: parts } = await admin
+        .from("meeting_series_participants")
+        .select("profiles(full_name, email)")
+        .eq("series_id", seriesId);
+      pessoas = (parts ?? []).map((p) => (p as unknown as { profiles: { full_name: string | null; email: string | null } | null }).profiles);
+    }
 
-    const attendees = (parts ?? [])
-      .map((p) => (p as unknown as { profiles: { full_name: string | null; email: string | null } | null }).profiles)
+    const attendees = pessoas
       .filter((pr): pr is { full_name: string | null; email: string } => !!pr?.email)
       .map((pr) => ({ name: pr.full_name ?? pr.email, email: pr.email }));
     if (attendees.length === 0) return "skipped";
@@ -181,7 +191,10 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
 
     const rrule = method === "CANCEL" ? null : seriesRrule(s.periodicity, toIcsUtc(until));
 
-    const seq = (s.ics_sequence ?? 0) + 1;
+    // convite a quem acabou de entrar não muda a reunião dos demais: mantém a versão
+    const atual = s.ics_sequence ?? 0;
+    const seq = apenas && method === "REQUEST" ? Math.max(atual, 1) : atual + 1;
+    const saiuDaLista = !!apenas && method === "CANCEL";
 
     const { data: org } = s.owner_user_id
       ? await admin.from("profiles").select("full_name").eq("id", s.owner_user_id).maybeSingle()
@@ -189,7 +202,9 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
 
     const location = (s.rooms as unknown as { name: string } | null)?.name || "Online";
     const organizerName = org?.full_name ?? "MANAGER HUB";
-    const label = method === "CANCEL" ? "Série de reuniões cancelada" : "Convite de reunião recorrente";
+    const label = saiuDaLista
+      ? "Você não participa mais da reunião"
+      : method === "CANCEL" ? "Série de reuniões cancelada" : "Convite de reunião recorrente";
     const cadence = PERIODICITY[s.periodicity] ?? "Recorrente";
 
     const ics = buildIcs({
@@ -210,16 +225,18 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod):
     const html =
       `<h2 style="margin:0 0 8px">${escapeHtml(label)}: ${escapeHtml(s.name)}</h2>` +
       (method === "CANCEL"
-        ? `<p style="margin:2px 0">A série de reuniões recorrentes foi cancelada.</p>`
+        ? `<p style="margin:2px 0">${saiuDaLista ? "Seu nome saiu da lista de participantes desta reunião recorrente." : "A série de reuniões recorrentes foi cancelada."}</p>`
         : `<p style="margin:2px 0"><strong>Frequência:</strong> ${escapeHtml(cadence)}</p>` +
           `<p style="margin:2px 0"><strong>Primeira ocorrência:</strong> ${formatDateTime(start.toISOString())}</p>` +
           `<p style="margin:2px 0"><strong>Local:</strong> ${escapeHtml(location)}</p>` +
           `<p style="margin:2px 0"><strong>Organizador:</strong> ${escapeHtml(organizerName)}</p>` +
           (s.objetivo ? `<p style="margin:8px 0 0">${escapeHtml(s.objetivo)}</p>` : "")) +
-      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo MANAGER HUB. As ocorrências dos próximos ${horizonMonths === 1 ? "30 dias" : "12 meses"} ficam reservadas.</p>`;
+      (saiuDaLista
+        ? `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Aviso enviado pelo MANAGER HUB.</p>`
+        : `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo MANAGER HUB. As ocorrências dos próximos ${horizonMonths === 1 ? "30 dias" : "12 meses"} ficam reservadas.</p>`);
 
     const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${s.name}`, html, ics, method });
-    if (ok) {
+    if (ok && seq !== atual) {
       await admin.from("meeting_series").update({ ics_sequence: seq }).eq("id", seriesId);
     }
     return ok ? "sent" : "failed";

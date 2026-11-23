@@ -17,6 +17,7 @@ export default async function MeetingRecordsPage() {
   const [
     { data: series }, { data: parts }, { data: unitLinks },
     { data: members }, { data: roomsData }, { data: occ }, flags, { data: podeCriar },
+    { data: niveisLinks }, { data: foraLinks },
   ] = await Promise.all([
     supabase
       .from("meeting_series")
@@ -26,7 +27,12 @@ export default async function MeetingRecordsPage() {
       .order("is_active", { ascending: false })
       .order("next_date", { ascending: true, nullsFirst: false })
       .order("name"),
-    supabase.from("meeting_series_participants").select("series_id, user_id"),
+    // com hierarquia, uma reunião sozinha pode ter centenas: passa fácil do teto de 1000
+    fetchAll(() => supabase
+      .from("meeting_series_participants")
+      .select("series_id, user_id, via_nivel")
+      .order("series_id")
+      .order("user_id")),
     supabase.from("meeting_series_units").select("series_id, unit_id"),
     fetchAll(() => supabase
       .from("memberships")
@@ -48,6 +54,8 @@ export default async function MeetingRecordsPage() {
     getPlatformIntegrationFlags(),
     // quem vê o botão Nova reunião: a mesma regra que o banco aplica ao salvar
     supabase.rpc("pode_criar_reuniao", { p_tenant: tenant.id }),
+    supabase.from("meeting_series_niveis").select("series_id, hierarchy_level_id"),
+    fetchAll(() => supabase.from("meeting_series_fora").select("series_id, user_id").order("series_id").order("user_id")),
   ]);
 
   const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
@@ -75,11 +83,20 @@ export default async function MeetingRecordsPage() {
 
   // participantes habituais por série
   const partsBySeries = new Map<string, string[]>();
+  const manuaisBySeries = new Map<string, string[]>();
+  const juntar = (m: Map<string, string[]>, chave: string, valor: string) => {
+    const arr = m.get(chave);
+    if (arr) arr.push(valor);
+    else m.set(chave, [valor]);
+  };
   for (const p of parts ?? []) {
-    const arr = partsBySeries.get(p.series_id) ?? [];
-    arr.push(p.user_id);
-    partsBySeries.set(p.series_id, arr);
+    juntar(partsBySeries, p.series_id, p.user_id);
+    if (!p.via_nivel) juntar(manuaisBySeries, p.series_id, p.user_id);
   }
+  const niveisBySeries = new Map<string, string[]>();
+  for (const n of niveisLinks ?? []) juntar(niveisBySeries, n.series_id, n.hierarchy_level_id);
+  const foraBySeries = new Map<string, string[]>();
+  for (const f of foraLinks ?? []) juntar(foraBySeries, f.series_id, f.user_id);
 
   // data/hora da última reunião realizada (finalizada) por série.
   // occ já vem ordenado por started_at desc, então o primeiro finalizado de cada série é o mais recente.
@@ -111,6 +128,9 @@ export default async function MeetingRecordsPage() {
     generalRules: (s.general_rules as string[] | null) ?? [],
     howTo: (s.how_to as string[] | null) ?? [],
     participantIds: partsBySeries.get(s.id) ?? [],
+    manualIds: manuaisBySeries.get(s.id) ?? [],
+    hierarquiaIds: niveisBySeries.get(s.id) ?? [],
+    foraIds: foraBySeries.get(s.id) ?? [],
     unitIds: unitsBySeries.get(s.id) ?? [],
     unitNames: (unitsBySeries.get(s.id) ?? []).map((id) => unitById.get(id)).filter((x): x is string => !!x),
     isActive: s.is_active,
@@ -122,7 +142,13 @@ export default async function MeetingRecordsPage() {
   const occIds = (occ ?? []).map((o) => o.id);
   const [{ data: att }, { data: acts }, { data: recs }] = await Promise.all([
     occIds.length
-      ? supabase.from("meeting_attendance").select("occurrence_id, present").in("occurrence_id", occIds)
+      // uma linha por pessoa em cada registro: com listas grandes passa de 1000
+      ? fetchAll(() => supabase
+        .from("meeting_attendance")
+        .select("occurrence_id, present")
+        .in("occurrence_id", occIds)
+        .order("occurrence_id")
+        .order("user_id"))
       : Promise.resolve({ data: [] as { occurrence_id: string; present: boolean }[] }),
     occIds.length
       ? supabase.from("actions").select("occurrence_id").in("occurrence_id", occIds)

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import { finishOccurrence, saveOccurrenceDraft, type OccurrenceDraft } from "@/lib/actions/meeting-records";
+import { finishOccurrence, getNiveisDeReuniao, saveOccurrenceDraft, type OccurrenceDraft } from "@/lib/actions/meeting-records";
+import { LIMITE_SEM_CONFIRMAR, niveisComPessoas, type NiveisDeReuniao } from "@/lib/reuniao-niveis";
 import { createAction } from "@/lib/actions/actions";
 import { generateMeetingAI, generateActionsAI } from "@/lib/actions/ai";
 import { PERIODICITY } from "@/lib/constants";
@@ -64,6 +65,7 @@ export function RegisterDialog({
   );
   const [present, setPresent] = useState<Record<string, boolean>>({});
   const [attendees, setAttendees] = useState<string[]>([]);
+  const [dadosNiveis, setDadosNiveis] = useState<NiveisDeReuniao | null>(null);
   const [notes, setNotes] = useState("");
   const [decisions, setDecisions] = useState("");
   const [transcript, setTranscript] = useState("");
@@ -132,6 +134,13 @@ export function RegisterDialog({
     return () => clearTimeout(t);
   }, [open, occurrenceId, notes, decisions, transcript, attendees, present, advance, aiDraft, aiActionsDraft, collected]);
 
+  useEffect(() => {
+    if (!open) return;
+    let vivo = true;
+    getNiveisDeReuniao().then((d) => { if (vivo) setDadosNiveis(d); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [open]);
+
   if (!open || !series) return null;
 
   const onAttendeesChange = (ids: string[]) => {
@@ -141,6 +150,25 @@ export function RegisterDialog({
       for (const id of ids) next[id] = prev[id] ?? true;
       return next;
     });
+  };
+
+  // só para esta reunião: quem entra aqui não muda a lista habitual da série
+  const niveisDaReuniao = niveisComPessoas(dadosNiveis, series.unitIds).map((n) => ({
+    ...n,
+    faltam: n.pessoas.filter((id) => byId.has(id) && !attendees.includes(id)),
+  }));
+  const adicionarNivel = async (nivelId: string) => {
+    const chegam = niveisDaReuniao.find((n) => n.id === nivelId)?.faltam ?? [];
+    if (chegam.length === 0) return;
+    if (chegam.length > LIMITE_SEM_CONFIRMAR) {
+      const ok = await confirmDialog({
+        title: `Adicionar ${chegam.length} pessoas?`,
+        message: "Elas entram na presença desta reunião.",
+        confirmLabel: "Adicionar",
+      });
+      if (!ok) return;
+    }
+    onAttendeesChange([...attendees, ...chegam]);
   };
 
   const presentCount = attendees.filter((id) => present[id]).length;
@@ -344,7 +372,27 @@ export function RegisterDialog({
                 })}
               </div>
             )}
-            <PeoplePicker people={people} selected={attendees} onChange={onAttendeesChange} placeholder="Adicionar participante…" ocultarSelecionados />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-start" }}>
+              <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+                <PeoplePicker people={people} selected={attendees} onChange={onAttendeesChange} placeholder="Adicionar participante…" ocultarSelecionados />
+              </div>
+              {niveisDaReuniao.length > 0 && (
+                <select
+                  className="select"
+                  aria-label="Adicionar por hierarquia"
+                  value=""
+                  onChange={(e) => { if (e.target.value) void adicionarNivel(e.target.value); }}
+                  style={{ flex: "0 1 230px", width: "auto", minWidth: 0 }}
+                >
+                  <option value="">Adicionar por hierarquia…</option>
+                  {niveisDaReuniao.map((n) => (
+                    <option key={n.id} value={n.id} disabled={n.faltam.length === 0}>
+                      {n.nome} ({n.faltam.length === 0 ? "já na lista" : n.faltam.length})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
 
           {occurrenceId && (

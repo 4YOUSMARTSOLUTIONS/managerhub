@@ -583,6 +583,18 @@ export type Database = {
         Relationships: []
       }
       meeting_series_participants: {
+        Row: { series_id: string; user_id: string; via_nivel: boolean }
+        Insert: { series_id: string; user_id: string; via_nivel?: boolean }
+        Update: { series_id?: string; user_id?: string; via_nivel?: boolean }
+        Relationships: []
+      }
+      meeting_series_niveis: {
+        Row: { series_id: string; hierarchy_level_id: string }
+        Insert: { series_id: string; hierarchy_level_id: string }
+        Update: { series_id?: string; hierarchy_level_id?: string }
+        Relationships: []
+      }
+      meeting_series_fora: {
         Row: { series_id: string; user_id: string }
         Insert: { series_id: string; user_id: string }
         Update: { series_id?: string; user_id?: string }
@@ -2369,6 +2381,15 @@ export type Database = {
       update_action: { Args: { p_id: string; p_data: Json }; Returns: Json }
       acoes_da_pagina: { Args: { p_ids: string[] }; Returns: Json }
       pode_criar_reuniao: { Args: { p_tenant: string }; Returns: boolean }
+      reuniao_niveis_pessoas: { Args: Record<PropertyKey, never>; Returns: Json }
+      reuniao_convites_pegar: {
+        Args: { p_segredo: string }
+        Returns: { o_series: string; o_user: string; o_metodo: string }[]
+      }
+      reuniao_convites_concluir: {
+        Args: { p_segredo: string; p_series: string; p_users: string[]; p_metodo: string }
+        Returns: undefined
+      }
       import_action: { Args: { p_data: Json }; Returns: Json }
       demanda_set_problem: { Args: { p_demanda: string; p_texto: string }; Returns: undefined }
       search_action_ids: { Args: { p_filters?: Json; p_limit?: number; p_offset?: number }; Returns: Json }

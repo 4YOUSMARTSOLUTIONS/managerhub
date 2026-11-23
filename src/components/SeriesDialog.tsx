@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveSeries, parseTorPdf, parseTorExcel, type ContentRow } from "@/lib/actions/meeting-records";
+import { X } from "lucide-react";
+import { saveSeries, parseTorPdf, parseTorExcel, getNiveisDeReuniao, type ContentRow } from "@/lib/actions/meeting-records";
 import type { ParsedTor } from "@/lib/tor-parser";
 import { PERIODICITY } from "@/lib/constants";
+import { LIMITE_SEM_CONFIRMAR, niveisComPessoas, pessoasDosNiveis, type NiveisDeReuniao } from "@/lib/reuniao-niveis";
 import { PeoplePicker, type Person } from "./PeoplePicker";
+import { Avatar } from "@/components/ui/Avatar";
+import { confirmDialog } from "@/components/ui/confirm";
 import { InfoHint } from "@/components/ui/InfoHint";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 
 export type Room = { id: string; name: string };
 export type Unit = { id: string; name: string };
@@ -31,7 +36,12 @@ export type SeriesData = {
   content: ContentRow[];
   generalRules: string[];
   howTo: string[];
+  /** a lista efetiva: escolhidos um a um e quem veio pelo nível */
   participantIds: string[];
+  manualIds: string[];
+  hierarquiaIds: string[];
+  /** tirados à mão de um nível ligado: não voltam quando a lista se atualiza */
+  foraIds: string[];
   unitIds: string[];
   unitNames: string[];
   isPrivate: boolean;
@@ -113,7 +123,10 @@ export function SeriesDialog({
   const [content, setContent] = useState<ContentRow[]>([]);
   const [generalRules, setGeneralRules] = useState<string[]>([]);
   const [howTo, setHowTo] = useState<string[]>([]);
-  const [participants, setParticipants] = useState<string[]>([]);
+  const [manuais, setManuais] = useState<string[]>([]);
+  const [niveis, setNiveis] = useState<string[]>([]);
+  const [fora, setFora] = useState<string[]>([]);
+  const [dadosNiveis, setDadosNiveis] = useState<NiveisDeReuniao | null>(null);
   const [unitIds, setUnitIds] = useState<string[]>([]);
   const [isPrivate, setIsPrivate] = useState(false);
   const [error, setError] = useState("");
@@ -141,14 +154,83 @@ export function SeriesDialog({
       setContent(series?.content ?? []);
       setGeneralRules(series?.generalRules ?? []);
       setHowTo(series?.howTo ?? []);
-      setParticipants(series?.participantIds ?? []);
+      setManuais(series?.manualIds ?? []);
+      setNiveis(series?.hierarquiaIds ?? []);
+      setFora(series?.foraIds ?? []);
       setUnitIds(series?.unitIds ?? []);
       setIsPrivate(series?.isPrivate ?? false);
       setError(""); setImported("");
     }
   }, [open, series]);
 
+  // a cada abertura: quem está em cada nível pode ter mudado desde a última
+  useEffect(() => {
+    if (!open) return;
+    let vivo = true;
+    getNiveisDeReuniao().then((d) => { if (vivo) setDadosNiveis(d); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [open]);
+
+  const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  // enquanto os níveis não chegam, vale o que estava gravado
+  const doNivel = useMemo(
+    () => (dadosNiveis
+      ? pessoasDosNiveis(dadosNiveis, niveis, unitIds)
+      : (series?.participantIds ?? []).filter((id) => !(series?.manualIds ?? []).includes(id))),
+    [dadosNiveis, niveis, unitIds, series],
+  );
+  const lista = useMemo(() => {
+    const tirados = new Set(fora);
+    const ids = [...new Set([...manuais, ...doNivel.filter((id) => !tirados.has(id))])];
+    return ids.sort((a, b) => (byId.get(a)?.name ?? "").localeCompare(byId.get(b)?.name ?? "", "pt-BR"));
+  }, [manuais, doNivel, fora, byId]);
+  const nomeDoNivel = useMemo(() => {
+    const nomes = new Map((dadosNiveis?.niveis ?? []).map((n) => [n.id, n.nome]));
+    const marcados = new Set(niveis);
+    return new Map((dadosNiveis?.pessoas ?? [])
+      .filter((p) => marcados.has(p.nivel))
+      .map((p) => [p.id, nomes.get(p.nivel) ?? ""]));
+  }, [dadosNiveis, niveis]);
+  const opcoesNiveis = useMemo(() => {
+    const comPessoas = new Map(niveisComPessoas(dadosNiveis, unitIds).map((n) => [n.id, n.pessoas.length]));
+    return (dadosNiveis?.niveis ?? [])
+      // marcado continua na lista mesmo sem ninguém, para poder desmarcar
+      .filter((n) => comPessoas.has(n.id) || niveis.includes(n.id))
+      .map((n) => ({ value: n.id, label: `${n.nome} (${comPessoas.get(n.id) ?? 0})` }));
+  }, [dadosNiveis, unitIds, niveis]);
+
   if (!open) return null;
+
+  const retirados = fora.filter((id) => doNivel.includes(id)).length;
+
+  // busca e X da lista: quem sai de um nível ligado fica em `fora`, senão voltaria
+  const mudarLista = (ids: string[]) => {
+    const novos = new Set(ids);
+    const atuais = new Set(lista);
+    const entrou = ids.filter((id) => !atuais.has(id));
+    const saiu = lista.filter((id) => !novos.has(id));
+    setManuais((prev) => [...prev.filter((id) => !saiu.includes(id)), ...entrou]);
+    setFora((prev) => [...prev.filter((id) => !entrou.includes(id)), ...saiu.filter((id) => doNivel.includes(id))]);
+  };
+
+  const mudarNiveis = async (novos: string[]) => {
+    const acrescentados = novos.filter((n) => !niveis.includes(n));
+    if (acrescentados.length > 0) {
+      const atuais = new Set(lista);
+      const chegam = pessoasDosNiveis(dadosNiveis, acrescentados, unitIds).filter((id) => !atuais.has(id));
+      if (chegam.length > LIMITE_SEM_CONFIRMAR) {
+        const ok = await confirmDialog({
+          title: `Adicionar ${chegam.length} pessoas?`,
+          message: autoBook
+            ? "Elas entram na reunião e quem tem e-mail recebe o convite ao salvar."
+            : "Elas entram na lista de participantes desta reunião.",
+          confirmLabel: "Adicionar",
+        });
+        if (!ok) return;
+      }
+    }
+    setNiveis(novos);
+  };
 
   // aplica o TOR interpretado (PDF ou Excel) aos campos do formulário
   const applyParsed = (d: ParsedTor) => {
@@ -196,7 +278,7 @@ export function SeriesDialog({
     if (!isOnline && !roomId) { setError("Selecione uma sala ou marque a reunião como online."); return; }
     if (unitIds.length === 0) { setError("Selecione ao menos uma unidade."); return; }
     if (!participantsText.trim()) { setError("Descreva os participantes (ex.: “Todos os gerentes do comercial”)."); return; }
-    if (participants.length === 0) { setError("Selecione ao menos um usuário participante."); return; }
+    if (lista.length === 0) { setError("Selecione ao menos um usuário participante."); return; }
     if (content.filter((c) => c.item.trim()).length === 0) { setError("Adicione ao menos um item no Conteúdo / Pauta."); return; }
     if (generalRules.filter((r) => r.trim()).length === 0) { setError("Informe ao menos uma Regra Geral."); return; }
     if (howTo.filter((r) => r.trim()).length === 0) { setError("Informe ao menos um item em Como Realizar."); return; }
@@ -211,8 +293,11 @@ export function SeriesDialog({
         content: content.filter((c) => c.item.trim()),
         general_rules: generalRules.filter((r) => r.trim()),
         how_to: howTo.filter((r) => r.trim()),
-        participants,
+        participants: manuais,
         units: unitIds,
+        hierarquias: niveis,
+        // quem já não está nos níveis marcados não precisa continuar barrado
+        fora: dadosNiveis ? fora.filter((id) => doNivel.includes(id)) : fora,
       });
       if (res.error) { setError(res.error); return; }
       onClose();
@@ -389,8 +474,74 @@ export function SeriesDialog({
           </div>
 
           <div>
-            <label className="label">Usuários participantes <span style={{ color: "var(--mh-danger)" }}>*</span> <span className="soft">(selecione no sistema)</span></label>
-            <PeoplePicker people={people} selected={participants} onChange={setParticipants} />
+            <label className="label">
+              Usuários participantes <span style={{ color: "var(--mh-danger)" }}>*</span>{" "}
+              <span className="soft">{lista.length > 0 ? `(${lista.length} na lista)` : "(selecione no sistema)"}</span>
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-start" }}>
+              <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+                <PeoplePicker people={people} selected={lista} onChange={mudarLista} ocultarSelecionados />
+              </div>
+              {unitIds.length > 0 && (
+                <div style={{ paddingTop: "0.3rem" }}>
+                  <MultiSelect
+                    inline
+                    label="Adicionar por hierarquia"
+                    allLabel="nenhuma"
+                    options={opcoesNiveis}
+                    selected={niveis}
+                    onChange={(v) => { void mudarNiveis(v); }}
+                    carregando={!dadosNiveis}
+                  />
+                </div>
+              )}
+            </div>
+            {unitIds.length === 0 && (
+              <p className="soft" style={{ fontSize: "0.78rem", margin: "0.3rem 0 0" }}>
+                Marque ao menos uma unidade para adicionar por hierarquia.
+              </p>
+            )}
+            {lista.length > 0 && (
+              <div style={{ border: "1px solid var(--border)", borderRadius: 9, maxHeight: 220, overflowY: "auto", marginTop: "0.5rem" }}>
+                {lista.map((id) => {
+                  const p = byId.get(id);
+                  const nivel = manuais.includes(id) ? null : nomeDoNivel.get(id);
+                  return (
+                    <div key={id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3rem 0.3rem 0.3rem 0.6rem", borderBottom: "1px solid var(--border)", fontSize: "0.85rem" }}>
+                      <Avatar name={p?.name ?? "?"} userId={id} />
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p?.name}>{p?.name ?? "—"}</span>
+                      {nivel && <span className="soft" style={{ fontSize: "0.75rem", flexShrink: 0 }}>{nivel}</span>}
+                      <button
+                        type="button"
+                        aria-label={`Remover ${p?.name ?? "participante"} da reunião`}
+                        title="Remover da reunião"
+                        onClick={() => mudarLista(lista.filter((x) => x !== id))}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", width: 26, height: 26, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 6, flexShrink: 0 }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {niveis.length > 0 && (
+              <p className="soft" style={{ fontSize: "0.78rem", margin: "0.35rem 0 0" }}>
+                A lista acompanha a hierarquia nas unidades marcadas: quem entrar ou sair desses níveis entra ou sai da reunião.
+                {retirados > 0 && (
+                  <>
+                    {" "}{retirados === 1 ? "1 pessoa retirada à mão não volta." : `${retirados} pessoas retiradas à mão não voltam.`}{" "}
+                    <button
+                      type="button"
+                      onClick={() => setFora([])}
+                      style={{ background: "none", border: "none", padding: 0, color: "var(--mh-primary-500)", cursor: "pointer", fontSize: "inherit", textDecoration: "underline" }}
+                    >
+                      Trazer de volta
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
           </div>
 
           <div>

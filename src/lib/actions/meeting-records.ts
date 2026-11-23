@@ -6,6 +6,7 @@ import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { parseTor, type ParsedTor, type TextItem } from "@/lib/tor-parser";
 import { parseTorRows } from "@/lib/tor-excel";
 import { dispatchSeriesInvite } from "@/lib/invites";
+import type { NiveisDeReuniao } from "@/lib/reuniao-niveis";
 import type { ActionState } from "./types";
 import type { OccurrenceRow } from "@/components/MeetingRecords";
 import { OCC_PAGE_SIZE } from "@/lib/constants";
@@ -517,8 +518,13 @@ export type SeriesInput = {
   content: ContentRow[];
   general_rules: string[];
   how_to: string[];
+  /** escolhidos um a um; quem vem pelo nível o banco acrescenta */
   participants: string[];
   units: string[];
+  /** níveis de hierarquia ligados à reunião */
+  hierarquias: string[];
+  /** quem foi tirado à mão de um nível ligado e não deve voltar */
+  fora: string[];
 };
 
 export type OccurrenceInput = {
@@ -549,7 +555,7 @@ export async function saveSeries(input: SeriesInput): Promise<ActionState> {
     if (!input.is_online && !input.room_id) return { error: "Selecione uma sala ou marque a reunião como online." };
     if (!input.units?.length) return { error: "Selecione ao menos uma unidade." };
     if (!input.participants_text?.trim()) return { error: "Descreva os participantes." };
-    if (!input.participants?.length) return { error: "Selecione ao menos um usuário participante." };
+    if (!input.participants?.length && !input.hierarquias?.length) return { error: "Selecione ao menos um usuário participante." };
     if (!input.content?.some((c) => c.item?.trim())) return { error: "Adicione ao menos um item no Conteúdo / Pauta." };
     if (!input.general_rules?.some((r) => r?.trim())) return { error: "Informe ao menos uma Regra Geral." };
     if (!input.how_to?.some((r) => r?.trim())) return { error: "Informe ao menos um item em Como Realizar." };
@@ -572,6 +578,18 @@ export async function saveSeries(input: SeriesInput): Promise<ActionState> {
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
+  }
+}
+
+/** Níveis e pessoas de cada um, para adicionar participantes por hierarquia. */
+export async function getNiveisDeReuniao(): Promise<NiveisDeReuniao | null> {
+  try {
+    const { supabase } = await actionContext();
+    const { data, error } = await supabase.rpc("reuniao_niveis_pessoas");
+    if (error || !data) return null;
+    return data as unknown as NiveisDeReuniao;
+  } catch {
+    return null;
   }
 }
 

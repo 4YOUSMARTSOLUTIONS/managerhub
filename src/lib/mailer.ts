@@ -8,6 +8,8 @@ export const INVITE_FROM = `MANAGER HUB <${ORGANIZER_EMAIL}>`;
 
 type Anexo = { filename: string; content: string; content_type: string };
 
+const MAX_DESTINATARIOS = 50;
+
 /**
  * A ida ao Resend, num lugar só.
  *
@@ -65,14 +67,21 @@ export async function sendInvite(input: SendInviteInput): Promise<boolean> {
     },
   ];
 
-  const { ok } = await postResend(apiKey, {
-    from: INVITE_FROM,
-    to,
-    subject: input.subject,
-    html: input.html,
-    attachments: anexos,
-  });
-  return ok;
+  // o Resend recusa mais de 50 destinatários por e-mail, e uma reunião por
+  // hierarquia passa disso; a pausa respeita o limite de envios por segundo
+  let tudoCerto = true;
+  for (let i = 0; i < to.length; i += MAX_DESTINATARIOS) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 600));
+    const { ok } = await postResend(apiKey, {
+      from: INVITE_FROM,
+      to: to.slice(i, i + MAX_DESTINATARIOS),
+      subject: input.subject,
+      html: input.html,
+      attachments: anexos,
+    });
+    if (!ok) tudoCerto = false;
+  }
+  return tudoCerto;
 }
 
 export type SendMailInput = {
