@@ -141,11 +141,17 @@
 
      Estava em 12px, ou seja, 75%: no zoom padrão o corpo ficava em 12px, o
      parágrafo em 10,5px e o rótulo de campo em 8,6px, pequeno demais para uso
-     diário. 15px mantém a densidade que um sistema de gestão com muitas tabelas
-     precisa, sem a letra miúda.
+     diário. 15px ainda ficou grande no computador (LUIZ, 23/11/2026): com a
+     escala de 125% do Windows as tabelas passavam da tela. Daí 14px na tela
+     larga. No celular e na impressão continua 15px.
 
-     Para ajustar o sistema todo, mude só esta linha. */
+     Para ajustar o sistema todo, mude só estes dois números. */
   --mh-root-font: 15px;
+}
+@media screen and (min-width: 721px) {
+  :root {
+    --mh-root-font: 14px;
+  }
 }
 
 /* ── ALIASES LEGADOS: tudo que já existe continua funcionando ── */
@@ -345,12 +351,12 @@ a {
   min-width: 0;
 }
 .app-content {
-  padding: var(--mh-space-7);
+  padding: var(--mh-space-5);
   flex: 1;
 }
 
 .app-sidebar {
-  width: 248px;
+  width: 228px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--surface);
@@ -393,7 +399,7 @@ a {
   width: 100%;
   padding: 0.55rem 0.65rem;
   border-radius: var(--mh-radius-sm);
-  font-size: 0.875rem;
+  font-size: 0.84rem;
   font-weight: 500;
   color: var(--mh-text-2);
   background: transparent;
@@ -450,7 +456,7 @@ a {
   gap: 0.6rem;
   padding: 0.42rem 0.65rem 0.42rem 1.55rem;
   border-radius: var(--mh-radius-sm);
-  font-size: 0.83rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--mh-text-2);
   transition: background var(--mh-dur-fast) var(--mh-ease),
@@ -1069,23 +1075,23 @@ a {
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
 .table th {
   text-align: left;
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
   color: var(--mh-text-3);
   font-weight: 600;
-  padding: 0.5rem 0.6rem;
+  padding: 0.42rem 0.4rem;
   border-bottom: 1px solid var(--mh-border);
   background: var(--mh-surface-1);
   white-space: nowrap;
 }
 .table td {
-  padding: 0.5rem 0.6rem;
+  padding: 0.42rem 0.4rem;
   border-bottom: 1px solid var(--mh-border);
   vertical-align: middle;
 }
@@ -1103,7 +1109,7 @@ a {
 .table-dense,
 .metas-table,
 .area-goals-table {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 .table-dense th,
 .metas-table th,
@@ -1124,7 +1130,7 @@ a {
   font-size: 0.76rem;
 }
 .table-linha th {
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   padding: 0.42rem 0.45rem;
 }
 .table-linha td {
@@ -1143,6 +1149,23 @@ a {
   width: 26px;
   height: 26px;
   font-size: 0.62rem;
+}
+/* pílula e botão de ícone mais justos na tabela: com muitas colunas, são eles
+   que empurram a linha para fora da tela */
+.table .badge {
+  font-size: 0.7rem;
+  padding: 0.14rem 0.45rem;
+  gap: 0.28rem;
+}
+@media screen and (min-width: 721px) {
+  .table .icon-btn {
+    width: 26px;
+    height: 26px;
+  }
+  .table .btn-sm {
+    padding: 0.22rem 0.55rem;
+    font-size: 0.76rem;
+  }
 }
 
 /* farol de área: condensada e com largura pelo conteúdo (sem esticar) */

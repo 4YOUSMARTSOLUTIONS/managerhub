@@ -19,7 +19,7 @@ import {
 import type { Enums } from "@/types/database";
 import type { Theme } from "@/lib/theme";
 
-const SZ = 17;
+const SZ = 16;
 
 // ícones ficam no cliente; a estrutura vem do registry (src/lib/modules.ts)
 const GROUP_ICONS: Record<GroupKey, React.ReactNode> = {

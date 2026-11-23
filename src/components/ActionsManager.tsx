@@ -732,10 +732,10 @@ export function ActionsManager({
                         <td>{first && <Badge variant="quiet" tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
                         <td>{first && (a.isSdpo ? <Badge variant="quiet" tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{first && (a.programaName ? <Badge variant="quiet" tone="blue">{a.programaName}</Badge> : <span className="soft">—</span>)}</td>
-                        <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
-                        <td className="muted" style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.secaoName ?? ""}>{first ? (a.secaoName ?? "—") : ""}</td>
-                        <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
-                        <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.assigneeNames.map(shortName).join(", ")}>
+                        <td className="muted" style={{ maxWidth: 84, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
+                        <td className="muted" style={{ maxWidth: 92, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.secaoName ?? ""}>{first ? (a.secaoName ?? "—") : ""}</td>
+                        <td style={{ width: "100%", minWidth: 110, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
+                        <td style={{ maxWidth: 138, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.assigneeNames.map(shortName).join(", ")}>
                           {d.assigneeNames.length > 0 ? (
                             <>
                               {shortName(d.assigneeNames[0])}
@@ -749,7 +749,7 @@ export function ActionsManager({
                           )}
                           {d.attachments.length > 0 && <span className="soft" style={{ marginLeft: 6 }} title={`${d.attachments.length} anexo(s)`}>📎{d.attachments.length}</span>}
                         </td>
-                        <td className="muted" style={{ maxWidth: 170, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>
+                        <td className="muted" style={{ maxWidth: 104, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>
                           {first ? (a.requesterName ? shortName(a.requesterName) : "—") : ""}
                         </td>
                         <td className="muted" style={{ whiteSpace: "nowrap" }}>{first ? formatDate(a.createdAt) : ""}</td>
@@ -780,8 +780,8 @@ export function ActionsManager({
                               <button type="button" className="icon-btn" title="Editar ação" onClick={() => void abrirEdicao(a)}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                               </button>
-                            ) : <span aria-hidden="true" style={{ width: 32, height: 32, flexShrink: 0 }} />}
-                            {isOwner && !first && <span aria-hidden="true" style={{ width: 32, height: 32, flexShrink: 0 }} />}
+                            ) : <span aria-hidden="true" className="icon-btn" style={{ visibility: "hidden" }} />}
+                            {isOwner && !first && <span aria-hidden="true" className="icon-btn" style={{ visibility: "hidden" }} />}
                             {first && isOwner && (
                               <ConfirmActionButton
                                 action={deleteAction}
