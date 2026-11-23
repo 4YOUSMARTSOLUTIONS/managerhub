@@ -1,5 +1,6 @@
 import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { TicketsManager, type TicketRow } from "@/components/TicketsManager";
@@ -25,36 +26,40 @@ export default async function TicketsPage() {
   const managedSectorIds = (myMgr ?? []).map((r) => r.sector_id);
 
   const unitIds = effectiveUnitFilter(unitScope);
-  let ticketsQuery = supabase
-    .from("tickets")
-    .select(
-      "*, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (!fullAccess) {
-    ticketsQuery = managedSectorIds.length > 0
-      ? ticketsQuery.or(`sector_id.in.(${managedSectorIds.join(",")}),requester_id.eq.${user.id}`)
-      : ticketsQuery.eq("requester_id", user.id);
-  }
+  // Lê tudo, sem o antigo `.limit(200)`: o Dashboard calcula sobre esta lista, e com
+  // o histórico importado ele contaria só os 200 mais recentes. A descrição fica de
+  // fora e vem ao abrir a ficha (`getTicketDetalhe`), para a carga não pesar.
+  const montarChamados = () => {
+    let q = supabase
+      .from("tickets")
+      .select(
+        "id, code, title, status, priority, requested_priority, due_date, sector_id, category, category_id, unit_id, assignee_id, requester_id, created_at, resolved_at, updated_at, approval_requested_at, nps_score, nps_comment, origem_id, legacy_requester, legacy_assignee, legacy_unit, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)",
+      )
+      .order("created_at", { ascending: false })
+      .order("id");
+    if (!fullAccess) {
+      q = managedSectorIds.length > 0
+        ? q.or(`sector_id.in.(${managedSectorIds.join(",")}),requester_id.eq.${user.id}`)
+        : q.eq("requester_id", user.id);
+    }
+    // chamado SEM unidade também entra: `.in()` sozinho descarta `null`, e um
+    // chamado aberto sem unidade sumiria de todo recorte menos "Todas". Mesma
+    // regra de /acoes e /checklists.
+    return unitIds ? q.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : q;
+  };
 
-  const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }] =
+  const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }, { data: atts }] =
     await Promise.all([
-      // chamado SEM unidade também entra: `.in()` sozinho descarta `null`, e um
-      // chamado aberto sem unidade sumiria de todo recorte menos "Todas". Mesma
-      // regra de /acoes e /checklists.
-      unitIds ? ticketsQuery.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : ticketsQuery,
+      fetchAll(montarChamados),
       getMembers(tenant.id),
       supabase.from("ticket_sectors").select("id, name, active").eq("tenant_id", tenant.id).order("name"),
       supabase.from("ticket_categories").select("id, name, sector_id, active").eq("tenant_id", tenant.id).order("name"),
       supabase.from("units").select("id, name").eq("tenant_id", tenant.id).order("name"),
       supabase.from("ticket_slas").select("category_id, priority, sla_value, sla_unit").eq("tenant_id", tenant.id),
+      // sem `.in(ids)`: com milhares de chamados a URL estoura. O mapa abaixo só é
+      // lido pelos chamados que a pessoa pode ver.
+      fetchAll(() => supabase.from("ticket_attachments").select("id, ticket_id, path, filename, content_type").order("id")),
     ]);
-
-  const ticketIds = (tickets ?? []).map((t) => t.id);
-  const { data: atts } = ticketIds.length
-    ? await supabase.from("ticket_attachments").select("id, ticket_id, path, filename, content_type").in("ticket_id", ticketIds)
-    : { data: [] as { id: string; ticket_id: string; path: string; filename: string; content_type: string | null }[] };
 
   const attByTicket = new Map<string, TicketRow["attachments"]>();
   for (const a of atts ?? []) {
@@ -67,7 +72,7 @@ export default async function TicketsPage() {
     id: t.id,
     code: t.code,
     title: t.title,
-    description: t.description,
+    importado: t.origem_id != null,
     status: t.status,
     priority: t.priority,
     requestedPriority: t.requested_priority,
@@ -77,11 +82,11 @@ export default async function TicketsPage() {
     categoryId: t.category_id,
     categoryName: (t.cat as unknown as { name: string } | null)?.name ?? null,
     unitId: t.unit_id,
-    unitName: (t.unit as unknown as { name: string } | null)?.name ?? null,
+    unitName: (t.unit as unknown as { name: string } | null)?.name ?? t.legacy_unit,
     assigneeId: t.assignee_id,
-    assigneeName: (t.assignee as { full_name: string | null } | null)?.full_name ?? null,
+    assigneeName: (t.assignee as unknown as { full_name: string | null } | null)?.full_name ?? t.legacy_assignee,
     requesterId: t.requester_id,
-    requesterName: (t.requester as { full_name: string | null } | null)?.full_name ?? null,
+    requesterName: (t.requester as unknown as { full_name: string | null } | null)?.full_name ?? t.legacy_requester,
     createdAt: t.created_at,
     resolvedAt: t.resolved_at,
     updatedAt: t.updated_at,
@@ -120,6 +125,7 @@ export default async function TicketsPage() {
           currentUserId={user.id}
           isAdmin={isAdmin}
           fullAccess={fullAccess}
+          isOwner={role === "owner"}
           managedSectorIds={managedSectorIds}
         />
       ),

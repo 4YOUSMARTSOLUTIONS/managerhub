@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NewTicketDialog, type SlaOpt } from "@/components/NewTicketDialog";
+import { ImportarChamadosDialog } from "@/components/ImportarChamadosDialog";
 import { TicketPanel } from "@/components/TicketPanel";
 import { NpsRating } from "@/components/NpsRating";
 import { deleteTicket, decideTicketConclusion } from "@/lib/actions/tickets";
@@ -14,6 +15,7 @@ import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
 import { formatDateTime, isOverdue, shortName } from "@/lib/format";
 
 const TERMINAL = ["resolved", "closed", "cancelled"];
+const POR_PAGINA = 50;
 import type { Enums } from "@/types/database";
 
 export type Opt = { id: string; name: string; active?: boolean };
@@ -23,7 +25,8 @@ export type TicketRow = {
   id: string;
   code: string | null;
   title: string;
-  description: string | null;
+  /** veio do sistema anterior: já foi encerrado lá e não entra na avaliação */
+  importado: boolean;
   status: Enums<"ticket_status">;
   priority: Enums<"priority_level">;
   requestedPriority: Enums<"priority_level"> | null;
@@ -48,7 +51,7 @@ export type TicketRow = {
 };
 
 export function TicketsManager({
-  tickets, sectors, categories, units, slas, slaMode, members, currentUserId, isAdmin, fullAccess, managedSectorIds,
+  tickets, sectors, categories, units, slas, slaMode, members, currentUserId, isAdmin, fullAccess, isOwner, managedSectorIds,
 }: {
   tickets: TicketRow[];
   sectors: Opt[];
@@ -60,6 +63,7 @@ export function TicketsManager({
   currentUserId: string;
   isAdmin: boolean;
   fullAccess: boolean;
+  isOwner: boolean;
   managedSectorIds: string[];
 }) {
   const showPriority = slaMode !== "category";
@@ -73,6 +77,10 @@ export function TicketsManager({
   const [reopenNote, setReopenNote] = useState("");
   const [decideError, setDecideError] = useState("");
   const [deciding, startDecide] = useTransition();
+  const [pagina, setPagina] = useState(1);
+  const totalPaginas = Math.max(1, Math.ceil(tickets.length / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const daPagina = tickets.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
 
   const runDecide = (approve: boolean) => {
     if (!decideTicket) return;
@@ -89,7 +97,8 @@ export function TicketsManager({
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.9rem" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginBottom: "0.9rem" }}>
+        {isOwner && <ImportarChamadosDialog />}
         <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>+ Abrir chamado</button>
       </div>
 
@@ -114,14 +123,14 @@ export function TicketsManager({
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t) => {
+              {daPagina.map((t) => {
                 const terminal = TERMINAL.includes(t.status);
                 const openish = !terminal;
                 const lastDate = terminal ? (t.resolvedAt ?? t.updatedAt) : t.updatedAt;
                 const awaitingApproval = !!t.approvalRequestedAt;
                 const sv = ticketStatusView(t.status, openish && isOverdue(t.dueDate), awaitingApproval);
                 // solicitante pode avaliar quando o chamado está resolvido/fechado
-                const canRate = t.requesterId === currentUserId && (t.status === "resolved" || t.status === "closed");
+                const canRate = !t.importado && t.requesterId === currentUserId && (t.status === "resolved" || t.status === "closed");
                 // solicitante decide a conclusão (de acordo / reabrir) quando aguardando aprovação
                 const canDecide = t.requesterId === currentUserId && awaitingApproval;
                 return (
@@ -220,6 +229,13 @@ export function TicketsManager({
           </table>
         ) : (
           <EmptyState title="Nenhum chamado" description="Abra o primeiro chamado para começar." />
+        )}
+        {totalPaginas > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.6rem", padding: "0.7rem 1.25rem", borderTop: "1px solid var(--mh-border)" }}>
+            <span className="muted" style={{ fontSize: "0.78rem" }}>Página {paginaAtual} de {totalPaginas}</span>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={paginaAtual <= 1} onClick={() => setPagina(paginaAtual - 1)}>Anterior</button>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={paginaAtual >= totalPaginas} onClick={() => setPagina(paginaAtual + 1)}>Próxima</button>
+          </div>
         )}
       </Section>
 

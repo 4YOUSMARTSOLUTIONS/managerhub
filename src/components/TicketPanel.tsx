@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTicketTriage, requestTicketConclusion, decideTicketConclusion, getTicketAttachmentUrl, getTicketComments, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
+import { updateTicketTriage, requestTicketConclusion, decideTicketConclusion, getTicketAttachmentUrl, getTicketComments, getTicketDetalhe, addTicketComment, type TicketComment } from "@/lib/actions/tickets";
 import { Avatar } from "@/components/ui/Avatar";
 import { SearchSelect } from "@/components/SearchSelect";
 import { NpsRating } from "@/components/NpsRating";
@@ -34,6 +34,7 @@ export function TicketPanel({
   const [assigneeId, setAssigneeId] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [comments, setComments] = useState<TicketComment[]>([]);
+  const [detalhe, setDetalhe] = useState<{ id: string; description: string | null; emCopia: string | null } | null>(null);
   const [commentText, setCommentText] = useState("");
   const [error, setError] = useState("");
   const [pending, start] = useTransition();
@@ -58,6 +59,7 @@ export function TicketPanel({
         setUrls(Object.fromEntries(entries.filter(([, u]) => u)));
       })();
       getTicketComments(ticket.id).then(setComments);
+      getTicketDetalhe(ticket.id).then((d) => setDetalhe({ id: ticket.id, ...d }));
     }
   }, [open, ticket]);
 
@@ -66,6 +68,9 @@ export function TicketPanel({
   if (!open || !ticket) return null;
 
   const awaitingApproval = !!ticket.approvalRequestedAt;
+  // o id confere: trocar de chamado não mostra por um instante o texto do anterior
+  const descricao = detalhe?.id === ticket.id ? detalhe.description : null;
+  const emCopia = detalhe?.id === ticket.id ? detalhe.emCopia : null;
 
   const save = () => {
     if (!ticket) return;
@@ -180,10 +185,17 @@ export function TicketPanel({
         </div>
 
         <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {ticket.description && (
+          {descricao && (
             <div>
               <label className="label">Descrição</label>
-              <p style={{ margin: 0, fontSize: "0.88rem", whiteSpace: "pre-wrap" }}>{ticket.description}</p>
+              <p style={{ margin: 0, fontSize: "0.88rem", whiteSpace: "pre-wrap" }}>{descricao}</p>
+            </div>
+          )}
+
+          {emCopia && (
+            <div>
+              <label className="label">Em cópia</label>
+              <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>{emCopia}</p>
             </div>
           )}
 

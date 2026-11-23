@@ -1482,6 +1482,7 @@ export type Database = {
       ticket_comments: {
         Row: {
           author_id: string | null
+          author_label: string | null
           body: string
           created_at: string
           id: string
@@ -1489,6 +1490,7 @@ export type Database = {
         }
         Insert: {
           author_id?: string | null
+          author_label?: string | null
           body: string
           created_at?: string
           id?: string
@@ -1496,6 +1498,7 @@ export type Database = {
         }
         Update: {
           author_id?: string | null
+          author_label?: string | null
           body?: string
           created_at?: string
           id?: string
@@ -1523,8 +1526,13 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          legacy_assignee: string | null
+          legacy_cc: string | null
+          legacy_requester: string | null
+          legacy_unit: string | null
           nps_comment: string | null
           nps_score: number | null
+          origem_id: string | null
           priority: Database["public"]["Enums"]["priority_level"]
           rated_at: string | null
           requested_priority: Database["public"]["Enums"]["priority_level"] | null
@@ -1548,8 +1556,13 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          legacy_assignee?: string | null
+          legacy_cc?: string | null
+          legacy_requester?: string | null
+          legacy_unit?: string | null
           nps_comment?: string | null
           nps_score?: number | null
+          origem_id?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           rated_at?: string | null
           requested_priority?: Database["public"]["Enums"]["priority_level"] | null
@@ -1573,8 +1586,13 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          legacy_assignee?: string | null
+          legacy_cc?: string | null
+          legacy_requester?: string | null
+          legacy_unit?: string | null
           nps_comment?: string | null
           nps_score?: number | null
+          origem_id?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           rated_at?: string | null
           requested_priority?: Database["public"]["Enums"]["priority_level"] | null
@@ -2192,6 +2210,7 @@ export type Database = {
       // pelo servidor do app; p_simular=true faz tudo e desfaz (a prévia).
       // Fora de Insert/Update de propósito: `importado` só nasce por esta RPC.
       absenteismo_importar: { Args: { p_tenant: string; p_linhas: Json; p_simular?: boolean }; Returns: Json }
+      chamados_importar: { Args: { p_tenant: string; p_linhas: Json; p_simular?: boolean }; Returns: Json }
       // comunicados de antes do sistema: entram EM ABERTO, no nome do gestor atual, sem e-mail (só o proprietário)
       absenteismo_importar_comunicados: { Args: { p_tenant: string; p_linhas: Json; p_simular?: boolean }; Returns: Json }
       // falta sem término (LUIZ, 17/11/2026): o DP encerra com o último dia; nulo reabre

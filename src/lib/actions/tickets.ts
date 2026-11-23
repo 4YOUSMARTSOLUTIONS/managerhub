@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { actionContext, adminActionContext } from "./context";
+import type { LinhaChamado } from "@/lib/chamados-importacao";
 import { verifyOwnPassword } from "./verify-password";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isCatalogInUse, wantsActive } from "@/lib/catalogGuard";
 import { PRIORITY } from "@/lib/constants";
 import type { ActionState } from "./types";
-import type { Database, Enums } from "@/types/database";
+import type { Database, Enums, Json } from "@/types/database";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
 type TicketUpdate = Database["public"]["Tables"]["tickets"]["Update"];
@@ -367,16 +368,65 @@ export async function getTicketComments(ticketId: string): Promise<TicketComment
   const { supabase } = await actionContext();
   const { data } = await supabase
     .from("ticket_comments")
-    .select("id, body, created_at, author_id, author:profiles!author_id(full_name)")
+    .select("id, body, created_at, author_id, author_label, author:profiles!author_id(full_name)")
     .eq("ticket_id", ticketId)
     .order("created_at", { ascending: true });
   return (data ?? []).map((c) => ({
     id: c.id,
     body: c.body,
     authorId: c.author_id,
-    authorName: (c.author as unknown as { full_name: string | null } | null)?.full_name ?? null,
+    // mensagem importada de quem não tem cadastro guarda o nome como veio
+    authorName: (c.author as unknown as { full_name: string | null } | null)?.full_name ?? c.author_label ?? null,
     createdAt: c.created_at,
   }));
+}
+
+/**
+ * Texto do chamado, lido só ao abrir a ficha: com o histórico importado são
+ * milhares de chamados, e mandar todas as descrições a cada carga pesaria a tela.
+ */
+export async function getTicketDetalhe(ticketId: string): Promise<{ description: string | null; emCopia: string | null }> {
+  const { supabase } = await actionContext();
+  const { data } = await supabase.from("tickets").select("description, legacy_cc").eq("id", ticketId).maybeSingle();
+  return { description: data?.description ?? null, emCopia: data?.legacy_cc ?? null };
+}
+
+// ---------- Importação do sistema anterior ----------
+export type ResultadoImportacaoChamados = {
+  novos: number;
+  ja_existiam: number;
+  comentarios: number;
+  recusadas: { linha: number; motivo: string }[];
+  sem_cadastro: Record<string, number>;
+  setores_novos: string[];
+  categorias_novas: string[];
+  unidades_texto: Record<string, number>;
+  error?: string;
+};
+
+/** Um lote da exportação. Com `simular`, só confere e conta, sem gravar. */
+export async function importarChamados(linhas: LinhaChamado[], simular: boolean): Promise<ResultadoImportacaoChamados> {
+  const vazio: ResultadoImportacaoChamados = {
+    novos: 0, ja_existiam: 0, comentarios: 0, recusadas: [], sem_cadastro: {},
+    setores_novos: [], categorias_novas: [], unidades_texto: {},
+  };
+  try {
+    const { supabase, tenantId, role } = await actionContext();
+    if (role !== "owner") return { ...vazio, error: "Apenas o proprietário importa chamados." };
+    const { data, error } = await supabase.rpc("chamados_importar", {
+      p_tenant: tenantId,
+      p_linhas: linhas as unknown as Json,
+      p_simular: simular,
+    });
+    if (error) return { ...vazio, error: error.message };
+    if (!simular) {
+      revalidatePath("/chamados");
+      revalidatePath("/dashboard");
+    }
+    return data as unknown as ResultadoImportacaoChamados;
+  } catch (e) {
+    return { ...vazio, error: (e as Error).message };
+  }
 }
 
 export async function addTicketComment(ticketId: string, body: string): Promise<ActionState> {
