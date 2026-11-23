@@ -52,6 +52,7 @@ export function MultiSelect({
   single = false,
   selectAll = false,
   allSelectedHint,
+  carregando = false,
 }: {
   label: string;
   options: MultiOption[];
@@ -96,6 +97,8 @@ export function MultiSelect({
    * que for criado depois fica de fora sem ninguém perceber.
    */
   allSelectedHint?: string;
+  /** as opções ainda estão a caminho: a lista avisa, em vez de dizer "Nada encontrado" */
+  carregando?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
@@ -185,7 +188,9 @@ export function MultiSelect({
   const resumo = selected.length === 0
     ? allLabel
     : selected.length === 1
-      ? options.find((o) => o.value === selected[0])?.label ?? selected[0]
+      // valor por id (setor) não tem o que mostrar até a opção chegar
+      ? options.find((o) => o.value === selected[0])?.label
+        ?? (carregando && /^[0-9a-f-]{36}$/i.test(selected[0]) ? "Carregando…" : selected[0])
       : `${selected.length} selecionados`;
 
   return (
@@ -283,7 +288,7 @@ export function MultiSelect({
 
           <div style={{ overflowY: "auto", padding: "0.25rem" }}>
             {visible.length === 0 ? (
-              <div className="soft" style={{ padding: "0.6rem", fontSize: "0.82rem" }}>Nada encontrado.</div>
+              <div className="soft" style={{ padding: "0.6rem", fontSize: "0.82rem" }}>{carregando ? "Carregando opções…" : "Nada encontrado."}</div>
             ) : (
               <>
                 {/* Voltar para "todos" precisa ser uma linha da lista: no modo de

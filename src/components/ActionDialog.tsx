@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { createAction, updateAction } from "@/lib/actions/actions";
 import { generateActionsAI } from "@/lib/actions/ai";
 import { formatDate } from "@/lib/format";
@@ -190,7 +191,12 @@ export function ActionDialog({
   };
 
   const setDemanda = (i: number, patch: Partial<Demanda>) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
-  const addDemandaFiles = (i: number, list: FileList) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, files: [...d.files, ...Array.from(list)] } : d)));
+  // copia a lista antes do set: o campo é limpo logo em seguida e, se o React adiar
+  // o cálculo do estado, o FileList já estaria vazio e o arquivo se perderia
+  const addDemandaFiles = (i: number, list: FileList) => {
+    const novos = Array.from(list);
+    setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, files: [...d.files, ...novos] } : d)));
+  };
   const removeDemandaFile = (i: number, fi: number) => setDemandas((ds) => ds.map((d, idx) => (idx === i ? { ...d, files: d.files.filter((_, k) => k !== fi) } : d)));
 
   const runAiActions = async () => {
@@ -269,10 +275,17 @@ export function ActionDialog({
     if (units && units.length > 0 && !unitId) { setError("Selecione a unidade (ou “Todas as unidades”)."); return; }
     if (!requesterId) { setError("Informe o solicitante."); return; }
     if (!dueDate) { setError("Informe o prazo da ação."); return; }
-    if (isSdpo && (!pilarId || !itemId)) { setError("Para SDPO, informe o Pilar e o Item."); return; }
+    // Ação importada pode não ter item nem reunião cadastrados (LUIZ, 23/11/2026):
+    // quem só troca o prazo não é obrigado a classificá-la. A regra volta a valer
+    // assim que a pessoa mexe na classificação.
+    const original = editingActionId ? editing?.payload : null;
+    const classificacaoIntacta = !!original && original.is_sdpo === isSdpo
+      && original.pilar_id === pilarId && original.bloco_id === blocoId && original.item_id === itemId;
+    const reuniaoIntacta = !!original && original.meeting_series_id === seriesId;
+    if (isSdpo && !classificacaoIntacta && (!pilarId || !itemId)) { setError("Para SDPO, informe o Pilar e o Item."); return; }
     // onde o pilar TEM bloco, ele faz parte da hierarquia e não é dispensável
-    if (isSdpo && pilarTemBloco && !blocoId) { setError("Informe o Bloco."); return; }
-    if (isSdpo && !seriesId) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
+    if (isSdpo && !classificacaoIntacta && pilarTemBloco && !blocoId) { setError("Informe o Bloco."); return; }
+    if (isSdpo && !seriesId && !(classificacaoIntacta && reuniaoIntacta)) { setError("Para ações do Programa de Excelência, informe a Reunião."); return; }
 
     // modo coletar: devolve a ação ao pai (não salva agora)
     if (onCollect) {
@@ -306,25 +319,27 @@ export function ActionDialog({
       demandas: cleanDemandas.map((d) => ({ id: d.id, description: d.description, assignees: d.assignees })),
     };
 
-    // editar ação existente: os anexos seguem sendo do cadastro, não do editar
+    const fd = new FormData();
+    fd.append("payload", JSON.stringify(payload));
+    for (const f of files) fd.append("files", f);
+    cleanDemandas.forEach((d, i) => d.files.forEach((f) => fd.append(`files_${i}`, f)));
+
+    // editar ação existente: os arquivos escolhidos aqui se somam aos que ela já tem
     if (editingActionId) {
       start(async () => {
-        const res = await updateAction(editingActionId, payload);
+        const res = await updateAction(editingActionId, fd);
         if (res.error) { setError(res.error); return; }
+        if (res.warning) toast.warning(res.warning);
         onClose();
         router.refresh();
       });
       return;
     }
 
-    const fd = new FormData();
-    fd.append("payload", JSON.stringify(payload));
-    for (const f of files) fd.append("files", f);
-    cleanDemandas.forEach((d, i) => d.files.forEach((f) => fd.append(`files_${i}`, f)));
-
     start(async () => {
       const res = await createAction(fd);
       if (res.error) { setError(res.error); return; }
+      if (res.warning) toast.warning(res.warning);
       router.refresh();
       if (keepOpen) {
         setDemandas([{ description: "", assignees: [], files: [] }]);
@@ -606,7 +621,7 @@ export function ActionDialog({
           {/* Anexos gerais */}
           <div>
             <label className="label">Anexos gerais <span className="soft">(valem para todas as ações acima)</span></label>
-            <input ref={fileRef} type="file" multiple hidden onChange={(e) => { if (e.target.files) setFiles((prev) => [...prev, ...Array.from(e.target.files!)]); e.target.value = ""; }} />
+            <input ref={fileRef} type="file" multiple hidden onChange={(e) => { const novos = Array.from(e.target.files ?? []); setFiles((prev) => [...prev, ...novos]); e.target.value = ""; }} />
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()}>↑ Adicionar arquivo</button>
             {files.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", marginTop: "0.5rem" }}>

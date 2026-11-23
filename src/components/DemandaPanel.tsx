@@ -130,7 +130,8 @@ export function DemandaPanel({
   if (!open || !demanda) return null;
 
   const isAssignee = demanda.assigneeIds.includes(currentUserId);
-  const isRequester = currentUserId === requesterId;
+  // ação sem solicitante vinculado (importada): quem aprova é quem a criou, como no banco
+  const isRequester = currentUserId === (requesterId ?? createdById);
   // reatribuir, cancelar, reabrir e decidir pedidos são de quem CADASTROU a
   // ação (mais admin/owner). O banco aplica a mesma regra em pode_gerir_acao.
   const canManage = currentUserId === createdById || isAdmin;

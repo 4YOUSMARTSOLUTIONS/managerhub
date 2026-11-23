@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { actionContext } from "./context";
 import type { ActionState } from "./types";
 import type { Enums } from "@/types/database";
+import type { FilterOptions } from "@/components/ActionsManager";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { recusaDeUpload, TAMANHO_ANEXO, MIMES_ANEXO } from "@/lib/uploads";
 
@@ -52,40 +53,65 @@ export async function createAction(formData: FormData): Promise<ActionState> {
     const actionId = res.action_id;
     const demandaIds = res.demanda_ids ?? [];
 
-    const uploadOne = async (file: File, demandaId: string | null) => {
-    if (recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO)) return;
-      const safe = file.name.replace(/[^\w.\-]+/g, "_");
-      const path = `${tenantId}/${actionId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
-      const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
-      if (up.error) return;
-      await supabase.from("action_attachments").insert({
-        action_id: actionId,
-        demanda_id: demandaId,
-        tenant_id: tenantId,
-        path,
-        filename: file.name,
-        size: file.size,
-        content_type: file.type || null,
-        uploaded_by: userId,
-      });
-    };
-
-    // anexos gerais (para todas as ações)
-    const headerFiles = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
-    for (const file of headerFiles) await uploadOne(file, null);
-
-    // anexos por demanda/ação (alinhados à ordem das demandas)
-    for (let i = 0; i < demandaIds.length; i++) {
-      const dFiles = formData.getAll(`files_${i}`).filter((f): f is File => f instanceof File && f.size > 0);
-      for (const file of dFiles) await uploadOne(file, demandaIds[i]);
-    }
+    const falhas = await gravarAnexos(supabase, tenantId, userId, actionId, demandaIds, formData);
 
     revalidatePath("/acoes");
     revalidatePath("/dashboard");
-    return { ok: true };
+    return falhas ? { ok: true, warning: avisoDeAnexos(falhas) } : { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+const avisoDeAnexos = (n: number) =>
+  `A ação foi salva, mas ${n === 1 ? "1 anexo não foi enviado" : `${n} anexos não foram enviados`}. Confira o tipo e o tamanho do arquivo.`;
+
+/**
+ * Grava os anexos do formulário, na criação e na edição, e devolve quantos
+ * ficaram de fora. `files` são os gerais; `files_N` seguem a ordem de `demandaIds`.
+ */
+async function gravarAnexos(
+  supabase: Awaited<ReturnType<typeof actionContext>>["supabase"],
+  tenantId: string,
+  userId: string,
+  actionId: string,
+  demandaIds: string[],
+  formData: FormData,
+): Promise<number> {
+  let falhas = 0;
+  const uploadOne = async (file: File, demandaId: string | null) => {
+    if (recusaDeUpload(file, TAMANHO_ANEXO, MIMES_ANEXO)) { falhas += 1; return; }
+    const safe = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${tenantId}/${actionId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
+    const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (up.error) { falhas += 1; return; }
+    const { error } = await supabase.from("action_attachments").insert({
+      action_id: actionId,
+      demanda_id: demandaId,
+      tenant_id: tenantId,
+      path,
+      filename: file.name,
+      size: file.size,
+      content_type: file.type || null,
+      uploaded_by: userId,
+    });
+    if (error) {
+      falhas += 1;
+      // sem a linha o arquivo ficaria órfão no bucket, sem ninguém conseguir abrir
+      await supabase.storage.from(BUCKET).remove([path]);
+    }
+  };
+
+  // anexos gerais (para todas as ações)
+  const headerFiles = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  for (const file of headerFiles) await uploadOne(file, null);
+
+  // anexos por demanda/ação (alinhados à ordem das demandas)
+  for (let i = 0; i < demandaIds.length; i++) {
+    const dFiles = formData.getAll(`files_${i}`).filter((f): f is File => f instanceof File && f.size > 0);
+    for (const file of dFiles) await uploadOne(file, demandaIds[i]);
+  }
+  return falhas;
 }
 
 // ---------- Importação de ações (owner) ----------
@@ -485,16 +511,44 @@ export async function getDemandaTimeline(demandaId: string): Promise<{ events: T
  * não estiver concluída: as duas regras vivem na RPC, aqui é só o transporte.
  * A data de criação não viaja no payload, e um trigger a protege no banco.
  */
-export async function updateAction(actionId: string, payload: unknown): Promise<ActionState> {
+export async function updateAction(actionId: string, formData: FormData): Promise<ActionState> {
   try {
-    const { supabase } = await actionContext();
+    const { supabase, tenantId, userId } = await actionContext();
     if (!actionId) return { error: "Ação inválida." };
-    const { error } = await supabase.rpc("update_action", { p_id: actionId, p_data: payload as never });
+    // aba aberta antes da publicação ainda manda o formato antigo
+    if (!(formData instanceof FormData)) return { error: "O sistema foi atualizado. Recarregue a página e salve de novo." };
+    const raw = String(formData.get("payload") ?? "");
+    if (!raw) return { error: "Dados inválidos." };
+    const { data, error } = await supabase.rpc("update_action", { p_id: actionId, p_data: JSON.parse(raw) as never });
     if (error) return { error: error.message };
+
+    const demandaIds = ((data ?? {}) as { demanda_ids?: string[] }).demanda_ids ?? [];
+    const falhas = await gravarAnexos(supabase, tenantId, userId, actionId, demandaIds, formData);
+
     revalidatePath("/acoes");
     revalidatePath("/dashboard");
-    return { ok: true };
+    return falhas ? { ok: true, warning: avisoDeAnexos(falhas) } : { ok: true };
   } catch (e) { return { error: (e as Error).message }; }
+}
+
+/**
+ * Opções dos filtros da tela de Ações, sob demanda: só quem abre o painel paga
+ * por elas, e uma vez por visita, em vez de a cada clique em filtro.
+ */
+export async function getActionFilterOptions(): Promise<FilterOptions> {
+  const { supabase, tenantId } = await actionContext();
+  const [{ data: opcoes }, { data: deps }, { data: subs }] = await Promise.all([
+    supabase.rpc("action_filter_options"),
+    supabase.from("departments").select("id, name").eq("tenant_id", tenantId).eq("active", true).order("name"),
+    supabase.from("subdepartments").select("id, name, department_id").eq("tenant_id", tenantId).eq("active", true).order("name"),
+  ]);
+  return {
+    // as listas em uso saem da RPC (só o que existe nas ações); setor e subsetor
+    // saem do CADASTRO, senão o filtro nasceria vazio: quase nenhuma ação tem setor
+    ...((opcoes ?? { programas: [], pilares: [], blocos: [], itens: [], kpis: [], tools: [], meetings: [], requesters: [], assignees: [] }) as Omit<FilterOptions, "departments" | "subdepartments">),
+    departments: (deps ?? []).map((d) => ({ id: d.id, nome: d.name })),
+    subdepartments: (subs ?? []).map((x) => ({ id: x.id, nome: x.name, deptId: x.department_id })),
+  };
 }
 
 /**

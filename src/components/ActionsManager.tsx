@@ -15,7 +15,7 @@ import { AdicionarFiltro, PeriodoPilula, Pilula } from "@/components/ui/FiltrosP
 import { MINHA_PAPEIS, MINHA_PADRAO, MINHA_TODAS, PAPEL_LABEL, PAPEL_HINT, type MinhaPapel } from "@/lib/acoes-minhas";
 import { STATUS_TODOS } from "@/lib/acoes-status";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
-import { deleteAction, getActionForEdit, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
+import { deleteAction, getActionFilterOptions, getActionForEdit, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import type { CollectedAction } from "./ActionDialog";
 import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
 import { ActionDialog, type Opt } from "./ActionDialog";
@@ -92,6 +92,11 @@ export type FilterOptions = {
   /** catálogo da empresa, não os valores em uso: setor é campo novo e quase nenhuma ação o tem ainda */
   departments: { id: string; nome: string }[];
   subdepartments: { id: string; nome: string; deptId: string | null }[];
+};
+
+const OPCOES_VAZIAS: FilterOptions = {
+  programas: [], pilares: [], blocos: [], itens: [], kpis: [], tools: [],
+  meetings: [], requesters: [], assignees: [], departments: [], subdepartments: [],
 };
 
 const PESSOA_LEGADA = "Não está mais ativa na empresa. Continua nas ações antigas.";
@@ -256,11 +261,10 @@ export type ActionRow = {
 
 export function ActionsManager({
   actions, currentUserId, isAdmin, isOwner, units, aiEnabled,
-  filters, filterOptions, total,
+  filters, total,
 }: {
   actions: ActionRow[];
   filters: ActionFilters;
-  filterOptions: FilterOptions;
   total: number;
   currentUserId: string;
   isAdmin: boolean;
@@ -393,6 +397,21 @@ export function ActionsManager({
   const [filtersOpen, setFiltersOpen] = useState(hasFilters);
   const [qDraft, setQDraft] = useState(filters.q);
 
+  /**
+   * Opções dos filtros: só quando o painel abre, e uma vez por visita. Vinham em
+   * toda carga e a cada clique em filtro, para quem nem abria o painel.
+   */
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const carregandoFiltros = filterOptions === null;
+  const buscandoFiltros = useRef(false);
+  useEffect(() => {
+    if (!filtersOpen || buscandoFiltros.current) return;
+    buscandoFiltros.current = true;
+    getActionFilterOptions()
+      .then(setFilterOptions)
+      .catch(() => { buscandoFiltros.current = false; }); // tenta de novo ao reabrir o painel
+  }, [filtersOpen]);
+
   const applyFilters = useCallback((patch: Partial<ActionFilters>) => {
     const next = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(patch)) {
@@ -466,7 +485,7 @@ export function ActionsManager({
     kpis: kpiOpts, tools: toolOpts, meetings: meetingOpts,
     requesters: requesterOpts, assignees: assigneeOpts,
     departments: deptOpts, subdepartments: subOpts,
-  } = filterOptions;
+  } = filterOptions ?? OPCOES_VAZIAS;
 
   /**
    * Subsetor segue o setor escolhido, como no formulário da ação. Sem setor
@@ -517,27 +536,27 @@ export function ActionsManager({
           </span>
         );
       case "programa":
-        return <MultiSelect inline label="Programa" options={programaOpts.map((p) => ({ value: p, label: p }))} selected={filtrosVistos.programa} onChange={(v) => applyFilters({ programa: v })} />;
+        return <MultiSelect inline carregando={carregandoFiltros} label="Programa"options={programaOpts.map((p) => ({ value: p, label: p }))} selected={filtrosVistos.programa} onChange={(v) => applyFilters({ programa: v })} />;
       case "pilar":
-        return <MultiSelect inline searchable label="Pilar" legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={pilarOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.pilar} onChange={(v) => applyFilters({ pilar: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Pilar" legacyHint="Pilar que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={pilarOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.pilar} onChange={(v) => applyFilters({ pilar: v })} />;
       case "bloco":
-        return <MultiSelect inline searchable label="Bloco" legacyHint="Bloco que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={blocoOpts.map((b) => ({ value: b.nome, label: b.nome, legacy: b.legacy }))} selected={filtrosVistos.bloco} onChange={(v) => applyFilters({ bloco: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Bloco" legacyHint="Bloco que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={blocoOpts.map((b) => ({ value: b.nome, label: b.nome, legacy: b.legacy }))} selected={filtrosVistos.bloco} onChange={(v) => applyFilters({ bloco: v })} />;
       case "item":
-        return <MultiSelect inline searchable label="Item" legacyHint="Item que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={itemOpts.map((i) => ({ value: i.nome, label: i.nome, legacy: i.legacy }))} selected={filtrosVistos.item} onChange={(v) => applyFilters({ item: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Item" legacyHint="Item que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={itemOpts.map((i) => ({ value: i.nome, label: i.nome, legacy: i.legacy }))} selected={filtrosVistos.item} onChange={(v) => applyFilters({ item: v })} />;
       case "dept":
-        return <MultiSelect inline searchable label="Setor" options={(deptOpts ?? []).map((d) => ({ value: d.id, label: d.nome }))} selected={filtrosVistos.dept} onChange={(v) => applyFilters({ dept: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Setor" options={(deptOpts ?? []).map((d) => ({ value: d.id, label: d.nome }))} selected={filtrosVistos.dept} onChange={(v) => applyFilters({ dept: v })} />;
       case "sub":
-        return <MultiSelect inline searchable label="Subsetor" options={subVisiveis.map((x) => ({ value: x.id, label: x.nome }))} selected={filtrosVistos.sub} onChange={(v) => applyFilters({ sub: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Subsetor" options={subVisiveis.map((x) => ({ value: x.id, label: x.nome }))} selected={filtrosVistos.sub} onChange={(v) => applyFilters({ sub: v })} />;
       case "kpi":
-        return <MultiSelect inline searchable label="KPI" legacyHint="KPI que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={kpiOpts.map((x) => ({ value: x.nome, label: x.nome, legacy: x.legacy }))} selected={filtrosVistos.kpi} onChange={(v) => applyFilters({ kpi: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="KPI" legacyHint="KPI que não está mais no cadastro ou foi desativado. Continua nas ações antigas." options={kpiOpts.map((x) => ({ value: x.nome, label: x.nome, legacy: x.legacy }))} selected={filtrosVistos.kpi} onChange={(v) => applyFilters({ kpi: v })} />;
       case "tool":
-        return <MultiSelect inline searchable allLabel="Todas" label="Ferramenta" legacyLabel="Legadas" legacyHint="Ferramenta que não está mais no cadastro ou foi desativada. Continua nas ações antigas." options={toolOpts.map((t) => ({ value: t.nome, label: t.nome, legacy: t.legacy }))} selected={filtrosVistos.tool} onChange={(v) => applyFilters({ tool: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}allLabel="Todas" label="Ferramenta" legacyLabel="Legadas" legacyHint="Ferramenta que não está mais no cadastro ou foi desativada. Continua nas ações antigas." options={toolOpts.map((t) => ({ value: t.nome, label: t.nome, legacy: t.legacy }))} selected={filtrosVistos.tool} onChange={(v) => applyFilters({ tool: v })} />;
       case "meeting":
-        return <MultiSelect inline searchable allLabel="Todas" label="Reunião" legacyLabel="Legadas" legacyHint="Reunião que não existe mais como série ativa na agenda. Continua nas ações antigas." options={meetingOpts.map((m) => ({ value: m.nome, label: m.nome, legacy: m.legacy }))} selected={filtrosVistos.meeting} onChange={(v) => applyFilters({ meeting: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}allLabel="Todas" label="Reunião" legacyLabel="Legadas" legacyHint="Reunião que não existe mais como série ativa na agenda. Continua nas ações antigas." options={meetingOpts.map((m) => ({ value: m.nome, label: m.nome, legacy: m.legacy }))} selected={filtrosVistos.meeting} onChange={(v) => applyFilters({ meeting: v })} />;
       case "requester":
-        return <MultiSelect inline searchable label="Solicitante" legacyHint={PESSOA_LEGADA} options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.requester} onChange={(v) => applyFilters({ requester: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Solicitante" legacyHint={PESSOA_LEGADA} options={requesterOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.requester} onChange={(v) => applyFilters({ requester: v })} />;
       case "assignee":
-        return <MultiSelect inline searchable label="Responsável" legacyHint={PESSOA_LEGADA} options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.assignee} onChange={(v) => applyFilters({ assignee: v })} />;
+        return <MultiSelect inline searchable carregando={carregandoFiltros}label="Responsável" legacyHint={PESSOA_LEGADA} options={assigneeOpts.map((p) => ({ value: p.nome, label: p.nome, legacy: p.legacy }))} selected={filtrosVistos.assignee} onChange={(v) => applyFilters({ assignee: v })} />;
       case "periodo":
         return <PeriodoPilula from={filtrosVistos.from} to={filtrosVistos.to} onChange={(p) => applyFilters(p)} />;
     }
