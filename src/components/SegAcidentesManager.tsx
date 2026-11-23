@@ -528,7 +528,7 @@ export function SegAcidentesManager({
                   <li key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.82rem" }}>
                     {/* a ação mora no módulo de Ações: aqui vai o ponteiro,
                         não uma segunda cópia do acompanhamento */}
-                    <Link href={`/acoes?busca=${a.codigo}`} className="btn btn-ghost btn-sm">
+                    <Link href={`/acoes?q=%23${a.codigo}&minhas=todas&st=todos`} className="btn btn-ghost btn-sm">
                       <ExternalLink size={13} /> Ação #{a.codigo}
                     </Link>
                     <Badge tone={a.concluida ? "green" : "amber"}>

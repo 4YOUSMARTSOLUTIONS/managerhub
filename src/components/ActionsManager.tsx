@@ -12,6 +12,7 @@ import { PRIORITY, PRIORITY_TONE, EFF_STATUS_LABEL, effStatus, type EffStatus } 
 import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { MINHA_PAPEIS, MINHA_PADRAO, MINHA_TODAS, PAPEL_LABEL, PAPEL_HINT, type MinhaPapel } from "@/lib/acoes-minhas";
+import { STATUS_TODOS } from "@/lib/acoes-status";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
 import { deleteAction, getActionForEdit, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import type { CollectedAction } from "./ActionDialog";
@@ -527,6 +528,8 @@ export function ActionsManager({
       // caractere no valor, inclusive vírgula, que é comum em nomes
       if (Array.isArray(value)) value.forEach((v) => { if (v) next.append(param, v); });
       else if (value) next.set(param, value);
+      // status vazio precisa de sentinela: sem o parâmetro a tela volta ao padrão
+      if (key === "status" && Array.isArray(value) && value.length === 0) next.set(param, STATUS_TODOS);
     }
     next.delete("p"); // qualquer mudança de filtro volta para a primeira página
     const qs = next.toString();
@@ -567,6 +570,8 @@ export function ActionsManager({
     // "Minhas" não é filtro de painel: limpar os filtros não muda o modo da tela
     const next = new URLSearchParams();
     searchParams.getAll(PARAM.mine).forEach((v) => next.append(PARAM.mine, v));
+    // limpar tira também o recorte padrão de status: é o caminho para ver tudo
+    next.set(PARAM.status, STATUS_TODOS);
     const qs = next.toString();
     startTransition(() => {
       marcarOtimista((atual) => ({ ...VAZIO, mine: atual.mine }));

@@ -5,6 +5,7 @@ import { ActionsManager, type ActionRow, type FilterOptions } from "@/components
 // de um módulo neutro, NÃO de ActionsManager: constante exportada de arquivo
 // "use client" chega aqui como proxy de referência, e `.includes` estoura
 import { MINHA_PARAM, resolverMinhas } from "@/lib/acoes-minhas";
+import { resolverStatus } from "@/lib/acoes-status";
 import { Pager } from "@/components/ui/Pager";
 import { moduleGate } from "@/lib/module-gate";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
@@ -52,7 +53,8 @@ export default async function ActionsPage({ searchParams }: { searchParams: Prom
   // filtros vivem na URL: a busca é feita no banco, sobre a base inteira
   const filters = {
     q: sp.q ?? "", sdpo: sp.sdpo ?? "", from: sp.de ?? "", to: sp.ate ?? "",
-    status: asList(sp.st), programa: asList(sp.prog),
+    // sem `st` na URL a tela abre no que ainda pede ação; `?st=todos` tira o recorte
+    status: resolverStatus(asList(sp.st)), programa: asList(sp.prog),
     pilar: asList(sp.pilar), bloco: asList(sp.bloco), item: asList(sp.item),
     kpi: asList(sp.kpi), tool: asList(sp.ferr), meeting: asList(sp.reuniao),
     requester: asList(sp.sol), assignee: asList(sp.resp),
