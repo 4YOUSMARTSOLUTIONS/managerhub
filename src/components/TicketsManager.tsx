@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NewTicketDialog, type SlaOpt } from "@/components/NewTicketDialog";
 import { ImportarChamadosDialog } from "@/components/ImportarChamadosDialog";
+import { BotoesFiltroChamados, PainelFiltrosChamados, useFiltrosChamados } from "@/components/FiltrosChamados";
+import { contarFiltros, filtrarChamados } from "@/lib/chamados-filtros";
 import { TicketPanel } from "@/components/TicketPanel";
 import { NpsRating } from "@/components/NpsRating";
 import { deleteTicket, decideTicketConclusion } from "@/lib/actions/tickets";
@@ -77,10 +79,15 @@ export function TicketsManager({
   const [reopenNote, setReopenNote] = useState("");
   const [decideError, setDecideError] = useState("");
   const [deciding, startDecide] = useTransition();
-  const [pagina, setPagina] = useState(1);
-  const totalPaginas = Math.max(1, Math.ceil(tickets.length / POR_PAGINA));
+  const { filtros, pagina, setPagina } = useFiltrosChamados();
+  const filtrados = useMemo(() => filtrarChamados(tickets, filtros), [tickets, filtros]);
+  const comFiltro = contarFiltros(filtros) > 0;
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
-  const daPagina = tickets.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+  const daPagina = filtrados.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+  const tituloLista = comFiltro
+    ? `${filtrados.length.toLocaleString("pt-BR")} de ${tickets.length.toLocaleString("pt-BR")} chamados`
+    : `${tickets.length.toLocaleString("pt-BR")} ${tickets.length === 1 ? "chamado" : "chamados"}`;
 
   const runDecide = (approve: boolean) => {
     if (!decideTicket) return;
@@ -102,8 +109,9 @@ export function TicketsManager({
         <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>+ Abrir chamado</button>
       </div>
 
-      <Section title={`${tickets.length} ${tickets.length === 1 ? "chamado" : "chamados"}`} padded={false}>
-        {tickets.length > 0 ? (
+      <Section title={tituloLista} action={<BotoesFiltroChamados />} padded={false}>
+        <PainelFiltrosChamados tickets={tickets} comPrioridade={showPriority} />
+        {filtrados.length > 0 ? (
           <table className="table">
             <thead>
               <tr>
@@ -232,7 +240,9 @@ export function TicketsManager({
             </tbody>
           </table>
         ) : (
-          <EmptyState title="Nenhum chamado" description="Abra o primeiro chamado para começar." />
+          tickets.length > 0
+            ? <EmptyState title="Nenhum chamado encontrado" description="Ajuste ou limpe os filtros para ver os chamados." />
+            : <EmptyState title="Nenhum chamado" description="Abra o primeiro chamado para começar." />
         )}
         {totalPaginas > 1 && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.6rem", padding: "0.7rem 1.25rem", borderTop: "1px solid var(--mh-border)" }}>

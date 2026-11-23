@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { TicketsManager, type TicketRow } from "@/components/TicketsManager";
 import { TicketsDashboard } from "@/components/TicketsDashboard";
+import { FiltrosChamadosProvider } from "@/components/FiltrosChamados";
 import { TICKET_CATEGORY } from "@/lib/constants";
 import { moduleGate } from "@/lib/module-gate";
 
@@ -135,7 +136,9 @@ export default async function TicketsPage() {
   return (
     <div>
       <PageHeader title="Chamados" subtitle="Solicitações de TI, Serviços Gerais e outras áreas." />
-      <Tabs tabs={tabs} />
+      <FiltrosChamadosProvider>
+        <Tabs tabs={tabs} />
+      </FiltrosChamadosProvider>
     </div>
   );
 }
