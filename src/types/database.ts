@@ -863,6 +863,24 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      formularios: {
+        Row: { id: string; tenant_id: string; criado_por: string | null; titulo: string; descricao: string | null; campos: Json; status: string; anonimo: boolean; varias_respostas: boolean; permite_editar: boolean; prazo: string | null; mensagem_final: string | null; publico_todos: boolean; publico_niveis: string[]; publico_cargos: string[]; publico_pessoas: string[]; unidades: string[]; publicado_em: string | null; encerrado_em: string | null; avisado_em: string | null; created_at: string; updated_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      formulario_respostas: {
+        Row: { id: string; formulario_id: string; tenant_id: string; respondente_id: string | null; respondente_nome: string | null; unidade_id: string | null; respostas: Json; arquivos: string[]; enviada_em: string; editada_em: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      formulario_respondentes: {
+        Row: { formulario_id: string; user_id: string; respostas: number }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       conhecimento_artigos: {
         Row: { id: string; slug: string; modulo: string | null; titulo: string; resumo: string | null; conteudo: string; ordem: number; publicado: boolean; created_by: string | null; updated_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; slug: string; modulo?: string | null; titulo: string; resumo?: string | null; conteudo?: string; ordem?: number; publicado?: boolean; created_at?: string; updated_at?: string }
@@ -2130,6 +2148,21 @@ export type Database = {
       sugestao_triar: { Args: { p_id: string; p_status: Database["public"]["Enums"]["sugestao_status"]; p_resposta: string | null; p_duplicada_de: string | null; p_artigo_slug: string | null }; Returns: undefined }
       sugestao_moderar: { Args: { p_id: string; p_ocultar: boolean; p_motivo: string | null }; Returns: undefined }
       sugestao_moderar_comentario: { Args: { p_id: string; p_ocultar: boolean }; Returns: undefined }
+      formulario_gere: { Args: { p_form: string }; Returns: boolean }
+      formulario_sou_publico: { Args: { p_form: string }; Returns: boolean }
+      formulario_criar: { Args: Record<PropertyKey, never>; Returns: string }
+      formulario_salvar: { Args: { p_id: string; p_dados: Json }; Returns: undefined }
+      formulario_publicar: { Args: { p_id: string }; Returns: number }
+      formulario_encerrar: { Args: { p_id: string }; Returns: undefined }
+      formulario_apagar: { Args: { p_id: string }; Returns: string[] }
+      formulario_duplicar: { Args: { p_id: string }; Returns: string }
+      formulario_pode_enviar: { Args: { p_form: string }; Returns: string | null }
+      formulario_responder: { Args: { p_form: string; p_respostas: Json; p_arquivos: string[] }; Returns: string }
+      formulario_editar_resposta: { Args: { p_resposta: string; p_respostas: Json; p_arquivos: string[] }; Returns: string[] }
+      formulario_apagar_resposta: { Args: { p_resposta: string }; Returns: string[] }
+      formulario_resumo: { Args: { p_form: string }; Returns: Json }
+      formulario_pendentes: { Args: { p_form: string }; Returns: Json }
+      formulario_opcoes_publico: { Args: Record<PropertyKey, never>; Returns: Json }
       // notificações no celular: as do app (sessão) e as da rota /api/push (service role)
       push_inscrever: { Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_aparelho: string }; Returns: undefined }
       push_cancelar: { Args: { p_endpoint: string }; Returns: undefined }
