@@ -328,8 +328,8 @@ const hoje = () => {
  * A tela do processo de absenteísmo.
  *
  * Três abas sobre a mesma lista: "Em aberto" é o que foi lançado e ainda não tem
- * motivo confirmado; "Aguardando o DP" é a fila de quem decide; "Histórico" é o
- * que já foi decidido.
+ * motivo confirmado (e o reprovado, que volta para correção); "Aguardando o DP" é
+ * a fila de quem decide; "Histórico" é o que já foi encerrado (aprovado ou cancelado).
  *
  * O bloco de atestado (CID, médico, local) só aparece quando o TIPO exige, e o
  * dado é buscado sob demanda pela RPC, nunca junto da lista.
@@ -409,16 +409,16 @@ export function AbsenteismosManager({
         .some((v) => v && normalizar(v).includes(q)));
   };
 
-  // O reprovado volta ao gestor (LUIZ, 17/11/2026): fica também em "Em aberto",
-  // no topo, porque é trabalho dele corrigir e reenviar. Só no Histórico ele
-  // sumia no meio do que já foi encerrado.
+  // O reprovado volta ao gestor (LUIZ, 17/11/2026): fica em "Em aberto", no topo,
+  // porque é trabalho dele corrigir e reenviar. E SÓ lá (LUIZ, 24/11/2026):
+  // repetido no Histórico ele aparecia como encerrado sem estar. Ao reenviar vai
+  // para a fila do DP; ao cancelar, para o Histórico.
   const emAberto = filtrar([
     ...rows.filter((r) => r.status === "reprovado"),
     ...rows.filter((r) => r.status === "aberto"),
   ]);
   const fila = filtrar(rows.filter((r) => r.status === "pendente"));
-  const historico = filtrar(rows.filter((r) =>
-    r.status === "aprovado" || r.status === "reprovado" || r.status === "cancelado"));
+  const historico = filtrar(rows.filter((r) => r.status === "aprovado" || r.status === "cancelado"));
 
   /** "Ainda não sei o motivo": grava e comunica na hora; o resto vem pelo Efetivar. */
   const lancar = () => {
@@ -802,8 +802,8 @@ export function AbsenteismosManager({
             Comunicados registrados, ainda sem definição. Nada daqui foi ao DP nem conta como
             ausência: quando a situação estiver confirmada (atestado em mãos, falta assumida),
             use <strong>Efetivar</strong> para informar o motivo, o período real e os documentos.
-            Os lançamentos reprovados pelo DP também voltam para cá, no topo: corrija pelo
-            <strong> Efetivar</strong> e envie de novo.
+            Os lançamentos reprovados pelo DP voltam para cá, no topo, e ficam aqui até serem
+            corrigidos: use o <strong>Efetivar</strong> e envie de novo.
           </p>
           {tabela(emAberto, true, "Nenhuma ausência em aberto. Quando alguém faltar ou sair por algumas horas, lance por aqui.")}
         </div>
