@@ -172,9 +172,12 @@ export const porNome = (a: string, b: string) =>
 /** Telas que existem mas não ficam no menu lateral: moram no menu do usuário (LUIZ, 23/11/2026). */
 export const FORA_DO_MENU: ModuleKey[] = ["conhecimento", "sugestoes"];
 
+/** Fora da classificação (LUIZ, 23/11/2026): Dashboard sempre abre o menu e Configurações sempre fecha. */
+const posicaoFixa = (key: string) => (key === "dashboard" ? -1 : key === "configuracoes" ? 1 : 0);
+
 /**
- * Ordem exata do menu, derivada dos rótulos: tudo em ordem alfabética, inclusive
- * Dashboard e Configurações (LUIZ, 23/11/2026). Grupos e itens soltos se misturam.
+ * Ordem exata do menu, derivada dos rótulos: Dashboard, depois tudo em ordem
+ * alfabética (grupos e itens soltos se misturam) e Configurações por último.
  */
 export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; key: GroupKey })[] = [
   ...MODULE_GROUPS.map((g) => ({ type: "group" as const, key: g.key, label: g.label })),
@@ -182,7 +185,7 @@ export const NAV_ORDER: ({ type: "module"; key: ModuleKey } | { type: "group"; k
     .filter((m) => m.group === null && !FORA_DO_MENU.includes(m.key))
     .map((m) => ({ type: "module" as const, key: m.key, label: m.label })),
 ]
-  .sort((a, b) => porNome(a.label, b.label))
+  .sort((a, b) => posicaoFixa(a.key) - posicaoFixa(b.key) || porNome(a.label, b.label))
   .map(({ type, key }) => (type === "group"
     ? { type: "group" as const, key: key as GroupKey }
     : { type: "module" as const, key: key as ModuleKey }));
