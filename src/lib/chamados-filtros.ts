@@ -153,6 +153,16 @@ export function filtrarChamados(linhas: TicketRow[], f: FiltrosChamado): TicketR
     && (f.origem.length === 0 || f.origem.includes(t.importado ? "importado" : "sistema")));
 }
 
+/** Prazo mais antigo primeiro; quem não tem prazo vai para o fim (LUIZ, 23/11/2026). */
+export function ordenarPorPrazo(linhas: TicketRow[]): TicketRow[] {
+  return linhas
+    .map((t) => ({ t, prazo: t.dueDate ? new Date(t.dueDate).getTime() : Number.POSITIVE_INFINITY }))
+    .sort((a, b) => (a.prazo === b.prazo
+      ? a.t.createdAt.localeCompare(b.t.createdAt) || a.t.id.localeCompare(b.t.id)
+      : a.prazo < b.prazo ? -1 : 1))
+    .map(({ t }) => t);
+}
+
 /** quantos filtros estão em uso; as duas pontas de um período contam como um */
 export function contarFiltros(f: FiltrosChamado): number {
   const listas = [f.status, f.setor, f.categoria, f.prioridade, f.solicitante, f.responsavel, f.cumprimento, f.avaliacao, f.anexos, f.origem];

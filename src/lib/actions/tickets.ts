@@ -400,6 +400,20 @@ export async function getTicketDetalhe(ticketId: string): Promise<{ description:
   return { description: data?.description ?? null, emCopia: data?.legacy_cc ?? null };
 }
 
+/**
+ * Descrições só da página aberta, para a dica da tabela. A leitura passa pela
+ * sessão de quem pede, então a RLS corta o que a pessoa não pode ver.
+ */
+export async function getDescricoesDeChamados(ids: string[]): Promise<Record<string, string>> {
+  const { supabase } = await actionContext();
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const lote = [...new Set(ids)].filter((id) => UUID.test(id)).slice(0, 60);
+  if (lote.length === 0) return {};
+  const { data, error } = await supabase.from("tickets").select("id, description").in("id", lote);
+  if (error) throw new Error(error.message);
+  return Object.fromEntries((data ?? []).flatMap((t) => (t.description ? [[t.id, t.description]] : [])));
+}
+
 // ---------- Importação do sistema anterior ----------
 export type ResultadoImportacaoChamados = {
   novos: number;
