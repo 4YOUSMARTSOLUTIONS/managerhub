@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { ACTION_STATUS, effStatus, assigneeEffStatus } from "@/lib/constants";
 import { EffStatusBadge } from "@/components/ui/EffStatusBadge";
-import { formatDate, formatDateTime, isOverdue } from "@/lib/format";
+import { formatDate, formatDateTime, isOverdue, shortName } from "@/lib/format";
 import {
   getDemandaTimeline, demandaComment, demandaRequest,
   demandaDecide, demandaReopen, demandaCancel, demandaReassign, getAttachmentUrl,
@@ -202,7 +202,7 @@ export function DemandaPanel({
           <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "1rem 1.15rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.9rem" }}>
             <Field label="Prazo"><span style={{ color: due && !finalizada && isOverdue(due) ? "var(--mh-danger)" : undefined }}>{due ? formatDate(due) : "—"}</span></Field>
             <Field label="Responsáveis">{demanda.assigneeNames.length > 0 ? demanda.assigneeNames.join(", ") : <span className="soft">Sem responsável</span>}</Field>
-            <Field label="Solicitante">{demanda.requesterName ?? "—"}</Field>
+            <Field label="Solicitante">{demanda.requesterName ? <span title={demanda.requesterName}>{shortName(demanda.requesterName)}</span> : "—"}</Field>
             {(demanda.ccNames ?? []).length > 0 && <Field label="Em cópia"><span className="muted">{demanda.ccNames.join(", ")}</span></Field>}
             {demanda.isSdpo && (demanda.pilarName || demanda.secaoName || demanda.blocoName || demanda.itemName) && (
               <Field label="SDPO"><span className="muted">{[demanda.pilarName, demanda.secaoName, demanda.blocoName, demanda.itemName].filter(Boolean).join(" › ")}</span></Field>

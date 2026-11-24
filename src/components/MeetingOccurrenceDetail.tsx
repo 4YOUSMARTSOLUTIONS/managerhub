@@ -10,7 +10,7 @@ import {
   RECORDING_STATUS_LABEL, RECORDING_STATUS_TONE,
 } from "@/lib/constants";
 import { Badge } from "@/components/ui/Badge";
-import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
+import { formatDate, formatDateTime, formatDuration, shortName } from "@/lib/format";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -152,7 +152,7 @@ export function MeetingOccurrenceDetail({ occurrenceId, onClose }: { occurrenceI
                           {a.code != null && <span className="soft" style={{ fontSize: "0.78rem" }}>#{a.code}</span>}
                           {a.isSdpo && <Badge tone="purple">SDPO</Badge>}
                           <Badge tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>
-                          <span className="soft" style={{ fontSize: "0.78rem" }}>Solicitante: {a.requesterName ?? "—"}{a.dueDate ? ` · prazo ${formatDate(a.dueDate)}` : ""}</span>
+                          <span className="soft" style={{ fontSize: "0.78rem" }}>Solicitante: <span title={a.requesterName ?? undefined}>{a.requesterName ? shortName(a.requesterName) : "—"}</span>{a.dueDate ? ` · prazo ${formatDate(a.dueDate)}` : ""}</span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
                           {a.demandas.map((d) => (
