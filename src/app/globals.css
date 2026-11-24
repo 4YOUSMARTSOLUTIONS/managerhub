@@ -1104,6 +1104,39 @@ a {
   background: var(--mh-surface-1);
   white-space: nowrap;
 }
+/* cabeçalho que classifica a lista: herda o visual do th e só ganha a seta
+   (Ações: Criada em, Status, Prazo) */
+.th-ordenar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.th-ordenar svg {
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+.th-ordenar:hover,
+.th-ordenar[data-ativo] {
+  color: var(--mh-text-1);
+}
+.th-ordenar:hover svg,
+.th-ordenar[data-ativo] svg {
+  opacity: 1;
+}
+.th-ordenar:focus-visible {
+  outline: 2px solid var(--mh-primary-500);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
 .table td {
   padding: 0.42rem 0.4rem;
   border-bottom: 1px solid var(--mh-border);

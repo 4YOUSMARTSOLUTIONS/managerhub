@@ -6,6 +6,7 @@ import { ActionsManager, type ActionRow } from "@/components/ActionsManager";
 // "use client" chega aqui como proxy de referência, e `.includes` estoura
 import { MINHA_PARAM, resolverMinhas } from "@/lib/acoes-minhas";
 import { resolverStatus } from "@/lib/acoes-status";
+import { ORDEM_PARAM, SENTIDO_PARAM, ehOrdemPadrao, resolverOrdem } from "@/lib/acoes-ordem";
 import { Pager } from "@/components/ui/Pager";
 import { SkeletonPage } from "@/components/ui/Skeleton";
 import { moduleGate } from "@/lib/module-gate";
@@ -22,6 +23,8 @@ type SP = {
   sol?: string | string[]; resp?: string | string[];
   setor?: string | string[]; sub?: string | string[];
   minhas?: string | string[];
+  /** classificação: ausente = Data de criação, a mais nova primeiro */
+  ord?: string; dir?: string;
 };
 
 /** A linha como `acoes_da_pagina` devolve: a unidade resolve aqui, pelo escopo de quem vê. */
@@ -76,6 +79,9 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
     mine,
   };
 
+  // classificação: decidida no banco, senão só a página aberta sairia na ordem
+  const ordem = resolverOrdem(sp.ord, sp.dir);
+
   const unitIds = effectiveUnitFilter(unitScope);
   const unitById = new Map(unitScope.units.map((u) => [u.id, u.name]));
 
@@ -84,7 +90,7 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
   // chegam quando o painel de filtros abre.
   const flagsP = getPlatformIntegrationFlags();
   const { data: search, error: erroBusca } = await supabase.rpc("search_action_ids", {
-    p_filters: { ...filters, units: unitIds ?? null },
+    p_filters: { ...filters, units: unitIds ?? null, ord: ordem.por, dir: ordem.dir },
     p_limit: PAGE_SIZE,
     p_offset: from,
   });
@@ -115,6 +121,11 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
   for (const [k, v] of Object.entries({ st: sp.st, prog: sp.prog, pilar: sp.pilar, bloco: sp.bloco, item: sp.item, setor: sp.setor, sub: sp.sub, kpi: sp.kpi, ferr: sp.ferr, reuniao: sp.reuniao, sol: sp.sol, resp: sp.resp, [MINHA_PARAM]: sp.minhas })) {
     asList(v).forEach((x) => pagerQuery.append(k, x));
   }
+  // trocar de página mantém a classificação
+  if (!ehOrdemPadrao(ordem)) {
+    pagerQuery.set(ORDEM_PARAM, ordem.por);
+    pagerQuery.set(SENTIDO_PARAM, ordem.dir);
+  }
 
   return (
     <>
@@ -126,6 +137,7 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
         units={unitScope.units}
         aiEnabled={flags.hasOpenAI}
         filters={filters}
+        ordem={ordem}
         total={actionsTotal}
       />
       <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerQuery} />

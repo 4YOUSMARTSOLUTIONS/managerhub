@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IconExport } from "@/components/ui/ImpExpIcons";
 import { exportActions } from "@/lib/actions/actions";
 import type { ActionFilters } from "./ActionsManager";
+import type { OrdemAcoes } from "@/lib/acoes-ordem";
 
 /** Baixa o .xlsx (base64) devolvido pelo servidor. */
 function saveBase64(file: string, filename: string) {
@@ -18,15 +19,16 @@ function saveBase64(file: string, filename: string) {
 
 /**
  * Exporta as ações respeitando os filtros aplicados, e não apenas a página exibida.
- * O arquivo é montado no servidor, então trafega pronto.
+ * O arquivo é montado no servidor, então trafega pronto. A planilha sai na mesma
+ * ordem da tela.
  */
-export function ExportActionsButton({ filters, hasFilters }: { filters: ActionFilters; hasFilters: boolean }) {
+export function ExportActionsButton({ filters, ordem, hasFilters }: { filters: ActionFilters; ordem?: OrdemAcoes; hasFilters: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function run() {
     setBusy(true); setError("");
-    const res = await exportActions({ ...filters }, null);
+    const res = await exportActions({ ...filters, ...(ordem ? { ord: ordem.por, dir: ordem.dir } : {}) }, null);
     setBusy(false);
     if (res.error || !res.file) { setError(res.error ?? "Não foi possível exportar."); return; }
     saveBase64(res.file, res.filename ?? "acoes.xlsx");

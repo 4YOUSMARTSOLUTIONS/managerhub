@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, ClipboardCheck, Filter, MessageSquare, Pencil, Trash2, User } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronsUpDown, ClipboardCheck, Filter, MessageSquare, Pencil, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
@@ -15,6 +15,7 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { AdicionarFiltro, PeriodoPilula, Pilula } from "@/components/ui/FiltrosPilula";
 import { MINHA_PAPEIS, MINHA_PADRAO, MINHA_TODAS, PAPEL_LABEL, PAPEL_HINT, type MinhaPapel } from "@/lib/acoes-minhas";
 import { STATUS_TODOS } from "@/lib/acoes-status";
+import { ORDEM_PARAM, SENTIDO_PARAM, ehOrdemPadrao, proximaOrdem, type OrdemAcoes, type OrdemPor } from "@/lib/acoes-ordem";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
 import { deleteAction, getActionFilterOptions, getActionForEdit, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import type { CollectedAction } from "./ActionDialog";
@@ -224,6 +225,42 @@ function PapeisDropdown({ selected, onToggle }: { selected: MinhaPapel[]; onTogg
   );
 }
 
+/**
+ * Cabeçalho de coluna que classifica a lista. O primeiro clique entra no sentido
+ * natural da coluna (a mais nova, o mais urgente, o prazo mais perto) e o segundo
+ * inverte. A seta aparece só na coluna em uso; nas outras fica o ícone neutro,
+ * apagado, para dizer que dá para clicar sem disputar atenção com os dados.
+ */
+const DICA_ORDEM: Record<OrdemPor, string> = {
+  criada: "Classificar pela data de criação",
+  status: "Classificar por status: Atrasada, Aguardando aprovação, Em andamento, Concluída, Cancelada",
+  prazo: "Classificar pelo prazo (sem prazo fica no fim)",
+};
+
+function ThOrdenavel({ por, ordem, onOrdenar, children }: {
+  por: OrdemPor;
+  ordem: OrdemAcoes;
+  onOrdenar: (por: OrdemPor) => void;
+  children: React.ReactNode;
+}) {
+  const ativo = ordem.por === por;
+  const Icone = !ativo ? ChevronsUpDown : ordem.dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th aria-sort={ativo ? (ordem.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        className="th-ordenar"
+        data-ativo={ativo ? "" : undefined}
+        onClick={() => onOrdenar(por)}
+        title={ativo ? `${DICA_ORDEM[por]}. Clique para inverter.` : DICA_ORDEM[por]}
+      >
+        {children}
+        <Icone size={11} aria-hidden />
+      </button>
+    </th>
+  );
+}
+
 /** chave do filtro -> nome do parâmetro na URL */
 const PARAM: Record<keyof ActionFilters, string> = {
   q: "q", sdpo: "sdpo", status: "st",
@@ -263,10 +300,12 @@ export type ActionRow = {
 
 export function ActionsManager({
   actions, currentUserId, isAdmin, isOwner, units, aiEnabled,
-  filters, total,
+  filters, ordem, total,
 }: {
   actions: ActionRow[];
   filters: ActionFilters;
+  /** classificação em vigor, já resolvida da URL pela página */
+  ordem: OrdemAcoes;
   total: number;
   currentUserId: string;
   isAdmin: boolean;
@@ -402,6 +441,8 @@ export function ActionsManager({
    * e a barra de progresso no topo conta que o resultado está vindo.
    */
   const [filtrosVistos, marcarOtimista] = useOptimistic(filters);
+  // mesma ideia para a classificação: a seta vira no clique, não na volta do banco
+  const [ordemVista, marcarOrdem] = useOptimistic(ordem);
 
   const countOf = (v: string | string[]) => (Array.isArray(v) ? (v.length > 0 ? 1 : 0) : v ? 1 : 0);
   // contagem e botão "Limpar" seguem o que o usuário ACABOU de marcar, não o que o
@@ -477,6 +518,27 @@ export function ActionsManager({
   const alternarPapel = (p: MinhaPapel) =>
     aplicarMinhas(minhas.includes(p) ? minhas.filter((x) => x !== p) : [...minhas, p]);
 
+  /**
+   * Classifica pela coluna. Volta para a primeira página, como um filtro: a página
+   * 7 de outra ordem é outro pedaço da lista, e ficar nela confundiria.
+   */
+  const ordenar = (por: OrdemPor) => {
+    const nova = proximaOrdem(ordemVista, por);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete(ORDEM_PARAM);
+    next.delete(SENTIDO_PARAM);
+    if (!ehOrdemPadrao(nova)) {
+      next.set(ORDEM_PARAM, nova.por);
+      next.set(SENTIDO_PARAM, nova.dir);
+    }
+    next.delete("p");
+    const qs = next.toString();
+    startTransition(() => {
+      marcarOrdem(nova);
+      router.push(qs ? `/acoes?${qs}` : "/acoes", { scroll: false });
+    });
+  };
+
   const clearFilters = () => {
     setQDraft("");
     // as pílulas abertas e ainda vazias somem junto: senão "Limpar filtros"
@@ -485,6 +547,11 @@ export function ActionsManager({
     // "Minhas" não é filtro de painel: limpar os filtros não muda o modo da tela
     const next = new URLSearchParams();
     searchParams.getAll(PARAM.mine).forEach((v) => next.append(PARAM.mine, v));
+    // a classificação também não é filtro: limpar não desfaz a ordem escolhida
+    for (const k of [ORDEM_PARAM, SENTIDO_PARAM]) {
+      const v = searchParams.get(k);
+      if (v) next.set(k, v);
+    }
     // limpar tira também o recorte padrão de status: é o caminho para ver tudo
     next.set(PARAM.status, STATUS_TODOS);
     const qs = next.toString();
@@ -632,7 +699,7 @@ export function ActionsManager({
             {/* o modo "Minhas" entra no recorte exportado, então tem de entrar
                 também no aviso do botão: senão ele prometeria a base inteira e
                 entregaria só as do usuário */}
-            {isOwner && <ExportActionsButton filters={filters} hasFilters={hasFilters || minhasLigado} />}
+            {isOwner && <ExportActionsButton filters={filters} ordem={ordem} hasFilters={hasFilters || minhasLigado} />}
             <button className="btn btn-primary" onClick={abrirNovaAcao}>+ Nova ação</button>
           </div>
         }
@@ -733,7 +800,8 @@ export function ActionsManager({
                 <col />
                 <col style={{ width: "11%" }} />
                 <col style={{ width: "8%" }} />
-                <col style={{ width: 73 }} />
+                {/* "Criada em" ganhou espaço para a seta de classificação */}
+                <col style={{ width: 88 }} />
                 <col style={{ width: 152 }} />
                 <col style={{ width: 84 }} />
                 <col style={{ width: 73 }} />
@@ -749,10 +817,10 @@ export function ActionsManager({
                   <th>Descrição</th>
                   <th>Responsáveis</th>
                   <th>Solicitante</th>
-                  <th>Criada em</th>
-                  <th>Status</th>
+                  <ThOrdenavel por="criada" ordem={ordemVista} onOrdenar={ordenar}>Criada em</ThOrdenavel>
+                  <ThOrdenavel por="status" ordem={ordemVista} onOrdenar={ordenar}>Status</ThOrdenavel>
                   <th style={{ textAlign: "center" }}>Comentários</th>
-                  <th>Prazo</th>
+                  <ThOrdenavel por="prazo" ordem={ordemVista} onOrdenar={ordenar}>Prazo</ThOrdenavel>
                   <th style={{ textAlign: "right" }}>Ações</th>
                 </tr>
               </thead>
