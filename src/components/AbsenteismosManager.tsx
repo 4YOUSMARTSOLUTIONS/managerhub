@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Ban, CalendarPlus, Check, Download, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, Trash2, X,
+  AlertTriangle, Ban, CalendarPlus, Check, Download, FileSpreadsheet, FileText, Mail, Paperclip, Pencil, Send, Sparkles, Stethoscope, Trash2, Undo2, X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/Badge";
@@ -27,7 +27,7 @@ import {
   anexarDocumentoAbsenteismo, buscarCid, cancelarAbsenteismo, comunicarAberturaPendente, confirmarAbsenteismo, continuaAusente,
   encerrarFaltaSemTermino,
   decidirAbsenteismo, getAlertaInss, getAtestado, getCpfDoLancamento, getDocumentoAbsenteismoUrl,
-  lancarNaoComparecimento, reenviarComunicado, removerDocumentoAbsenteismo,
+  lancarNaoComparecimento, marcarAbonoNoPonto, reenviarComunicado, removerDocumentoAbsenteismo,
   salvarConfirmacao,
   lerAtestadoComIA,
   type AlertaInss, type AtestadoLido, type ConfirmacaoInput,
@@ -116,6 +116,21 @@ export type AbsenteismoRow = {
   /** o término veio do desligamento do colaborador */
   faltaEncerradaNoDesligamento: boolean;
 };
+
+/**
+ * Linha da aba "Abonos no ponto" (LUIZ, 24/11/2026): a falta abonada com a marca
+ * de quem a lançou no sistema de ponto, e quando.
+ */
+export type LinhaAbono = AbsenteismoRow & {
+  pontoEm: string | null;
+  pontoPorName: string | null;
+};
+
+/** Onde o abono está no ponto: falta lançar, já lançado, ou cancelado depois de lançado. */
+function situacaoNoPonto(a: LinhaAbono): "retirar" | "lancar" | "lancado" {
+  if (a.status !== "aprovado") return "retirar";
+  return a.pontoEm ? "lancado" : "lancar";
+}
 
 /** altura dos botões da coluna Ações: todos iguais, para a linha não pular */
 const ALTURA_ACAO = 28;
@@ -336,6 +351,7 @@ const hoje = () => {
  */
 export function AbsenteismosManager({
   rows, pessoas, equipe, tipos, unidades, kindsComRedutor, meuId, podeDecidir, veEmpresa, podeCancelarAprovado, podeImportarHistorico,
+  abonos,
 }: {
   rows: AbsenteismoRow[];
   pessoas: Pessoa[];
@@ -360,6 +376,11 @@ export function AbsenteismosManager({
   podeCancelarAprovado: boolean;
   /** importação do histórico: só o proprietário (LUIZ, 16/11/2026) */
   podeImportarHistorico: boolean;
+  /**
+   * Faltas abonadas para lançar no ponto (LUIZ, 24/11/2026). Nulo para quem não
+   * vê a fila do DP: a aba nem aparece.
+   */
+  abonos: LinhaAbono[] | null;
 }) {
   const [novo, setNovo] = useState<
     {
@@ -419,6 +440,40 @@ export function AbsenteismosManager({
   ]);
   const fila = filtrar(rows.filter((r) => r.status === "pendente"));
   const historico = filtrar(rows.filter((r) => r.status === "aprovado" || r.status === "cancelado"));
+
+  /**
+   * Abonos no ponto, na ordem do trabalho: primeiro o cancelado que já tinha ido
+   * ao ponto (precisa sair de lá), depois o que falta lançar (o mais antigo
+   * antes) e, por último, os já lançados (o mais recente antes).
+   */
+  const listaAbonos = useMemo(() => {
+    const ordem = { retirar: 0, lancar: 1, lancado: 2 } as const;
+    const inicio = (a: LinhaAbono) => a.ausenciaInicio ?? a.startDate ?? a.occurredOn;
+    return [...(abonos ?? [])].sort((x, y) => {
+      const sx = situacaoNoPonto(x), sy = situacaoNoPonto(y);
+      if (sx !== sy) return ordem[sx] - ordem[sy];
+      if (sx === "lancado") return (y.pontoEm ?? "").localeCompare(x.pontoEm ?? "");
+      return inicio(x).localeCompare(inicio(y));
+    });
+  }, [abonos]);
+  const abonosVistos = filtrar(listaAbonos) as LinhaAbono[];
+  const abonosPorFazer = listaAbonos.filter((a) => situacaoNoPonto(a) !== "lancado").length;
+
+  const [marcandoPonto, setMarcandoPonto] = useState<string | null>(null);
+  const marcarPonto = (a: LinhaAbono, lancado: boolean) => {
+    setMarcandoPonto(a.id);
+    iniciar(async () => {
+      const r = await marcarAbonoNoPonto(a.id, lancado);
+      setMarcandoPonto(null);
+      if (r.error) { toast.error(r.error); return; }
+      toast.success(
+        lancado ? "Marcado como lançado no ponto."
+          : a.status === "aprovado" ? "Marca desfeita: o abono voltou para lançar."
+          : "Pronto: o abono saiu da lista.",
+      );
+      router.refresh();
+    });
+  };
 
   /** "Ainda não sei o motivo": grava e comunica na hora; o resto vem pelo Efetivar. */
   const lancar = () => {
@@ -793,6 +848,124 @@ export function AbsenteismosManager({
     );
   };
 
+  const tabelaAbonos = (lista: LinhaAbono[]) => lista.length === 0 ? (
+    <EmptyState
+      title="Nenhum abono por aqui"
+      description="Quando o DP aprovar uma falta marcada como abonada, ela aparece nesta lista para ser lançada no ponto."
+    />
+  ) : (
+    <div style={{ overflowX: "auto" }}>
+      <table className="table table-linha">
+        <thead>
+          <tr>
+            <th style={{ textAlign: "center" }}>Ações</th>
+            <th>Matrícula</th>
+            <th>Colaborador</th>
+            {/* a matrícula repete entre unidades: no ponto, a unidade diz de quem é */}
+            <th>Unidade</th>
+            <th>Setor</th>
+            <th>Motivo</th>
+            <th>Início</th>
+            <th>Fim</th>
+            <th title="Os dias abonados">Duração</th>
+            <th>Aprovado em</th>
+            <th>No ponto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lista.map((a) => {
+            const sit = situacaoNoPonto(a);
+            const dur = duracao(a);
+            const ocupado = marcandoPonto === a.id;
+            const quemLancou = a.pontoEm
+              ? `Lançado no ponto em ${formatDate(a.pontoEm)}${a.pontoPorName ? ` por ${a.pontoPorName}` : ""}`
+              : undefined;
+            return (
+              <tr key={a.id}>
+                <td style={{ textAlign: "center" }}>
+                  <span style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
+                    {sit === "lancar" && (
+                      <button
+                        type="button" className="btn btn-primary btn-xs" style={{ height: ALTURA_ACAO }}
+                        disabled={pendente} onClick={() => marcarPonto(a, true)}
+                        title="Já lancei este abono no sistema de ponto"
+                      >
+                        <Check size={12} /> {ocupado ? "Marcando..." : "Lançado no ponto"}
+                      </button>
+                    )}
+                    {sit === "retirar" && (
+                      <button
+                        type="button" className="btn btn-danger btn-xs" style={{ height: ALTURA_ACAO }}
+                        disabled={pendente} onClick={() => marcarPonto(a, false)}
+                        title="O lançamento foi cancelado: já retirei o abono do sistema de ponto"
+                      >
+                        <Check size={12} /> {ocupado ? "Confirmando..." : "Retirado do ponto"}
+                      </button>
+                    )}
+                    {sit === "lancado" && (
+                      <button
+                        type="button" className="icon-btn"
+                        style={{ width: ALTURA_ACAO, height: ALTURA_ACAO }}
+                        disabled={pendente}
+                        title="Desfazer: o abono ainda não foi lançado no ponto"
+                        aria-label="Desfazer a marca de lançado no ponto"
+                        onClick={() => marcarPonto(a, false)}
+                      >
+                        <Undo2 size={13} />
+                      </button>
+                    )}
+                    <button
+                      type="button" className="icon-btn" title="Ver"
+                      style={{ width: ALTURA_ACAO, height: ALTURA_ACAO }}
+                      onClick={() => setAberto(a)}
+                    >
+                      <FileText size={13} />
+                    </button>
+                  </span>
+                </td>
+                <td className="tabular muted">{a.employeeCode ?? <span className="soft">–</span>}</td>
+                <td>
+                  <span className="cell-trunc" style={{ maxWidth: 150, fontWeight: 600 }} title={a.fullName ?? undefined}>
+                    {a.fullName ? shortName(a.fullName) : "Sem nome"}
+                  </span>
+                </td>
+                <td className="muted">{corta(a.unitName, 110)}</td>
+                <td className="muted">{corta(a.departmentName, 100)}</td>
+                <td>{a.typeName ? corta(a.typeName, 120) : <span className="soft">–</span>}</td>
+                <td>{formatDate(a.startDate ?? a.occurredOn)}</td>
+                <td>
+                  {a.endDate === SEM_RETORNO
+                    ? <span title="Falta sem data de término: segue faltando">Sem término</span>
+                    : a.endDate ? formatDate(a.endDate) : <span className="soft">–</span>}
+                </td>
+                <td>{dur || <span className="soft">–</span>}</td>
+                <td className="muted">
+                  {a.decidedAt
+                    ? <span title={a.decidedByName ? `Aprovado por ${a.decidedByName}` : undefined}>{formatDate(a.decidedAt)}</span>
+                    : <span className="soft">–</span>}
+                </td>
+                <td>
+                  {/* uma pílula só, e só quando pede ação; o lançado vira texto */}
+                  {sit === "lancar" && <Badge tone="amber">Falta lançar</Badge>}
+                  {sit === "retirar" && (
+                    <span title={quemLancou ? `${quemLancou}, e o lançamento foi cancelado depois` : undefined}>
+                      <Badge tone="red">Cancelado: retirar do ponto</Badge>
+                    </span>
+                  )}
+                  {sit === "lancado" && (
+                    <span className="cell-trunc muted" style={{ maxWidth: 190 }} title={quemLancou}>
+                      Lançado em {formatDate(a.pontoEm)}{a.pontoPorName ? ` · ${shortName(a.pontoPorName)}` : ""}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
   const abas: Tab[] = [
     {
       id: "abertos", label: `Em aberto (${emAberto.length})`,
@@ -820,6 +993,22 @@ export function AbsenteismosManager({
     id: "historico", label: `Histórico (${historico.length})`,
     content: tabela(historico, true, "Nenhum lançamento decidido ainda."),
   });
+  if (abonos) {
+    abas.push({
+      // o número é o que ainda pede alguém agir, não o total da lista
+      id: "abonos", label: `Abonos no ponto (${abonosPorFazer})`,
+      content: (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
+            Faltas abonadas e aprovadas pelo DP. Lance o abono no sistema de ponto e marque aqui
+            em <strong>Lançado no ponto</strong>. Se um abono já lançado for cancelado depois, ele volta
+            para o topo: retire do ponto e confirme em <strong>Retirado do ponto</strong>.
+          </p>
+          {tabelaAbonos(abonosVistos)}
+        </div>
+      ),
+    });
+  }
 
   const pessoaEscolhida = novo?.userId ? pessoaPorId.get(novo.userId) ?? null : null;
 
@@ -833,7 +1022,9 @@ export function AbsenteismosManager({
         {(quantosSemTermino > 0 || soSemTermino) && (
           <button
             type="button"
-            className={`btn btn-sm ${soSemTermino ? "btn-primary" : "btn-ghost"}`}
+            // vermelho translúcido para chamar atenção (LUIZ, 24/11/2026); ligado, vermelho cheio
+            className="btn btn-sm btn-danger"
+            style={soSemTermino ? { background: "var(--mh-danger)", borderColor: "var(--mh-danger)", color: "#fff" } : undefined}
             aria-pressed={soSemTermino}
             title="Faltas lançadas sem data de término, que seguem em aberto"
             onClick={() => {

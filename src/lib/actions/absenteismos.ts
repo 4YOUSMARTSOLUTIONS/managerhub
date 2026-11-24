@@ -1223,3 +1223,23 @@ function mensagemDoLancamento(e: { code?: string; message?: string }): string {
   }
   return msg || "Não foi possível salvar.";
 }
+
+/**
+ * Abonos no ponto (LUIZ, 24/11/2026): marca (ou desfaz) o "Lançado no ponto" da
+ * falta abonada e aprovada. Marcam o DP, o Proprietário, o Administrador e a
+ * Área de Gente, que aqui age: lançar no ponto é a tarefa desse time, e a marca
+ * não muda nada do lançamento. A RPC confere quem é e se o caso é mesmo abono.
+ */
+export async function marcarAbonoNoPonto(id: string, lancado: boolean): Promise<ActionState> {
+  try {
+    const { supabase, isDp, isGente } = await actionContext();
+    if (!isDp && !isGente) return { error: "Só o DP e a Área de Gente marcam o lançamento no ponto." };
+    if (!id) return { error: "Lançamento inválido." };
+    const { error } = await supabase.rpc("absenteismo_marcar_ponto", { p_id: id, p_lancado: lancado });
+    if (error) return { error: error.message };
+    revalidar();
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

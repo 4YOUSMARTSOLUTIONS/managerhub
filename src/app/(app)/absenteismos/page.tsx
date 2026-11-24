@@ -4,7 +4,7 @@ import { minhaEquipe } from "@/lib/team";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { AbsenteismosManager, type AbsenteismoRow } from "@/components/AbsenteismosManager";
+import { AbsenteismosManager, type AbsenteismoRow, type LinhaAbono } from "@/components/AbsenteismosManager";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
@@ -72,6 +72,27 @@ export default async function AbsenteismosPage() {
     .limit(500);
   if (unidades) lista = lista.or(`snap_unit_id.in.(${unidades.join(",")}),snap_unit_id.is.null`);
 
+  /**
+   * Abonos no ponto (LUIZ, 24/11/2026): a falta abonada, numa consulta própria e
+   * sem o teto de 500 da lista, senão o abono antigo ainda por lançar sumiria da
+   * aba. Só para quem vê a fila do DP (a aba é dele e da Área de Gente). Vem
+   * qualquer situação: o aprovado é o trabalho, e o cancelado DEPOIS de lançado
+   * precisa voltar para ser retirado do ponto. A tela faz o recorte.
+   */
+  const abonosP = veEmpresa
+    ? Promise.all([
+        fetchAll(() => {
+          let q = supabase.from("absenteismo_lancamentos").select("*")
+            .eq("tenant_id", tenant.id).eq("waived", true)
+            .order("occurred_on", { ascending: false }).order("id");
+          if (unidades) q = q.or(`snap_unit_id.in.(${unidades.join(",")}),snap_unit_id.is.null`);
+          return q;
+        }),
+        fetchAll(() => supabase.from("absenteismo_ponto").select("lancamento_id, lancado_por, lancado_em")
+          .eq("tenant_id", tenant.id).order("lancamento_id")),
+      ])
+    : null;
+
   const [
     { data: lancamentos }, membros, { data: tipos },
     { data: vinculos }, { data: deps }, { data: subs }, { data: cargos },
@@ -138,7 +159,8 @@ export default async function AbsenteismosPage() {
     .filter((p) => p.name)
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-  const rows: AbsenteismoRow[] = (lancamentos ?? []).map((l) => ({
+  type Lancamento = NonNullable<typeof lancamentos>[number];
+  const paraLinha = (l: Lancamento): AbsenteismoRow => ({
     id: l.id,
     status: l.status,
     userId: l.user_id,
@@ -187,7 +209,26 @@ export default async function AbsenteismosPage() {
     importadoPorName: l.comunicado_importado_por ? nomePorId.get(l.comunicado_importado_por) ?? null : null,
     faltaContinua: l.falta_continua,
     faltaEncerradaNoDesligamento: l.falta_encerrada_no_desligamento,
-  }));
+  });
+  const rows: AbsenteismoRow[] = (lancamentos ?? []).map(paraLinha);
+
+  let abonos: LinhaAbono[] | null = null;
+  if (abonosP) {
+    const [{ data: lancAbonos, error: erroAbonos }, { data: marcas, error: erroMarcas }] = await abonosP;
+    if (erroAbonos || erroMarcas) console.error("[absenteismo] abonos no ponto", erroAbonos?.message ?? erroMarcas?.message);
+    const marcaPorLancamento = new Map((marcas ?? []).map((m) => [m.lancamento_id, m]));
+    abonos = ((lancAbonos ?? []) as Lancamento[])
+      .map((l) => {
+        const m = marcaPorLancamento.get(l.id);
+        return {
+          ...paraLinha(l),
+          pontoEm: m?.lancado_em ?? null,
+          pontoPorName: m?.lancado_por ? nomePorId.get(m.lancado_por) ?? null : null,
+        };
+      })
+      // o aprovado é o trabalho; o que não é mais aprovado só volta se já foi ao ponto
+      .filter((a) => a.status === "aprovado" || a.pontoEm);
+  }
 
   // Regra sem faixa não corta nada, então só conta quem tem as duas coisas. É o
   // mesmo recorte que /metas faz antes de calcular.
@@ -225,6 +266,7 @@ export default async function AbsenteismosPage() {
         podeCancelarAprovado={role === "owner" || role === "admin"}
         // só o proprietário (LUIZ, 16/11/2026); a action e a RPC conferem de novo
         podeImportarHistorico={role === "owner"}
+        abonos={abonos}
       />
     </div>
   );

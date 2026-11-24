@@ -936,6 +936,15 @@ export type Database = {
         Update: { id?: string; tenant_id?: string; lancamento_id?: string; event?: string; to_emails?: string[]; status?: string; error?: string | null; sent_by?: string | null; sent_at?: string }
         Relationships: []
       }
+      // "Lançado no ponto" da falta abonada e aprovada (aba Abonos no ponto).
+      // Lê quem vê a fila do DP; escrita SÓ pela RPC absenteismo_marcar_ponto
+      // (o grant de authenticated é só select).
+      absenteismo_ponto: {
+        Row: { id: string; tenant_id: string; lancamento_id: string; lancado_por: string | null; lancado_em: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       // Contratos ENCERRADOS do colaborador (vínculos anteriores, com outra
       // matrícula). A importação em lote arquiva aqui ao detectar recontratação,
       // e as importações de férias/punições/RV consultam para aceitar
@@ -2241,6 +2250,7 @@ export type Database = {
       absenteismo_confirmar: { Args: { p_id: string }; Returns: undefined }
       // "Continua ausente" (LUIZ, 17/11/2026): estende o lançamento em aberto até p_ate
       absenteismo_continua_ausente: { Args: { p_id: string; p_ate: string }; Returns: undefined }
+      absenteismo_marcar_ponto: { Args: { p_id: string; p_lancado: boolean }; Returns: undefined }
       // envia ao RH; os dias sem comparecer que o documento não cobre viram falta à parte (ids devolvidos)
       absenteismo_confirmar_e_separar: { Args: { p_id: string }; Returns: string[] }
       absenteismo_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
