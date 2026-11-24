@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, Filter, MessageSquare, User } from "lucide-react";
+import { Check, ChevronDown, ClipboardCheck, Filter, MessageSquare, Pencil, Trash2, User } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { Badge } from "@/components/ui/Badge";
@@ -17,7 +18,8 @@ import { STATUS_TODOS } from "@/lib/acoes-status";
 import { formatDate, isOverdue, shortName } from "@/lib/format";
 import { deleteAction, getActionFilterOptions, getActionForEdit, getActionFormOptions, type ActionFormOptions } from "@/lib/actions/actions";
 import type { CollectedAction } from "./ActionDialog";
-import { ConfirmActionButton } from "@/components/ui/ConfirmActionButton";
+import { confirmDialog } from "@/components/ui/confirm";
+import { MenuDeLinha } from "@/components/ui/MenuDeLinha";
 import { ActionDialog, type Opt } from "./ActionDialog";
 import { ImportActionsDialog } from "./ImportActionsDialog";
 import { ExportActionsButton } from "./ExportActionsButton";
@@ -332,6 +334,25 @@ export function ActionsManager({
       },
     });
     setOpen(true);
+  };
+
+  const excluirAcao = async (a: ActionRow) => {
+    const ok = await confirmDialog({
+      title: `Excluir a ação #${a.code}?`,
+      message: "Excluir esta ação e todas as suas demandas?",
+      confirmLabel: "Excluir",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const fd = new FormData();
+    fd.append("id", a.id);
+    try {
+      const r = await deleteAction(fd);
+      if (r?.error) { toast.error(r.error); return; }
+      router.refresh();
+    } catch {
+      toast.error("Não foi possível excluir a ação. Tente de novo.");
+    }
   };
 
   const openPanel = (d: DemandaCard, a: ActionRow, di: number) => {
@@ -695,21 +716,37 @@ export function ActionsManager({
             : <EmptyState title="Nenhuma ação" description="Crie ações para acompanhar pendências e o Programa de Excelência." />
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table className="table">
+            {/* largura fixa por coluna: a tabela cabe na tela e o texto longo vira
+                reticências, com o dado inteiro na dica. A Descrição fica com o resto */}
+            <table className="table" style={{ tableLayout: "fixed", minWidth: 1030 }}>
+              <colgroup>
+                <col style={{ width: 66 }} />
+                <col style={{ width: 70 }} />
+                <col style={{ width: 67 }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "5.5%" }} />
+                <col />
+                <col style={{ width: "11%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: 73 }} />
+                <col style={{ width: 152 }} />
+                <col style={{ width: 84 }} />
+                <col style={{ width: 73 }} />
+                <col style={{ width: 46 }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th>Ação</th>
                   <th>Prioridade</th>
-                  <th>SDPO</th>
                   <th>Programa</th>
                   <th>Pilar</th>
                   <th>Seção</th>
                   <th>Descrição</th>
                   <th>Responsáveis</th>
                   <th>Solicitante</th>
-                  <th>Aberta em</th>
+                  <th>Criada em</th>
                   <th>Status</th>
-                  <th title="Comentários lançados na ação" style={{ textAlign: "center" }}>Coment.</th>
+                  <th style={{ textAlign: "center" }}>Comentários</th>
                   <th>Prazo</th>
                   <th style={{ textAlign: "right" }}>Ações</th>
                 </tr>
@@ -730,12 +767,11 @@ export function ActionsManager({
                         {/* um acento por linha (DESIGN.md): o status mantém a cor;
                             prioridade e vínculo com o Programa são taxonomia */}
                         <td>{first && <Badge variant="quiet" tone={PRIORITY_TONE[a.priority]}>{PRIORITY[a.priority]}</Badge>}</td>
-                        <td>{first && (a.isSdpo ? <Badge variant="quiet" tone="purple">Sim</Badge> : <span className="soft">Não</span>)}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{first && (a.programaName ? <Badge variant="quiet" tone="blue">{a.programaName}</Badge> : <span className="soft">—</span>)}</td>
-                        <td className="muted" style={{ maxWidth: 84, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
-                        <td className="muted" style={{ maxWidth: 92, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.secaoName ?? ""}>{first ? (a.secaoName ?? "—") : ""}</td>
-                        <td style={{ width: "100%", minWidth: 110, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
-                        <td style={{ maxWidth: 138, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.assigneeNames.map(shortName).join(", ")}>
+                        <td className="muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.pilarName ?? ""}>{first ? (a.pilarName ?? "—") : ""}</td>
+                        <td className="muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.secaoName ?? ""}>{first ? (a.secaoName ?? "—") : ""}</td>
+                        <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "help" }} title={d.description}>{d.description}</td>
+                        <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={d.assigneeNames.map(shortName).join(", ")}>
                           {d.assigneeNames.length > 0 ? (
                             <>
                               {shortName(d.assigneeNames[0])}
@@ -749,12 +785,12 @@ export function ActionsManager({
                           )}
                           {d.attachments.length > 0 && <span className="soft" style={{ marginLeft: 6 }} title={`${d.attachments.length} anexo(s)`}>📎{d.attachments.length}</span>}
                         </td>
-                        <td className="muted" style={{ maxWidth: 104, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>
+                        <td className="muted" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.requesterName ?? ""}>
                           {first ? (a.requesterName ? shortName(a.requesterName) : "—") : ""}
                         </td>
                         <td className="muted" style={{ whiteSpace: "nowrap" }}>{first ? formatDate(a.createdAt) : ""}</td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          <EffStatusBadge eff={eff} overdue={overdue} />
+                          <EffStatusBadge eff={eff} overdue={overdue} compacto />
                         </td>
                         {/* sem comentário fica apagado: destaca de longe quem não recebeu follow */}
                         <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
@@ -771,31 +807,19 @@ export function ActionsManager({
                         </td>
                         <td style={{ whiteSpace: "nowrap", color: overdue ? "var(--mh-danger)" : "var(--text-muted)" }}>{d.dueDate ? formatDate(d.dueDate) : "—"}</td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          <div style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => openPanel(d, a, di)}>Tratar</button>
-                            {/* Cada botão tem a sua vaga fixa (LUIZ, 22/11/2026): sem o lápis
-                                (ação concluída, sem permissão ou 2ª demanda) fica um espaço do
-                                mesmo tamanho, e o "Tratar" não anda de uma linha para a outra. */}
-                            {first && podeGerir(a) && !finalizadaToda(a) ? (
-                              <button type="button" className="icon-btn" title="Editar ação" onClick={() => void abrirEdicao(a)}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                              </button>
-                            ) : <span aria-hidden="true" className="icon-btn" style={{ visibility: "hidden" }} />}
-                            {isOwner && !first && <span aria-hidden="true" className="icon-btn" style={{ visibility: "hidden" }} />}
-                            {first && isOwner && (
-                              <ConfirmActionButton
-                                action={deleteAction}
-                                fields={{ id: a.id }}
-                                className="icon-btn icon-btn-danger"
-                                buttonTitle="Excluir ação"
-                                title="Excluir ação"
-                                message="Excluir esta ação e todas as suas demandas?"
-                                confirmLabel="Excluir"
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                              </ConfirmActionButton>
-                            )}
-                          </div>
+                          {/* editar e excluir valem para a ação inteira, por isso só na 1ª linha dela */}
+                          <MenuDeLinha
+                            rotulo={`Opções da ação #${a.code}`}
+                            itens={[
+                              { rotulo: "Tratar", icone: <ClipboardCheck size={14} />, onClick: () => openPanel(d, a, di) },
+                              ...(first && podeGerir(a) && !finalizadaToda(a)
+                                ? [{ rotulo: "Editar", icone: <Pencil size={14} />, onClick: () => void abrirEdicao(a) }]
+                                : []),
+                              ...(first && isOwner
+                                ? [{ rotulo: "Excluir", icone: <Trash2 size={14} />, perigo: true, onClick: () => void excluirAcao(a) }]
+                                : []),
+                            ]}
+                          />
                         </td>
                       </tr>
                     );
