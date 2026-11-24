@@ -156,11 +156,14 @@ export function TicketsManager({
         <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>+ Abrir chamado</button>
       </div>
 
-      <Section title={tituloLista} titleExtra={<BotoesFiltroChamados />} padded={false}>
+      {/* a rolagem lateral fica só na tabela: no corpo do cartão ela cortava a
+          caixa dos filtros quando a lista tinha poucas linhas */}
+      <Section title={tituloLista} titleExtra={<BotoesFiltroChamados />} padded={false} bodyStyle={{ overflowX: "visible" }}>
         <PainelFiltrosChamados tickets={tickets} comPrioridade={showPriority} />
         {filtrados.length > 0 ? (
           /* largura fixa por coluna: nada quebra linha, o texto longo vira reticências
              com o dado inteiro na dica, e o Chamado fica com o espaço que sobra */
+          <div style={{ overflowX: "auto" }}>
           <table className="table table-justa" style={{ tableLayout: "fixed", minWidth: 1030 }}>
             <colgroup>
               <col style={{ width: 52 }} />
@@ -279,6 +282,7 @@ export function TicketsManager({
               })}
             </tbody>
           </table>
+          </div>
         ) : (
           tickets.length > 0
             ? <EmptyState title="Nenhum chamado encontrado" description="Ajuste ou limpe os filtros para ver os chamados." />

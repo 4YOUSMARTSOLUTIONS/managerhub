@@ -643,7 +643,11 @@ export function ActionsManager({
         padded={false}
         /* a lista esmaece enquanto o novo resultado vem, mas segue legível e
            clicável: o usuário pode marcar o próximo filtro sem esperar este */
-        bodyStyle={isPending ? { opacity: 0.55, transition: "opacity 120ms" } : undefined}
+        bodyStyle={{
+          // a tabela tem rolagem lateral própria; aqui ela cortaria a caixa dos filtros
+          overflowX: "visible",
+          ...(isPending ? { opacity: 0.55, transition: "opacity 120ms" } : {}),
+        }}
         /* MODO DA TELA, colado no contador e não no funil.
            Fica fora do painel de filtros de propósito: é o recorte principal e
            precisa estar à vista. E fica à ESQUERDA porque se lê junto do número:
