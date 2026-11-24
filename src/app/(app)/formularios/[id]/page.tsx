@@ -78,6 +78,7 @@ export default async function ResponderFormularioPage({
       urlsMinha={urlsMinha}
       pessoas={pessoas}
       gere={!!gere}
+      verHistorico={situacao !== "rascunho" && (!!gere || (!f.privado && !!souPublico))}
     />
   );
 }

@@ -41,6 +41,7 @@ const ENTITY_LABEL: Record<string, string> = {
   ferias_decimo_escolhas: "Férias: escolha do 13º",
   acesso_telas_nivel: "Acesso às telas: regra do nível",
   acesso_telas_pessoa: "Acesso às telas: exceção da pessoa",
+  formularios: "Formulário", formulario_respostas: "Resposta de formulário",
 };
 
 const ACTION_LABEL: Record<string, { label: string; tone: Tone }> = {

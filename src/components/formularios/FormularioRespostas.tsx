@@ -43,10 +43,12 @@ function valorDaPlanilha(c: Campo, r: Respostas): string | number | null {
   return textoDaResposta(c, v) || null;
 }
 
-export function FormularioRespostas({ form, linhas, resumo }: {
+export function FormularioRespostas({ form, linhas, resumo, gere }: {
   form: Formulario;
   linhas: LinhaResposta[];
   resumo: { publico: number; responderam: number; respostas: number };
+  /** quem gere administra; o público do formulário comum só lê o histórico */
+  gere: boolean;
 }) {
   const router = useRouter();
   const [, iniciar] = useTransition();
@@ -154,8 +156,10 @@ export function FormularioRespostas({ form, linhas, resumo }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <Link href="/formularios" className="btn btn-ghost btn-sm"><ArrowLeft size={15} /> Formulários</Link>
-        <div style={{ marginLeft: "auto", display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+        <Link href={gere ? "/formularios" : `/formularios/${form.id}`} className="btn btn-ghost btn-sm">
+          <ArrowLeft size={15} /> {gere ? "Formulários" : "Voltar ao formulário"}
+        </Link>
+        {gere && <div style={{ marginLeft: "auto", display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
           <Link href={`/formularios/${form.id}?previa=1`} className="btn btn-ghost btn-sm"><Eye size={15} /> Pré-visualizar</Link>
           <Link href={`/formularios/${form.id}/editar`} className="btn btn-ghost btn-sm"><Pencil size={15} /> Editar</Link>
           {situacao === "aberto" && (
@@ -173,7 +177,7 @@ export function FormularioRespostas({ form, linhas, resumo }: {
             filename={nomeArquivo} sheetName="Respostas" label="Exportar respostas"
             headers={planilha.cab} rows={planilha.rows} colunasDeData={planilha.colunasDeData}
           />
-        </div>
+        </div>}
       </div>
 
       <div className="card" style={{ padding: "1rem 1.1rem", display: "flex", flexDirection: "column", gap: "0.8rem" }}>
@@ -183,17 +187,25 @@ export function FormularioRespostas({ form, linhas, resumo }: {
             {situacao === "rascunho" ? "Rascunho" : situacao === "aberto" ? "Aberto" : "Encerrado"}
           </Badge>
           {form.anonimo && <Badge variant="quiet" tone="blue">Anônimo</Badge>}
+          <Badge variant="quiet" tone="gray">{form.privado ? "Histórico privado" : "Histórico compartilhado"}</Badge>
         </div>
+        {!gere && (
+          <div className="soft" style={{ fontSize: "0.82rem" }}>
+            Histórico de respostas: todo o público deste formulário vê o que foi enviado.
+          </div>
+        )}
         <div className="soft" style={{ fontSize: "0.8rem" }}>
           {form.prazo ? `Prazo: ${formatDateTime(form.prazo)}` : "Sem prazo"}
           {form.publicadoEm ? ` · Publicado em ${formatDateTime(form.publicadoEm)}` : ""}
         </div>
-        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-          {stat("Respostas", resumo.respostas)}
-          {stat("Responderam", `${resumo.responderam} de ${resumo.publico}`, "Pessoas do público de hoje que já responderam")}
-          {stat("Adesão", `${pct}%`)}
-          {!form.anonimo && stat("Faltam", faltamQtd)}
-        </div>
+        {gere && (
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+            {stat("Respostas", resumo.respostas)}
+            {stat("Responderam", `${resumo.responderam} de ${resumo.publico}`, "Pessoas do público de hoje que já responderam")}
+            {stat("Adesão", `${pct}%`)}
+            {!form.anonimo && stat("Faltam", faltamQtd)}
+          </div>
+        )}
       </div>
 
       <div className="card">
@@ -202,7 +214,7 @@ export function FormularioRespostas({ form, linhas, resumo }: {
             <button type="button" className={`tab${aba === "respostas" ? " tab-active" : ""}`} onClick={() => setAba("respostas")}>
               Respostas ({linhas.length})
             </button>
-            {!form.anonimo && (
+            {gere && !form.anonimo && (
               <button type="button" className={`tab${aba === "faltam" ? " tab-active" : ""}`} onClick={verFaltam}>
                 Quem falta ({faltamQtd})
               </button>
@@ -305,7 +317,7 @@ export function FormularioRespostas({ form, linhas, resumo }: {
             {aberta.unidade && <Badge variant="quiet" tone="gray">{aberta.unidade}</Badge>}
           </>
         ) : null}
-        footer={aberta ? (
+        footer={aberta && gere ? (
           <button type="button" className="btn btn-danger btn-sm" onClick={async () => {
             if (!(await confirmDialog({
               title: "Apagar resposta",

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, Eye, Pencil, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, History, Lock, Pencil, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { formatDateTime, shortName } from "@/lib/format";
 import {
@@ -135,7 +135,7 @@ function Preenchimento({
 }
 
 export function FormularioTela({
-  form, criadoPorNome, previa, foraDoPublico, situacao, minhasRespostas, minhaResposta, urlsMinha, pessoas, gere,
+  form, criadoPorNome, previa, foraDoPublico, situacao, minhasRespostas, minhaResposta, urlsMinha, pessoas, gere, verHistorico,
 }: {
   form: Formulario;
   criadoPorNome: string;
@@ -147,6 +147,8 @@ export function FormularioTela({
   urlsMinha: Record<string, string>;
   pessoas: { id: string; nome: string }[];
   gere: boolean;
+  /** pode abrir a tabela de respostas (gere, ou está no público de um formulário comum) */
+  verHistorico: boolean;
 }) {
   const [editando, setEditando] = useState(false);
   const temObrigatoria = form.campos.some((c) => c.obrigatorio && !c.removido);
@@ -161,6 +163,23 @@ export function FormularioTela({
         <span>{form.prazo ? `Prazo: ${formatDateTime(form.prazo)}` : "Sem prazo"}</span>
         {form.anonimo && (
           <Badge variant="quiet" tone="blue"><ShieldCheck size={12} style={{ marginRight: 3 }} />Respostas anônimas</Badge>
+        )}
+      </div>
+      <div className="soft" style={{ display: "flex", gap: "0.45rem", alignItems: "center", flexWrap: "wrap", fontSize: "0.78rem" }}>
+        {form.privado ? (
+          <><Lock size={13} /> Histórico privado: só quem criou, o Proprietário e o Administrador veem as respostas.</>
+        ) : (
+          <>
+            <History size={13} />
+            {form.anonimo
+              ? "Histórico compartilhado: todo o público vê as respostas, sem o nome de quem respondeu."
+              : "Histórico compartilhado: todo o público vê as respostas e quem respondeu."}
+          </>
+        )}
+        {verHistorico && (
+          <Link href={`/formularios/${form.id}/respostas`} className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }}>
+            <History size={14} /> {gere ? "Ver respostas" : "Ver histórico"}
+          </Link>
         )}
       </div>
       {temObrigatoria && <span className="soft" style={{ fontSize: "0.76rem" }}><span style={{ color: "var(--mh-danger)" }}>*</span> resposta obrigatória</span>}

@@ -88,6 +88,8 @@ export type Formulario = {
   campos: Campo[];
   status: FormularioStatus;
   anonimo: boolean;
+  /** "Histórico privado": só quem gere vê as respostas. Sem isso, o público vê o histórico */
+  privado: boolean;
   variasRespostas: boolean;
   permiteEditar: boolean;
   prazo: string | null;
@@ -104,13 +106,13 @@ export type Formulario = {
 };
 
 export const COLUNAS_FORMULARIO =
-  "id, tenant_id, criado_por, titulo, descricao, campos, status, anonimo, varias_respostas, permite_editar, " +
+  "id, tenant_id, criado_por, titulo, descricao, campos, status, anonimo, privado, varias_respostas, permite_editar, " +
   "prazo, mensagem_final, publico_todos, publico_niveis, publico_cargos, publico_pessoas, unidades, " +
   "publicado_em, encerrado_em, created_at, updated_at";
 
 type LinhaFormulario = {
   id: string; tenant_id: string; criado_por: string | null; titulo: string; descricao: string | null;
-  campos: unknown; status: string; anonimo: boolean; varias_respostas: boolean; permite_editar: boolean;
+  campos: unknown; status: string; anonimo: boolean; privado: boolean; varias_respostas: boolean; permite_editar: boolean;
   prazo: string | null; mensagem_final: string | null; publico_todos: boolean; publico_niveis: string[];
   publico_cargos: string[]; publico_pessoas: string[]; unidades: string[]; publicado_em: string | null;
   encerrado_em: string | null; created_at: string; updated_at: string;
@@ -122,7 +124,7 @@ export function formularioDaLinha(r: LinhaFormulario, criadoPorNome = "—"): Fo
     titulo: r.titulo, descricao: r.descricao,
     campos: Array.isArray(r.campos) ? (r.campos as Campo[]) : [],
     status: r.status as FormularioStatus,
-    anonimo: r.anonimo, variasRespostas: r.varias_respostas, permiteEditar: r.permite_editar,
+    anonimo: r.anonimo, privado: r.privado, variasRespostas: r.varias_respostas, permiteEditar: r.permite_editar,
     prazo: r.prazo, mensagemFinal: r.mensagem_final,
     publicoTodos: r.publico_todos, publicoNiveis: r.publico_niveis ?? [], publicoCargos: r.publico_cargos ?? [],
     publicoPessoas: r.publico_pessoas ?? [], unidades: r.unidades ?? [],

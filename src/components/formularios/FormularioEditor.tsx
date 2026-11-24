@@ -53,6 +53,7 @@ export function FormularioEditor({
   const [descricao, setDescricao] = useState(inicial.descricao ?? "");
   const [campos, setCampos] = useState<Campo[]>(inicial.campos);
   const [anonimo, setAnonimo] = useState(inicial.anonimo);
+  const [privado, setPrivado] = useState(inicial.privado);
   const [varias, setVarias] = useState(inicial.variasRespostas);
   const [editar, setEditar] = useState(inicial.permiteEditar);
   const [prazo, setPrazo] = useState(paraLocal(inicial.prazo));
@@ -158,7 +159,7 @@ export function FormularioEditor({
   };
 
   const dados = (): DadosFormulario => ({
-    titulo, descricao, campos, anonimo, variasRespostas: varias,
+    titulo, descricao, campos, anonimo, privado, variasRespostas: varias,
     permiteEditar: editar && !anonimo && !varias,
     prazo: prazo ? new Date(prazo).toISOString() : null,
     mensagemFinal: mensagem,
@@ -208,7 +209,11 @@ export function FormularioEditor({
       title: reabrir ? "Reabrir formulário" : "Publicar formulário",
       message: reabrir
         ? "O formulário volta a receber respostas. Quem já foi avisado não recebe aviso de novo."
-        : <>O formulário vai para <b>{publico.length}</b> {publico.length === 1 ? "pessoa" : "pessoas"}, e cada uma recebe um aviso no sino e no celular.{anonimo ? " As respostas serão anônimas." : ""}</>,
+        : <>O formulário vai para <b>{publico.length}</b> {publico.length === 1 ? "pessoa" : "pessoas"}, e cada uma recebe um aviso no sino e no celular.{" "}
+            {privado
+              ? "Só você, o Proprietário e o Administrador vão ver as respostas."
+              : "Todo o público vai ver o histórico de respostas."}
+            {anonimo ? " As respostas serão anônimas." : ""}</>,
       confirmLabel: reabrir ? "Reabrir" : "Publicar",
     });
     if (!ok) return;
@@ -415,6 +420,18 @@ export function FormularioEditor({
 
       {aba === "config" && (
         <div className="card" style={{ padding: "1rem 1.1rem", display: "flex", flexDirection: "column", gap: "1.05rem" }}>
+          <Check
+            checked={privado}
+            onChange={marcar(setPrivado)}
+            disabled={inicial.privado && totalRespostas > 0}
+            dica={inicial.privado && totalRespostas > 0
+              ? "O formulário já tem respostas: o histórico continua privado."
+              : privado
+                ? "Só quem criou, o Proprietário e o Administrador veem as respostas. Cada pessoa vê só a própria."
+                : "Desmarcado, todo o público vê o histórico de respostas, como um livro de registros compartilhado."}
+          >
+            Histórico privado
+          </Check>
           <Check
             checked={anonimo}
             onChange={(v) => { marcar(setAnonimo)(v); if (v) setEditar(false); }}

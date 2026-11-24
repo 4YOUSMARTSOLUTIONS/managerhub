@@ -864,7 +864,7 @@ export type Database = {
         Relationships: []
       }
       formularios: {
-        Row: { id: string; tenant_id: string; criado_por: string | null; titulo: string; descricao: string | null; campos: Json; status: string; anonimo: boolean; varias_respostas: boolean; permite_editar: boolean; prazo: string | null; mensagem_final: string | null; publico_todos: boolean; publico_niveis: string[]; publico_cargos: string[]; publico_pessoas: string[]; unidades: string[]; publicado_em: string | null; encerrado_em: string | null; avisado_em: string | null; created_at: string; updated_at: string }
+        Row: { id: string; tenant_id: string; criado_por: string | null; titulo: string; descricao: string | null; campos: Json; status: string; anonimo: boolean; privado: boolean; varias_respostas: boolean; permite_editar: boolean; prazo: string | null; mensagem_final: string | null; publico_todos: boolean; publico_niveis: string[]; publico_cargos: string[]; publico_pessoas: string[]; unidades: string[]; publicado_em: string | null; encerrado_em: string | null; avisado_em: string | null; created_at: string; updated_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -2150,6 +2150,7 @@ export type Database = {
       sugestao_moderar_comentario: { Args: { p_id: string; p_ocultar: boolean }; Returns: undefined }
       formulario_gere: { Args: { p_form: string }; Returns: boolean }
       formulario_sou_publico: { Args: { p_form: string }; Returns: boolean }
+      formulario_historico_aberto: { Args: { p_form: string }; Returns: boolean }
       formulario_criar: { Args: Record<PropertyKey, never>; Returns: string }
       formulario_salvar: { Args: { p_id: string; p_dados: Json }; Returns: undefined }
       formulario_publicar: { Args: { p_id: string }; Returns: number }

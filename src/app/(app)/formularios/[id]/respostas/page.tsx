@@ -6,7 +6,11 @@ import { fetchAll, emLotes } from "@/lib/supabase/fetch-all";
 import { COLUNAS_FORMULARIO, formularioDaLinha, type Respostas } from "@/lib/formularios";
 import { FormularioRespostas, type LinhaResposta } from "@/components/formularios/FormularioRespostas";
 
-/** Respostas de um formulário: só quem o gere (autor, Proprietário, Administrador). */
+/**
+ * Respostas de um formulário. Quem gere (autor, Proprietário, Administrador) vê
+ * tudo e administra; no formulário comum, quem está no público vê o histórico,
+ * só para ler (LUIZ, 24/11/2026). A RLS das respostas segue a mesma regra.
+ */
 export default async function RespostasFormularioPage({ params }: { params: Promise<{ id: string }> }) {
   const gate = await moduleGate("formularios");
   if (gate) return gate;
@@ -15,16 +19,18 @@ export default async function RespostasFormularioPage({ params }: { params: Prom
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
   const supabase = await createClient();
-  const [{ data: linha }, { data: gere }, { data: resp }, { data: resumo }, { data: unidades }] = await Promise.all([
+  const [{ data: linha }, { data: gere }, { data: historico }, { data: resp }, { data: unidades }] = await Promise.all([
     supabase.from("formularios").select(COLUNAS_FORMULARIO).eq("id", id).maybeSingle(),
     supabase.rpc("formulario_gere", { p_form: id }),
+    supabase.rpc("formulario_historico_aberto", { p_form: id }),
     fetchAll(() => supabase.from("formulario_respostas")
       .select("id, respondente_id, respondente_nome, unidade_id, respostas, arquivos, enviada_em, editada_em")
       .eq("formulario_id", id).order("enviada_em", { ascending: false }).order("id")),
-    supabase.rpc("formulario_resumo", { p_form: id }),
     supabase.from("units").select("id, name").eq("tenant_id", tenant.id),
   ]);
-  if (!linha || !gere) notFound();
+  if (!linha || (!gere && !historico)) notFound();
+  // contagens de público e adesão: só para quem gere
+  const { data: resumo } = gere ? await supabase.rpc("formulario_resumo", { p_form: id }) : { data: null };
   const f = formularioDaLinha(linha as unknown as Parameters<typeof formularioDaLinha>[0]);
 
   const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id, u.name]));
@@ -57,6 +63,7 @@ export default async function RespostasFormularioPage({ params }: { params: Prom
       form={f}
       linhas={linhas}
       resumo={{ publico: rs.publico ?? 0, responderam: rs.responderam ?? 0, respostas: rs.respostas ?? total }}
+      gere={!!gere}
     />
   );
 }

@@ -112,6 +112,7 @@ export type DadosFormulario = {
   descricao: string;
   campos: Campo[];
   anonimo: boolean;
+  privado: boolean;
   variasRespostas: boolean;
   permiteEditar: boolean;
   prazo: string | null;
@@ -146,6 +147,7 @@ export async function salvarFormulario(id: string, d: DadosFormulario): Resultad
         descricao: d.descricao.slice(0, 4000),
         campos,
         anonimo: d.anonimo,
+        privado: d.privado,
         varias_respostas: d.variasRespostas,
         permite_editar: d.permiteEditar,
         prazo: d.prazo,

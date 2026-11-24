@@ -226,7 +226,12 @@ export function FormulariosLista({ formularios, ehAdmin }: { formularios: LinhaL
             <tbody>
               {itens.map((f) => (
                 <tr key={f.id} style={{ cursor: "pointer" }} onClick={() => abrirGestao(f)}>
-                  <td><span style={{ ...CORTE, display: "block" }} title={f.titulo}>{f.titulo}</span></td>
+                  <td>
+                    <span style={{ ...CORTE, display: "block" }} title={f.privado ? `${f.titulo} (histórico privado)` : f.titulo}>
+                      {f.privado && <Lock size={11} style={{ marginRight: 4, verticalAlign: "-1px" }} aria-label="Histórico privado" />}
+                      {f.titulo}
+                    </span>
+                  </td>
                   {comAutor && <td><span style={{ ...CORTE, display: "block" }} title={f.criadoPorNome}>{shortName(f.criadoPorNome)}</span></td>}
                   <td><SituacaoGestao f={f} /></td>
                   <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{f.respostas}</td>
