@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { SearchSelect } from "@/components/SearchSelect";
 import { NpsRating } from "@/components/NpsRating";
 import { PRIORITY, TICKET_STATUS, options } from "@/lib/constants";
-import { formatDateTime, numeroChamado } from "@/lib/format";
+import { formatDateTime, numeroChamado, shortName } from "@/lib/format";
 import { npsColor, npsFace } from "@/lib/nps";
 import type { Enums } from "@/types/database";
 import type { TicketRow, Opt, CatOpt, Member } from "./TicketsManager";
@@ -180,7 +180,7 @@ export function TicketPanel({
           <div>
             <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>{ticket.code ? `${numeroChamado(ticket.code)} · ` : ""}{ticket.title}</h2>
             <p className="muted" style={{ margin: "0.15rem 0 0", fontSize: "0.83rem" }}>
-              Solicitante: {ticket.requesterName ?? "—"} · pediu prioridade <strong>{ticket.requestedPriority ? PRIORITY[ticket.requestedPriority] : "—"}</strong>
+              Solicitante: <span title={ticket.requesterName ?? undefined}>{ticket.requesterName ? shortName(ticket.requesterName) : "—"}</span> · pediu prioridade <strong>{ticket.requestedPriority ? PRIORITY[ticket.requestedPriority] : "—"}</strong>
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)" }}>×</button>

@@ -161,21 +161,22 @@ export function TicketsManager({
         {filtrados.length > 0 ? (
           /* largura fixa por coluna: nada quebra linha, o texto longo vira reticências
              com o dado inteiro na dica, e o Chamado fica com o espaço que sobra */
-          <table className="table" style={{ tableLayout: "fixed", minWidth: 1030 }}>
+          <table className="table table-justa" style={{ tableLayout: "fixed", minWidth: 1030 }}>
             <colgroup>
               <col style={{ width: 52 }} />
-              <col style={{ width: 56 }} />
+              <col style={{ width: 48 }} />
               <col />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "7%" }} />
-              {showPriority && <col style={{ width: 66 }} />}
-              <col style={{ width: "8.3%" }} />
-              <col style={{ width: "8.3%" }} />
-              <col style={{ width: 72 }} />
+              <col style={{ width: 83 }} />
+              <col style={{ width: "6%" }} />
+              {showPriority && <col style={{ width: 62 }} />}
+              {/* cabem os nomes reduzidos inteiros: o solicitante chega a 17 letras */}
+              <col style={{ width: 122 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 68 }} />
               <col style={{ width: 86 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 84 }} />
-              <col style={{ width: 72 }} />
+              <col style={{ width: 126 }} />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 68 }} />
             </colgroup>
             <thead>
               <tr>

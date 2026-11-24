@@ -1151,6 +1151,21 @@ a {
   padding: 0.34rem 0.45rem;
   white-space: nowrap;
 }
+/* tabela com muitas colunas (Chamados): o respiro lateral menor é o que deixa os
+   nomes inteiros sem empurrar a linha para fora da tela */
+.table-justa th,
+.table-justa td {
+  padding-left: 0.28rem;
+  padding-right: 0.28rem;
+}
+.table-justa th:first-child,
+.table-justa td:first-child {
+  padding-left: 0.6rem;
+}
+.table-justa th:last-child,
+.table-justa td:last-child {
+  padding-right: 0.6rem;
+}
 .cell-trunc {
   display: block;
   overflow: hidden;
