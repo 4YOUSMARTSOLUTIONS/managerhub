@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { actionContext } from "./context";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -124,14 +125,27 @@ export type DadosFormulario = {
   unidades: string[];
 };
 
-export async function criarFormulario(): Resultado<{ id: string }> {
+/**
+ * Cria o rascunho e já abre o editor NA MESMA resposta.
+ *
+ * Antes devolvia o id e a tela fazia `router.push`: eram duas idas ao servidor, e
+ * a primeira ainda redesenhava a lista inteira por causa do `revalidatePath`,
+ * para ser descartada logo em seguida (0,5 a 0,8 s jogados fora). Com `redirect`
+ * o Next desenha o editor dentro da própria resposta da action.
+ *
+ * `redirect` lança o controle de fluxo do Next, então fica FORA do try: dentro,
+ * o `catch` o engoliria como erro. Só volta valor quando dá errado.
+ */
+export async function criarFormulario(): Promise<{ error: string }> {
+  let id: string;
   try {
     const { supabase } = await actionContext();
     const { data, error } = await supabase.rpc("formulario_criar");
     if (error) return { error: error.message };
-    revalidatePath("/formularios");
-    return { id: data as string };
-  } catch (e) { return erro(e); }
+    id = data as string;
+  } catch (e) { return { error: erro(e).error }; }
+  revalidatePath("/formularios");
+  redirect(`/formularios/${id}/editar`);
 }
 
 export async function salvarFormulario(id: string, d: DadosFormulario): Resultado {
@@ -185,14 +199,17 @@ export async function encerrarFormulario(id: string): Resultado {
   } catch (e) { return erro(e); }
 }
 
-export async function duplicarFormulario(id: string): Resultado<{ id: string }> {
+/** Mesmo caminho de `criarFormulario`: a cópia abre no editor na mesma resposta. */
+export async function duplicarFormulario(id: string): Promise<{ error: string }> {
+  let novo: string;
   try {
     const { supabase } = await actionContext();
     const { data, error } = await supabase.rpc("formulario_duplicar", { p_id: id });
     if (error) return { error: error.message };
-    revalidatePath("/formularios");
-    return { id: data as string };
-  } catch (e) { return erro(e); }
+    novo = data as string;
+  } catch (e) { return { error: erro(e).error }; }
+  revalidatePath("/formularios");
+  redirect(`/formularios/${novo}/editar`);
 }
 
 /** Tira do bucket os arquivos citados e tudo o que ficou na pasta do formulário. */

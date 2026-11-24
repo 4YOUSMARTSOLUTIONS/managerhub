@@ -93,10 +93,9 @@ export function FormulariosLista({ formularios, ehAdmin }: { formularios: LinhaL
     itens.push({
       rotulo: "Duplicar", icone: <Copy size={14} />,
       onClick: () => iniciar(async () => {
+        // a action abre a cópia no editor ("Cópia de ..."); só volta se der errado
         const r = await duplicarFormulario(f.id);
-        if (r.error || !r.id) { toast.error(r.error ?? "Não foi possível duplicar."); return; }
-        toast.success("Cópia criada como rascunho.");
-        router.push(`/formularios/${r.id}/editar`);
+        if (r?.error) toast.error(r.error);
       }),
     });
     if (s === "aberto") {
