@@ -336,25 +336,6 @@ export function ActionsManager({
     setOpen(true);
   };
 
-  const excluirAcao = async (a: ActionRow) => {
-    const ok = await confirmDialog({
-      title: `Excluir a ação #${a.code}?`,
-      message: "Excluir esta ação e todas as suas demandas?",
-      confirmLabel: "Excluir",
-      tone: "danger",
-    });
-    if (!ok) return;
-    const fd = new FormData();
-    fd.append("id", a.id);
-    try {
-      const r = await deleteAction(fd);
-      if (r?.error) { toast.error(r.error); return; }
-      router.refresh();
-    } catch {
-      toast.error("Não foi possível excluir a ação. Tente de novo.");
-    }
-  };
-
   const openPanel = (d: DemandaCard, a: ActionRow, di: number) => {
     void garantirOpcoes();
     setSelected({
@@ -390,6 +371,26 @@ export function ActionsManager({
   // ---------- Filtros (aplicados no banco, sincronizados pela URL) ----------
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const router = useRouter();
+
+  const excluirAcao = async (a: ActionRow) => {
+    const ok = await confirmDialog({
+      title: `Excluir a ação #${a.code}?`,
+      message: "Excluir esta ação e todas as suas demandas?",
+      confirmLabel: "Excluir",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const fd = new FormData();
+    fd.append("id", a.id);
+    try {
+      const r = await deleteAction(fd);
+      if (r?.error) { toast.error(r.error); return; }
+      router.refresh();
+    } catch {
+      toast.error("Não foi possível excluir a ação. Tente de novo.");
+    }
+  };
+
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   /**
