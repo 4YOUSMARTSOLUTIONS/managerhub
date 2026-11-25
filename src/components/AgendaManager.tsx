@@ -54,11 +54,24 @@ export function AgendaManager(props: {
   logsComAnexoOuComentario?: string[];
   /** de quem é o diário em tela (`?de=`), já conferido no servidor */
   diarioDe?: string;
+  /** Proprietário, Administrador e DP escolhem qualquer responsável de agenda */
+  escolheQualquerResponsavel?: boolean;
 }) {
   const section: AgendaSection = props.section ?? "diario";
   const { currentUserId, isAdmin, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, plannerTasks, holidays } = props;
   const router = useRouter();
   const [, start] = useTransition();
+
+  /**
+   * Quem pode ser responsável de uma agenda (LUIZ, 25/11/2026): a própria pessoa
+   * e a equipe dela; Proprietário, Administrador e DP, qualquer um. É a mesma
+   * regra que o banco aplica ao criar, trocar e transferir.
+   */
+  const responsaveisPossiveis = useMemo(() => {
+    if (props.escolheQualquerResponsavel) return people;
+    const permitidos = new Set([currentUserId, ...reportIds]);
+    return people.filter((p) => permitidos.has(p.id));
+  }, [props.escolheQualquerResponsavel, people, currentUserId, reportIds]);
 
   const [todayStr, setTodayStr] = useState(props.today);
   const [meDate, setMeDate] = useState(props.today);
@@ -722,12 +735,12 @@ export function AgendaManager(props: {
           key={transferindo.id}
           agenda={transferindo}
           onClose={() => setTransferindo(null)}
-          people={people}
+          people={responsaveisPossiveis}
           hoje={todayStr}
           ativaPorPessoa={ativaPorPessoa}
         />
       )}
-      <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} currentUserId={currentUserId} ativaPorPessoa={ativaPorPessoa} />
+      <AgendaBuilderDialog open={builderOpen} onClose={() => setBuilderOpen(false)} agenda={editing} people={people} opcoesResponsavel={responsaveisPossiveis} currentUserId={currentUserId} ativaPorPessoa={ativaPorPessoa} />
       <AgendaLogDetail ctx={detail} onClose={() => setDetail(null)} canFill={detailCanFill} nameById={nameById} />
       {demandaOpen && (
         <DemandaNaoPrevistaDialog

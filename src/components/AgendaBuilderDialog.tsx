@@ -82,12 +82,18 @@ function findOverlaps(tasks: TaskDraft[]): [string, string][] {
 }
 
 export function AgendaBuilderDialog({
-  open, onClose, agenda, people, currentUserId, ativaPorPessoa = {},
+  open, onClose, agenda, people, opcoesResponsavel, currentUserId, ativaPorPessoa = {},
 }: {
   open: boolean;
   onClose: () => void;
   agenda: AgendaFull | null;
+  /** todo mundo: o nome do responsável de uma agenda existente sai daqui */
   people: Opt[];
+  /**
+   * Quem pode ser escolhido numa agenda NOVA: a própria pessoa e a equipe dela
+   * (Proprietário, Administrador e DP: qualquer um). O banco confere de novo.
+   */
+  opcoesResponsavel?: Opt[];
   currentUserId: string;
   /**
    * A agenda de rotina ativa de cada pessoa (das que esta tela enxerga). Cada
@@ -225,7 +231,7 @@ export function AgendaBuilderDialog({
               {/* a agenda de demandas não previstas é de uma pessoa só */}
               {/* Agenda que já existe troca de responsável por "Transferir", com data:
                   trocar aqui jogaria o passado inteiro para quem entra */}
-              <SearchSelect options={people} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" disabled={imprevistos || !!agenda} />
+              <SearchSelect options={agenda ? people : (opcoesResponsavel ?? people)} value={responsibleId} onChange={setResponsibleId} placeholder="Buscar pessoa…" disabled={imprevistos || !!agenda} />
               {agenda && !imprevistos && (
                 <p className="soft" style={{ fontSize: "0.76rem", margin: "0.35rem 0 0" }}>
                   Para trocar o responsável, use Transferir na lista de agendas, com a data da troca.

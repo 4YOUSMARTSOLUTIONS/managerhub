@@ -24,6 +24,12 @@ export type AgendaData = {
   logsComAnexoOuComentario: string[];
   /** De quem é o diário em tela (`?de=`), já conferido contra quem a pessoa alcança. */
   diarioDe: string;
+  /**
+   * Escolhe qualquer pessoa como responsável de agenda: Proprietário,
+   * Administrador e DP (LUIZ, 25/11/2026). Os demais, só a si e a própria equipe
+   * (`reportIds`). O banco confere de novo (agenda_checar_responsavel).
+   */
+  escolheQualquerResponsavel: boolean;
 };
 
 export type SecaoAgenda = "diario" | "agendas" | "equipe" | "historico";
@@ -52,7 +58,7 @@ export function diarioDeDaUrl(de: string | string[] | undefined): string | null 
  *   a carga inteira.
  */
 export async function loadAgendaData(secao: SecaoAgenda, de: string | null = null): Promise<AgendaData> {
-  const { user, tenant, role, unitScope } = await requireContext();
+  const { user, tenant, role, unitScope, isDp } = await requireContext();
   const supabase = await createClient();
   const isAdmin = role === "owner" || role === "admin";
   const comRegistros = secao !== "agendas";
@@ -224,7 +230,7 @@ export async function loadAgendaData(secao: SecaoAgenda, de: string | null = nul
     }))
     .filter((t) => t.assigneeIds.length > 0);
 
-  return { currentUserId: user.id, isAdmin, today, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, plannerTasks, holidays, logsComAnexoOuComentario, diarioDe };
+  return { currentUserId: user.id, isAdmin, today, people, nameById, orgByUser, reportIds, agendas, logs, checklistScheds, checklistRuns, plannerTasks, holidays, logsComAnexoOuComentario, diarioDe, escolheQualquerResponsavel: isDp };
 }
 
 const COLUNAS_DO_LOG = "id, agenda_id, task_id, log_date, status, note, actual_minutes";
