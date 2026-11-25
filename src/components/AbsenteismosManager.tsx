@@ -983,12 +983,24 @@ export function AbsenteismosManager({
       ),
     },
   ];
-  if (podeDecidir || veEmpresa) {
-    abas.push({
-      id: "fila", label: `Aguardando o DP (${fila.length})`,
-      content: tabela(fila, true, "Nenhum lançamento aguardando decisão."),
-    });
-  }
+  // Para todos (LUIZ, 25/11/2026): o gestor acompanha o que a equipe dele tem
+  // com o DP; antes o lançamento sumia da tela dele entre o envio e a decisão.
+  // A RLS entrega a cada um só a própria cadeia, e decidir segue só com o DP
+  // (a ficha confere `podeDecidir`).
+  abas.push({
+    id: "fila", label: `Aguardando o DP (${fila.length})`,
+    content: podeDecidir || veEmpresa
+      ? tabela(fila, true, "Nenhum lançamento aguardando decisão.")
+      : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
+            Lançamentos da sua equipe enviados ao DP, aguardando a decisão. Nada aqui pode ser
+            alterado: para corrigir algum, peça ao DP para reprovar, e ele volta para <strong>Em aberto</strong>.
+          </p>
+          {tabela(fila, true, "Nenhum lançamento da sua equipe aguardando o DP.")}
+        </div>
+      ),
+  });
   abas.push({
     id: "historico", label: `Histórico (${historico.length})`,
     content: tabela(historico, true, "Nenhum lançamento decidido ainda."),
