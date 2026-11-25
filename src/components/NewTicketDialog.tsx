@@ -72,6 +72,8 @@ export function NewTicketDialog({
       for (const f of files) fd.append("files", f);
       const res = await createTicket(initialActionState, fd);
       if (res.error) { setError(res.error); return; }
+      // confirmação com o número e o título: sem isso o formulário só fechava
+      toast.success(res.message ?? "Chamado criado.", { description: title.trim() });
       if (res.warning) toast.warning(res.warning);
       reset();
       onClose();

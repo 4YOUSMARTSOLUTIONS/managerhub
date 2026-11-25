@@ -53,11 +53,16 @@ export async function createAction(formData: FormData): Promise<ActionState> {
     const actionId = res.action_id;
     const demandaIds = res.demanda_ids ?? [];
 
-    const falhas = await gravarAnexos(supabase, tenantId, userId, actionId, demandaIds, formData);
+    // o número (gerado pelo banco) vai na confirmação: quem cria sabe que registrou
+    const [falhas, { data: criada }] = await Promise.all([
+      gravarAnexos(supabase, tenantId, userId, actionId, demandaIds, formData),
+      supabase.from("actions").select("code").eq("id", actionId).maybeSingle(),
+    ]);
+    const message = criada?.code != null ? `Ação #${criada.code} criada.` : "Ação criada.";
 
     revalidatePath("/acoes");
     revalidatePath("/dashboard");
-    return falhas ? { ok: true, warning: avisoDeAnexos(falhas) } : { ok: true };
+    return falhas ? { ok: true, message, warning: avisoDeAnexos(falhas) } : { ok: true, message };
   } catch (e) {
     return { error: (e as Error).message };
   }

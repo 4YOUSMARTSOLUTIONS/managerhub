@@ -339,6 +339,8 @@ export function ActionDialog({
     start(async () => {
       const res = await createAction(fd);
       if (res.error) { setError(res.error); return; }
+      // confirmação com o número da ação: sem isso o formulário só fechava
+      toast.success(res.message ?? "Ação criada.");
       if (res.warning) toast.warning(res.warning);
       router.refresh();
       if (keepOpen) {
@@ -347,7 +349,7 @@ export function ActionDialog({
         // o problema é conteúdo da ação, não parâmetro: limpa junto com a descrição,
         // senão a próxima ação nasce com o diagnóstico da anterior
         setProblema("");
-        setSaved("Ação criada. Os parâmetros foram mantidos — adicione a próxima.");
+        setSaved(`${res.message ?? "Ação criada."} Os parâmetros foram mantidos: adicione a próxima.`);
       } else {
         onClose();
       }

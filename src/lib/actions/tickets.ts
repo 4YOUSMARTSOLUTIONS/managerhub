@@ -134,10 +134,13 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
         requester_id: userId,
         created_by: userId,
       })
-      .select("id")
+      .select("id, code")
       .single();
     if (error) return { error: error.message };
     const ticketId = ticket.id;
+    // o número (gerado pelo banco) vai na confirmação: quem abre sabe que registrou
+    const numero = numeroChamado(ticket.code);
+    const message = numero ? `Chamado ${numero} criado.` : "Chamado criado.";
 
     // anexos: imagens e PDF
     const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
@@ -168,8 +171,8 @@ export async function createTicket(_prev: ActionState, formData: FormData): Prom
     revalidatePath("/chamados");
     revalidatePath("/dashboard");
     return falhas
-      ? { ok: true, warning: `O chamado foi aberto, mas ${falhas === 1 ? "1 anexo não foi enviado" : `${falhas} anexos não foram enviados`}.` }
-      : { ok: true };
+      ? { ok: true, message, warning: `O chamado foi aberto, mas ${falhas === 1 ? "1 anexo não foi enviado" : `${falhas} anexos não foram enviados`}.` }
+      : { ok: true, message };
   } catch (e) {
     return { error: (e as Error).message };
   }

@@ -1322,6 +1322,12 @@ img.avatar {
   --toast-close-button-transform: translate(35%, -35%);
 }
 
+/* o ícone do toast diz o desfecho (certo verde ao criar uma ação ou um chamado,
+   pedido do LUIZ em 25/11/2026); o texto segue na cor normal da interface */
+[data-sonner-toast][data-type="success"] [data-icon] { color: var(--mh-success); }
+[data-sonner-toast][data-type="warning"] [data-icon] { color: var(--mh-warning); }
+[data-sonner-toast][data-type="error"] [data-icon] { color: var(--mh-danger); }
+
 /* gatilho do menu de usuário no rodapé da sidebar */
 .user-menu-trigger:hover {
   background: var(--mh-surface-2) !important;
