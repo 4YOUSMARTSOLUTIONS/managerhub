@@ -210,7 +210,7 @@ export default async function SettingsPage({
     { count: cidTotal }, { data: mgrSectors }, { data: blitzForaData }, { data: blitzExcData },
   ] = await Promise.all([
     em("estrutura", "usuarios", "chamados", "rv", "punicoes", "ferias", "seguranca") ? fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")) : nada,
-    em("empresa", "usuarios", "rv", "punicoes", "ferias", "absenteismos", "seguranca") ? supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name") : nada,
+    em("empresa", "usuarios", "rv", "punicoes", "ferias", "absenteismos", "seguranca", "salas") ? supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name") : nada,
     em("estrutura", "usuarios", "feedbacks") ? supabase.from("departments").select("*").eq("tenant_id", tenant.id).order("name") : nada,
     em("estrutura", "usuarios") ? supabase.from("subdepartments").select("*").eq("tenant_id", tenant.id).order("name") : nada,
     em("estrutura", "usuarios", "rv", "feedbacks", "absenteismos", "seguranca") ? supabase.from("positions").select("*").eq("tenant_id", tenant.id).order("name") : nada,
@@ -879,10 +879,33 @@ export default async function SettingsPage({
     />
   );
 
+  /**
+   * Salas por unidade (LUIZ, 25/11/2026). A lista segue o seletor do topo; a sala
+   * antiga, sem unidade, aparece em qualquer recorte até ser definida.
+   */
+  const unidadesDoEscopoSalas = effectiveUnitFilter(unitScope);
+  const nomeDaUnidade = new Map((units ?? []).map((u) => [u.id, u.name]));
+  const salasVistas = (rooms ?? []).filter((r) =>
+    !unidadesDoEscopoSalas || !r.unit_id || unidadesDoEscopoSalas.includes(r.unit_id));
+  const salasSemUnidade = salasVistas.filter((r) => !r.unit_id).length;
+  // com uma unidade só no recorte, ela já vem marcada
+  const unidadePadraoSala = unidadesDoEscopoSalas?.length === 1
+    ? unidadesDoEscopoSalas[0]
+    : (units ?? []).length === 1 ? (units ?? [])[0].id : "";
+  const campoUnidadeSala = (valor: string | null) => (
+    <div>
+      <label className="label">Unidade <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+      <select name="unit_id" className="select" required defaultValue={valor ?? unidadePadraoSala}>
+        <option value="" disabled>Selecione a unidade…</option>
+        {(units ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+      </select>
+    </div>
+  );
+
   const salasTab = (
     <div style={{ maxWidth: 760 }}>
     <Section
-      title={`Salas de reunião · ${rooms?.length ?? 0}`}
+      title={`Salas de reunião · ${salasVistas.length}`}
       padded={false}
       action={seEdita(
         <FormModal triggerLabel="+ Nova sala" title="Nova sala" action={createRoom} submitLabel="Criar sala">
@@ -890,6 +913,7 @@ export default async function SettingsPage({
             <label className="label">Nome</label>
             <input name="name" className="input" required placeholder="Sala Principal" />
           </div>
+          {campoUnidadeSala(null)}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "0.8rem" }}>
             <div>
               <label className="label">Localização</label>
@@ -911,19 +935,30 @@ export default async function SettingsPage({
         </FormModal>
       )}
     >
-      {rooms && rooms.length > 0 ? (
+      {salasSemUnidade > 0 && canEdit && (
+        <p className="soft" style={{ fontSize: "0.8rem", margin: 0, padding: "0.7rem 1rem", borderBottom: "1px solid var(--mh-border)" }}>
+          {salasSemUnidade === 1 ? "Uma sala ainda está" : `${salasSemUnidade} salas ainda estão`} sem unidade: enquanto isso,
+          aparecem para todas as unidades. Defina pelo lápis de cada uma.
+        </p>
+      )}
+      {salasVistas.length > 0 ? (
         <table className="table">
           <thead>
-            <tr><th>Sala</th><th>Localização</th><th>Capacidade</th><th>Recursos</th><th>Status</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
+            <tr><th>Sala</th><th>Unidade</th><th>Localização</th><th>Capacidade</th><th>Recursos</th><th>Status</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
           </thead>
           <tbody>
-            {rooms.map((r) => (
+            {salasVistas.map((r) => (
               <tr key={r.id}>
                 <td>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", fontWeight: 600 }}>
                     <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color }} />
                     {r.name}
                   </span>
+                </td>
+                <td>
+                  {r.unit_id
+                    ? <span className="muted">{nomeDaUnidade.get(r.unit_id) ?? "—"}</span>
+                    : <Badge variant="quiet" tone="amber">Sem unidade</Badge>}
                 </td>
                 <td className="muted">{r.location ?? "—"}</td>
                 <td className="muted">{r.capacity} pessoas</td>
@@ -951,6 +986,7 @@ export default async function SettingsPage({
                         <label className="label">Nome</label>
                         <input name="name" className="input" required defaultValue={r.name} placeholder="Sala Principal" />
                       </div>
+                      {campoUnidadeSala(r.unit_id)}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "0.8rem" }}>
                         <div>
                           <label className="label">Localização</label>

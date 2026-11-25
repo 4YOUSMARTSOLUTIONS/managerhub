@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDaSala, salasDasUnidades, type SalaDaUnidade } from "@/lib/salas";
 import { useEffect, useState, useTransition } from "react";
 import { CalendarPlus, Check, CheckCircle2, Lock, LockOpen, Pencil, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -87,7 +88,7 @@ export function TrainingSessionsManager({
   trainings: TrainingOpt[];
   people: Opt[];
   units: Opt[];
-  rooms: Opt[];
+  rooms: SalaDaUnidade[];
   podeCriar: boolean;
 }) {
   const [editando, setEditando] = useState<SessionRow | null>(null);
@@ -264,7 +265,7 @@ function SessionDialog({
   trainings: TrainingOpt[];
   people: Opt[];
   units: Opt[];
-  rooms: Opt[];
+  rooms: SalaDaUnidade[];
   onClose: () => void;
 }) {
   // datetime-local trabalha em hora local; o ISO do banco vem em UTC
@@ -408,7 +409,8 @@ function SessionDialog({
               <label className="label">Sala</label>
               <select className="select" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
                 <option value="">Selecione uma sala…</option>
-                {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                {/* as salas da unidade escolhida acima (e as ainda sem unidade) */}
+                {salasDasUnidades(rooms, unitId ? [unitId] : [], roomId).map((r) => <option key={r.id} value={r.id}>{rotuloDaSala(r)}</option>)}
               </select>
               <p className="soft" style={{ fontSize: "0.72rem", margin: "0.3rem 0 0" }}>
                 As mesmas salas cadastradas para as reuniões.

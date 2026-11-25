@@ -693,6 +693,7 @@ export function MeetingRecords({
         seriesName={confirmStart?.name ?? ""}
         defaultRoomId={confirmStart?.roomId ?? null}
         rooms={rooms}
+        unitIds={confirmStart?.unitIds ?? []}
         pending={pending}
         onConfirm={runStart}
         onClose={() => setConfirmStart(null)}

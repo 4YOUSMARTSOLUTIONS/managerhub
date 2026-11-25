@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { Room } from "./SeriesDialog";
+import { rotuloDaSala, salasDasUnidades } from "@/lib/salas";
 
 export function StartMeetingDialog({
   open,
   seriesName,
   defaultRoomId,
   rooms,
+  unitIds = [],
   pending,
   onConfirm,
   onClose,
@@ -20,6 +22,8 @@ export function StartMeetingDialog({
   seriesName: string;
   defaultRoomId: string | null;
   rooms: Room[];
+  /** unidades da reunião: a sala sai delas (e das ainda sem unidade) */
+  unitIds?: string[];
   pending: boolean;
   onConfirm: (roomId: string, link: string, nextDate?: string, nextTime?: string) => void;
   onClose: () => void;
@@ -81,7 +85,7 @@ export function StartMeetingDialog({
             <label className="label">Sala utilizada</label>
             <select className="select" value={roomId} onChange={(e) => setRoomId(e.target.value)} disabled={pending}>
               <option value="">Nenhuma (online / sem sala)</option>
-              {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {salasDasUnidades(rooms, unitIds, roomId).map((r) => <option key={r.id} value={r.id}>{rotuloDaSala(r)}</option>)}
             </select>
             <p className="soft" style={{ fontSize: "0.78rem", marginTop: "0.3rem" }}>
               Se escolher uma sala, ela será reservada no calendário durante a reunião, mesmo sem reserva prévia.

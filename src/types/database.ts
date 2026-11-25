@@ -1404,6 +1404,8 @@ export type Database = {
           name: string
           resources: string[]
           tenant_id: string
+          /** unidade da sala (25/11/2026); nula nas antigas até o admin definir */
+          unit_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1416,6 +1418,7 @@ export type Database = {
           name: string
           resources?: string[]
           tenant_id: string
+          unit_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1428,9 +1431,17 @@ export type Database = {
           name?: string
           resources?: string[]
           tenant_id?: string
+          unit_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "rooms_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "rooms_tenant_id_fkey"
             columns: ["tenant_id"]

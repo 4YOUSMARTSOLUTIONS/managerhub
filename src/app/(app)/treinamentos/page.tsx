@@ -1,3 +1,4 @@
+import { salasParaSeletor } from "@/lib/salas";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -112,7 +113,7 @@ export default async function TreinamentosPage() {
       .not("session_id", "is", null)
       .order("id")),
     // as mesmas salas das reuniões: turma presencial escolhe daqui
-    supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
+    supabase.from("rooms").select("id, name, unit_id").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     // trilhas com os passos já ordenados: o embed devolve na ordem do `order`
     supabase
       .from("training_paths")
@@ -391,7 +392,7 @@ export default async function TreinamentosPage() {
         pilares={pilaresOpt}
         units={unitScope.units}
         sessions={sessions}
-        rooms={(salas ?? []).map((r) => ({ id: r.id, name: r.name }))}
+        rooms={salasParaSeletor(salas ?? [], unitScope.units)}
         paths={paths}
       />
     </div>

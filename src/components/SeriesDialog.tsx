@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloDaSala, salasDasUnidades, type SalaDaUnidade } from "@/lib/salas";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
@@ -13,7 +14,8 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 
-export type Room = { id: string; name: string };
+/** a sala com a unidade (25/11/2026): o seletor mostra só as das unidades da reunião */
+export type Room = SalaDaUnidade;
 export type Unit = { id: string; name: string };
 
 export type SeriesData = {
@@ -421,7 +423,8 @@ export function SeriesDialog({
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.8rem", alignItems: "center" }}>
               <select className="select" value={roomId} onChange={(e) => setRoomId(e.target.value)}>
                 <option value="">{isOnline ? "Sem sala física (somente online)" : "Selecione a sala…"}</option>
-                {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                {/* as salas das unidades marcadas acima (e as ainda sem unidade) */}
+                {salasDasUnidades(rooms, unitIds, roomId).map((r) => <option key={r.id} value={r.id}>{rotuloDaSala(r)}</option>)}
               </select>
               <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.85rem", whiteSpace: "nowrap" }}>
                 <input type="checkbox" checked={isOnline} onChange={(e) => setIsOnline(e.target.checked)} />

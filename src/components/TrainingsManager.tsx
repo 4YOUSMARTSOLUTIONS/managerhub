@@ -1,5 +1,6 @@
 "use client";
 
+import type { SalaDaUnidade } from "@/lib/salas";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { FileCheck, GraduationCap, History, Layers, Lock, Pencil, PlayCircle, Trash2, UserPlus } from "lucide-react";
@@ -120,7 +121,8 @@ export function TrainingsManager({
   pilares: Opt[];
   units: Opt[];
   sessions: SessionRow[];
-  rooms: Opt[];
+  /** as salas com a unidade: a turma escolhe entre as da unidade dela */
+  rooms: SalaDaUnidade[];
   paths: TrilhaRow[];
 }) {
   const [editing, setEditing] = useState<TrainingForEdit | null>(null);

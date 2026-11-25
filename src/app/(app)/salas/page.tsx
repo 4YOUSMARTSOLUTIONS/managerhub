@@ -5,6 +5,7 @@ import { MeetingsBoard } from "@/components/MeetingsBoard";
 import type { CalMeeting } from "@/components/RoomCalendar";
 import type { Person } from "@/components/PeoplePicker";
 import { moduleGate } from "@/lib/module-gate";
+import { rotuloDaSala, salaNoEscopo } from "@/lib/salas";
 
 export default async function MeetingsPage() {
   const gate = await moduleGate("salas");
@@ -34,14 +35,14 @@ export default async function MeetingsPage() {
     // ordem, senão uma página pode repetir reunião e pular outra.
     fetchAll(() => supabase
       .from("meetings")
-      .select("*, rooms(id, name, color, capacity, location, resources), creator:profiles!created_by(full_name), meeting_participants(user_id)")
+      .select("*, rooms(id, name, color, capacity, location, resources, unit_id), creator:profiles!created_by(full_name), meeting_participants(user_id)")
       .eq("tenant_id", tenant.id)
       .gte("starts_at", winStart)
       .lt("starts_at", winEnd)
       .order("starts_at", { ascending: false })
       .order("id")),
     // faltava o filtro de empresa: dependia so da RLS, diferente das demais
-    supabase.from("rooms").select("id, name, color, capacity, location, resources").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
+    supabase.from("rooms").select("id, name, color, capacity, location, resources, unit_id").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     // mesma ideia nas series: os participantes vem junto, ja escopados
     supabase.from("meeting_series").select("id, name, meeting_series_participants(user_id)").eq("tenant_id", tenant.id).eq("is_active", true).is("deleted_at", null).order("name"),
     fetchAll(() => supabase.from("memberships").select("user_id, profiles!memberships_user_id_fkey(full_name)").eq("tenant_id", tenant.id).eq("is_active", true).order("id")),
@@ -53,6 +54,14 @@ export default async function MeetingsPage() {
       : Promise.resolve({ data: null as { series_id: string }[] | null }),
   ]);
   const customHolidays = (holidays ?? []).map((h) => ({ day: h.day, name: h.name }));
+
+  // Salas por unidade (LUIZ, 25/11/2026): a sala e a reserva dela seguem o
+  // seletor do topo; sala ainda sem unidade aparece em qualquer recorte. Com mais
+  // de uma unidade, o nome leva a unidade ("Principal · MATRIZ").
+  const nomeUnidade = new Map(unitScope.units.map((u) => [u.id, u.name]));
+  const variasUnidades = unitScope.units.length > 1;
+  const nomeDaSala = (r: { name: string; unit_id: string | null }) =>
+    rotuloDaSala({ id: "", name: r.name, unitName: variasUnidades && r.unit_id ? nomeUnidade.get(r.unit_id) ?? null : null });
 
   // séries ligadas às unidades do escopo (reuniões avulsas sempre aparecem)
   const scopeSeriesIds: Set<string> | null = links ? new Set(links.map((l) => l.series_id)) : null;
@@ -76,8 +85,10 @@ export default async function MeetingsPage() {
 
   const calMeetings: CalMeeting[] = (meetings ?? [])
     .filter((m) => !scopeSeriesIds || m.series_id === null || scopeSeriesIds.has(m.series_id))
+    // a reserva de uma sala de outra unidade fica fora do recorte
+    .filter((m) => salaNoEscopo((m.rooms as { unit_id: string | null } | null)?.unit_id, scopeUnitIds))
     .map((m) => {
-    const room = m.rooms as { id: string; name: string; color: string; capacity: number | null; location: string | null; resources: string[] } | null;
+    const room = m.rooms as { id: string; name: string; color: string; capacity: number | null; location: string | null; resources: string[]; unit_id: string | null } | null;
     const creator = m.creator as { full_name: string | null } | null;
     return {
       id: m.id,
@@ -86,7 +97,7 @@ export default async function MeetingsPage() {
       starts_at: m.starts_at,
       ends_at: m.ends_at,
       status: m.status,
-      room: room ? { id: room.id, name: room.name, color: room.color, capacity: room.capacity, location: room.location, resources: room.resources ?? [] } : null,
+      room: room ? { id: room.id, name: nomeDaSala(room), color: room.color, capacity: room.capacity, location: room.location, resources: room.resources ?? [] } : null,
       created_by: m.created_by,
       creatorName: creator?.full_name ?? null,
       seriesId: m.series_id,
@@ -95,7 +106,7 @@ export default async function MeetingsPage() {
       endInput: toLocalInput(m.ends_at),
     };
   });
-  const calRooms = (rooms ?? []).map((r) => ({ id: r.id, name: r.name, color: r.color, capacity: r.capacity, location: r.location, resources: r.resources ?? [] }));
+  const calRooms = (rooms ?? []).filter((r) => salaNoEscopo(r.unit_id, scopeUnitIds)).map((r) => ({ id: r.id, name: nomeDaSala(r), color: r.color, capacity: r.capacity, location: r.location, resources: r.resources ?? [] }));
 
   return (
     <div>

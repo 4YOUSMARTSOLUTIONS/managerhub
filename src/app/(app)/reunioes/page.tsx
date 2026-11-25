@@ -1,3 +1,4 @@
+import { salasParaSeletor } from "@/lib/salas";
 import { requireContext, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
@@ -40,7 +41,7 @@ export default async function MeetingRecordsPage() {
       .eq("tenant_id", tenant.id)
       .eq("is_active", true)
       .order("id")),
-    supabase.from("rooms").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
+    supabase.from("rooms").select("id, name, unit_id").eq("tenant_id", tenant.id).eq("is_active", true).order("name"),
     supabase
       .from("meeting_occurrences")
       .select("id, series_id, occurred_on, status, started_at, ended_at, duration_seconds, auto_finished, meeting_link, draft, registered_by, meeting_series(name), registrant:profiles!registered_by(full_name)")
@@ -58,11 +59,11 @@ export default async function MeetingRecordsPage() {
     fetchAll(() => supabase.from("meeting_series_fora").select("series_id, user_id").order("series_id").order("user_id")),
   ]);
 
-  const rooms = (roomsData ?? []).map((r) => ({ id: r.id, name: r.name }));
-  const roomById = new Map(rooms.map((r) => [r.id, r.name]));
-
   // as unidades ja vieram do requireContext; a consulta daqui repetia a de la
   const units = unitScope.units;
+  // a sala com a unidade (25/11/2026): cada reunião escolhe entre as das unidades dela
+  const rooms = salasParaSeletor(roomsData ?? [], units);
+  const roomById = new Map(rooms.map((r) => [r.id, r.name]));
   const unitById = new Map(units.map((u) => [u.id, u.name]));
   const unitsBySeries = new Map<string, string[]>();
   for (const ul of unitLinks ?? []) {
