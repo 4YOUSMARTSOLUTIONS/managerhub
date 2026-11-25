@@ -252,6 +252,7 @@ export async function updateTicketTriage(input: TriageInput): Promise<ActionStat
         p_title: `Chamado ${numeroChamado(cur.code)} atualizado`.trim(),
         p_body: body,
         p_demanda: null,
+        p_ticket: input.ticket_id,
       });
     }
 
@@ -284,6 +285,7 @@ export async function requestTicketConclusion(ticketId: string): Promise<ActionS
         p_title: `Chamado ${numeroChamado(t.code)} aguardando seu de acordo`.trim(),
         p_body: `O atendimento de "${t.title}" foi concluído. Confirme se está de acordo para encerrar o chamado.`,
         p_demanda: null,
+        p_ticket: ticketId,
       });
     }
 
@@ -322,6 +324,7 @@ export async function decideTicketConclusion(ticketId: string, approve: boolean,
           ? `O solicitante deu o de acordo e o chamado "${t?.title}" foi encerrado.`
           : `O solicitante recusou a conclusão de "${t?.title}"; o chamado voltou para atendimento.`,
         p_demanda: null,
+        p_ticket: ticketId,
       });
     }
 

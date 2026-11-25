@@ -11,6 +11,9 @@ import { Pager } from "@/components/ui/Pager";
 import { SkeletonPage } from "@/components/ui/Skeleton";
 import { moduleGate } from "@/lib/module-gate";
 import { getPlatformIntegrationFlags } from "@/lib/platform-integrations";
+import { ABRIR_DEMANDA } from "@/lib/notificacao-destino";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const PAGE_SIZE = 50;
 
@@ -25,6 +28,8 @@ type SP = {
   minhas?: string | string[];
   /** classificação: ausente = Data de criação, a mais nova primeiro */
   ord?: string; dir?: string;
+  /** demanda aberta pelo aviso do sino */
+  [ABRIR_DEMANDA]?: string;
 };
 
 /** A linha como `acoes_da_pagina` devolve: a unidade resolve aqui, pelo escopo de quem vê. */
@@ -89,6 +94,19 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
   // opções de filtro não vêm mais aqui: as linhas já trazem os nomes, e as opções
   // chegam quando o painel de filtros abre.
   const flagsP = getPlatformIntegrationFlags();
+
+  // A ação do aviso do sino vem à parte, em paralelo com a página: pode estar em
+  // outra página, fora dos filtros ou de outra unidade. A leitura é a de quem
+  // clicou (RLS na demanda, a regra de visibilidade em `acoes_da_pagina`).
+  const pedido = sp[ABRIR_DEMANDA];
+  const abrirP = (async (): Promise<LinhaDaPagina | null> => {
+    if (!pedido || !UUID.test(pedido)) return null;
+    const { data: dem } = await supabase.from("action_demandas").select("action_id").eq("id", pedido).maybeSingle();
+    if (!dem) return null;
+    const { data } = await supabase.rpc("acoes_da_pagina", { p_ids: [dem.action_id] });
+    return ((data ?? []) as unknown as LinhaDaPagina[])[0] ?? null;
+  })();
+
   const { data: search, error: erroBusca } = await supabase.rpc("search_action_ids", {
     p_filters: { ...filters, units: unitIds ?? null, ord: ordem.por, dir: ordem.dir },
     p_limit: PAGE_SIZE,
@@ -98,18 +116,20 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
   if (erroBusca) throw new Error("Não foi possível carregar as ações.");
   const { ids: pageIds, total: actionsTotal } = (search ?? { ids: [], total: 0 }) as { ids: string[]; total: number };
 
-  const [{ data: linhas, error: erroLinhas }, flags] = await Promise.all([
+  const [{ data: linhas, error: erroLinhas }, flags, linhaPedida] = await Promise.all([
     pageIds.length
       ? supabase.rpc("acoes_da_pagina", { p_ids: pageIds })
       : Promise.resolve({ data: [], error: null }),
     flagsP,
+    abrirP,
   ]);
   if (erroLinhas) throw new Error("Não foi possível carregar as ações.");
 
-  const rows: ActionRow[] = ((linhas ?? []) as unknown as LinhaDaPagina[]).map(({ unitId, legacyUnit, ...linha }) => ({
+  const paraLinha = ({ unitId, legacyUnit, ...linha }: LinhaDaPagina): ActionRow => ({
     ...linha,
     unitName: (unitId ? unitById.get(unitId) ?? null : null) ?? legacyUnit ?? null,
-  }));
+  });
+  const rows: ActionRow[] = ((linhas ?? []) as unknown as LinhaDaPagina[]).map(paraLinha);
 
   // mantém os filtros ao trocar de página (multivalor vira parâmetro repetido)
   const pagerQuery = new URLSearchParams();
@@ -139,6 +159,7 @@ async function ListaDeAcoes({ searchParams }: { searchParams: Promise<SP> }) {
         filters={filters}
         ordem={ordem}
         total={actionsTotal}
+        abrir={linhaPedida ? paraLinha(linhaPedida) : null}
       />
       <Pager basePath="/acoes" param="p" page={page} pageSize={PAGE_SIZE} total={actionsTotal} extra={pagerQuery} />
     </>

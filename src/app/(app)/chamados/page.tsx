@@ -2,16 +2,22 @@ import { requireContext, getMembers, effectiveUnitFilter } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Tabs, type Tab } from "@/components/ui/Tabs";
-import { TicketsManager, type TicketRow } from "@/components/TicketsManager";
+import type { Tab } from "@/components/ui/Tabs";
+import { AbasDosChamados, TicketsManager, type TicketRow } from "@/components/TicketsManager";
 import { TicketsDashboard } from "@/components/TicketsDashboard";
 import { FiltrosChamadosProvider } from "@/components/FiltrosChamados";
 import { TICKET_CATEGORY } from "@/lib/constants";
 import { moduleGate } from "@/lib/module-gate";
+import { ABRIR_CHAMADO } from "@/lib/notificacao-destino";
 
-export default async function TicketsPage() {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default async function TicketsPage({ searchParams }: { searchParams: Promise<{ [ABRIR_CHAMADO]?: string }> }) {
   const gate = await moduleGate("chamados");
   if (gate) return gate;
+  // o aviso do sino leva ao chamado: `?chamado=<id>` abre a ficha dele
+  const pedido = (await searchParams)[ABRIR_CHAMADO];
+  const abrirId = pedido && UUID.test(pedido) ? pedido : null;
 
   const { tenant, user, role, unitScope } = await requireContext();
   const isAdmin = role === "owner" || role === "admin" || role === "manager";
@@ -30,26 +36,36 @@ export default async function TicketsPage() {
   // Lê tudo, sem o antigo `.limit(200)`: o Dashboard calcula sobre esta lista, e com
   // o histórico importado ele contaria só os 200 mais recentes. A descrição fica de
   // fora e vem ao abrir a ficha (`getTicketDetalhe`), para a carga não pesar.
+  const COLUNAS =
+    "id, code, title, status, priority, requested_priority, due_date, sector_id, category, category_id, unit_id, assignee_id, requester_id, created_at, resolved_at, updated_at, approval_requested_at, nps_score, nps_comment, origem_id, legacy_requester, legacy_assignee, legacy_unit, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)";
+  // quem vê o quê: o mesmo recorte na lista e no chamado aberto pelo aviso
+  const escopo = fullAccess
+    ? null
+    : managedSectorIds.length > 0
+      ? `sector_id.in.(${managedSectorIds.join(",")}),requester_id.eq.${user.id}`
+      : `requester_id.eq.${user.id}`;
   const montarChamados = () => {
     let q = supabase
       .from("tickets")
-      .select(
-        "id, code, title, status, priority, requested_priority, due_date, sector_id, category, category_id, unit_id, assignee_id, requester_id, created_at, resolved_at, updated_at, approval_requested_at, nps_score, nps_comment, origem_id, legacy_requester, legacy_assignee, legacy_unit, assignee:profiles!assignee_id(full_name), requester:profiles!requester_id(full_name), sector:ticket_sectors(name), cat:ticket_categories(name), unit:units(name)",
-      )
+      .select(COLUNAS)
       .order("created_at", { ascending: false })
       .order("id");
-    if (!fullAccess) {
-      q = managedSectorIds.length > 0
-        ? q.or(`sector_id.in.(${managedSectorIds.join(",")}),requester_id.eq.${user.id}`)
-        : q.eq("requester_id", user.id);
-    }
+    if (escopo) q = q.or(escopo);
     // chamado SEM unidade também entra: `.in()` sozinho descarta `null`, e um
     // chamado aberto sem unidade sumiria de todo recorte menos "Todas". Mesma
     // regra de /acoes e /checklists.
     return unitIds ? q.or(`unit_id.in.(${unitIds.join(",")}),unit_id.is.null`) : q;
   };
 
-  const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }, { data: atts }] =
+  // O chamado do aviso vem à parte: pode ser de outra unidade que não a do
+  // seletor do topo, e ainda assim a pessoa precisa conseguir abri-lo.
+  const montarPedido = () => {
+    if (!abrirId) return Promise.resolve({ data: null });
+    const q = supabase.from("tickets").select(COLUNAS).eq("id", abrirId);
+    return (escopo ? q.or(escopo) : q).maybeSingle();
+  };
+
+  const [{ data: tickets }, members, { data: sectors }, { data: categories }, { data: units }, { data: slas }, { data: atts }, { data: pedidoAvulso }] =
     await Promise.all([
       fetchAll(montarChamados),
       getMembers(tenant.id),
@@ -60,6 +76,7 @@ export default async function TicketsPage() {
       // sem `.in(ids)`: com milhares de chamados a URL estoura. O mapa abaixo só é
       // lido pelos chamados que a pessoa pode ver.
       fetchAll(() => supabase.from("ticket_attachments").select("id, ticket_id, path, filename, content_type").order("id")),
+      montarPedido(),
     ]);
 
   const attByTicket = new Map<string, TicketRow["attachments"]>();
@@ -69,7 +86,7 @@ export default async function TicketsPage() {
     attByTicket.set(a.ticket_id, arr);
   }
 
-  const rows: TicketRow[] = (tickets ?? []).map((t) => ({
+  const paraLinha = (t: NonNullable<typeof tickets>[number]): TicketRow => ({
     id: t.id,
     code: t.code,
     title: t.title,
@@ -95,7 +112,11 @@ export default async function TicketsPage() {
     npsScore: t.nps_score,
     npsComment: t.nps_comment,
     attachments: attByTicket.get(t.id) ?? [],
-  }));
+  });
+  const rows: TicketRow[] = (tickets ?? []).map(paraLinha);
+  const abrir = abrirId
+    ? rows.find((r) => r.id === abrirId) ?? (pedidoAvulso ? paraLinha(pedidoAvulso) : null)
+    : null;
 
   const members2 = members
     .map((m) => ({ id: m.profile?.id ?? "", name: m.profile?.full_name ?? m.profile?.email ?? "—" }))
@@ -128,6 +149,7 @@ export default async function TicketsPage() {
           fullAccess={fullAccess}
           isOwner={role === "owner"}
           managedSectorIds={managedSectorIds}
+          abrir={abrir}
         />
       ),
     },
@@ -137,7 +159,7 @@ export default async function TicketsPage() {
     <div>
       <PageHeader title="Chamados" subtitle="Solicitações de TI, Serviços Gerais e outras áreas." />
       <FiltrosChamadosProvider>
-        <Tabs tabs={tabs} />
+        <AbasDosChamados tabs={tabs} />
       </FiltrosChamadosProvider>
     </div>
   );

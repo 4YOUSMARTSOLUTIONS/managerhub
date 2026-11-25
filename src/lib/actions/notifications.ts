@@ -9,6 +9,7 @@ export type NotificationRow = {
   body: string | null;
   demandaId: string | null;
   plannerBoardId: string | null;
+  ticketId: string | null;
   isRead: boolean;
   createdAt: string;
 };
@@ -17,12 +18,12 @@ export async function getNotifications(): Promise<{ items: NotificationRow[]; un
   const { supabase, userId } = await actionContext();
   const { data } = await supabase
     .from("notifications")
-    .select("id, type, title, body, demanda_id, planner_board_id, is_read, created_at")
+    .select("id, type, title, body, demanda_id, planner_board_id, ticket_id, is_read, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(50);
   const items = (data ?? []).map((n) => ({
-    id: n.id, type: n.type, title: n.title, body: n.body, demandaId: n.demanda_id, plannerBoardId: n.planner_board_id, isRead: n.is_read, createdAt: n.created_at,
+    id: n.id, type: n.type, title: n.title, body: n.body, demandaId: n.demanda_id, plannerBoardId: n.planner_board_id, ticketId: n.ticket_id, isRead: n.is_read, createdAt: n.created_at,
   }));
   return { items, unread: items.filter((n) => !n.isRead).length };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Section } from "@/components/ui/Section";
@@ -18,6 +18,9 @@ import { confirmDialog } from "@/components/ui/confirm";
 import { MenuDeLinha } from "@/components/ui/MenuDeLinha";
 import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
 import { formatDateTime, isOverdue, numeroChamado, shortName } from "@/lib/format";
+import { Tabs, type Tab } from "@/components/ui/Tabs";
+import { ABRIR_CHAMADO } from "@/lib/notificacao-destino";
+import { tirarDaUrl } from "@/lib/abrir-pela-url";
 
 const TERMINAL = ["resolved", "closed", "cancelled"];
 const POR_PAGINA = 50;
@@ -61,8 +64,25 @@ export type TicketRow = {
   attachments: { id: string; path: string; filename: string; contentType: string | null }[];
 };
 
+/**
+ * As abas de Chamados. O aviso do sino leva a `?chamado=<id>`: a aba
+ * Chamados vem à frente, mesmo com a pessoa no Dashboard, e a ficha abre lá.
+ */
+export function AbasDosChamados({ tabs }: { tabs: Tab[] }) {
+  const pedido = useSearchParams().get(ABRIR_CHAMADO);
+  const [ativa, setAtiva] = useState(pedido ? "chamados" : tabs[0]?.id);
+  // muda de aba uma vez por pedido novo; depois a pessoa troca à vontade
+  const [pedidoVisto, setPedidoVisto] = useState(pedido);
+  if (pedido !== pedidoVisto) {
+    setPedidoVisto(pedido);
+    if (pedido) setAtiva("chamados");
+  }
+  return <Tabs tabs={tabs} active={ativa} onActiveChange={setAtiva} />;
+}
+
 export function TicketsManager({
   tickets, sectors, categories, units, slas, slaMode, members, currentUserId, isAdmin, fullAccess, isOwner, managedSectorIds,
+  abrir = null,
 }: {
   tickets: TicketRow[];
   sectors: Opt[];
@@ -76,13 +96,34 @@ export function TicketsManager({
   fullAccess: boolean;
   isOwner: boolean;
   managedSectorIds: string[];
+  /** o chamado pedido pela URL (aviso do sino), já conferido no escopo de quem vê; null se não achou */
+  abrir?: TicketRow | null;
 }) {
   const showPriority = slaMode !== "category";
   const managedSet = new Set(managedSectorIds);
   // pode tratar um chamado específico: acesso total (owner/admin) ou gestor do setor dele
   const canEditTicket = (t: TicketRow) => fullAccess || (!!t.sectorId && managedSet.has(t.sectorId));
   const [newOpen, setNewOpen] = useState(false);
-  const [selected, setSelected] = useState<TicketRow | null>(null);
+  // `?chamado=<id>` (aviso do sino) abre a ficha. Clicar em outro aviso com a
+  // tela já aberta troca o chamado: o pedido muda e o painel acompanha.
+  const pedido = useSearchParams().get(ABRIR_CHAMADO);
+  const doPedido = pedido && abrir?.id === pedido ? abrir : null;
+  const [selected, setSelected] = useState<TicketRow | null>(doPedido);
+  const [pedidoVisto, setPedidoVisto] = useState(pedido);
+  if (pedido !== pedidoVisto) {
+    setPedidoVisto(pedido);
+    if (doPedido) setSelected(doPedido);
+  }
+  // excluído, ou fora do que a pessoa alcança: avisa em vez de abrir a lista calada
+  useEffect(() => {
+    if (!pedido || abrir?.id === pedido) return;
+    toast.info("Este chamado não está mais disponível para você.");
+    tirarDaUrl(ABRIR_CHAMADO);
+  }, [pedido, abrir]);
+  const fecharFicha = () => {
+    setSelected(null);
+    tirarDaUrl(ABRIR_CHAMADO);
+  };
   const [ratingTicket, setRatingTicket] = useState<TicketRow | null>(null);
   const [decideTicket, setDecideTicket] = useState<TicketRow | null>(null);
   const [reopenNote, setReopenNote] = useState("");
@@ -308,7 +349,7 @@ export function TicketsManager({
       />
       <TicketPanel
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={fecharFicha}
         ticket={selected}
         sectors={sectors}
         categories={categories}

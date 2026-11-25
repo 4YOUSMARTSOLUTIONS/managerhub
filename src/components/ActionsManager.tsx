@@ -26,6 +26,8 @@ import { ImportActionsDialog } from "./ImportActionsDialog";
 import { ExportActionsButton } from "./ExportActionsButton";
 import { DemandaPanel, type DemandaInfo, type AssigneeState } from "./DemandaPanel";
 import type { Enums } from "@/types/database";
+import { ABRIR_DEMANDA } from "@/lib/notificacao-destino";
+import { tirarDaUrl } from "@/lib/abrir-pela-url";
 
 export type DemandaCard = {
   id: string;
@@ -298,9 +300,43 @@ export type ActionRow = {
   attachments: { id: string; filename: string; path: string }[];
 };
 
+/** O que o painel da demanda precisa: a demanda e quem manda nela. */
+type Painel = { demanda: DemandaInfo; requesterId: string | null; createdById: string | null };
+
+function painelDe(d: DemandaCard, a: ActionRow, di: number): Painel {
+  return {
+    demanda: {
+      id: d.id,
+      label: a.demandas.length > 1 ? `#${a.code}.${di + 1}` : `#${a.code}`,
+      description: d.description,
+      status: d.status as Enums<"action_status">,
+      dueDate: d.dueDate,
+      priority: a.priority,
+      assigneeIds: d.assigneeIds,
+      assigneeNames: d.assigneeNames,
+      assigneeStates: d.assigneeStates,
+      attachments: d.attachments,
+      requesterName: a.requesterName,
+      problem: a.problem,
+      ccNames: a.ccNames,
+      isSdpo: a.isSdpo,
+      pilarName: a.pilarName,
+      secaoName: a.secaoName,
+      blocoName: a.blocoName,
+      itemName: a.itemName,
+      kpiName: a.kpiName,
+      toolName: a.toolName,
+      seriesName: a.seriesName,
+      occurredOn: a.occurredOn,
+    },
+    requesterId: a.requesterId,
+    createdById: a.createdById,
+  };
+}
+
 export function ActionsManager({
   actions, currentUserId, isAdmin, isOwner, units, aiEnabled,
-  filters, ordem, total,
+  filters, ordem, total, abrir = null,
 }: {
   actions: ActionRow[];
   filters: ActionFilters;
@@ -312,9 +348,32 @@ export function ActionsManager({
   isOwner: boolean;
   units?: Opt[];
   aiEnabled?: boolean;
+  /**
+   * A ação da demanda pedida pela URL (aviso do sino), lida com a visibilidade
+   * de quem clicou; null se não achou. Pode estar fora da página e dos filtros.
+   */
+  abrir?: ActionRow | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<{ demanda: DemandaInfo; requesterId: string | null; createdById: string | null } | null>(null);
+  // `?demanda=<id>` (aviso do sino) abre o painel daquela demanda. Outro aviso
+  // com a tela já aberta troca a demanda: o pedido muda e o painel acompanha.
+  const pedido = useSearchParams().get(ABRIR_DEMANDA);
+  const painelDoPedido = (): Painel | null => {
+    if (!pedido || !abrir) return null;
+    const di = abrir.demandas.findIndex((d) => d.id === pedido);
+    return di < 0 ? null : painelDe(abrir.demandas[di], abrir, di);
+  };
+  const [selected, setSelected] = useState<Painel | null>(painelDoPedido);
+  const [pedidoVisto, setPedidoVisto] = useState(pedido);
+  if (pedido !== pedidoVisto) {
+    setPedidoVisto(pedido);
+    const p = painelDoPedido();
+    if (p) setSelected(p);
+  }
+  const fecharPainel = () => {
+    setSelected(null);
+    tirarDaUrl(ABRIR_DEMANDA);
+  };
   const [editAction, setEditAction] = useState<{ id: string; seed: CollectedAction } | null>(null);
   const [editErro, setEditErro] = useState("");
 
@@ -339,7 +398,20 @@ export function ActionsManager({
     }
   }, []);
 
+  // excluída, ou fora do que a pessoa alcança: avisa em vez de abrir a lista calada
+  const pedidoAchado = !!pedido && !!abrir?.demandas.some((d) => d.id === pedido);
   useEffect(() => {
+    if (!pedido || pedidoAchado) return;
+    toast.info("Esta ação não está mais disponível para você.");
+    tirarDaUrl(ABRIR_DEMANDA);
+  }, [pedido, pedidoAchado]);
+
+  useEffect(() => {
+    // veio pelo aviso: o painel já está esperando os catálogos
+    if (pedidoAchado) {
+      const t = setTimeout(() => void garantirOpcoes(), 0);
+      return () => clearTimeout(t);
+    }
     // requestIdleCallback não existe no Safari; o timer é a rede de segurança
     const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (id: number) => void };
     if (w.requestIdleCallback) {
@@ -348,7 +420,7 @@ export function ActionsManager({
     }
     const t = setTimeout(() => void garantirOpcoes(), 1500);
     return () => clearTimeout(t);
-  }, [garantirOpcoes]);
+  }, [garantirOpcoes, pedidoAchado]);
 
   const abrirNovaAcao = () => { setEditAction(null); setOpen(true); void garantirOpcoes(); };
 
@@ -377,34 +449,7 @@ export function ActionsManager({
 
   const openPanel = (d: DemandaCard, a: ActionRow, di: number) => {
     void garantirOpcoes();
-    setSelected({
-      demanda: {
-        id: d.id,
-        label: a.demandas.length > 1 ? `#${a.code}.${di + 1}` : `#${a.code}`,
-        description: d.description,
-        status: d.status as Enums<"action_status">,
-        dueDate: d.dueDate,
-        priority: a.priority,
-        assigneeIds: d.assigneeIds,
-        assigneeNames: d.assigneeNames,
-        assigneeStates: d.assigneeStates,
-        attachments: d.attachments,
-        requesterName: a.requesterName,
-        problem: a.problem,
-        ccNames: a.ccNames,
-        isSdpo: a.isSdpo,
-        pilarName: a.pilarName,
-        secaoName: a.secaoName,
-        blocoName: a.blocoName,
-        itemName: a.itemName,
-        kpiName: a.kpiName,
-        toolName: a.toolName,
-        seriesName: a.seriesName,
-        occurredOn: a.occurredOn,
-      },
-      requesterId: a.requesterId,
-      createdById: a.createdById,
-    });
+    setSelected(painelDe(d, a, di));
   };
 
   // ---------- Filtros (aplicados no banco, sincronizados pela URL) ----------
@@ -936,7 +981,7 @@ export function ActionsManager({
 
       <DemandaPanel
         open={!!selected && !!opcoes}
-        onClose={() => setSelected(null)}
+        onClose={fecharPainel}
         demanda={selected?.demanda ?? null}
         requesterId={selected?.requesterId ?? null}
         createdById={selected?.createdById ?? null}
@@ -944,7 +989,7 @@ export function ActionsManager({
         isAdmin={isAdmin}
         people={opcoes?.people ?? []}
       />
-      {selected && !opcoes && <CarregandoFormulario onClose={() => setSelected(null)} />}
+      {selected && !opcoes && <CarregandoFormulario onClose={fecharPainel} />}
     </div>
   );
 }

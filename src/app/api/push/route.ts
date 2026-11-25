@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     const expiradas: string[] = [];
     for (let i = 0; i < linhas.length; i += LOTE) {
       await Promise.all(linhas.slice(i, i + LOTE).map(async (l) => {
-        const url = destinoDaNotificacao({ type: l.type, demandaId: l.demanda_id, plannerBoardId: l.planner_board_id }) ?? "/dashboard";
+        const url = destinoDaNotificacao({ type: l.type, demandaId: l.demanda_id, plannerBoardId: l.planner_board_id, ticketId: l.ticket_id }) ?? "/dashboard";
         // aparelho parado além do tempo da pessoa (celular compartilhado): a
         // sessão dela venceu e quem está com o celular pode ser outra pessoa.
         // O aviso chega, mas sem dizer do que se trata.

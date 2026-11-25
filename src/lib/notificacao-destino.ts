@@ -1,4 +1,12 @@
 /**
+ * Parâmetros que abrem o item na tela (LUIZ, 25/11/2026): o aviso leva àquele
+ * chamado ou àquela ação, e não só à lista. A tela lê o parâmetro, abre o
+ * painel e o tira da URL ao fechar.
+ */
+export const ABRIR_CHAMADO = "chamado";
+export const ABRIR_DEMANDA = "demanda";
+
+/**
  * Para onde uma notificação leva. O sino e o aviso no celular usam o mesmo
  * mapa: tocar no aviso do celular abre a mesma tela que clicar no sino.
  *
@@ -8,10 +16,14 @@ export function destinoDaNotificacao(n: {
   type: string;
   demandaId?: string | null;
   plannerBoardId?: string | null;
+  ticketId?: string | null;
 }): string | null {
-  // a notificação sabe para onde aponta: quadro do Planner ou lista de Ações
+  // a notificação sabe para onde aponta: quadro do Planner, chamado ou ação
   if (n.plannerBoardId) return `/planner?quadro=${n.plannerBoardId}`;
-  if (n.demandaId) return "/acoes";
+  if (n.ticketId) return `/chamados?${ABRIR_CHAMADO}=${n.ticketId}`;
+  if (n.demandaId) return `/acoes?${ABRIR_DEMANDA}=${n.demandaId}`;
+  // aviso de chamado sem o id (o chamado foi excluído): ao menos a lista
+  if (n.type === "ticket") return "/chamados";
   // treinamento não tem destino próprio na tabela: o tipo já diz para onde ir,
   // e uma coluna a mais em `notifications` custaria uma migração por módulo
   if (n.type.startsWith("training_")) return "/treinamentos";
