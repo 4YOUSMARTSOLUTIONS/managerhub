@@ -329,6 +329,8 @@ export function ActionDialog({
       start(async () => {
         const res = await updateAction(editingActionId, fd);
         if (res.error) { setError(res.error); return; }
+        // confirmação com o número da ação: sem isso o formulário só fechava
+        toast.success(res.message ?? "Ação atualizada.");
         if (res.warning) toast.warning(res.warning);
         onClose();
         router.refresh();

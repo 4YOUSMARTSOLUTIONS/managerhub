@@ -528,11 +528,16 @@ export async function updateAction(actionId: string, formData: FormData): Promis
     if (error) return { error: error.message };
 
     const demandaIds = ((data ?? {}) as { demanda_ids?: string[] }).demanda_ids ?? [];
-    const falhas = await gravarAnexos(supabase, tenantId, userId, actionId, demandaIds, formData);
+    // o número vai na confirmação, como na criação
+    const [falhas, { data: salva }] = await Promise.all([
+      gravarAnexos(supabase, tenantId, userId, actionId, demandaIds, formData),
+      supabase.from("actions").select("code").eq("id", actionId).maybeSingle(),
+    ]);
+    const message = salva?.code != null ? `Ação #${salva.code} atualizada.` : "Ação atualizada.";
 
     revalidatePath("/acoes");
     revalidatePath("/dashboard");
-    return falhas ? { ok: true, warning: avisoDeAnexos(falhas) } : { ok: true };
+    return falhas ? { ok: true, message, warning: avisoDeAnexos(falhas) } : { ok: true, message };
   } catch (e) { return { error: (e as Error).message }; }
 }
 
