@@ -940,7 +940,9 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp }: {
   const escolheram = pessoas.filter((p) => p.quer !== null);
   const [filtro, setFiltro] = useState<"pendentes" | "escolheram" | "todos">(pendentes.length > 0 ? "pendentes" : "todos");
   const [salvando, iniciar] = useTransition();
-  const lista = filtro === "pendentes" ? pendentes : filtro === "escolheram" ? escolheram : pessoas;
+  const [busca, setBusca] = useState("");
+  const lista = (filtro === "pendentes" ? pendentes : filtro === "escolheram" ? escolheram : pessoas)
+    .filter((p) => casaBusca(busca, p.nome, p.matricula));
   const enviadoEm = (p: EscolhaDecimoDaEquipe) => (p.escolhidoEm ? DIA_SP.format(new Date(p.escolhidoEm)) : "");
   const rotulo = (p: EscolhaDecimoDaEquipe) => (p.quer === null ? "Pendente" : p.quer ? "Quer adiantar" : "Não quer adiantar");
 
@@ -989,6 +991,8 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp }: {
           rows={pessoas.map((p) => [p.matricula ?? "", p.nome, p.unidade ?? "", p.setor ?? "", rotulo(p), enviadoEm(p)])}
         />
       </div>
+      <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+      <CampoBusca valor={busca} onMudar={setBusca} />
       <div style={{ display: "inline-flex", gap: "0.35rem", flexWrap: "wrap" }}>
         {filtros.map((f) => (
           <button
@@ -1000,7 +1004,10 @@ function EscolhasDoDecimo({ ano, prazo, pessoas, ehDp }: {
           </button>
         ))}
       </div>
-      {lista.length === 0 ? (
+      </div>
+      {lista.length === 0 && busca.trim() ? (
+        <NinguemNaBusca busca={busca} />
+      ) : lista.length === 0 ? (
         <EmptyState
           title={filtro === "pendentes" ? "Todos já escolheram" : "Ninguém por aqui"}
           description={filtro === "pendentes" ? `Todos os operacionais já escolheram o 13º de ${ano}.` : "Nenhum operacional neste recorte."}
@@ -1217,6 +1224,31 @@ function CartaoResumo({
   );
 }
 
+/**
+ * Busca pelo colaborador nas filas (Aprovações, Efetivação e Escolha do 13º),
+ * pedido do LUIZ em 25/11/2026. Nome ou matrícula, sem ligar para acento e
+ * maiúscula, como em Todas as previsões.
+ */
+function CampoBusca({ valor, onMudar }: { valor: string; onMudar: (v: string) => void }) {
+  return (
+    <input
+      type="search" className="input" aria-label="Buscar colaborador"
+      placeholder="Buscar colaborador por nome ou matrícula…"
+      value={valor} onChange={(e) => onMudar(e.target.value)} style={{ maxWidth: 320 }}
+    />
+  );
+}
+
+const casaBusca = (busca: string, nome: string | null, matricula: string | null) => {
+  const q = normalizar(busca.trim());
+  return !q || normalizar(`${nome ?? ""} ${matricula ?? ""}`).includes(q);
+};
+
+/** A busca não achou ninguém, mas a lista tem gente: diz isso, e não "nada aguardando". */
+function NinguemNaBusca({ busca }: { busca: string }) {
+  return <EmptyState title="Ninguém encontrado" description={`Nenhum colaborador desta lista corresponde a "${busca.trim()}".`} />;
+}
+
 function FilaGestor({
   fila, onDetalhe, onDevolver, soEquipe, anteriorDe, hoje, unidades, soUsuarios, porSetor, decide,
 }: {
@@ -1239,6 +1271,8 @@ function FilaGestor({
 }) {
   const [decidindo, iniciar] = useTransition();
   const [vendoEquipe, setVendoEquipe] = useState(false);
+  const [busca, setBusca] = useState("");
+  const visiveis = fila.filter((r) => casaBusca(busca, r.fullName, r.employeeCode));
 
   // Quem mais estará fora no período de cada pedido (LUIZ, 12/11/2026): uma
   // busca só, que serve ao alerta de cada linha e à linha do tempo da equipe.
@@ -1280,7 +1314,8 @@ function FilaGestor({
   return (
     <div style={{ paddingTop: "0.9rem" }}>
       {/* um ícone só para a equipe inteira (LUIZ, 12/11/2026), não um por pedido */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.6rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.6rem", marginBottom: "0.6rem" }}>
+        {fila.length > 0 ? <CampoBusca valor={busca} onMudar={setBusca} /> : <span />}
         <button type="button" className="btn btn-ghost btn-sm" title={rotuloEquipe} aria-label={rotuloEquipe} onClick={() => setVendoEquipe(true)}>
           <CalendarRange size={16} aria-hidden />
         </button>
@@ -1292,6 +1327,8 @@ function FilaGestor({
             ? "Nenhuma solicitação da sua equipe aguarda decisão. As das outras equipes estão em Toda a empresa."
             : "As solicitações da sua equipe aparecem aqui para aprovar ou devolver."}
         />
+      ) : visiveis.length === 0 ? (
+        <NinguemNaBusca busca={busca} />
       ) : (
         <div className="card" style={{ overflowX: "auto" }}>
           <table className="table">
@@ -1307,7 +1344,7 @@ function FilaGestor({
               </tr>
             </thead>
             <tbody>
-              {fila.map((r) => (
+              {visiveis.map((r) => (
                 <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onDetalhe(r)}>
                   <td>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
@@ -1425,6 +1462,7 @@ function FilaDp({
   onEfetivar: (r: FeriasRow) => void;
   onDevolver: (r: FeriasRow) => void;
 }) {
+  const [busca, setBusca] = useState("");
   if (fila.length === 0) {
     return (
       <div style={{ paddingTop: "0.9rem" }}>
@@ -1437,8 +1475,39 @@ function FilaDp({
       </div>
     );
   }
+  const visiveis = fila.filter((r) => casaBusca(busca, r.fullName, r.employeeCode));
+  // Planilha para a conferência do DP (LUIZ, 25/11/2026): o que está na tela,
+  // com as datas como data de verdade no Excel, para ordenar e filtrar.
+  const anterior = (r: FeriasRow) => {
+    const a = anteriorDe(r);
+    return a ? `${formatDate(a.startDate)} a ${formatDate(a.endDate)}` : "";
+  };
+  const situacao = (r: FeriasRow) =>
+    aguardandoDecimo[r.id] ? `Aguardando escolha do 13º até ${formatDate(aguardandoDecimo[r.id])}` : "Pronta para efetivar";
   return (
-    <div className="card" style={{ overflowX: "auto", marginTop: "0.9rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", paddingTop: "0.9rem" }}>
+    <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+      <CampoBusca valor={busca} onMudar={setBusca} />
+      <span className="soft" style={{ fontSize: "0.8rem" }}>{visiveis.length} previsão(ões)</span>
+      <div style={{ marginLeft: "auto" }}>
+        <ExportButton
+          filename={`efetivacao-de-ferias-${hojeSP()}`}
+          sheetName="Efetivação"
+          headers={["Matrícula", "Colaborador", "Unidade", "Setor", "Subsetor", "Cargo", "Início", "Término", "Dias", "Abono",
+            "Adiantar 13º", "Aquisitivo", "Origem", "Período anterior", "Fora do prazo", "Aprovada em", "Aprovada por", "Situação"]}
+          colunasDeData={["Início", "Término", "Aprovada em"]}
+          rows={visiveis.map((r) => [
+            r.employeeCode, r.fullName, r.unitName, r.departmentName, r.subdepartmentName, r.positionName,
+            r.startDate, r.endDate, r.dias, r.abonoDias,
+            r.decimo ? "Sim" : "Não", periodoAquisitivo(r.aquisitivoInicio, r.aquisitivoFim),
+            origemDaPrevisao(r), anterior(r), rotuloForaPrazo(r) ?? "",
+            r.decidedAt ? DIA_ISO_SP.format(new Date(r.decidedAt)) : null, r.decidedByName, situacao(r),
+          ])}
+        />
+      </div>
+    </div>
+    {visiveis.length === 0 ? <NinguemNaBusca busca={busca} /> : (
+    <div className="card" style={{ overflowX: "auto" }}>
       <table className="table">
         <thead>
           <tr>
@@ -1452,7 +1521,7 @@ function FilaDp({
           </tr>
         </thead>
         <tbody>
-          {fila.map((r) => (
+          {visiveis.map((r) => (
             <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => onDetalhe(r)}>
               <td style={{ fontWeight: 600 }}>{shortName(r.fullName)}</td>
               <td className="muted" style={{ fontSize: "0.82rem" }}>{r.departmentName ?? "—"}</td>
@@ -1502,8 +1571,21 @@ function FilaDp({
         </tbody>
       </table>
     </div>
+    )}
+    </div>
   );
 }
+
+/** A origem da previsão por extenso (a mesma ordem do selo da fila do DP). */
+function origemDaPrevisao(r: FeriasRow): string {
+  if (r.emDobro) return "Em dobro";
+  if (r.reagendadaDe) return "Reagendamento";
+  if (r.lancadaPeloGestor) return "Pelo gestor";
+  return "Solicitada";
+}
+
+/** AAAA-MM-DD no fuso de São Paulo: a planilha transforma em data do Excel. */
+const DIA_ISO_SP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" });
 
 // ============================================================================
 // Tabela geral
