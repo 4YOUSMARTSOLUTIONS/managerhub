@@ -469,22 +469,34 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true,
                 <p key={i} style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: "0.4rem 0 0" }}>{e}</p>
               ))}
               {analisando && <div className="soft" style={{ marginTop: 4 }}>Conferindo o que muda em cada cadastro…</div>}
-              {analise && (
-                <div className="muted" style={{ marginTop: 4 }}>
-                  {pendentes.length === 0
-                    ? "Nenhuma mudança de função, nível, setor, subsetor, gestor ou hierarquia."
-                    : `${pendentes.length} colaborador(es) com mudança que pede data.`}
-                  {analise.preenchimentos > 0 && ` ${analise.preenchimentos} cadastro(s) só vão ser completados (campo que estava vazio), sem data.`}
-                  {admDiv.length > 0 && ` ${admDiv.length} com admissão diferente da planilha.`}
-                </div>
-              )}
+              {/* o que a prévia diz, com quem é quem: clicar na linha abre a lista */}
               {analise && (
                 <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.82rem" }}>
-                  <li>{admissoes} admissão(ões)</li>
-                  <li>{desligamentos} desligamento(s)</li>
-                  <li>{pendentes.length} mudança(s) com data (função, setor, gestor, hierarquia…)</li>
-                  {analise.preenchimentos > 0 && <li>{analise.preenchimentos} campo(s) vazio(s) completado(s)</li>}
-                  {dadosPessoais > 0 && <li>{dadosPessoais} cadastro(s) com dado pessoal atualizado (telefone, e-mail, nascimento)</li>}
+                  <LinhaDaPrevia
+                    rotulo={`${admissoes} admissão(ões)`}
+                    itens={analise.createdList.filter((c) => !c.desligado).map((c) => `${c.nome} · matrícula ${c.codigo ?? "?"} · ${c.unidade}`)}
+                  />
+                  <LinhaDaPrevia
+                    rotulo={`${desligamentos} desligamento(s)`}
+                    itens={analise.updatedList.filter((u) => u.tipo === "desligamento").map((u) => `${u.nome}: ${u.motivo}`)}
+                  />
+                  <LinhaDaPrevia
+                    rotulo={`${pendentes.length} mudança(s) que pedem data (função, setor, gestor, hierarquia…)`}
+                    itens={pendentes.map((p) => `${p.nome}: ${p.mudancas.map((m) => `${m.campo} ${m.de ?? "(vazio)"} → ${m.para ?? "(vazio)"}`).join("; ")}`)}
+                  />
+                  {analise.preenchimentos > 0 && (
+                    <LinhaDaPrevia
+                      rotulo={`${analise.preenchimentos} cadastro(s) com campo que estava vazio, completado sem data`}
+                      itens={completados(analise)}
+                    />
+                  )}
+                  {dadosPessoais > 0 && (
+                    <LinhaDaPrevia
+                      rotulo={`${dadosPessoais} cadastro(s) com dado pessoal atualizado`}
+                      itens={analise.updatedList.filter((u) => u.tipo === "dados").map((u) => `${u.nome}: ${u.motivo.replace(/^Dados atualizados: /, "")}`)}
+                    />
+                  )}
+                  {admDiv.length > 0 && <li>{admDiv.length} com admissão diferente da cadastrada (lista abaixo)</li>}
                   <li>{analise.skipped} sem nenhuma mudança</li>
                 </ul>
               )}
@@ -853,4 +865,33 @@ function regrasNovas(itens: ItemACompletar[], escolhas: Record<string, Escolha>,
     }
   }
   return { funcoes: [...funcoes.values()], subsetores: [...subsetores.values()] };
+}
+
+/** uma linha do resumo da prévia; com lista, ela abre ao clicar */
+function LinhaDaPrevia({ rotulo, itens }: { rotulo: string; itens: string[] }) {
+  if (itens.length === 0) return <li>{rotulo}</li>;
+  return (
+    <li>
+      <details>
+        <summary style={{ cursor: "pointer" }}>{rotulo}</summary>
+        <ul style={{ margin: "0.25rem 0 0.4rem", paddingLeft: "1rem", maxHeight: 180, overflow: "auto" }}>
+          {itens.map((t, i) => <li key={i}>{t}</li>)}
+        </ul>
+      </details>
+    </li>
+  );
+}
+
+/**
+ * Quem só tem campo vazio completado (nível, hierarquia, gestor), com o valor
+ * novo. Sem data: completar o que faltava não é movimentação.
+ */
+function completados(a: ImportSummary): string[] {
+  const porPessoa = new Map<string, { nome: string; o: string[] }>();
+  for (const l of [...a.levelsList, ...a.hierarchiesList, ...a.managersList]) {
+    const x = porPessoa.get(l.cpf) ?? { nome: l.nome, o: [] };
+    x.o.push(l.motivo);
+    porPessoa.set(l.cpf, x);
+  }
+  return [...porPessoa.values()].map((x) => `${x.nome}: ${x.o.join("; ")}`);
 }

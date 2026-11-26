@@ -74,6 +74,8 @@ export async function salvarRegraFuncao(positionId: string, hierarchyId: string 
       )
       : await supabase.from("regra_funcao_hierarquia").delete().eq("tenant_id", tenantId).eq("position_id", positionId);
     if (error) return { error: error.message };
+    // a importação, na mesma tela, precisa da regra nova
+    revalidatePath("/configuracoes");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -94,6 +96,8 @@ export async function salvarRegraSubsetor(
       : await supabase.from("regra_subsetor_gestor").delete()
         .eq("tenant_id", tenantId).eq("subdepartment_id", subdepartmentId).eq("unit_id", unitId);
     if (error) return { error: error.message };
+    // a importação, na mesma tela, precisa da regra nova
+    revalidatePath("/configuracoes");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
