@@ -24,6 +24,7 @@ import { addFeedbackCompetencyForm, removeFeedbackCompetencyForm, toggleFeedback
 import { FeedbackCadenceEditor } from "@/components/FeedbackCadenceEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
+import { RegrasImportacaoManager, type GrupoSubsetor } from "@/components/RegrasImportacaoManager";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
 import { AcessoTelasManager } from "@/components/acesso/AcessoTelasManager";
 import { SessaoManager } from "@/components/acesso/SessaoManager";
@@ -208,6 +209,7 @@ export default async function SettingsPage({
     { data: feriasBloqueadosData }, { data: situacoesData }, { data: feriasConfigData },
     equipeDoGestor,
     { count: cidTotal }, { data: mgrSectors }, { data: blitzForaData }, { data: blitzExcData },
+    { data: importacaoConfigData }, { data: regrasFuncaoData }, { data: regrasSubsetorData },
   ] = await Promise.all([
     em("estrutura", "usuarios", "chamados", "rv", "punicoes", "ferias", "seguranca") ? fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")) : nada,
     em("empresa", "usuarios", "rv", "punicoes", "ferias", "absenteismos", "seguranca", "salas") ? supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name") : nada,
@@ -355,6 +357,11 @@ export default async function SettingsPage({
     // Público da blitz: funções de fora e exceções por pessoa
     em("seguranca") ? supabase.from("seg_blitz_publico_funcoes").select("position_id").eq("tenant_id", tenant.id) : nada,
     em("seguranca") ? supabase.from("seg_blitz_publico_pessoas").select("user_id, participa").eq("tenant_id", tenant.id) : nada,
+    // importação de colaboradores: parâmetros do arquivo do Domínio e as regras
+    // de sugestão (só quem importa: owner, admin e DP)
+    em("usuarios") && canEditDP ? supabase.from("importacao_config").select("empresas_dominio, dominios_email_corporativo").eq("tenant_id", tenant.id).maybeSingle() : nada,
+    em("usuarios") && canEditDP ? supabase.from("regra_funcao_hierarquia").select("position_id, hierarchy_level_id").eq("tenant_id", tenant.id) : nada,
+    em("usuarios") && canEditDP ? supabase.from("regra_subsetor_gestor").select("subdepartment_id, unit_id, manager_id").eq("tenant_id", tenant.id) : nada,
   ]);
   const equipe = equipeDoGestor ? new Set(equipeDoGestor) : null;
   // Equipe de segurança inclui e desativa/reativa perguntas da blitz (LUIZ,
@@ -703,6 +710,65 @@ export default async function SettingsPage({
   // Férias moram DENTRO de Colaboradores, e não numa aba de topo: é dado por
   // pessoa, e a barra de cima já tem nove itens. Quem procura "férias" procura no
   // cadastro de gente.
+  // Regras da importação (LUIZ, 26/11/2026): o arquivo do Domínio sobe como sai
+  // e a importação sugere o que ele não traz a partir destas regras
+  const importacao = canEditDP ? {
+    empresasDominio: Object.fromEntries(
+      Object.entries((importacaoConfigData?.empresas_dominio ?? {}) as Record<string, unknown>)
+        .filter((par): par is [string, string] => typeof par[1] === "string"),
+    ),
+    regrasFuncao: (regrasFuncaoData ?? []).map((r) => ({ positionId: r.position_id, hierarchyId: r.hierarchy_level_id })),
+    regrasSubsetor: (regrasSubsetorData ?? []).map((r) => ({ subdepartmentId: r.subdepartment_id, unitId: r.unit_id, managerId: r.manager_id })),
+  } : undefined;
+  const regrasImportacaoTab = (() => {
+    if (!importacao) return null;
+    const ativosDaEmpresa = mems.filter((m) => m.is_active);
+    const porFuncao = new Map<string, number>();
+    const porGrupo = new Map<string, number>();
+    for (const m of ativosDaEmpresa) {
+      if (m.position_id) porFuncao.set(m.position_id, (porFuncao.get(m.position_id) ?? 0) + 1);
+      if (!m.subdepartment_id) continue;
+      for (const u of unitsByMem.get(m.id) ?? []) {
+        const k = `${m.subdepartment_id}|${u}`;
+        porGrupo.set(k, (porGrupo.get(k) ?? 0) + 1);
+      }
+    }
+    // os grupos com gente hoje e os que só têm regra
+    for (const r of importacao.regrasSubsetor) {
+      const k = `${r.subdepartmentId}|${r.unitId}`;
+      if (!porGrupo.has(k)) porGrupo.set(k, 0);
+    }
+    const grupos: GrupoSubsetor[] = [...porGrupo.entries()].flatMap(([k, pessoas]) => {
+      const [subId, unId] = k.split("|");
+      const sub = subById.get(subId);
+      const un = unitById.get(unId);
+      if (!sub || !un) return [];
+      return [{
+        subsetorId: subId, subsetorNome: sub.name, setorNome: deptById.get(sub.department_id)?.name ?? "",
+        unidadeId: unId, unidadeNome: un.name, pessoas,
+      }];
+    }).sort((a, b) => a.setorNome.localeCompare(b.setorNome, "pt-BR") || a.subsetorNome.localeCompare(b.subsetorNome, "pt-BR") || a.unidadeNome.localeCompare(b.unidadeNome, "pt-BR"));
+    return (
+      <RegrasImportacaoManager
+        canEdit={canEditDP}
+        config={{
+          empresasDominio: importacao.empresasDominio,
+          dominiosEmail: importacaoConfigData?.dominios_email_corporativo ?? [],
+        }}
+        unidades={(units ?? []).map((u) => ({ id: u.id, name: u.name }))}
+        funcoes={(positions ?? []).filter((x) => x.active).map((x) => ({ id: x.id, name: x.name, pessoas: porFuncao.get(x.id) ?? 0 }))
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))}
+        hierarquias={(hierarchies ?? []).filter((h) => h.active).map((h) => ({ id: h.id, name: h.name }))}
+        grupos={grupos}
+        gestores={employeesTodos.filter((e) => e.active && !e.dismissedAt)
+          .map((e) => ({ id: e.userId, name: e.fullName ?? "Sem nome" }))
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))}
+        regrasFuncao={importacao.regrasFuncao}
+        regrasSubsetor={importacao.regrasSubsetor}
+      />
+    );
+  })();
+
   const usuariosTab = (
     <Tabs
       variant="sub"
@@ -724,6 +790,7 @@ export default async function SettingsPage({
               isSuperAdmin={isSuperAdmin}
               canEdit={canEditDP}
               canManageAccess={canEdit}
+              importacao={importacao}
             />
           ),
         },
@@ -749,6 +816,7 @@ export default async function SettingsPage({
         },
         // quem vê quais telas (por nível, com exceção por pessoa) e quanto tempo
         // sem uso encerra a sessão; só owner/admin grava
+        ...(regrasImportacaoTab ? [{ id: "regras-importacao", label: "Regras da importação", content: regrasImportacaoTab }] : []),
         ...(veAcesso ? [{ id: "acesso", label: "Acesso e sessão", content: acessoTab }] : []),
       ]}
     />

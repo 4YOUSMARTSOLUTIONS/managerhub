@@ -13,7 +13,7 @@ import { setUserPassword, removeUser, setMemberActive, enviarLinkDeRecuperacao }
 import type { Tone } from "@/lib/constants";
 import { formatCpf, onlyDigits } from "@/lib/cpf";
 import { EmployeeDialog, type EmployeeData, type Option, type SubdeptOption, type UnitOption } from "./EmployeeDialog";
-import { ImportEmployeesDialog } from "./ImportEmployeesDialog";
+import { ImportEmployeesDialog, type ContextoImportacao } from "./ImportEmployeesDialog";
 import { EmployeeViewDialog } from "./EmployeeViewDialog";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { ExportButton } from "@/components/ui/ExportButton";
@@ -86,6 +86,7 @@ export function UsersManager({
   isSuperAdmin = false,
   canEdit = true,
   canManageAccess = true,
+  importacao,
 }: {
   employees: EmployeeRow[];
   units: UnitOption[];
@@ -115,6 +116,15 @@ export function UsersManager({
    * dentro do banco.
    */
   canManageAccess?: boolean;
+  /**
+   * Regras e parâmetros da importação (Configurações > Colaboradores > Regras
+   * da importação): é com eles que o arquivo do Domínio é lido e completado.
+   */
+  importacao?: {
+    empresasDominio: Record<string, string>;
+    regrasFuncao: { positionId: string; hierarchyId: string }[];
+    regrasSubsetor: { subdepartmentId: string; unitId: string; managerId: string }[];
+  };
 }) {
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -141,6 +151,40 @@ export function UsersManager({
     const ativos = new Set(employees.filter((e) => e.active).map((e) => e.userId));
     return people.map((p) => ({ ...p, active: ativos.has(p.id) }));
   }, [people, employees]);
+
+  // o que a importação precisa para ler o arquivo da folha e sugerir o que falta
+  const contextoImportacao = useMemo((): ContextoImportacao | undefined => {
+    if (!importacao) return undefined;
+    const ativos = employees.filter((e) => e.active && !e.dismissedAt);
+    const posNome = new Map(positions.map((x) => [x.id, x.name]));
+    const unNome = new Map(units.map((x) => [x.id, x.name]));
+    const deptNome = new Map(departments.map((x) => [x.id, x.name]));
+    return {
+      empresasDominio: importacao.empresasDominio,
+      ativos: ativos.map((e) => ({
+        userId: e.userId, nome: e.fullName ?? "", cpf: e.cpf ? onlyDigits(e.cpf) : null,
+        codigo: e.employeeCode, unidades: e.unitNames,
+        gestorId: e.managerId ?? null, gestorNome: e.managerName ?? null,
+        hierarquiaId: e.hierarchyLevelId ?? null, hierarquiaNome: e.hierarchyName ?? null,
+      })),
+      regrasFuncao: importacao.regrasFuncao
+        .map((r) => ({ funcao: posNome.get(r.positionId) ?? "", hierarquiaId: r.hierarchyId }))
+        .filter((r) => r.funcao),
+      regrasSubsetor: importacao.regrasSubsetor
+        .map((r) => ({ subsetorId: r.subdepartmentId, unidade: unNome.get(r.unitId) ?? "", gestorId: r.managerId }))
+        .filter((r) => r.unidade),
+      opcoes: {
+        subsetores: subdepartments
+          .filter((x) => x.active !== false)
+          .map((x) => ({ id: x.id, name: x.name, departmentName: deptNome.get(x.department_id) ?? "" }))
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+        hierarquias: hierarchies.filter((x) => x.active !== false).map((x) => ({ id: x.id, name: x.name })),
+        gestores: ativos
+          .map((e) => ({ id: e.userId, name: e.fullName ?? "Sem nome" }))
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+      },
+    };
+  }, [importacao, employees, positions, units, departments, subdepartments, hierarchies]);
 
   const openCreate = () => { setEditing(undefined); setOpen(true); };
   const openEdit = (e: EmployeeRow) => { setEditing(e); setOpen(true); };
@@ -409,7 +453,7 @@ export function UsersManager({
             subordinadosAtivos={editing ? employees.filter((e) => e.active && e.managerId === editing.userId).length : 0}
           />
 
-          {canEdit && <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} podeDefinirPerfil={canManageAccess} />}
+          {canEdit && <ImportEmployeesDialog open={importOpen} onClose={() => setImportOpen(false)} podeDefinirPerfil={canManageAccess} contexto={contextoImportacao} />}
         </>
       )}
 

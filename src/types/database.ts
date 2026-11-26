@@ -988,6 +988,29 @@ export type Database = {
         Update: { antecedencia_minima_dias?: number; antecedencia_gestor_dias?: number; antecedencia_dp_dias?: number; abono_fora_prazo?: string; decimo_fora_prazo?: string; decimo_prazo?: string; updated_by?: string | null; updated_at?: string }
         Relationships: []
       }
+      // ---- importação de colaboradores (LUIZ, 26/11/2026) ----
+      // Códigos de empresa do arquivo do Domínio e domínios do e-mail
+      // corporativo. Leitura de membro; escrita de owner/admin/DP.
+      importacao_config: {
+        Row: { id: string; tenant_id: string; empresas_dominio: Json; dominios_email_corporativo: string[]; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; empresas_dominio?: Json; dominios_email_corporativo?: string[]; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { empresas_dominio?: Json; dominios_email_corporativo?: string[]; updated_by?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      // Sugestões da importação: a hierarquia de cada função e o gestor de
+      // cada subsetor por unidade. Quem importa confirma.
+      regra_funcao_hierarquia: {
+        Row: { id: string; tenant_id: string; position_id: string; hierarchy_level_id: string; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; position_id: string; hierarchy_level_id: string; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { hierarchy_level_id?: string; updated_by?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      regra_subsetor_gestor: {
+        Row: { id: string; tenant_id: string; subdepartment_id: string; unit_id: string; manager_id: string; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; subdepartment_id: string; unit_id: string; manager_id: string; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { manager_id?: string; updated_by?: string | null; updated_at?: string }
+        Relationships: []
+      }
       // Dedup do varredor semanal de vencimento (cron): cada (pessoa,
       // aquisitivo, tipo) avisa uma vez. Escrita só pela função do cron.
       ferias_alertas_enviados: {

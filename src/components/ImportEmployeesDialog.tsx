@@ -3,11 +3,18 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { loadXlsx } from "@/lib/xlsx-lazy";
+import { loadXlsx, matrizDaPlanilha } from "@/lib/xlsx-lazy";
 import {
   importEmployees, simularImportacao,
   type ImportSummary, type PendenteImportacao,
 } from "@/lib/actions/employees";
+import { lembrarRegras } from "@/lib/actions/importacao";
+import { lerPlanilhaDeColaboradores, NOME_DO_FORMATO, type FormatoArquivo, type LinhaLida } from "@/lib/importacao-layouts";
+import { shortName } from "@/lib/format";
+import {
+  CompletarImportacao, faltaNoItem, SEM,
+  type Escolha, type ItemACompletar, type OpcoesCompletar,
+} from "./CompletarImportacao";
 
 type Row = Record<string, string>;
 
@@ -17,49 +24,7 @@ const TEMPLATE_HEADERS = [
   "Demissão", "Sexo", "Telefone", "E-mail", "Código Gestor", "Perfil", "Hierarquia",
 ];
 
-const norm = (s: string) =>
-  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-
-function fieldOf(header: string): string | null {
-  const h = norm(header);
-  // Gestor vem PRIMEIRO: "Código Gestor" contém "codigo" e cairia em
-  // employee_code lá embaixo, atribuindo a matrícula do chefe ao subordinado.
-  //
-  // Só a MATRÍCULA entra. Uma coluna de nome de gestor é ignorada de propósito:
-  // nome tem homônimo, e numa planilha de ~1000 linhas cada acerto por
-  // aproximação é uma chance de vincular a pessoa errada em silêncio. A
-  // exportação continua trazendo o nome, marcado como não editável, para
-  // conferência.
-  if (h.includes("gestor") || h.includes("lider") || h.includes("superior")) {
-    return h.includes("codigo") || h.includes("matricula") ? "manager_code" : null;
-  }
-  // "Perfil" sozinho é o perfil de ACESSO. Vem antes do teste de "perfil função",
-  // que é o nível do cargo (Júnior/Pleno/Sênior) e nada tem a ver com permissão.
-  if (h === "perfil" || h.includes("perfil de acesso") || h.includes("tipo de usuario")) return "role";
-  if (h.includes("hierarquia") || h === "nivel hierarquico") return "hierarchy";
-  if (h.includes("sub setor") || h.includes("subsetor")) return "subdepartment";
-  if (h.startsWith("perfil")) return "level";
-  if (h === "empresa" || h === "unidade") return "unit";
-  if (h.includes("codigo") || h === "matricula") return "employee_code";
-  if (h.includes("nome")) return "full_name";
-  if (h.includes("admiss")) return "admission_date";
-  if (h.includes("funcao")) return "position";
-  if (h === "setor") return "department";
-  if (h.includes("nascimento")) return "birth_date";
-  if (h === "cpf") return "cpf";
-  if (h.includes("demiss")) return "__demissao";
-  if (h === "sexo") return "gender";
-  if (h.includes("telefone") || h.includes("celular")) return "phone";
-  if (h.includes("mail")) return "email";
-  return null;
-}
-
 const pad = (n: number) => String(n).padStart(2, "0");
-function cellStr(v: unknown): string {
-  if (v == null) return "";
-  if (v instanceof Date) return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
-  return String(v).trim();
-}
 
 const soDigitos = (s: string | undefined) => (s ?? "").replace(/\D/g, "");
 function hojeIso() {
@@ -76,7 +41,7 @@ function resumoVazio(): ImportSummary {
     movimentacoes: 0, preenchimentos: 0, admissoes: 0,
     skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [],
     levelsList: [], movimentacoesList: [], pendentes: [], admissoesList: [], admissoesDivergentes: [],
-    errors: [],
+    errors: [], createdList: [], avisos: [],
   };
 }
 
@@ -102,6 +67,8 @@ function somar(agg: ImportSummary, res: ImportSummary) {
   agg.admissoesList.push(...(res.admissoesList ?? []));
   agg.admissoesDivergentes.push(...(res.admissoesDivergentes ?? []));
   agg.errors.push(...(res.errors ?? []));
+  agg.createdList.push(...(res.createdList ?? []));
+  agg.avisos.push(...(res.avisos ?? []));
 }
 
 /** o que impede a data de valer; null = ok. As mesmas regras do servidor. */
@@ -112,11 +79,37 @@ function problemaDaData(p: PendenteImportacao, v: string, hoje: string): string 
   return null;
 }
 
-export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true }: {
+/**
+ * O que a importação precisa saber do sistema para ler o arquivo da folha
+ * (Domínio) e sugerir o que ele não traz. Vem da página de Configurações.
+ */
+export type ContextoImportacao = {
+  /** código de empresa do Domínio → unidade */
+  empresasDominio: Record<string, string>;
+  /** quem tem vínculo ativo, com a situação de hoje */
+  ativos: {
+    userId: string; nome: string; cpf: string | null; codigo: string | null; unidades: string[];
+    gestorId: string | null; gestorNome: string | null; hierarquiaId: string | null; hierarquiaNome: string | null;
+  }[];
+  /** função (nome) → hierarquia */
+  regrasFuncao: { funcao: string; hierarquiaId: string }[];
+  /** subsetor + unidade (nome) → gestor */
+  regrasSubsetor: { subsetorId: string; unidade: string; gestorId: string }[];
+  opcoes: OpcoesCompletar;
+};
+
+const canon = (s: string) =>
+  (s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+const chaveDeVinculo = (unidade: string, codigo: string) =>
+  `${canon(unidade)}|${(codigo ?? "").trim().replace(/^0+(?=\d)/, "")}`;
+
+export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true, contexto }: {
   open: boolean;
   onClose: () => void;
   /** false para o RH: a coluna Perfil é ignorada pelo servidor */
   podeDefinirPerfil?: boolean;
+  /** sem ele, o arquivo do Domínio não tem como achar a unidade de cada empresa */
+  contexto?: ContextoImportacao;
 }) {
   // guarda TODAS as linhas lidas com o sinalizador de demissão: assim alternar
   // "apenas ativos" só reaplica o filtro, sem precisar reler o arquivo
@@ -137,6 +130,16 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
   const [dataTodos, setDataTodos] = useState("");
   // admissão divergente só é corrigida para quem for marcado
   const [corrigirAdm, setCorrigirAdm] = useState<Record<string, boolean>>({});
+  // arquivo da folha (Domínio): o que ele não traz é completado aqui
+  const [formato, setFormato] = useState<FormatoArquivo>("modelo");
+  const [errosDaLeitura, setErrosDaLeitura] = useState<string[]>([]);
+  const [antigos, setAntigos] = useState(0);
+  const [ausentes, setAusentes] = useState<{ nome: string; codigo: string; unidade: string }[]>([]);
+  const [itens, setItens] = useState<ItemACompletar[]>([]);
+  const [escolhas, setEscolhas] = useState<Record<string, Escolha>>({});
+  const [lembrar, setLembrar] = useState(true);
+  // a prévia vale para as escolhas do momento em que rodou
+  const [conferido, setConferido] = useState(true);
   const router = useRouter();
 
   // "Apenas ativos" NÃO joga mais a linha fora. Jogar fora era o que engolia a
@@ -207,37 +210,80 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
     const vistosAdm = new Set<string>();
     agg.admissoesDivergentes = agg.admissoesDivergentes.filter((a) => (vistosAdm.has(a.cpf) ? false : (vistosAdm.add(a.cpf), true)));
     setAnalise(agg); setAnalisando(false); setProgress("");
+    return agg;
+  }
+
+  /** as linhas com o que o DP completou (só no arquivo da folha) */
+  function comEscolhas(linhas: Row[]): Row[] {
+    if (formato !== "dominio" || !contexto) return linhas;
+    const porId = new Map(contexto.ativos.map((a) => [a.userId, a]));
+    const subNome = new Map(contexto.opcoes.subsetores.map((x) => [x.id, x.name]));
+    const hierNome = new Map(contexto.opcoes.hierarquias.map((x) => [x.id, x.name]));
+    return linhas.map((r) => {
+      const e = escolhas[soDigitos(r.cpf)];
+      if (!e) return r;
+      const x: Row = { ...r };
+      // "sem subsetor" é não mandar: na mudança de setor o banco apaga o antigo
+      if (e.subsetorId && e.subsetorId !== SEM) x.subdepartment = subNome.get(e.subsetorId) ?? "";
+      if (e.gestorId === SEM) x.manager_code = "-";
+      else if (e.gestorId) {
+        // pelo CPF do gestor: resolve mesmo quando ele é de outra unidade
+        const g = porId.get(e.gestorId);
+        if (g?.cpf) x.manager = g.cpf;
+        else if (g?.codigo) x.manager_code = g.codigo;
+      }
+      if (e.hierarquiaId === SEM) x.hierarchy = "-";
+      else if (e.hierarquiaId) x.hierarchy = hierNome.get(e.hierarquiaId) ?? "";
+      return x;
+    });
+  }
+
+  function escolher(cpf: string, e: Escolha) {
+    setEscolhas((atual) => ({ ...atual, [cpf]: e }));
+    setConferido(false);
+  }
+
+  async function conferir() {
+    await analisar(comEscolhas(rows));
+    setConferido(true);
   }
 
   async function onFile(file: File) {
     const XLSX = await loadXlsx();
     setParseError(""); setSummary(null); setParsed([]); setFileName(""); setAnalise(null);
+    setErrosDaLeitura([]); setAntigos(0); setAusentes([]); setItens([]); setEscolhas({}); setConferido(true);
     setReading(true);
     // dá um respiro ao navegador para pintar o "Lendo a planilha…" antes de travar na leitura
     await new Promise((r) => setTimeout(r, 0));
-    let lidas: { data: Row; dismissed: boolean }[] = [];
+    let lidas: LinhaLida[] = [];
+    let doDominio = false;
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array", cellDates: true });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, blankrows: false });
+      // datas pelo número de série, sem fuso (ver matrizDaPlanilha)
+      const aoa = matrizDaPlanilha(XLSX, XLSX.read(buf, { type: "array", cellNF: true }));
       if (aoa.length < 2) { setParseError("Planilha vazia."); return; }
-      const headers = (aoa[0] as unknown[]).map((h) => fieldOf(String(h ?? "")));
-      const out: { data: Row; dismissed: boolean }[] = [];
-      let ign = 0;
-      for (let i = 1; i < aoa.length; i++) {
-        const r = aoa[i] as unknown[];
-        const obj: Row = {};
-        headers.forEach((f, idx) => { if (f) obj[f] = cellStr(r[idx]); });
-        // a data de demissão decide se a linha entra (filtro "apenas ativos") E precisa
-        // seguir para o servidor: é ela que marca o colaborador como inativo
-        const isDismissed = !!obj["__demissao"];
-        if (isDismissed) obj["dismissed_at"] = obj["__demissao"];
-        delete obj["__demissao"];
-        if (!obj["cpf"] || !obj["full_name"]) { ign++; continue; }
-        out.push({ data: obj, dismissed: isDismissed });
+      const leitura = lerPlanilhaDeColaboradores(aoa, { empresasDominio: contexto?.empresasDominio ?? {} });
+      doDominio = leitura.formato === "dominio";
+      let out = leitura.linhas;
+      if (doDominio) {
+        // O arquivo da folha traz TODO o histórico (em 26/11/2026, 766 de 1.084
+        // linhas eram de desligados antigos). Sobe só o desligado que ainda
+        // está ativo no sistema: é o desligamento que precisa acontecer. O
+        // resto não mudaria nada e só deixaria a prévia mais lenta.
+        const ativos = new Set((contexto?.ativos ?? []).flatMap((a) => a.unidades.map((u) => chaveDeVinculo(u, a.codigo ?? ""))));
+        const chave = (l: LinhaLida) => chaveDeVinculo(l.data.unit ?? "", l.data.employee_code ?? "");
+        const noArquivo = new Set(out.map(chave));
+        setAntigos(out.filter((l) => l.dismissed && !ativos.has(chave(l))).length);
+        out = out.filter((l) => !l.dismissed || ativos.has(chave(l)));
+        // ativo no sistema que não veio no arquivo: ou saiu do relatório, ou o
+        // filtro da exportação deixou de fora. Não desliga ninguém, só avisa.
+        setAusentes((contexto?.ativos ?? [])
+          .filter((a) => a.codigo && !a.unidades.some((u) => noArquivo.has(chaveDeVinculo(u, a.codigo ?? ""))))
+          .map((a) => ({ nome: a.nome, codigo: a.codigo ?? "", unidade: a.unidades.join("; ") })));
       }
-      setParsed(out); setIgnored(ign); setFileName(file.name);
+      setFormato(leitura.formato);
+      setErrosDaLeitura(leitura.erros);
+      setParsed(out); setIgnored(leitura.ignoradas); setFileName(file.name);
       lidas = out;
     } catch (e) {
       setParseError("Não consegui ler o arquivo: " + (e as Error).message);
@@ -246,7 +292,15 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
     }
     // quem já existe responde igual com ou sem "apenas ativos": a prévia não
     // precisa ser refeita quando a caixa muda
-    if (lidas.length) await analisar(lidas.map((p) => p.data));
+    if (!lidas.length) return;
+    const linhas = lidas.map((p) => p.data);
+    const primeira = await analisar(linhas);
+    if (doDominio && contexto) {
+      const novos = montarItens(primeira, linhas, contexto);
+      setItens(novos.itens);
+      setEscolhas(novos.escolhas);
+      setConferido(novos.itens.length === 0);
+    }
   }
 
   function aplicarATodos() {
@@ -258,7 +312,7 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
     setImporting(true); setSummary(null); setProgress("");
     // a data de cada mudança (e a correção de admissão marcada) volta para a
     // linha da pessoa, casada pelo CPF
-    const comDatas = rows.map((r) => {
+    const comDatas = comEscolhas(rows).map((r) => {
       const cpf = soDigitos(r.cpf);
       const extra: Row = {};
       if (datas[cpf]) extra.effective_date = datas[cpf];
@@ -272,6 +326,14 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
       somar(agg, await importEmployees(part, password));
     }
     setImporting(false); setProgress("");
+    if (formato === "dominio" && lembrar && contexto && agg.errors.length === 0) {
+      const novas = regrasNovas(itens, escolhas, contexto);
+      if (novas.funcoes.length || novas.subsetores.length) {
+        const r = await lembrarRegras(novas);
+        if (r.error) toast.warning(`As regras novas não foram guardadas: ${r.error}`);
+        else if (r.message) toast.success(r.message);
+      }
+    }
     router.refresh();
 
     const parts = [`${agg.created} criado(s)`];
@@ -300,7 +362,20 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
   }
 
   const ocupado = reading || importing || analisando;
-  const largura = (pendentes.length > 0 || admDiv.length > 0) && !summary ? 760 : 620;
+  const faltamEscolhas = itens.filter((i) => faltaNoItem(i, escolhas[i.cpf])).length;
+  const largura = (pendentes.length > 0 || admDiv.length > 0 || itens.length > 0) && !summary ? 760 : 620;
+  const regraSub = new Map((contexto?.regrasSubsetor ?? []).map((r) => [`${r.subsetorId}|${canon(r.unidade)}`, r.gestorId]));
+  const sugestaoGestor = (subsetorId: string, unidade: string) => {
+    for (const u of unidade.split(";")) {
+      const g = regraSub.get(`${subsetorId}|${canon(u)}`);
+      if (g) return g;
+    }
+    return null;
+  };
+  // o que a prévia diz, agrupado: é isto que o DP confere antes de importar
+  const admissoes = analise ? analise.createdList.filter((c) => !c.desligado).length : 0;
+  const desligamentos = analise ? analise.updatedList.filter((u) => u.tipo === "desligamento").length : 0;
+  const dadosPessoais = analise ? analise.updatedList.filter((u) => u.tipo === "dados").length : 0;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(3, 6, 14, 0.6)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 1rem", zIndex: 70, overflowY: "auto" }}>
@@ -314,6 +389,9 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
           <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.85rem 1rem", fontSize: "0.85rem" }}>
             <p style={{ margin: "0 0 0.5rem" }} className="muted">
               Suba uma planilha (.xlsx) com os colaboradores. Use o modelo abaixo (tem uma aba “Instruções”).
+              <br />• <strong>Arquivo do Domínio</strong>: o relatório “Empregados em Excel” pode subir como sai do
+              sistema da folha. O sistema reconhece o arquivo e pede só o que ele não traz (subsetor, gestor e
+              hierarquia), com sugestões de Regras da importação.
               <br />• <strong>Várias unidades</strong>: separe por <code>;</code> na coluna Empresa (ex.: MATRIZ; FILIAL)
               <br />• <strong>Datas</strong> no formato <strong>dd/mm/aaaa</strong>
               <br />• <strong>Quem já está cadastrado</strong>: a planilha atualiza unidade, função, nível,
@@ -383,6 +461,13 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
                 {dismissed > 0 && ` · ${dismissed} com demissão${onlyActive ? " (desligam quem já existe; não criam cadastro novo)" : " (desligam quem existe e criam os que faltam)"}`}
                 {ignored > 0 && ` · ${ignored} sem CPF/nome (ignorados)`}
               </div>
+              <div className="soft" style={{ marginTop: 2, fontSize: "0.78rem" }}>
+                {NOME_DO_FORMATO[formato]}
+                {formato === "dominio" && antigos > 0 && ` · ${antigos} desligados antigos ficaram de fora (já não estão ativos no sistema)`}
+              </div>
+              {errosDaLeitura.map((e, i) => (
+                <p key={i} style={{ color: "var(--mh-danger)", fontSize: "0.82rem", margin: "0.4rem 0 0" }}>{e}</p>
+              ))}
               {analisando && <div className="soft" style={{ marginTop: 4 }}>Conferindo o que muda em cada cadastro…</div>}
               {analise && (
                 <div className="muted" style={{ marginTop: 4 }}>
@@ -392,6 +477,40 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
                   {analise.preenchimentos > 0 && ` ${analise.preenchimentos} cadastro(s) só vão ser completados (campo que estava vazio), sem data.`}
                   {admDiv.length > 0 && ` ${admDiv.length} com admissão diferente da planilha.`}
                 </div>
+              )}
+              {analise && (
+                <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.82rem" }}>
+                  <li>{admissoes} admissão(ões)</li>
+                  <li>{desligamentos} desligamento(s)</li>
+                  <li>{pendentes.length} mudança(s) com data (função, setor, gestor, hierarquia…)</li>
+                  {analise.preenchimentos > 0 && <li>{analise.preenchimentos} campo(s) vazio(s) completado(s)</li>}
+                  {dadosPessoais > 0 && <li>{dadosPessoais} cadastro(s) com dado pessoal atualizado (telefone, e-mail, nascimento)</li>}
+                  <li>{analise.skipped} sem nenhuma mudança</li>
+                </ul>
+              )}
+              {analise && analise.avisos.length > 0 && (
+                <details style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
+                  <summary style={{ cursor: "pointer", color: "var(--mh-warning)" }}>
+                    {analise.avisos.length} aviso(s): a linha entra, mas com ressalva
+                  </summary>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 160, overflow: "auto" }}>
+                    {analise.avisos.map((a, i) => <li key={i}>{a.nome ?? "?"}: {a.aviso}</li>)}
+                  </ul>
+                </details>
+              )}
+              {formato === "dominio" && ausentes.length > 0 && (
+                <details style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
+                  <summary style={{ cursor: "pointer", color: "var(--mh-warning)" }}>
+                    {ausentes.length} ativo(s) no sistema não vieram no arquivo
+                  </summary>
+                  <p className="soft" style={{ margin: "0.35rem 0 0", fontSize: "0.78rem" }}>
+                    Ninguém é desligado por isso. Confira se o relatório saiu completo; quem saiu da empresa
+                    precisa vir com a data de demissão.
+                  </p>
+                  <ul className="muted" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", maxHeight: 160, overflow: "auto" }}>
+                    {ausentes.map((a, i) => <li key={i} title={a.nome}>{a.codigo} · {shortName(a.nome)} · {a.unidade}</li>)}
+                  </ul>
+                </details>
               )}
               {analise && analise.errors.length > 0 && (
                 <details style={{ fontSize: "0.82rem", marginTop: "0.5rem" }}>
@@ -406,7 +525,32 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
             </div>
           )}
 
-          {analise && pendentes.length > 0 && !summary && (
+          {analise && itens.length > 0 && !summary && contexto && (
+            <>
+              <CompletarImportacao
+                itens={itens}
+                escolhas={escolhas}
+                onEscolha={escolher}
+                opcoes={contexto.opcoes}
+                sugestaoGestor={sugestaoGestor}
+                lembrar={lembrar}
+                onLembrar={setLembrar}
+                disabled={ocupado}
+              />
+              {!conferido && (
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "0.6rem", marginTop: "-0.4rem" }}>
+                  <span className="soft" style={{ fontSize: "0.8rem" }}>
+                    {faltamEscolhas > 0 ? "Responda todos para conferir." : "Confira de novo para ver as datas que essas escolhas pedem."}
+                  </span>
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={ocupado || faltamEscolhas > 0} onClick={conferir}>
+                    Conferir de novo
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {analise && pendentes.length > 0 && !summary && conferido && (
             <div className="card" style={{ fontSize: "0.88rem", overflow: "hidden" }}>
               <div style={{ padding: "0.85rem 1rem", background: "var(--surface-2)" }}>
                 <strong>Mudanças que precisam de data ({pendentes.length})</strong>
@@ -630,7 +774,7 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
             <button
               type="button"
               className="btn btn-primary"
-              disabled={!rows.length || ocupado || !analise || faltando > 0 || !!summary}
+              disabled={!rows.length || ocupado || !analise || faltando > 0 || !!summary || !conferido || faltamEscolhas > 0}
               onClick={doImport}
             >
               {importing ? "Importando…" : `Importar ${rows.length || ""}`}
@@ -640,4 +784,73 @@ export function ImportEmployeesDialog({ open, onClose, podeDefinirPerfil = true 
       </div>
     </div>
   );
+}
+
+/**
+ * Quem precisa de complemento depois da primeira prévia do arquivo da folha:
+ * as admissões e quem mudou de setor ou de função. A escolha inicial já é a
+ * sugestão das regras.
+ */
+function montarItens(
+  a: ImportSummary, linhas: Row[], ctx: ContextoImportacao,
+): { itens: ItemACompletar[]; escolhas: Record<string, Escolha> } {
+  const porCpf = new Map(linhas.map((r) => [soDigitos(r.cpf), r]));
+  const ativoPorChave = new Map(ctx.ativos.flatMap((at) => at.unidades.map((u) => [chaveDeVinculo(u, at.codigo ?? ""), at] as const)));
+  const regraFuncao = new Map(ctx.regrasFuncao.map((r) => [canon(r.funcao), r.hierarquiaId]));
+  const itens: ItemACompletar[] = [];
+  const escolhas: Record<string, Escolha> = {};
+
+  for (const c of a.createdList) {
+    const cpf = soDigitos(c.cpf);
+    const r = porCpf.get(cpf);
+    if (c.desligado || !r || escolhas[cpf]) continue;
+    itens.push({
+      cpf, nome: c.nome, matricula: r.employee_code ?? c.codigo ?? "", unidade: r.unit ?? c.unidade,
+      setor: r.department ?? "", funcao: r.position ?? "", tipo: "admissao", mudaSetor: true, mudaFuncao: true,
+    });
+    escolhas[cpf] = { subsetorId: "", gestorId: "", hierarquiaId: regraFuncao.get(canon(r.position ?? "")) ?? "" };
+  }
+
+  for (const p of a.pendentes) {
+    const cpf = soDigitos(p.cpf);
+    const r = porCpf.get(cpf);
+    if (!r || escolhas[cpf]) continue;
+    const mudaSetor = p.mudancas.some((m) => m.campo === "Setor");
+    const mudaFuncao = p.mudancas.some((m) => m.campo === "Função");
+    const at = ativoPorChave.get(chaveDeVinculo(r.unit ?? "", r.employee_code ?? ""));
+    const sugerida = regraFuncao.get(canon(r.position ?? "")) ?? null;
+    // função nova com a mesma hierarquia de hoje não pede nada
+    const pedeHierarquia = mudaFuncao && (sugerida === null || sugerida !== (at?.hierarquiaId ?? null));
+    if (!mudaSetor && !pedeHierarquia) continue;
+    itens.push({
+      cpf, nome: p.nome, matricula: r.employee_code ?? p.matricula ?? "", unidade: r.unit ?? p.unidade,
+      setor: r.department ?? "", funcao: r.position ?? "", tipo: "mudanca", mudaSetor, mudaFuncao: pedeHierarquia,
+      atual: {
+        gestorId: at?.gestorId ?? null, gestorNome: at?.gestorNome ?? null,
+        hierarquiaId: at?.hierarquiaId ?? null, hierarquiaNome: at?.hierarquiaNome ?? null,
+      },
+    });
+    escolhas[cpf] = { subsetorId: "", gestorId: "", hierarquiaId: pedeHierarquia && sugerida ? sugerida : "" };
+  }
+  return { itens, escolhas };
+}
+
+/** o que o DP escolheu para função ou subsetor que ainda não tinha regra */
+function regrasNovas(itens: ItemACompletar[], escolhas: Record<string, Escolha>, ctx: ContextoImportacao) {
+  const temFuncao = new Set(ctx.regrasFuncao.map((r) => canon(r.funcao)));
+  const temSub = new Set(ctx.regrasSubsetor.map((r) => `${r.subsetorId}|${canon(r.unidade)}`));
+  const funcoes = new Map<string, { funcao: string; hierarchyId: string }>();
+  const subsetores = new Map<string, { subdepartmentId: string; unitName: string; managerId: string }>();
+  for (const i of itens) {
+    const e = escolhas[i.cpf];
+    if (!e) continue;
+    if (i.mudaFuncao && e.hierarquiaId && e.hierarquiaId !== SEM && !temFuncao.has(canon(i.funcao))) {
+      funcoes.set(canon(i.funcao), { funcao: i.funcao, hierarchyId: e.hierarquiaId });
+    }
+    const unidade = i.unidade.split(";")[0]?.trim() ?? "";
+    if (e.subsetorId && e.subsetorId !== SEM && e.gestorId && e.gestorId !== SEM && !temSub.has(`${e.subsetorId}|${canon(unidade)}`)) {
+      subsetores.set(`${e.subsetorId}|${canon(unidade)}`, { subdepartmentId: e.subsetorId, unitName: unidade, managerId: e.gestorId });
+    }
+  }
+  return { funcoes: [...funcoes.values()], subsetores: [...subsetores.values()] };
 }

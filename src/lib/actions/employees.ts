@@ -76,7 +76,16 @@ export type ImportSummary = {
   managers: number;
   /** linhas que não alteraram nada: mesmo código, ou contrato anterior (histórico) */
   skippedList: { nome: string; cpf: string; codigo: string | null; motivo?: string }[];
-  updatedList: { nome: string; cpf: string; motivo: string }[];
+  /**
+   * `tipo` (26/11/2026): "desligamento" (estava ativo e a planilha desligou),
+   * "data_demissao" (já desligado, a data mudou) ou "dados" (e-mail, telefone,
+   * nascimento ou sexo). Recontratação vem sem tipo.
+   */
+  updatedList: { nome: string; cpf: string; motivo: string; tipo?: "desligamento" | "data_demissao" | "dados" }[];
+  /** só na prévia faz diferença: quem a planilha CRIARIA (admissão ou primeiro vínculo na empresa) */
+  createdList: { cpf: string; nome: string; codigo: string | null; unidade: string; desligado: boolean }[];
+  /** o que entrou com ressalva, sem impedir a linha (ex.: e-mail inválido ignorado) */
+  avisos: { nome?: string; cpf?: string; aviso: string }[];
   managersList: { nome: string; cpf: string; motivo: string }[];
   /** colaboradores em que a planilha mudou SÓ o perfil de acesso */
   roles: number;
@@ -133,6 +142,7 @@ const EMPTY_SUMMARY: ImportSummary = {
   movimentacoes: 0, preenchimentos: 0, admissoes: 0,
   skippedList: [], updatedList: [], managersList: [], rolesList: [], hierarchiesList: [], levelsList: [],
   movimentacoesList: [], pendentes: [], admissoesList: [], admissoesDivergentes: [], errors: [],
+  createdList: [], avisos: [],
 };
 
 /**
