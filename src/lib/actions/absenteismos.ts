@@ -1004,21 +1004,41 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Lançamento inválido." };
 
+    // Abonar parte dos dias (LUIZ, 26/11/2026): o trecho abonado sai do
+    // lançamento e vira falta abonada à parte, enviada junto
+    const abonoInicio = String(formData.get("abono_inicio") ?? "");
+    const abonoFim = String(formData.get("abono_fim") ?? "");
+    const comAbono = /^\d{4}-\d{2}-\d{2}$/.test(abonoInicio) && /^\d{4}-\d{2}-\d{2}$/.test(abonoFim);
+
     // Com "Continua ausente", os dias que o documento não cobre viram falta à
     // parte, já enviada ao DP na mesma transação (LUIZ, 17/11/2026)
-    const { data: faltas, error } = await supabase.rpc("absenteismo_confirmar_e_separar", { p_id: id });
+    const { data, error } = await supabase.rpc(
+      "absenteismo_confirmar_e_separar",
+      comAbono ? { p_id: id, p_abono_inicio: abonoInicio, p_abono_fim: abonoFim } : { p_id: id },
+    );
     if (error) return { error: error.message };
+    // até 26/11/2026 a função devolvia só a lista das faltas separadas
+    const separados = Array.isArray(data)
+      ? { faltas: data as string[], abono: null }
+      : ((data ?? {}) as { faltas?: string[] | null; abono?: string | null });
+    const faltas = separados.faltas ?? [];
+    const abono = separados.abono ?? null;
 
     const envio = await dispatchComunicadoAbsenteismo(id, "confirmado", userId);
-    // a falta separada nunca teve aviso de abertura: sai como "Ausência lançada"
-    const envios = await Promise.all((faltas ?? []).map((f) => dispatchComunicadoAbsenteismo(f, "confirmado", userId)));
+    // os separados nunca tiveram aviso de abertura: saem como "Ausência lançada"
+    const envios = await Promise.all([...faltas, ...(abono ? [abono] : [])].map((f) => dispatchComunicadoAbsenteismo(f, "confirmado", userId)));
     const falhou = [envio, ...envios].find((e) => e.status !== "sent") ?? envio;
 
     revalidar();
-    const n = faltas?.length ?? 0;
+    const n = faltas.length;
+    const partes = [
+      abono && "os dias abonados num lançamento à parte",
+      n && `${n === 1 ? "a falta dos dias" : `${n} lançamentos de falta para os dias`} que o documento não cobre`,
+    ].filter(Boolean) as string[];
     return {
       ok: true,
-      message: n ? `Enviado ao DP, com ${n === 1 ? "a falta dos dias" : `${n} lançamentos de falta para os dias`} que o documento não cobre.` : "Enviado ao DP.",
+      // sem nada separado, a tela usa a mensagem dela
+      message: partes.length ? `Enviado ao DP, com ${partes.join(" e ")}.` : undefined,
       ...avisoDoEnvio(falhou),
     };
   } catch (e) {

@@ -191,6 +191,13 @@ type Confirmacao = {
   acompanhado: string;
   /** falta sem data de término (LUIZ, 17/11/2026); só vale com motivo de falta */
   semTermino: boolean;
+  /**
+   * Abonar parte dos dias (LUIZ, 26/11/2026). Não fica no rascunho: vai só no
+   * envio, quando o banco separa os dias abonados num lançamento à parte.
+   */
+  abonoParcial: boolean;
+  abonoInicio: string;
+  abonoFim: string;
 };
 
 /**
@@ -226,6 +233,31 @@ function diaSeguinte(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Abonar parte dos dias (LUIZ, 26/11/2026): o trecho abonado fica no começo ou
+ * no fim do período e deixa pelo menos um dia de ausência no lançamento. As
+ * mesmas regras de `absenteismo_confirmar_e_separar`, conferidas aqui para o
+ * erro aparecer antes do envio. Devolve o que sobra para o motivo.
+ */
+function conferirAbono(
+  inicio: string, fim: string, abIni: string, abFim: string, primeiroDia: PrimeiroDia,
+): { erro: string } | { restoIni: string; restoFim: string; dias: number } {
+  if (!abIni || !abFim) return { erro: "Informe o primeiro e o último dia abonado." };
+  if (abFim < abIni) return { erro: "O último dia abonado não pode ser antes do primeiro." };
+  if (abIni < inicio || abFim > fim) return { erro: `Os dias abonados precisam estar dentro do período (${intervalo([inicio, fim])}).` };
+  if (abIni === inicio && abFim === fim) return { erro: "Para abonar o período inteiro, lance como falta abonada." };
+  if (abIni !== inicio && abFim !== fim) return { erro: "Os dias abonados precisam ser os do começo ou os do fim do período." };
+  if (abIni === inicio && primeiroDia !== "integral") {
+    return { erro: "Com o primeiro dia trabalhado, os dias abonados precisam ser os do fim do período." };
+  }
+  const restoIni = abIni === inicio ? diaSeguinte(abFim) : inicio;
+  const restoFim = abFim === fim ? diaAnterior(abIni) : fim;
+  if (primeiroDia === "trabalhou" && restoFim <= restoIni) {
+    return { erro: "Com o primeiro dia trabalhado, sobraria só ele no lançamento. Deixe pelo menos um dia de ausência fora do abono." };
+  }
+  return { restoIni, restoFim, dias: diasDoPeriodo(abIni, abFim) ?? 0 };
 }
 
 /**
@@ -1690,6 +1722,7 @@ function PainelConfirmacao({
     primeiroDia: linha?.primeiroDia ?? "integral",
     acompanhado: "",
     semTermino: Boolean(linha?.faltaContinua && linha.endDate === SEM_RETORNO),
+    abonoParcial: false, abonoInicio: "", abonoFim: "",
   });
   const [inss, setInss] = useState<AlertaInss | null>(null);
   const [temDoc, setTemDoc] = useState(Boolean(linha?.docPath));
@@ -1729,6 +1762,13 @@ function PainelConfirmacao({
     : "";
   // o horário vai ao servidor na ausência de horas e no primeiro dia parcial
   const levaHoras = c.emHoras || primeiroDia === "parcial";
+  // Abonar parte dos dias (LUIZ, 26/11/2026): período de 2 dias ou mais, fora da
+  // falta sem término, da ausência de horas e da falta já abonada inteira
+  const podeAbonarParte = Boolean(tipo) && !semTermino && !c.emHoras && (diasNoDocumento ?? 0) >= 2
+    && !(tipo?.kind === "falta" && c.abonada);
+  const abonoParte = podeAbonarParte && c.abonoParcial;
+  const abono = abonoParte ? conferirAbono(c.startDate, c.endDate, c.abonoInicio, c.abonoFim, primeiroDia) : null;
+  const abonoOk = abono && !("erro" in abono) ? abono : null;
 
   // O dado clínico já gravado vem pela RPC, uma vez, ao abrir. Não viaja na
   // listagem justamente para isso.
@@ -1824,6 +1864,16 @@ function PainelConfirmacao({
     } else if (primeiroDia === "parcial") {
       itens.push(["Primeiro dia", `Trabalhou parte de ${formatDate(c.startDate)}, ausente ${horario}`]);
     }
+    if (abonoOk) {
+      const resto = diasDoPeriodo(abonoOk.restoIni, abonoOk.restoFim) ?? 0;
+      // rótulo curto: o nome do motivo já está na linha Motivo, e um rótulo longo esmagava a coluna dos valores
+      itens.push(["Dias do motivo", `${intervalo([abonoOk.restoIni, abonoOk.restoFim])} (${resto} dia${resto === 1 ? "" : "s"})`]);
+      itens.push([
+        "Dias abonados",
+        `${intervalo([c.abonoInicio, c.abonoFim])} (${abonoOk.dias} dia${abonoOk.dias === 1 ? "" : "s"}), num lançamento à parte como falta abonada`,
+        true,
+      ]);
+    }
     if (tipo?.requiresMedical) itens.push(["Tipo de atestado", c.tipoAtestado === "odontologico" ? "Odontológico" : "Médico"]);
     else if (pedeTipoDocumento) itens.push(["Tipo de documento", rotuloTipoDocumento(c.tipoDocumento) ?? ""]);
     if (tipo?.requiresCompanion && c.acompanhado.trim()) itens.push(["Acompanhado", c.acompanhado.trim()]);
@@ -1863,6 +1913,7 @@ function PainelConfirmacao({
       onErro(`O período informado não cobre nenhum dos dias sem comparecer (${intervalo([sem.inicio, sem.fim])}).`);
       return;
     }
+    if (abono && "erro" in abono) { onErro(abono.erro); return; }
     const ok = await confirmDialog({
       title: ehNovo ? "Lançar e enviar ao DP" : "Enviar ao DP",
       confirmLabel: "Enviar",
@@ -1906,12 +1957,17 @@ function PainelConfirmacao({
 
       const fd = new FormData();
       fd.set("id", id);
+      if (abonoOk) {
+        fd.set("abono_inicio", c.abonoInicio);
+        fd.set("abono_fim", c.abonoFim);
+      }
       const r = await confirmarAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
       onEnviado?.();
       onFechar();
       if (r.warning) toast.warning(r.warning);
-      else toast.success(ehNovo ? "Ausência lançada e enviada ao DP." : "Enviado ao DP.");
+      // a mensagem do servidor só vem quando algo foi separado (dias abonados ou fora do documento)
+      else toast.success(r.message ?? (ehNovo ? "Ausência lançada e enviada ao DP." : "Enviado ao DP."));
     });
   };
 
@@ -2204,6 +2260,72 @@ function PainelConfirmacao({
                 );
               })()}
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Abonar parte dos dias (LUIZ, 26/11/2026): atestado de acompanhamento de
+          5 dias em que a lei cobre 1, e a empresa abona os outros 4. Os dias
+          abonados saem deste lançamento e vão ao DP num lançamento à parte, como
+          falta abonada; aprovados, aparecem em Abonos no ponto. */}
+      {podeAbonarParte && (
+        <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.7rem 0.8rem", display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
+            <input
+              type="checkbox" checked={c.abonoParcial} style={{ marginTop: 3 }}
+              onChange={(e) => {
+                const liga = e.target.checked;
+                // parte do caso comum: o motivo cobre o primeiro dia e o restante é abonado
+                setC((x) => ({
+                  ...x, abonoParcial: liga,
+                  abonoInicio: liga && !x.abonoInicio && x.startDate ? diaSeguinte(x.startDate) : x.abonoInicio,
+                  abonoFim: liga && !x.abonoFim ? x.endDate : x.abonoFim,
+                }));
+              }}
+            />
+            <span>
+              Abonar parte dos dias
+              <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                Quando o motivo não cobre o período todo e a empresa abona o restante. Os dias abonados saem
+                deste lançamento e vão ao DP junto, num lançamento à parte como falta abonada: ficam
+                registrados, não pesam na remuneração variável e, depois de aprovados, aparecem em Abonos no ponto.
+              </span>
+            </span>
+          </label>
+          {c.abonoParcial && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 170px))", gap: "0.8rem", paddingLeft: "1.4rem" }}>
+                <div>
+                  <label className="label">Abonar de <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <input
+                    type="date" className="input" value={c.abonoInicio} min={c.startDate} max={c.endDate}
+                    onChange={(e) => setC((x) => ({ ...x, abonoInicio: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="label">Até <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <input
+                    type="date" className="input" value={c.abonoFim} min={c.startDate} max={c.endDate}
+                    onChange={(e) => setC((x) => ({ ...x, abonoFim: e.target.value }))}
+                  />
+                </div>
+              </div>
+              {abono && "erro" in abono ? (
+                <p style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem", color: "var(--mh-danger)" }}>{abono.erro}</p>
+              ) : abonoOk ? (
+                <p style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem", background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
+                  {(() => {
+                    const resto = diasDoPeriodo(abonoOk.restoIni, abonoOk.restoFim) ?? 0;
+                    return (
+                      <>
+                        Fica como {tipo?.name ?? "o motivo"}: <strong>{intervalo([abonoOk.restoIni, abonoOk.restoFim])} ({resto} dia{resto === 1 ? "" : "s"})</strong>.
+                        {" "}Abonados à parte: <strong>{intervalo([c.abonoInicio, c.abonoFim])} ({abonoOk.dias} dia{abonoOk.dias === 1 ? "" : "s"})</strong>.
+                      </>
+                    );
+                  })()}
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       )}

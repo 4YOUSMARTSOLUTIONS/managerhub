@@ -2262,8 +2262,12 @@ export type Database = {
       // "Continua ausente" (LUIZ, 17/11/2026): estende o lançamento em aberto até p_ate
       absenteismo_continua_ausente: { Args: { p_id: string; p_ate: string }; Returns: undefined }
       absenteismo_marcar_ponto: { Args: { p_id: string; p_lancado: boolean }; Returns: undefined }
-      // envia ao RH; os dias sem comparecer que o documento não cobre viram falta à parte (ids devolvidos)
-      absenteismo_confirmar_e_separar: { Args: { p_id: string }; Returns: string[] }
+      // envia ao DP; os dias sem comparecer que o documento não cobre viram falta à parte, e o trecho
+      // abonado (p_abono_*) vira falta abonada à parte. Devolve { faltas: uuid[], abono: uuid | null }
+      absenteismo_confirmar_e_separar: {
+        Args: { p_id: string; p_abono_inicio?: string; p_abono_fim?: string }
+        Returns: { faltas: string[]; abono: string | null } | string[]
+      }
       absenteismo_decidir: { Args: { p_id: string; p_aprovar: boolean; p_nota?: string | null }; Returns: undefined }
       absenteismo_cancelar: { Args: { p_id: string; p_nota?: string | null }; Returns: undefined }
       absenteismo_atestado: { Args: { p_id: string }; Returns: Json }

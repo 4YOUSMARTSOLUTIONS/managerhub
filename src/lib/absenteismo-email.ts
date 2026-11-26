@@ -101,6 +101,8 @@ type Linha = {
   /** médico | odontológico (atestado) ou médico | perícia INSS (afastamento): o tipo do documento, nada do conteúdo */
   certificate_kind: string | null;
   work_accident: boolean | null;
+  /** falta abonada: registrada, sem peso na remuneração variável */
+  waived?: boolean | null;
   /** último dia sem comparecer registrado pelo "Continua ausente"; nulo = só occurred_on */
   ausente_ate: string | null;
   /** falta lançada sem data de término (end_date SEM_TERMINO enquanto segue) */
@@ -187,6 +189,9 @@ function corpo(
   // cancelado em aberto: nunca houve motivo nem período informado
   if (evento !== "aberto" && evento !== "cancelado" && evento !== "continua") {
     linhas.push(["Motivo informado", l.snap_type_name ?? "-"]);
+    // abono de parte dos dias (LUIZ, 26/11/2026): sem isso a falta abonada
+    // chegaria como "Falta sem justificativa" pura
+    if (l.waived) linhas.push(["Falta abonada", "Sim, abonada pela empresa"]);
     if (l.start_date && l.end_date) {
       const primeiro = l.primeiro_dia === "trabalhou" || l.primeiro_dia === "parcial" ? l.primeiro_dia : null;
       // Primeiro dia trabalhado (LUIZ, 12/11/2026): o período é o do documento,
