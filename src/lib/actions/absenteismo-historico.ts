@@ -159,7 +159,7 @@ export async function importarHistoricoAbsenteismo(
       if (abonada === null) { recusar(l, "Abonada: use Sim ou Não."); continue; }
       const detalhe = detalheDoAfastamento(l.detalhe ?? "");
       if (detalhe === null) {
-        recusar(l, "Detalhe do afastamento: use Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez ou Licença-maternidade.");
+        recusar(l, "Detalhe do afastamento: use Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez, Rescisão indireta ou Licença-maternidade.");
         continue;
       }
       if (detalhe && AFASTAMENTO_MOTIVO[detalhe]?.kind !== tipo.kind) {

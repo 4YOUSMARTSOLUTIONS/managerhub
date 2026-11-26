@@ -107,7 +107,7 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
           : "A empresa tem uma única unidade; pode deixar em branco."],
         ["Colaborador", "Não", "Só para conferência. O sistema identifica por ID e Unidade."],
         ["Motivo", "Sim", "O nome do motivo exatamente como na aba Motivos (sem diferença de acento ou maiúscula)."],
-        ["Detalhe do afastamento", "Não", "Só para afastamento e licença: Afastado pelo INSS, Acidente de trabalho ou Aposentadoria por invalidez (motivo de afastamento), ou Licença-maternidade (motivo de licença). É o que aparece como situação do colaborador; em branco ele aparece só como Afastado ou De licença."],
+        ["Detalhe do afastamento", "Não", "Só para afastamento e licença: Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez ou Rescisão indireta (motivo de afastamento), ou Licença-maternidade (motivo de licença). É o que aparece como situação do colaborador; em branco ele aparece só como Afastado ou De licença."],
         ["Início", "Sim", "Primeiro dia de ausência, DD/MM/AAAA. Precisa ser antes de hoje: o que acontece de hoje em diante segue pelo Lançar ausência."],
         ["Fim", "Sim", "Último dia de ausência, DD/MM/AAAA (conta como ausência). Ausência de um dia: Início e Fim iguais."],
         ["Das / Até", "Não", "Só para ausência de horas (chegou atrasado, saiu mais cedo, consulta): o horário em que esteve ausente, HH:MM. Vale para um dia só, então Início e Fim precisam ser iguais. Ausência de horas não vira dias de ausência."],

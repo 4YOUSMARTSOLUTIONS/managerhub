@@ -414,6 +414,8 @@ export const AFASTAMENTO_MOTIVO: Record<string, { label: string; kind: "afastame
   afastado_inss: { label: "Afastado pelo INSS", kind: "afastamento" },
   acidente_trabalho: { label: "Acidente de trabalho", kind: "afastamento" },
   aposentadoria_invalidez: { label: "Aposentadoria por invalidez", kind: "afastamento" },
+  // contrato ativo na folha, mas a pessoa não trabalha enquanto a ação corre (LUIZ, 26/11/2026)
+  rescisao_indireta: { label: "Rescisão indireta", kind: "afastamento" },
   licenca_maternidade: { label: "Licença-maternidade", kind: "licenca" },
 };
 
@@ -425,6 +427,7 @@ export const SITUACAO_COLABORADOR: Record<string, string> = {
   afastado_inss: "Afastado pelo INSS",
   acidente_trabalho: "Afastado por acidente de trabalho",
   aposentadoria_invalidez: "Aposentadoria por invalidez",
+  rescisao_indireta: "Rescisão indireta",
   licenca_maternidade: "Licença-maternidade",
   afastamento: "Afastado",
   licenca: "De licença",

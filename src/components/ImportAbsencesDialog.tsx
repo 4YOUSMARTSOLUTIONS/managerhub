@@ -127,7 +127,7 @@ export function ImportAbsencesDialog({ alvos, unidades }: { alvos: AlvoDeImporta
         ? "Obrigatória: a empresa tem mais de uma unidade, e a mesma matrícula pode existir em unidades diferentes. Escreva o nome da unidade como cadastrado."
         : "A empresa tem uma única unidade; pode deixar em branco."],
       ["Colaborador", "Não", "Somente conferência visual. O sistema identifica por ID e Unidade, nunca pelo nome."],
-      ["Tipo", "Não", "Férias, Licença, Afastamento, Atestado ou Falta. Para afastamento e licença, pode escrever o motivo no lugar do tipo: Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez ou Licença-maternidade. Em branco vale Férias."],
+      ["Tipo", "Não", "Férias, Licença, Afastamento, Atestado ou Falta. Para afastamento e licença, pode escrever o motivo no lugar do tipo: Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez, Rescisão indireta ou Licença-maternidade. Em branco vale Férias."],
       ["Início", "Sim", "Primeiro dia de ausência, no formato DD/MM/AAAA. Este dia conta como ausência."],
       ["Fim", "Sim", "Último dia de ausência, no formato DD/MM/AAAA. Este dia também conta. Afastamento ou licença sem data de retorno (aposentadoria por invalidez, INSS sem alta prevista): escreva Sem retorno. Em branco a linha é recusada, para um afastamento não ficar aberto por esquecimento."],
       ["Desconta RV", "Não", "Sim ou Não. Em branco vale o padrão do tipo: Férias, Licença e Afastamento descontam; Atestado não."],

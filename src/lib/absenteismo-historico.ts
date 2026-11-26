@@ -122,10 +122,11 @@ export function tipoDeAtestado(v: string): "" | "medico" | "odontologico" | null
  * Detalhe do afastamento (`employee_absences.motivo`): `""` vazio, `null`
  * ilegível. Se combina com o motivo da linha, quem confere é o servidor.
  */
-export function detalheDoAfastamento(v: string): "" | "afastado_inss" | "acidente_trabalho" | "aposentadoria_invalidez" | "licenca_maternidade" | null {
+export function detalheDoAfastamento(v: string): "" | "afastado_inss" | "acidente_trabalho" | "aposentadoria_invalidez" | "rescisao_indireta" | "licenca_maternidade" | null {
   const s = normTexto(v ?? "");
   if (!s) return "";
   if (s.includes("matern")) return "licenca_maternidade";
+  if (s.includes("rescis") || s.includes("indireta")) return "rescisao_indireta";
   if (s.includes("aposentad") || s.includes("invalidez")) return "aposentadoria_invalidez";
   if (s.includes("acidente")) return "acidente_trabalho";
   if (s.includes("inss")) return "afastado_inss";

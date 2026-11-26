@@ -66,7 +66,7 @@ export function parseTipo(v: string): AbsenceKind | null {
   if (s.includes("falta")) return "falta";
   // o motivo escrito no lugar do tipo ("Aposentadoria por invalidez") também vale
   if (s.includes("matern")) return "licenca";
-  if (["aposentad", "invalidez", "inss", "auxilio", "acidente"].some((k) => s.includes(k))) return "afastamento";
+  if (["aposentad", "invalidez", "inss", "auxilio", "acidente", "rescis", "indireta"].some((k) => s.includes(k))) return "afastamento";
   return null;
 }
 
@@ -77,7 +77,8 @@ export function parseTipo(v: string): AbsenceKind | null {
 export function parseMotivo(v: string, kind: AbsenceKind): string | null {
   const s = normTexto(v ?? "");
   let m: string | null = null;
-  if (s.includes("invalidez") || s.includes("aposentad")) m = "aposentadoria_invalidez";
+  if (s.includes("rescis") || s.includes("indireta")) m = "rescisao_indireta";
+  else if (s.includes("invalidez") || s.includes("aposentad")) m = "aposentadoria_invalidez";
   else if (s.includes("acidente")) m = "acidente_trabalho";
   else if (s.includes("inss") || s.includes("auxilio") || s.includes("doenca")) m = "afastado_inss";
   else if (s.includes("matern")) m = "licenca_maternidade";
