@@ -4,7 +4,7 @@
 import type { IcsMethod } from "./ics";
 
 export const ORGANIZER_EMAIL = "noreply@4yousmartsolutions.com.br";
-export const INVITE_FROM = `MANAGER HUB <${ORGANIZER_EMAIL}>`;
+export const INVITE_FROM = `Manager HUB <${ORGANIZER_EMAIL}>`;
 
 type Anexo = { filename: string; content: string; content_type: string };
 

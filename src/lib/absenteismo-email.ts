@@ -295,8 +295,8 @@ function corpo(
   <p style="margin:0 0 12px">${escapeHtml(situacao)}</p>
   ${observacao}
   ${nota}
-  <p style="margin:0 0 12px"><a href="${escapeHtml(appUrl)}/absenteismos">Abrir no MANAGER HUB</a></p>
-  <p style="margin:16px 0 0;color:#777;font-size:12px">Comunicação automática do MANAGER HUB. Dados de atestado, quando houver, ficam apenas no sistema.</p>
+  <p style="margin:0 0 12px"><a href="${escapeHtml(appUrl)}/absenteismos">Abrir no Manager HUB</a></p>
+  <p style="margin:16px 0 0;color:#777;font-size:12px">Comunicação automática do Manager HUB. Dados de atestado, quando houver, ficam apenas no sistema.</p>
 </div>`;
 }
 
@@ -395,7 +395,7 @@ export async function dispatchComunicadoAbsenteismo(
       apiKey,
       to: emails,
       subject: assunto(modelo, linha),
-      html: corpo(modelo, linha, empresa?.name ?? "MANAGER HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined, inssDias),
+      html: corpo(modelo, linha, empresa?.name ?? "Manager HUB", autor?.full_name ?? "gestor", appUrl, ator?.full_name ?? undefined, inssDias),
       replyTo: autor?.email ?? undefined,
     });
 

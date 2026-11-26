@@ -71,7 +71,7 @@ function corpo(nome: string | null | undefined, link: string): string {
 <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2937;line-height:1.6">
   <p style="margin:0 0 1rem">${ola}</p>
   <p style="margin:0 0 1rem">
-    Recebemos um pedido para redefinir a sua senha do <strong>MANAGER HUB</strong>.
+    Recebemos um pedido para redefinir a sua senha do <strong>Manager HUB</strong>.
     Clique no botão abaixo para escolher uma senha nova.
   </p>
   <p style="margin:0 0 1.4rem">
@@ -148,7 +148,7 @@ export async function dispararRecuperacao(identificador: string): Promise<void> 
     const enviado = await sendMail({
       apiKey,
       to: [d.destino],
-      subject: "Redefinição de senha — MANAGER HUB",
+      subject: "Redefinição de senha do Manager HUB",
       html: corpo(d.nome, link),
     });
     if (!enviado.ok) {

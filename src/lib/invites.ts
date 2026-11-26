@@ -102,7 +102,7 @@ export async function dispatchInvite(meetingId: string, method: IcsMethod, opts:
     if (attendees.length === 0) return "skipped";
 
     const location = (m.rooms as unknown as { name: string } | null)?.name || "Online";
-    const organizerName = org?.full_name ?? "MANAGER HUB";
+    const organizerName = org?.full_name ?? "Manager HUB";
 
     const ics = buildIcs({
       uid: `${meetingId}@managerhub`,
@@ -124,7 +124,7 @@ export async function dispatchInvite(meetingId: string, method: IcsMethod, opts:
       `<p style="margin:2px 0"><strong>Local:</strong> ${escapeHtml(location)}</p>` +
       `<p style="margin:2px 0"><strong>Organizador:</strong> ${escapeHtml(organizerName)}</p>` +
       (m.description ? `<p style="margin:8px 0 0">${escapeHtml(m.description)}</p>` : "") +
-      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite enviado pelo MANAGER HUB.</p>`;
+      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite enviado pelo Manager HUB.</p>`;
 
     const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${opts.label}: ${m.title}`, html, ics, method });
     // só grava a nova sequência se o envio deu certo (evita drift de SEQUENCE)
@@ -201,7 +201,7 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod, 
       : { data: null };
 
     const location = (s.rooms as unknown as { name: string } | null)?.name || "Online";
-    const organizerName = org?.full_name ?? "MANAGER HUB";
+    const organizerName = org?.full_name ?? "Manager HUB";
     const label = saiuDaLista
       ? "Você não participa mais da reunião"
       : method === "CANCEL" ? "Série de reuniões cancelada" : "Convite de reunião recorrente";
@@ -232,8 +232,8 @@ export async function dispatchSeriesInvite(seriesId: string, method: IcsMethod, 
           `<p style="margin:2px 0"><strong>Organizador:</strong> ${escapeHtml(organizerName)}</p>` +
           (s.objetivo ? `<p style="margin:8px 0 0">${escapeHtml(s.objetivo)}</p>` : "")) +
       (saiuDaLista
-        ? `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Aviso enviado pelo MANAGER HUB.</p>`
-        : `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo MANAGER HUB. As ocorrências dos próximos ${horizonMonths === 1 ? "30 dias" : "12 meses"} ficam reservadas.</p>`);
+        ? `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Aviso enviado pelo Manager HUB.</p>`
+        : `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Convite recorrente enviado pelo Manager HUB. As ocorrências dos próximos ${horizonMonths === 1 ? "30 dias" : "12 meses"} ficam reservadas.</p>`);
 
     const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${s.name}`, html, ics, method });
     if (ok && seq !== atual) {
@@ -278,7 +278,7 @@ export async function dispatchOccurrenceOverride(meetingId: string, method: IcsM
       ? await admin.from("profiles").select("full_name").eq("id", s.owner_user_id).maybeSingle()
       : { data: null };
     const location = (m.rooms as unknown as { name: string } | null)?.name || "Online";
-    const organizerName = org?.full_name ?? "MANAGER HUB";
+    const organizerName = org?.full_name ?? "Manager HUB";
     const seq = (s.ics_sequence ?? 0) + 1;
     const label = method === "CANCEL" ? "Ocorrência cancelada" : "Ocorrência remarcada";
 
@@ -301,7 +301,7 @@ export async function dispatchOccurrenceOverride(meetingId: string, method: IcsM
       `<h2 style="margin:0 0 8px">${escapeHtml(label)}: ${escapeHtml(m.title)}</h2>` +
       `<p style="margin:2px 0"><strong>Quando:</strong> ${formatDateTime(m.starts_at)} — ${formatDateTime(m.ends_at)}</p>` +
       `<p style="margin:2px 0"><strong>Local:</strong> ${escapeHtml(location)}</p>` +
-      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Alteração de uma ocorrência da série recorrente (MANAGER HUB).</p>`;
+      `<p style="margin:12px 0 0;color:#6b7280;font-size:12px">Alteração de uma ocorrência da série recorrente (Manager HUB).</p>`;
 
     const ok = await sendInvite({ apiKey, to: attendees.map((a) => a.email), subject: `${label}: ${m.title}`, html, ics, method });
     if (ok) await admin.from("meeting_series").update({ ics_sequence: seq }).eq("id", m.series_id);
