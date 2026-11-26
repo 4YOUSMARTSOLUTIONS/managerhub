@@ -36,6 +36,7 @@ export type EmployeeData = {
   isTrainingManager?: boolean;
   /** marca de avaliador da blitz de trajeto (lança a blitz sem ser gestor) */
   isAvaliadorBlitz?: boolean;
+  isAjustaEquipe?: boolean;
   /** marca do Departamento Pessoal, a antiga "RH" (atribuição, independente do perfil) */
   isHr?: boolean;
   /** marca da Área de Gente: lê o pessoal da empresa, sem agir (LUIZ, 19/11/2026) */
@@ -339,6 +340,20 @@ export function EmployeeDialog({
                     <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
                       Lança a blitz e vê as que registrou. A tela da blitz entra mesmo para quem tem acesso
                       restrito. Não dá acesso a relatos nem a acidentes, que são da Equipe de segurança.
+                    </span>
+                  </span>
+                </label>
+                {/* Ajusta equipes do setor (LUIZ, 26/11/2026): quem cuida da carteira
+                    do comercial sem ser do DP. A trava é no banco: só o próprio
+                    setor, e o gestor novo também do setor (`equipe_transferir`). */}
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                  <input type="checkbox" name="is_ajusta_equipe" value="1" defaultChecked={employee?.isAjustaEquipe ?? false} style={{ marginTop: 3 }} />
+                  <span>
+                    <strong>Ajusta equipes do setor</strong>
+                    <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                      Muda o gestor e o subsetor de quem é do mesmo setor, com data, em Configurações &gt;
+                      Colaboradores &gt; Equipes do setor. Não vê o cadastro nem os dados pessoais, e não mexe
+                      em função, hierarquia ou desligamento.
                     </span>
                   </span>
                 </label>

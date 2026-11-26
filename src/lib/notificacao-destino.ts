@@ -37,5 +37,7 @@ export function destinoDaNotificacao(n: {
   if (n.type.startsWith("seg_blitz_")) return "/seguranca/blitz";
   if (n.type.startsWith("sugestao_")) return "/sugestoes";
   if (n.type.startsWith("formulario_")) return "/formularios";
+  // mudança de gestor ou subsetor feita em Equipes do setor: o gestor confere a equipe
+  if (n.type.startsWith("equipe_")) return "/minha-equipe";
   return null;
 }

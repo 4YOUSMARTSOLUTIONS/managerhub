@@ -25,6 +25,8 @@ import { FeedbackCadenceEditor } from "@/components/FeedbackCadenceEditor";
 import { UnitsManager } from "@/components/UnitsManager";
 import { UsersManager, type EmployeeRow } from "@/components/UsersManager";
 import { RegrasImportacaoManager, type GrupoSubsetor } from "@/components/RegrasImportacaoManager";
+import { EquipesDoSetorManager, type PessoaDaEquipe } from "@/components/EquipesDoSetorManager";
+import { EquipesDoSetorSoMarca } from "./equipes-do-setor";
 import { AbsencesManager, type AbsenceRow } from "@/components/AbsencesManager";
 import { AcessoTelasManager } from "@/components/acesso/AcessoTelasManager";
 import { SessaoManager } from "@/components/acesso/SessaoManager";
@@ -84,7 +86,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ aba?: string; sub?: string }>;
 }) {
   const { aba, sub } = await searchParams;
-  const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh, isGente: marcaGente } = await requireContext();
+  const { tenant, role, user, isSuperAdmin, unitScope, isHr: marcaRh, isGente: marcaGente, isAjustaEquipe: marcaAjusta } = await requireContext();
   // acesso por nível: quem não tem Configurações liberada vai para a tela dele
   await exigirTelaBase("configuracoes");
 
@@ -123,6 +125,13 @@ export default async function SettingsPage({
   const isGestor = role === "team_lead" && !isHr && !isGente;
   const canView = canEdit || isGerencial || isHr || isGente || isGestor;
   const canEditDP = canEdit || isHr;
+
+  // Quinto caminho (LUIZ, 26/11/2026): a marca "Ajusta equipes do setor" sem
+  // nenhum dos perfis acima. A pessoa vê SÓ Colaboradores > Equipes do setor,
+  // do próprio setor, e nenhuma consulta das outras abas sai para ela.
+  if (!canView && marcaAjusta) {
+    return <EquipesDoSetorSoMarca supabase={await createClient()} tenantId={tenant.id} userId={user.id} />;
+  }
 
   if (!canView) {
     return (
@@ -361,7 +370,7 @@ export default async function SettingsPage({
     // de sugestão (só quem importa: owner, admin e DP)
     em("usuarios") && canEditDP ? supabase.from("importacao_config").select("empresas_dominio, dominios_email_corporativo").eq("tenant_id", tenant.id).maybeSingle() : nada,
     em("usuarios") && canEditDP ? supabase.from("regra_funcao_hierarquia").select("position_id, hierarchy_level_id").eq("tenant_id", tenant.id) : nada,
-    em("usuarios") && canEditDP ? supabase.from("regra_subsetor_gestor").select("subdepartment_id, unit_id, manager_id").eq("tenant_id", tenant.id) : nada,
+    em("usuarios") && (canEditDP || marcaAjusta) ? supabase.from("regra_subsetor_gestor").select("subdepartment_id, unit_id, manager_id").eq("tenant_id", tenant.id) : nada,
   ]);
   const equipe = equipeDoGestor ? new Set(equipeDoGestor) : null;
   // Equipe de segurança inclui e desativa/reativa perguntas da blitz (LUIZ,
@@ -442,6 +451,7 @@ export default async function SettingsPage({
       unitIds: uIds,
       isTrainingManager: m.is_training_manager,
       isAvaliadorBlitz: m.is_avaliador_blitz,
+      isAjustaEquipe: m.is_ajusta_equipe,
       isHr: m.is_hr,
       isGente: m.is_gente,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,
@@ -769,6 +779,47 @@ export default async function SettingsPage({
     );
   })();
 
+  // Equipes do setor (LUIZ, 26/11/2026): owner/admin/DP em qualquer setor; quem
+  // lê Configurações e tem a marca, só no próprio setor
+  const equipesTab = (() => {
+    if (!canEditDP && !marcaAjusta) return null;
+    const ativosDaEmpresa = mems.filter((m) => m.is_active);
+    const meuSetor = ativosDaEmpresa.find((m) => m.user_id === user.id)?.department_id ?? null;
+    const soMeuSetor = !canEditDP;
+    if (soMeuSetor && !meuSetor) return null;
+    const pessoas: PessoaDaEquipe[] = ativosDaEmpresa
+      .filter((m) => !soMeuSetor || m.department_id === meuSetor)
+      .map((m) => ({
+        membershipId: m.id,
+        userId: m.user_id,
+        nome: profById.get(m.user_id)?.full_name ?? "Sem nome",
+        matricula: m.employee_code,
+        funcao: m.position_id ? posById.get(m.position_id)?.name ?? null : null,
+        setorId: m.department_id,
+        subsetorId: m.subdepartment_id,
+        subsetorNome: m.subdepartment_id ? subById.get(m.subdepartment_id)?.name ?? null : null,
+        gestorId: m.manager_id,
+        gestorNome: m.manager_id ? profById.get(m.manager_id)?.full_name ?? null : null,
+        unidades: (unitsByMem.get(m.id) ?? []).map((id) => unitById.get(id)?.name).filter((x): x is string => !!x),
+      }));
+    const comGente = new Set(pessoas.map((x) => x.setorId).filter((x): x is string => !!x));
+    const setores = (departments ?? [])
+      .filter((d) => comGente.has(d.id))
+      .map((d) => ({ id: d.id, name: d.name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    return (
+      <EquipesDoSetorManager
+        pessoas={pessoas}
+        setores={setores}
+        subsetores={(subdepartments ?? []).filter((x) => x.active).map((x) => ({ id: x.id, name: x.name, setorId: x.department_id }))}
+        regrasSubsetor={(regrasSubsetorData ?? []).map((r) => ({ subsetorId: r.subdepartment_id, unidade: unitById.get(r.unit_id)?.name ?? "", gestorId: r.manager_id }))}
+        setorInicial={meuSetor && comGente.has(meuSetor) ? meuSetor : setores[0]?.id ?? null}
+        setorFixo={soMeuSetor}
+        meuUserId={user.id}
+      />
+    );
+  })();
+
   const usuariosTab = (
     <Tabs
       variant="sub"
@@ -816,6 +867,7 @@ export default async function SettingsPage({
         },
         // quem vê quais telas (por nível, com exceção por pessoa) e quanto tempo
         // sem uso encerra a sessão; só owner/admin grava
+        ...(equipesTab ? [{ id: "equipes", label: "Equipes do setor", content: equipesTab }] : []),
         ...(regrasImportacaoTab ? [{ id: "regras-importacao", label: "Regras da importação", content: regrasImportacaoTab }] : []),
         ...(veAcesso ? [{ id: "acesso", label: "Acesso e sessão", content: acessoTab }] : []),
       ]}

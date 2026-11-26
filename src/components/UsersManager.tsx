@@ -370,6 +370,7 @@ export function UsersManager({
                       {/* DP e Área de Gente são atribuições: selo neutro ao lado do perfil */}
                       {e.isHr && e.role !== "hr" && <Badge variant="quiet">DP</Badge>}
                       {e.isGente && <Badge variant="quiet">Área de Gente</Badge>}
+                      {e.isAjustaEquipe && <Badge variant="quiet">Ajusta equipes</Badge>}
                     </span>
                   </td>
                   <td>

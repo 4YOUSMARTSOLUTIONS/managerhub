@@ -19,6 +19,7 @@ export function AppShell({
   role,
   isHr = false,
   isGente = false,
+  isAjustaEquipe = false,
   isSuperAdmin,
   tenantName,
   userName,
@@ -42,6 +43,8 @@ export function AppShell({
   isHr?: boolean;
   /** marca da Área de Gente (só leitura do pessoal) */
   isGente?: boolean;
+  /** marca "Ajusta equipes do setor": entra em Configurações só para Equipes do setor */
+  isAjustaEquipe?: boolean;
   isSuperAdmin: boolean;
   tenantName: string;
   userName: string | null | undefined;
@@ -84,6 +87,7 @@ export function AppShell({
         role={role}
         isHr={isHr}
         isGente={isGente}
+        isAjustaEquipe={isAjustaEquipe}
         isSuperAdmin={isSuperAdmin}
         moduleState={moduleState}
         construction={construction}

@@ -47,6 +47,12 @@ export type ActiveContext = {
    */
   isAvaliadorBlitz: boolean;
   /**
+   * marca "Ajusta equipes do setor" (`memberships.is_ajusta_equipe`, LUIZ
+   * 26/11/2026): muda gestor e subsetor de quem é do mesmo setor, em
+   * Configurações > Colaboradores > Equipes do setor
+   */
+  isAjustaEquipe: boolean;
+  /**
    * equipe de segurança (`seg_equipe`): vê a segurança da empresa inteira e, por
    * isso, não fica travada na própria unidade (LUIZ, 18/11/2026)
    */
@@ -86,7 +92,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     getIsSuperAdmin(),
     supabase
       .from("memberships")
-      .select("id, role, tenant_id, is_active, is_hr, is_gente, is_avaliador_blitz, tenants(*)")
+      .select("id, role, tenant_id, is_active, is_hr, is_gente, is_avaliador_blitz, is_ajusta_equipe, tenants(*)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(1),
@@ -99,6 +105,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
   let isHr = false;
   let isGente = false;
   let isAvaliadorBlitz = false;
+  let isAjustaEquipe = false;
   let isAdmin: boolean;
   let membershipId: string | null = null;
 
@@ -121,6 +128,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     isHr = membership.is_hr;
     isGente = membership.is_gente === true;
     isAvaliadorBlitz = membership.is_avaliador_blitz === true;
+    isAjustaEquipe = membership.is_ajusta_equipe === true;
     isAdmin = role === "owner" || role === "admin";
     membershipId = membership.id;
   }
@@ -197,6 +205,7 @@ export const requireContext = cache(async function requireContext(): Promise<Act
     isGente,
     isDp: isAdmin || isHr,
     isAvaliadorBlitz,
+    isAjustaEquipe,
     isSeguranca,
     unitScope: { units: allowed, allowedUnitIds, unrestricted, activeUnitId, locked: allowed.length === 1 },
     isSuperAdmin,

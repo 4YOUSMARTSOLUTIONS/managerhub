@@ -57,6 +57,7 @@ export function Sidebar({
   role,
   isHr = false,
   isGente = false,
+  isAjustaEquipe = false,
   isSuperAdmin = false,
   moduleState,
   construction,
@@ -71,6 +72,8 @@ export function Sidebar({
   isHr?: boolean;
   /** marca da Área de Gente (`memberships.is_gente`): só leitura do pessoal */
   isGente?: boolean;
+  /** marca "Ajusta equipes do setor" (`memberships.is_ajusta_equipe`) */
+  isAjustaEquipe?: boolean;
   isSuperAdmin?: boolean;
   /** estado resolvido no servidor (entitlement por unidade) */
   moduleState: Record<ModuleKey, ModuleState>;
@@ -92,7 +95,7 @@ export function Sidebar({
   const visible = (m: ModuleDef) => {
     // owner de plataforma sem empresa: só o Painel ADM
     if (platformOnly) return m.key === "admin";
-    if (!permitidoPeloPapel(m, { role, isHr, isGente, isSuperAdmin })) return false;
+    if (!permitidoPeloPapel(m, { role, isHr, isGente, isAjustaEquipe, isSuperAdmin })) return false;
     return moduleState[m.key] !== "hidden";
   };
 

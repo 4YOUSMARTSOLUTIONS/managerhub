@@ -409,6 +409,7 @@ export type Database = {
           is_ticket_manager: boolean
           is_training_manager: boolean
           is_avaliador_blitz: boolean
+          is_ajusta_equipe: boolean
           manager_id: string | null
           position_id: string | null
           position_level_id: string | null
@@ -431,6 +432,7 @@ export type Database = {
           is_ticket_manager?: boolean
           is_training_manager?: boolean
           is_avaliador_blitz?: boolean
+          is_ajusta_equipe?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
@@ -453,6 +455,7 @@ export type Database = {
           is_ticket_manager?: boolean
           is_training_manager?: boolean
           is_avaliador_blitz?: boolean
+          is_ajusta_equipe?: boolean
           manager_id?: string | null
           position_id?: string | null
           position_level_id?: string | null
@@ -2565,6 +2568,8 @@ export type Database = {
       admin_create_employee: { Args: { p_data: Json; p_password: string }; Returns: string }
       admin_update_employee: { Args: { p_user: string; p_data: Json }; Returns: undefined }
       admin_import_employees: { Args: { p_rows: Json; p_password: string; p_simular?: boolean }; Returns: Json }
+      // Equipes do setor (26/11/2026): gestor e/ou subsetor com data; nulo = não muda
+      equipe_transferir: { Args: { p_tenant: string; p_membros: string[]; p_subsetor: string | null; p_gestor: string | null; p_data: string }; Returns: Json }
       platform_companies: {
         Args: Record<PropertyKey, never>
         Returns: {

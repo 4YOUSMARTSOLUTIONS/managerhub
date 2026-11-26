@@ -136,7 +136,7 @@ export default async function AppLayout({
   const caminho = (await headers()).get(CABECALHO_CAMINHO);
   const destino = caminho
     ? destinoAntecipado(caminho, moduleState, (m) =>
-        permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isGente: ctx.isGente, isSuperAdmin: ctx.isSuperAdmin }))
+        permitidoPeloPapel(m, { role: ctx.role, isHr: ctx.isHr, isGente: ctx.isGente, isAjustaEquipe: ctx.isAjustaEquipe, isSuperAdmin: ctx.isSuperAdmin }))
     : null;
   if (destino) redirect(destino);
 
@@ -159,6 +159,7 @@ export default async function AppLayout({
       role={ctx.role}
       isHr={ctx.isHr}
       isGente={ctx.isGente}
+      isAjustaEquipe={ctx.isAjustaEquipe}
       isSuperAdmin={ctx.isSuperAdmin}
       tenantName={ctx.tenant.name}
       userName={userName}

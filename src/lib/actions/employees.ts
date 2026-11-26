@@ -255,6 +255,8 @@ export async function updateEmployee(
           is_gente: formData.get("is_gente") === "1",
           // mesma trava no banco: só owner/admin concede (so_administracao_concede_avaliador_blitz)
           is_avaliador_blitz: formData.get("is_avaliador_blitz") === "1",
+          // mesma trava no banco: só owner/admin concede (so_administracao_concede_ajusta_equipe)
+          is_ajusta_equipe: formData.get("is_ajusta_equipe") === "1",
         })
         .eq("tenant_id", tenantId)
         .eq("user_id", userId);
