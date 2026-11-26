@@ -1008,6 +1008,14 @@ export type Database = {
         Update: { hierarchy_level_id?: string; updated_by?: string | null; updated_at?: string }
         Relationships: []
       }
+      // Equipes do setor: as funções da carteira de cada setor (nome base, sem o
+      // nível). Sem linha ou lista vazia, o setor inteiro aparece.
+      equipe_setor_config: {
+        Row: { id: string; tenant_id: string; department_id: string; funcoes: string[]; updated_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; tenant_id: string; department_id: string; funcoes?: string[]; updated_by?: string | null; created_at?: string; updated_at?: string }
+        Update: { funcoes?: string[]; updated_by?: string | null; updated_at?: string }
+        Relationships: []
+      }
       regra_subsetor_gestor: {
         Row: { id: string; tenant_id: string; subdepartment_id: string; unit_id: string; manager_id: string; updated_by: string | null; created_at: string; updated_at: string }
         Insert: { id?: string; tenant_id: string; subdepartment_id: string; unit_id: string; manager_id: string; updated_by?: string | null; created_at?: string; updated_at?: string }

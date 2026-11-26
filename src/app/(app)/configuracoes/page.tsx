@@ -219,6 +219,7 @@ export default async function SettingsPage({
     equipeDoGestor,
     { count: cidTotal }, { data: mgrSectors }, { data: blitzForaData }, { data: blitzExcData },
     { data: importacaoConfigData }, { data: regrasFuncaoData }, { data: regrasSubsetorData },
+    { data: equipeConfigData },
   ] = await Promise.all([
     em("estrutura", "usuarios", "chamados", "rv", "punicoes", "ferias", "seguranca") ? fetchAll(() => supabase.from("memberships").select("*").eq("tenant_id", tenant.id).order("id")) : nada,
     em("empresa", "usuarios", "rv", "punicoes", "ferias", "absenteismos", "seguranca", "salas") ? supabase.from("units").select("*").eq("tenant_id", tenant.id).order("name") : nada,
@@ -371,6 +372,8 @@ export default async function SettingsPage({
     em("usuarios") && canEditDP ? supabase.from("importacao_config").select("empresas_dominio, dominios_email_corporativo").eq("tenant_id", tenant.id).maybeSingle() : nada,
     em("usuarios") && canEditDP ? supabase.from("regra_funcao_hierarquia").select("position_id, hierarchy_level_id").eq("tenant_id", tenant.id) : nada,
     em("usuarios") && (canEditDP || marcaAjusta) ? supabase.from("regra_subsetor_gestor").select("subdepartment_id, unit_id, manager_id").eq("tenant_id", tenant.id) : nada,
+    // as funções da carteira de cada setor, em Equipes do setor
+    em("usuarios") && (canEditDP || marcaAjusta) ? supabase.from("equipe_setor_config").select("department_id, funcoes").eq("tenant_id", tenant.id) : nada,
   ]);
   const equipe = equipeDoGestor ? new Set(equipeDoGestor) : null;
   // Equipe de segurança inclui e desativa/reativa perguntas da blitz (LUIZ,
@@ -816,6 +819,8 @@ export default async function SettingsPage({
         setorInicial={meuSetor && comGente.has(meuSetor) ? meuSetor : setores[0]?.id ?? null}
         setorFixo={soMeuSetor}
         meuUserId={user.id}
+        funcoesDaCarteira={Object.fromEntries((equipeConfigData ?? []).map((c) => [c.department_id, c.funcoes]))}
+        podeConfigurar={canEditDP}
       />
     );
   })();

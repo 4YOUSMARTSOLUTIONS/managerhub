@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { actionContext } from "./context";
+import { actionContext, dpActionContext } from "./context";
 import type { ActionState } from "./types";
 
 export async function transferirNaEquipe(input: {
@@ -36,6 +36,25 @@ export async function transferirNaEquipe(input: {
     const partes = [`${movidos} colaborador(es) transferido(s)`];
     if (iguais > 0) partes.push(`${iguais} já estava(m) assim`);
     return { ok: true, message: `${partes.join(", ")}.` };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/**
+ * As funções da carteira de um setor (nome base, sem o nível). Só owner, admin
+ * e DP; lista vazia volta a mostrar o setor inteiro.
+ */
+export async function salvarFuncoesDaCarteira(setorId: string, funcoes: string[]): Promise<ActionState> {
+  try {
+    const { supabase, tenantId, userId } = await dpActionContext();
+    const { error } = await supabase.from("equipe_setor_config").upsert(
+      { tenant_id: tenantId, department_id: setorId, funcoes, updated_by: userId },
+      { onConflict: "tenant_id,department_id" },
+    );
+    if (error) return { error: error.message };
+    revalidatePath("/configuracoes");
+    return { ok: true, message: "Funções da carteira salvas." };
   } catch (e) {
     return { error: (e as Error).message };
   }

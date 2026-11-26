@@ -32,7 +32,7 @@ export async function EquipesDoSetorSoMarca({ supabase, tenantId, userId }: {
     );
   }
 
-  const [{ data: mems }, { data: setor }, { data: subs }, { data: cargos }, { data: unidades }, { data: regras }] = await Promise.all([
+  const [{ data: mems }, { data: setor }, { data: subs }, { data: cargos }, { data: unidades }, { data: regras }, { data: config }] = await Promise.all([
     fetchAll(() => supabase
       .from("memberships")
       .select("id, user_id, employee_code, department_id, subdepartment_id, position_id, manager_id, profiles!memberships_user_id_fkey(full_name)")
@@ -43,6 +43,7 @@ export async function EquipesDoSetorSoMarca({ supabase, tenantId, userId }: {
     supabase.from("positions").select("id, name").eq("tenant_id", tenantId),
     supabase.from("units").select("id, name").eq("tenant_id", tenantId),
     supabase.from("regra_subsetor_gestor").select("subdepartment_id, unit_id, manager_id").eq("tenant_id", tenantId),
+    supabase.from("equipe_setor_config").select("funcoes").eq("tenant_id", tenantId).eq("department_id", setorId).maybeSingle(),
   ]);
 
   const lista = mems ?? [];
@@ -101,6 +102,8 @@ export async function EquipesDoSetorSoMarca({ supabase, tenantId, userId }: {
               setorInicial={setorId}
               setorFixo
               meuUserId={userId}
+              funcoesDaCarteira={{ [setorId]: config?.funcoes ?? [] }}
+              podeConfigurar={false}
             />
           ),
         }]}

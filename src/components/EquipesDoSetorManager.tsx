@@ -13,8 +13,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { transferirNaEquipe } from "@/lib/actions/equipes";
+import { salvarFuncoesDaCarteira, transferirNaEquipe } from "@/lib/actions/equipes";
 import { shortName } from "@/lib/format";
+import { funcaoBase } from "@/lib/funcao-base";
 import { SearchSelect } from "./SearchSelect";
 
 export type PessoaDaEquipe = {
@@ -53,6 +54,8 @@ export function EquipesDoSetorManager({
   setorInicial,
   setorFixo,
   meuUserId,
+  funcoesDaCarteira,
+  podeConfigurar,
 }: {
   /** ativos (de um setor só, para quem tem só a marca; de todos, para owner/admin/DP) */
   pessoas: PessoaDaEquipe[];
@@ -64,6 +67,13 @@ export function EquipesDoSetorManager({
   /** quem tem só a marca: o setor dela, sem escolha */
   setorFixo: boolean;
   meuUserId: string;
+  /**
+   * as funções da carteira de cada setor (nome base). A lista mostra só quem
+   * tem uma delas; setor sem configuração mostra todo mundo (LUIZ, 26/11/2026)
+   */
+  funcoesDaCarteira: Record<string, string[]>;
+  /** owner, admin e DP configuram as funções da carteira */
+  podeConfigurar: boolean;
 }) {
   const router = useRouter();
   const [setor, setSetor] = useState(setorInicial ?? setores[0]?.id ?? "");
@@ -73,7 +83,13 @@ export function EquipesDoSetorManager({
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [transferindo, setTransferindo] = useState<PessoaDaEquipe[] | null>(null);
 
-  const doSetor = useMemo(() => pessoas.filter((p) => p.setorId === setor).sort(ordem), [pessoas, setor]);
+  // o setor inteiro serve de gestor (decisão do LUIZ); a lista mostra só a carteira
+  const doSetorTodos = useMemo(() => pessoas.filter((p) => p.setorId === setor).sort(ordem), [pessoas, setor]);
+  const carteira = useMemo(() => funcoesDaCarteira[setor] ?? [], [funcoesDaCarteira, setor]);
+  const doSetor = useMemo(
+    () => (carteira.length ? doSetorTodos.filter((p) => carteira.includes(funcaoBase(p.funcao))) : doSetorTodos),
+    [doSetorTodos, carteira],
+  );
   const subsDoSetor = useMemo(
     () => subsetores.filter((s) => s.setorId === setor).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     [subsetores, setor],
@@ -109,9 +125,21 @@ export function EquipesDoSetorManager({
     <div className="card">
       <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
         <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-          Mude o gestor e o subsetor de quem é do setor, com a data em que a mudança vale. Ela entra no
-          histórico de cada pessoa, e o gestor que perde e o que recebe a pessoa são avisados.
+          Mude o gestor e o subsetor de quem é da carteira do setor, com a data em que a mudança vale. Ela
+          entra no histórico de cada pessoa, e o gestor que perde e o que recebe a pessoa são avisados.
         </p>
+        {podeConfigurar ? (
+          <FuncoesDaCarteira
+            key={setor}
+            setorId={setor}
+            atuais={carteira}
+            disponiveis={[...new Set(doSetorTodos.map((p) => funcaoBase(p.funcao)).filter(Boolean))].sort()}
+          />
+        ) : carteira.length > 0 && (
+          <p className="soft" style={{ fontSize: "0.78rem", margin: 0 }}>
+            Carteira: {carteira.join(", ")} (em qualquer nível).
+          </p>
+        )}
         <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
           {!setorFixo && (
             <select className="select" value={setor} onChange={(e) => trocarSetor(e.target.value)} aria-label="Setor" style={{ width: 200 }}>
@@ -191,7 +219,7 @@ export function EquipesDoSetorManager({
           pessoas={transferindo}
           subsetores={subsDoSetor}
           // o gestor novo é alguém do setor (decisão do LUIZ), e nunca quem está sendo movido
-          gestores={doSetor
+          gestores={doSetorTodos
             .filter((g) => !transferindo.some((t) => t.userId === g.userId))
             .map((g) => ({ id: g.userId, name: g.nome }))
             .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))}
@@ -199,6 +227,60 @@ export function EquipesDoSetorManager({
           onFechar={() => setTransferindo(null)}
           onFeito={() => { setTransferindo(null); setMarcados(new Set()); router.refresh(); }}
         />
+      )}
+    </div>
+  );
+}
+
+/** owner, admin e DP escolhem as funções da carteira do setor (nome base) */
+function FuncoesDaCarteira({ setorId, atuais, disponiveis }: {
+  setorId: string;
+  atuais: string[];
+  disponiveis: string[];
+}) {
+  const router = useRouter();
+  const [lista, setLista] = useState<string[]>(atuais);
+  const [nova, setNova] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const mudou = lista.join("|") !== atuais.join("|");
+
+  async function salvar() {
+    setSalvando(true);
+    const r = await salvarFuncoesDaCarteira(setorId, lista);
+    setSalvando(false);
+    if (r.error) { toast.error(r.error); return; }
+    toast.success(r.message ?? "Salvo.");
+    router.refresh();
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap", fontSize: "0.8rem" }}>
+      <span className="muted">Funções da carteira:</span>
+      {lista.length === 0 && <span className="soft">nenhuma (aparece o setor inteiro)</span>}
+      {lista.map((f) => (
+        <span key={f} className="badge" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {f}
+          <button
+            type="button" aria-label={`Tirar ${f}`} disabled={salvando}
+            onClick={() => setLista((xs) => xs.filter((x) => x !== f))}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 0, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <select
+        className="select" value={nova} disabled={salvando} aria-label="Acrescentar função à carteira"
+        onChange={(e) => { const v = e.target.value; if (v && !lista.includes(v)) setLista((xs) => [...xs, v].sort()); setNova(""); }}
+        style={{ width: 230 }}
+      >
+        <option value="">Acrescentar função…</option>
+        {disponiveis.filter((f) => !lista.includes(f)).map((f) => <option key={f} value={f}>{f}</option>)}
+      </select>
+      {mudou && (
+        <button type="button" className="btn btn-primary btn-sm" disabled={salvando} onClick={salvar}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </button>
       )}
     </div>
   );
