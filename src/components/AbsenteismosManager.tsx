@@ -2288,7 +2288,7 @@ function PainelConfirmacao({
               Abonar parte dos dias
               <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
                 Quando o motivo não cobre o período todo e a empresa abona o restante. Os dias abonados saem
-                deste lançamento e vão ao DP junto, num lançamento à parte com o motivo {nomeDoAbono}: ficam
+                deste lançamento e são encaminhados para o DP, num lançamento à parte com o motivo {nomeDoAbono}: ficam
                 registrados, não pesam na remuneração variável e, depois de aprovados, aparecem em Abonos no ponto.
               </span>
             </span>
