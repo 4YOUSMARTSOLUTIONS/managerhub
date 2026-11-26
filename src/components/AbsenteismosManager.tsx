@@ -162,6 +162,8 @@ type Tipo = {
   requiresKinship: boolean;
   discountsRvDefault: boolean;
   active: boolean;
+  /** o motivo Abono (LUIZ, 26/11/2026): sempre abonado, usado no "Abonar parte dos dias" */
+  abono?: boolean;
 };
 
 type PrimeiroDia = "integral" | "trabalhou" | "parcial";
@@ -247,7 +249,7 @@ function conferirAbono(
   if (!abIni || !abFim) return { erro: "Informe o primeiro e o último dia abonado." };
   if (abFim < abIni) return { erro: "O último dia abonado não pode ser antes do primeiro." };
   if (abIni < inicio || abFim > fim) return { erro: `Os dias abonados precisam estar dentro do período (${intervalo([inicio, fim])}).` };
-  if (abIni === inicio && abFim === fim) return { erro: "Para abonar o período inteiro, lance como falta abonada." };
+  if (abIni === inicio && abFim === fim) return { erro: "Para abonar o período inteiro, escolha o motivo Abono." };
   if (abIni !== inicio && abFim !== fim) return { erro: "Os dias abonados precisam ser os do começo ou os do fim do período." };
   if (abIni === inicio && primeiroDia !== "integral") {
     return { erro: "Com o primeiro dia trabalhado, os dias abonados precisam ser os do fim do período." };
@@ -1745,7 +1747,7 @@ function PainelConfirmacao({
   // afastamento: o documento é médico ou da perícia do INSS (LUIZ, 17/11/2026)
   const pedeTipoDocumento = tipo?.kind === "afastamento" && !tipo.requiresMedical;
   // falta sem término (LUIZ, 17/11/2026): só com motivo de falta; o fim vai 9999
-  const semTermino = c.semTermino && tipo?.kind === "falta";
+  const semTermino = c.semTermino && tipo?.kind === "falta" && !tipo.abono;
   const fimEfetivo = semTermino ? SEM_RETORNO : c.endDate;
   const primeiroDia = semTermino ? "integral" : primeiroDiaQueVale(c);
   const diasNoDocumento = semTermino ? null : diasDoPeriodo(c.startDate, c.endDate);
@@ -1755,7 +1757,8 @@ function PainelConfirmacao({
   const foraDoDocumento = sem && c.startDate && fimEfetivo && fimEfetivo >= c.startDate
     ? diasForaDoDocumento(sem, c.startDate, fimEfetivo, primeiroDia)
     : [];
-  const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument) ?? null;
+  // a falta comum dos dias fora do documento, nunca o Abono (o mesmo filtro do banco)
+  const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument && !t.abono) ?? null;
   const umDiaFora = foraDoDocumento?.length === 1 && foraDoDocumento[0][0] === foraDoDocumento[0][1];
   const avisoFalta = foraDoDocumento?.length
     ? `O período informado não cobre ${foraDoDocumento.map(intervalo).join(" e ")}. ${umDiaFora ? "Esse dia será lançado" : "Esses dias serão lançados"} como ${tipoFalta?.name ?? "falta"}, num lançamento à parte que vai ao DP junto.`
@@ -1764,8 +1767,9 @@ function PainelConfirmacao({
   const levaHoras = c.emHoras || primeiroDia === "parcial";
   // Abonar parte dos dias (LUIZ, 26/11/2026): período de 2 dias ou mais, fora da
   // falta sem término, da ausência de horas e da falta já abonada inteira
-  const podeAbonarParte = Boolean(tipo) && !semTermino && !c.emHoras && (diasNoDocumento ?? 0) >= 2
+  const podeAbonarParte = Boolean(tipo) && !tipo?.abono && !semTermino && !c.emHoras && (diasNoDocumento ?? 0) >= 2
     && !(tipo?.kind === "falta" && c.abonada);
+  const nomeDoAbono = tipos.find((t) => t.abono)?.name ?? "Abono";
   const abonoParte = podeAbonarParte && c.abonoParcial;
   const abono = abonoParte ? conferirAbono(c.startDate, c.endDate, c.abonoInicio, c.abonoFim, primeiroDia) : null;
   const abonoOk = abono && !("erro" in abono) ? abono : null;
@@ -1809,7 +1813,7 @@ function PainelConfirmacao({
     acidenteTrabalho: c.acidenteTrabalho,
     tipoAtestado: c.tipoAtestado,
     tipoDocumento: c.tipoDocumento,
-    abonada: c.abonada,
+    abonada: c.abonada || Boolean(tipo?.abono),
     horaInicio: levaHoras ? c.horaInicio : "",
     horaFim: levaHoras ? c.horaFim : "",
     parcial: c.emHoras,
@@ -1870,7 +1874,7 @@ function PainelConfirmacao({
       itens.push(["Dias do motivo", `${intervalo([abonoOk.restoIni, abonoOk.restoFim])} (${resto} dia${resto === 1 ? "" : "s"})`]);
       itens.push([
         "Dias abonados",
-        `${intervalo([c.abonoInicio, c.abonoFim])} (${abonoOk.dias} dia${abonoOk.dias === 1 ? "" : "s"}), num lançamento à parte como falta abonada`,
+        `${intervalo([c.abonoInicio, c.abonoFim])} (${abonoOk.dias} dia${abonoOk.dias === 1 ? "" : "s"}), num lançamento à parte com o motivo ${nomeDoAbono}`,
         true,
       ]);
     }
@@ -2164,7 +2168,7 @@ function PainelConfirmacao({
 
       {/* Falta sem término (LUIZ, 17/11/2026): quem parou de vir e não vai
           justificar, sem data para acabar. O DP encerra depois, pela ficha. */}
-      {tipo?.kind === "falta" && !c.emHoras && (
+      {tipo?.kind === "falta" && !tipo.abono && !c.emHoras && (
         <label style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
           <input
             type="checkbox" checked={c.semTermino} style={{ marginTop: 3 }}
@@ -2273,21 +2277,18 @@ function PainelConfirmacao({
           <label style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
             <input
               type="checkbox" checked={c.abonoParcial} style={{ marginTop: 3 }}
+              // os dias começam em branco (LUIZ, 26/11/2026): vindo preenchidos, a
+              // pessoa podia enviar sem conferir quais dias estava abonando
               onChange={(e) => {
                 const liga = e.target.checked;
-                // parte do caso comum: o motivo cobre o primeiro dia e o restante é abonado
-                setC((x) => ({
-                  ...x, abonoParcial: liga,
-                  abonoInicio: liga && !x.abonoInicio && x.startDate ? diaSeguinte(x.startDate) : x.abonoInicio,
-                  abonoFim: liga && !x.abonoFim ? x.endDate : x.abonoFim,
-                }));
+                setC((x) => ({ ...x, abonoParcial: liga }));
               }}
             />
             <span>
               Abonar parte dos dias
               <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
                 Quando o motivo não cobre o período todo e a empresa abona o restante. Os dias abonados saem
-                deste lançamento e vão ao DP junto, num lançamento à parte como falta abonada: ficam
+                deste lançamento e vão ao DP junto, num lançamento à parte com o motivo {nomeDoAbono}: ficam
                 registrados, não pesam na remuneração variável e, depois de aprovados, aparecem em Abonos no ponto.
               </span>
             </span>
@@ -2310,7 +2311,11 @@ function PainelConfirmacao({
                   />
                 </div>
               </div>
-              {abono && "erro" in abono ? (
+              {!c.abonoInicio || !c.abonoFim ? (
+                <p className="soft" style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem" }}>
+                  Informe de que dia até que dia a empresa abona: os primeiros ou os últimos dias do período.
+                </p>
+              ) : abono && "erro" in abono ? (
                 <p style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem", color: "var(--mh-danger)" }}>{abono.erro}</p>
               ) : abonoOk ? (
                 <p style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem", background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
@@ -2366,7 +2371,7 @@ function PainelConfirmacao({
             </div>
           </>
         )}
-        {tipo?.kind === "falta" && (
+        {tipo?.kind === "falta" && !tipo.abono && (
           <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
             <input
               type="checkbox" checked={c.abonada}

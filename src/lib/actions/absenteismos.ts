@@ -61,6 +61,9 @@ function mensagem(e: { code?: string; message?: string }): string {
   if (msg.includes("absence_types_medico_pede_documento")) {
     return "Um tipo que pede dados médicos precisa exigir o documento anexado.";
   }
+  if (msg.includes("absence_types_abono_coerente")) {
+    return "O motivo de abono é usado no \"Abonar parte dos dias\": ele fica sempre com o comportamento Falta, sem documento e sem dados médicos.";
+  }
   if (msg.includes("absenteismo_dest_email_valido")) return "Informe um e-mail válido.";
   if (msg.includes("absenteismo_dest_geral_uk") || msg.includes("absenteismo_dest_unidade_uk")) {
     return "Este e-mail já está na lista para essa unidade.";
@@ -143,6 +146,15 @@ export async function deleteAbsenceType(formData: FormData): Promise<void> {
   const { supabase } = await dpActionContext();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
+
+  // O motivo Abono é o do "Abonar parte dos dias" (LUIZ, 26/11/2026): sem ele o
+  // abono de parte dos dias para de funcionar, então ele só se desativa
+  const { data: tipo } = await supabase.from("absence_types").select("abono").eq("id", id).maybeSingle();
+  if (tipo?.abono) {
+    await supabase.from("absence_types").update({ active: false }).eq("id", id);
+    revalidar();
+    return;
+  }
 
   const { error } = await supabase.from("absence_types").delete().eq("id", id);
   if (error) {
@@ -520,7 +532,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
 
     const { data: tipo } = await supabase
       .from("absence_types")
-      .select("id, name, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default")
+      .select("id, name, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, abono")
       .eq("id", input.absenceTypeId)
       .maybeSingle();
     if (!tipo) return { error: "Tipo de absenteísmo não encontrado." };
@@ -575,8 +587,9 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
           : tipo.kind === "afastamento"
             ? (input.tipoDocumento === "medico" || input.tipoDocumento === "pericia_inss" ? input.tipoDocumento : null)
             : null,
-        // abono só existe para falta: nas demais o motivo já diz o efeito
-        waived: tipo.kind === "falta" ? Boolean(input.abonada) : false,
+        // abono só existe para falta: nas demais o motivo já diz o efeito. O
+        // motivo Abono sai sempre abonado (o banco também força)
+        waived: tipo.abono ? true : tipo.kind === "falta" ? Boolean(input.abonada) : false,
         hours_start: gravaHoras ? horaIni : null,
         hours_end: gravaHoras ? horaFim : null,
         partial_day: emHoras,

@@ -25,6 +25,8 @@ export type TipoAbsenteismoRow = {
   discountsRvDefault: boolean;
   countsAsAbsenteeism: boolean;
   active: boolean;
+  /** o motivo dos dias abonados (LUIZ, 26/11/2026): sempre Falta, sem documento, sempre abonado */
+  abono?: boolean;
 };
 
 type Rascunho = {
@@ -298,6 +300,12 @@ export function AbsenceTypesManager({
               <tr key={t.id} style={{ opacity: t.active ? 1 : 0.6 }}>
                 <td>
                   <span style={{ fontWeight: 600 }}>{t.name}</span>
+                  {t.abono && (
+                    <span title="Usado no Abonar parte dos dias. Todo lançamento com ele sai abonado; o comportamento fica sempre Falta, sem documento."
+                      style={{ marginLeft: 6 }}>
+                      <Badge variant="quiet" tone="gray">Abono</Badge>
+                    </span>
+                  )}
                   {t.description && (
                     <div className="soft" style={{ fontSize: "0.74rem" }}>{t.description}</div>
                   )}

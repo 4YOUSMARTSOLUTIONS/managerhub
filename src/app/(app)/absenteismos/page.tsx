@@ -103,7 +103,7 @@ export default async function AbsenteismosPage() {
     getMembers(tenant.id),
     supabase
       .from("absence_types")
-      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, active")
+      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, active, abono")
       .eq("tenant_id", tenant.id)
       .order("sort").order("name"),
     // fetchAll: a empresa passa de 1000 vínculos (ativos e desligados) e o
@@ -254,7 +254,7 @@ export default async function AbsenteismosPage() {
           id: t.id, name: t.name, description: t.description, kind: t.kind,
           requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
           requiresCompanion: t.requires_companion, requiresKinship: t.requires_kinship,
-          discountsRvDefault: t.discounts_rv_default, active: t.active,
+          discountsRvDefault: t.discounts_rv_default, active: t.active, abono: t.abono,
         }))}
         unidades={(unidadesTodas ?? [])
           .filter((u) => !unidades || unidades.includes(u.id))
