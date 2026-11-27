@@ -9,7 +9,9 @@
 import { holidayName } from "@/lib/holidays";
 import { somarDias } from "@/lib/format";
 
-export type FeriadoCustom = { day: string; name: string };
+/** Dia da lista da empresa. `nao_trabalhado` (sábado de folga, ponte, ponto
+ *  facultativo) não é feriado: não entra na regra do art. 134 (LUIZ, 27/11/2026). */
+export type FeriadoCustom = { day: string; name: string; tipo?: "feriado" | "nao_trabalhado" };
 
 export type PeriodoInput = {
   inicio: string; // YYYY-MM-DD
@@ -85,7 +87,8 @@ const somaDias = (iso: string, n: number) => {
  * começar no descanso semanal, nos 2 dias que o antecedem, em feriado ou nos 2
  * dias antes de um feriado).
  */
-export function motivoInicioInvalido(inicio: string, feriados: FeriadoCustom[]): string | null {
+export function motivoInicioInvalido(inicio: string, todos: FeriadoCustom[]): string | null {
+  const feriados = todos.filter((f) => f.tipo !== "nao_trabalhado");
   const d = dataLocal(inicio);
   const dow = d.getDay();
   if (dow === 0 || dow === 5 || dow === 6) {

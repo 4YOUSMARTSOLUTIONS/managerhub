@@ -93,7 +93,7 @@ export default async function FeriasPage() {
     podeLiderar ? minhaEquipe(supabase, tenant.id) : Promise.resolve([] as string[]),
     meuVinculoP,
     bloqueadosP,
-    supabase.from("holidays").select("day, name").eq("tenant_id", tenant.id),
+    supabase.from("holidays").select("day, name, tipo").eq("tenant_id", tenant.id),
     supabase.rpc("ferias_periodos_aquisitivos", {
       p_tenant: tenant.id, p_user: user.id, p_hoje: hoje,
     }),
@@ -221,7 +221,7 @@ export default async function FeriasPage() {
         avisoSolicitar={avisoSolicitar}
         pessoasLancar={pessoasLancar}
         meusAquisitivos={meusAquisitivos}
-        feriados={(feriados ?? []).map((f) => ({ day: f.day, name: f.name }))}
+        feriados={(feriados ?? []).map((f) => ({ day: f.day, name: f.name, tipo: f.tipo }))}
         hoje={hoje}
         painel={(painel ?? null) as FeriasPainel | null}
         usaFolha={usaFolha}

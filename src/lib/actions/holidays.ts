@@ -12,12 +12,14 @@ export async function createHoliday(_prev: ActionState, formData: FormData): Pro
     const { supabase, tenantId } = await adminActionContext();
     const day = String(formData.get("day") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
-    if (!day) return { error: "Informe a data do feriado." };
-    if (!name) return { error: "Informe o nome do feriado." };
+    const tipo = formData.get("tipo") === "nao_trabalhado" ? "nao_trabalhado" : "feriado";
+    if (!day) return { error: "Informe a data." };
+    if (!name) return { error: "Informe o nome." };
 
+    // upsert pela data: cadastrar de novo a mesma data é a edição
     const { error } = await supabase
       .from("holidays")
-      .upsert({ tenant_id: tenantId, day, name }, { onConflict: "tenant_id,day" });
+      .upsert({ tenant_id: tenantId, day, name, tipo }, { onConflict: "tenant_id,day" });
     if (error) return { error: error.message };
 
     revalidatePath("/configuracoes");
@@ -35,7 +37,7 @@ export async function deleteHoliday(formData: FormData): Promise<void> {
   revalidatePath("/salas");
 }
 
-export type HolidayImportRow = { day: string; name: string };
+export type HolidayImportRow = { day: string; name: string; tipo: "feriado" | "nao_trabalhado" };
 
 /** Importação em lote (planilha .xlsx). O parse do arquivo é feito no cliente;
  *  aqui só validamos e gravamos (upsert por data). */
@@ -45,14 +47,14 @@ export async function importHolidays(
   try {
     const { supabase, tenantId } = await adminActionContext();
     const seen = new Set<string>();
-    const valid: { tenant_id: string; day: string; name: string }[] = [];
+    const valid: { tenant_id: string; day: string; name: string; tipo: "feriado" | "nao_trabalhado" }[] = [];
     for (const r of rows ?? []) {
       const day = String(r?.day ?? "").trim();
       const name = String(r?.name ?? "").trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !name) continue;
       if (seen.has(day)) continue;
       seen.add(day);
-      valid.push({ tenant_id: tenantId, day, name });
+      valid.push({ tenant_id: tenantId, day, name, tipo: r?.tipo === "nao_trabalhado" ? "nao_trabalhado" : "feriado" });
     }
     const skipped = (rows?.length ?? 0) - valid.length;
     if (valid.length === 0) return { imported: 0, skipped, error: "Nenhuma linha válida — verifique as colunas Data e Nome." };

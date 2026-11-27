@@ -64,7 +64,7 @@ const FIELD_LABEL: Record<string, string> = {
   starts_at: "Início", ends_at: "Fim", target: "Meta", value: "Valor", effective_from: "Vigência",
   kind: "Tipo", direction: "Direção", consolidation: "Cálculo", unit: "Un. medida", sort: "Ordem",
   gender: "Sexo", cpf: "CPF", email: "E-mail", phone: "Telefone", employee_code: "Código funcionário",
-  admission_date: "Admissão", birth_date: "Nascimento", day: "Data", nps_score: "NPS", nps_comment: "Comentário NPS",
+  admission_date: "Admissão", birth_date: "Nascimento", day: "Data", tipo: "Tipo", nps_score: "NPS", nps_comment: "Comentário NPS",
   resolved_at: "Resolvido em", approval_requested_at: "Aprovação solicitada em",
   problem_statement: "Problema/Diagnóstico",
   // lançamento de meta individual

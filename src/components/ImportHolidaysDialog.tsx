@@ -12,6 +12,14 @@ const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** Tipo pela coluna Tipo ou, sem ela, pelo nome: sábado de folga, ponte,
+ *  recesso e ponto facultativo não são feriado (LUIZ, 27/11/2026). */
+function tipoDaLinha(tipo: string, nome: string): HolidayImportRow["tipo"] {
+  const t = norm(tipo);
+  if (t) return t.includes("trabalh") || t.startsWith("nao") ? "nao_trabalhado" : "feriado";
+  return /nao trabalhad|ponto facultativo|recesso|ponte|folga/.test(norm(nome)) ? "nao_trabalhado" : "feriado";
+}
+
 /** Converte um valor de célula (Date, número ou texto) em YYYY-MM-DD, ou "". */
 function toISODay(v: unknown): string {
   if (v == null) return "";
@@ -44,17 +52,21 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
   async function downloadTemplate() {
     const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
-      ["Data", "Nome"],
-      ["25/12/2026", "Natal (exemplo — já é nacional)"],
-      ["20/01/2026", "Aniversário da cidade"],
-      ["09/07/2026", "Revolução Constitucionalista (SP)"],
+      ["Data", "Nome", "Tipo"],
+      ["20/01/2026", "Aniversário da cidade", "Feriado"],
+      ["09/07/2026", "Revolução Constitucionalista (SP)", "Feriado"],
+      ["16/02/2026", "Carnaval", "Dia não trabalhado"],
+      ["04/07/2026", "Sábado não trabalhado", "Dia não trabalhado"],
     ]);
-    ws["!cols"] = [{ wch: 16 }, { wch: 44 }];
+    ws["!cols"] = [{ wch: 16 }, { wch: 44 }, { wch: 22 }];
     const wsI = XLSX.utils.aoa_to_sheet([
       ["Coluna", "Obrigatório", "Como preencher"],
       ["Data", "Sim", "Formato dd/mm/aaaa (ex.: 20/01/2026)"],
-      ["Nome", "Sim", "Nome do feriado / dia não útil"],
-      ["", "", "Feriados nacionais já são automáticos — cadastre aqui só os próprios."],
+      ["Nome", "Sim", "Nome do feriado ou do dia não trabalhado"],
+      ["Tipo", "Não", "Feriado ou Dia não trabalhado. Em branco, o nome decide: sábado não trabalhado, ponte, recesso, folga e ponto facultativo viram dia não trabalhado; o resto, feriado."],
+      ["", "", "Feriado: sem expediente e, nas férias, o início não cai nele nem nos 2 dias antes (art. 134)."],
+      ["", "", "Dia não trabalhado: sem expediente, mas não barra o início de férias."],
+      ["", "", "Feriados nacionais já são automáticos; cadastre aqui só os próprios."],
     ]);
     wsI["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 60 }];
     const wb = XLSX.utils.book_new();
@@ -76,6 +88,7 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
       const headers = (aoa[0] as unknown[]).map((h) => norm(String(h ?? "")));
       let dayIdx = headers.findIndex((h) => h.includes("data") || h.includes("dia"));
       let nameIdx = headers.findIndex((h) => h.includes("nome") || h.includes("feriado") || h.includes("descri"));
+      const tipoIdx = headers.findIndex((h) => h === "tipo" || h.startsWith("tipo "));
       // fallback: sem cabeçalho reconhecido, assume coluna 0 = data, 1 = nome
       if (dayIdx === -1) dayIdx = 0;
       if (nameIdx === -1) nameIdx = 1;
@@ -87,7 +100,7 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
         const day = toISODay(r[dayIdx]);
         const name = String(r[nameIdx] ?? "").trim();
         if (!day || !name) { ign++; continue; }
-        parsed.push({ day, name });
+        parsed.push({ day, name, tipo: tipoDaLinha(tipoIdx >= 0 ? String(r[tipoIdx] ?? "") : "", name) });
       }
       setRows(parsed); setIgnored(ign); setFileName(file.name);
     } catch (e) {
@@ -120,8 +133,8 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
             <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
               <div style={{ background: "var(--surface-2)", borderRadius: 9, padding: "0.85rem 1rem", fontSize: "0.85rem" }}>
                 <p style={{ margin: "0 0 0.5rem" }} className="muted">
-                  Planilha com duas colunas: <strong>Data</strong> (dd/mm/aaaa) e <strong>Nome</strong>. Cada linha vira um
-                  dia não útil / feriado próprio. Datas já existentes são atualizadas.
+                  Planilha com as colunas <strong>Data</strong> (dd/mm/aaaa), <strong>Nome</strong> e, se quiser,
+                  <strong>Tipo</strong> (Feriado ou Dia não trabalhado). Datas já existentes são atualizadas.
                 </p>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={downloadTemplate}>↓ Baixar modelo</button>
               </div>
@@ -145,7 +158,9 @@ export function ImportHolidaysDialog({ open: openProp, onClose, hideTrigger }: {
                   </div>
                   {rows.length > 0 && (
                     <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem", maxHeight: 150, overflow: "auto" }}>
-                      {rows.slice(0, 12).map((r, i) => <li key={i}>{formatDate(r.day)} — {r.name}</li>)}
+                      {rows.slice(0, 12).map((r, i) => (
+                        <li key={i}>{formatDate(r.day)}: {r.name}{r.tipo === "nao_trabalhado" && " (dia não trabalhado)"}</li>
+                      ))}
                       {rows.length > 12 && <li>… e mais {rows.length - 12}</li>}
                     </ul>
                   )}

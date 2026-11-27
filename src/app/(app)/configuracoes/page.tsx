@@ -1163,6 +1163,23 @@ export default async function SettingsPage({
     </div>
   );
 
+  // Feriado x dia não trabalhado (LUIZ, 27/11/2026): só o feriado entra na
+  // regra de início das férias (art. 134); os dois tiram o expediente.
+  const campoTipoFeriado = (atual: string) => (
+    <div>
+      <label className="label">Tipo</label>
+      <select name="tipo" className="select" defaultValue={atual}>
+        <option value="feriado">Feriado</option>
+        <option value="nao_trabalhado">Dia não trabalhado</option>
+      </select>
+      <p className="soft" style={{ fontSize: "0.76rem", margin: "0.35rem 0 0" }}>
+        Os dois tiram o expediente na agenda, nas salas e nas reuniões. Só o <strong>feriado</strong> impede o início de
+        férias nele e nos 2 dias antes (art. 134). Sábado de folga, ponte, recesso e ponto facultativo (como o
+        carnaval) são <strong>dia não trabalhado</strong>.
+      </p>
+    </div>
+  );
+
   const feriadosTab = (
     <div style={{ maxWidth: 760 }}>
     <Section
@@ -1171,9 +1188,9 @@ export default async function SettingsPage({
       action={
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {seEdita(<ImportHolidaysDialog />)}
-          <ExportButton filename="feriados.xlsx" sheetName="Feriados" headers={["Data", "Nome"]} rows={(holidays ?? []).map((h) => { const [y, m, d] = h.day.split("-"); return [`${d}/${m}/${y}`, h.name]; })} />
+          <ExportButton filename="feriados.xlsx" sheetName="Feriados" headers={["Data", "Nome", "Tipo"]} rows={(holidays ?? []).map((h) => { const [y, m, d] = h.day.split("-"); return [`${d}/${m}/${y}`, h.name, h.tipo === "nao_trabalhado" ? "Dia não trabalhado" : "Feriado"]; })} />
           {seEdita(
-            <FormModal triggerLabel="+ Novo feriado" title="Novo feriado" action={createHoliday} submitLabel="Adicionar">
+            <FormModal triggerLabel="+ Novo dia" title="Novo feriado ou dia não trabalhado" action={createHoliday} submitLabel="Adicionar">
               <div>
                 <label className="label">Data</label>
                 <input name="day" type="date" className="input" required />
@@ -1182,6 +1199,7 @@ export default async function SettingsPage({
                 <label className="label">Nome</label>
                 <input name="name" className="input" required placeholder="Ex.: Aniversário da cidade" />
               </div>
+              {campoTipoFeriado("feriado")}
             </FormModal>
           )}
         </div>
@@ -1190,38 +1208,59 @@ export default async function SettingsPage({
       <div className="muted" style={{ fontSize: "0.82rem", padding: "0.9rem 1.25rem 0", margin: "0 0 0.8rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
         <p style={{ margin: 0 }}>
           Os feriados <strong>nacionais</strong> (fixos e móveis) já são reconhecidos automaticamente e sinalizados no
-          calendário de salas. Cadastre aqui apenas feriados <strong>próprios</strong> (estaduais, municipais ou pontos
-          facultativos da empresa).
+          calendário de salas. Cadastre aqui apenas os dias <strong>próprios</strong>, em dois tipos:
+          <strong> feriado</strong> (estadual ou municipal), que também impede o início de férias nele e nos 2 dias antes
+          (art. 134), e <strong>dia não trabalhado</strong> (sábado de folga, ponte, recesso, ponto facultativo como o
+          carnaval), que não barra férias.
         </p>
         <p style={{ margin: 0 }}>
           <strong>Domingo</strong> é considerado dia não útil; <strong>sábado</strong> é útil (a não ser que você o
-          cadastre como feriado acima). Ao agendar manualmente num dia não útil, o sistema avisa, mas não impede. Já as
-          reuniões <strong>recorrentes</strong> que caírem em domingo ou feriado são <strong>deslocadas para o próximo dia
-          útil</strong>.
+          cadastre acima como dia não trabalhado). Ao agendar manualmente num dia não útil, o sistema avisa, mas não
+          impede. Já as reuniões <strong>recorrentes</strong> que caírem em domingo, feriado ou dia não trabalhado são
+          <strong> deslocadas para o próximo dia útil</strong>.
         </p>
       </div>
       {holidays && holidays.length > 0 ? (
         <table className="table">
           <thead>
-            <tr><th>Data</th><th>Feriado</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
+            <tr><th>Data</th><th>Nome</th><th>Tipo</th>{canEdit && <th style={{ textAlign: "right" }}>Ações</th>}</tr>
           </thead>
           <tbody>
             {holidays.map((h) => (
               <tr key={h.id}>
                 <td className="muted">{formatDate(h.day)}</td>
                 <td style={{ fontWeight: 600 }}>{h.name}</td>
+                <td><Badge variant="quiet">{h.tipo === "nao_trabalhado" ? "Dia não trabalhado" : "Feriado"}</Badge></td>
                 {canEdit && (
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <span style={{ display: "inline-flex", gap: "0.35rem", alignItems: "center", justifyContent: "flex-end" }}>
+                  {/* a data é a chave (upsert por data): edita nome e tipo */}
+                  <FormModal
+                    triggerLabel={<Pencil size={16} />}
+                    triggerClassName="icon-btn"
+                    triggerTitle="Editar"
+                    title={`Editar · ${formatDate(h.day)}`}
+                    action={createHoliday}
+                    submitLabel="Salvar"
+                  >
+                    <input type="hidden" name="day" value={h.day} />
+                    <div>
+                      <label className="label">Nome</label>
+                      <input name="name" className="input" required defaultValue={h.name} />
+                    </div>
+                    {campoTipoFeriado(h.tipo)}
+                  </FormModal>
                   <ConfirmActionButton
                     action={deleteHoliday}
                     fields={{ id: h.id }}
                     className="icon-btn icon-btn-danger"
                     buttonTitle="Excluir"
                     title="Excluir feriado"
-                    message={<>Excluir o feriado <strong>{h.name}</strong>? Esta ação não pode ser desfeita.</>}
+                    message={<>Excluir <strong>{h.name}</strong>? Esta ação não pode ser desfeita.</>}
                   >
                     <Trash2 size={16} />
                   </ConfirmActionButton>
+                  </span>
                 </td>
                 )}
               </tr>
@@ -1229,7 +1268,7 @@ export default async function SettingsPage({
           </tbody>
         </table>
       ) : (
-        <EmptyState title="Nenhum feriado próprio cadastrado" description="Os feriados nacionais já são automáticos. Adicione aqui apenas feriados locais da empresa." />
+        <EmptyState title="Nenhum dia próprio cadastrado" description="Os feriados nacionais já são automáticos. Adicione aqui os feriados locais e os dias não trabalhados da empresa." />
       )}
     </Section>
     </div>

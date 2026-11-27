@@ -619,9 +619,10 @@ export type Database = {
         Relationships: []
       }
       holidays: {
-        Row: { id: string; tenant_id: string; day: string; name: string; created_by: string | null; created_at: string }
-        Insert: { id?: string; tenant_id: string; day: string; name: string; created_by?: string | null; created_at?: string }
-        Update: { id?: string; tenant_id?: string; day?: string; name?: string; created_by?: string | null; created_at?: string }
+        // tipo (27/11/2026): "feriado" conta no art. 134 das férias; "nao_trabalhado" só tira o expediente
+        Row: { id: string; tenant_id: string; day: string; name: string; tipo: "feriado" | "nao_trabalhado"; created_by: string | null; created_at: string }
+        Insert: { id?: string; tenant_id: string; day: string; name: string; tipo?: "feriado" | "nao_trabalhado"; created_by?: string | null; created_at?: string }
+        Update: { id?: string; tenant_id?: string; day?: string; name?: string; tipo?: "feriado" | "nao_trabalhado"; created_by?: string | null; created_at?: string }
         Relationships: []
       }
       sdpo_programas: {
@@ -2570,6 +2571,8 @@ export type Database = {
       easter_sunday: { Args: { p_year: number }; Returns: string }
       national_holiday_name: { Args: { p_date: string }; Returns: string | null }
       is_holiday: { Args: { p_tenant: string; p_date: string }; Returns: boolean }
+      // feriado de verdade (nacional ou da empresa do tipo feriado), sem os dias não trabalhados
+      is_feriado_legal: { Args: { p_tenant: string; p_date: string }; Returns: boolean }
       register_meeting_occurrence: { Args: { p_data: Json }; Returns: string }
       start_meeting_occurrence: { Args: { p_series_id: string }; Returns: string }
       anticipate_meeting_occurrence: { Args: { p_series_id: string; p_room_id?: string | null; p_link?: string | null; p_next_date?: string | null; p_next_time?: string | null }; Returns: string }
