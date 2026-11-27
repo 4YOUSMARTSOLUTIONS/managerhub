@@ -293,7 +293,7 @@ export default async function SettingsPage({
     em("punicoes") ? supabase.from("punicao_lancamentos").select("sanction_id").eq("tenant_id", tenant.id).not("sanction_id", "is", null) : nada,
     em("absenteismos") ? supabase
       .from("absence_types")
-      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, counts_as_absenteeism, active, abono")
+      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, counts_as_absenteeism, active, abono, compensacao")
       .eq("tenant_id", tenant.id)
       .order("sort").order("name") : nada,
     // a lista de destinatários é do DP: a policy é `owner/admin/hr`, e para o
@@ -590,7 +590,7 @@ export default async function SettingsPage({
     requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
     requiresCompanion: t.requires_companion, requiresKinship: t.requires_kinship,
     discountsRvDefault: t.discounts_rv_default,
-    countsAsAbsenteeism: t.counts_as_absenteeism, active: t.active, abono: t.abono,
+    countsAsAbsenteeism: t.counts_as_absenteeism, active: t.active, abono: t.abono, compensacao: t.compensacao,
   }));
   const nomeUnidade = new Map((units ?? []).map((u) => [u.id, u.name]));
   // Quem cada regra alcança hoje, e os gestores (regra_id nulo), que recebem sempre

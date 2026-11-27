@@ -62,7 +62,10 @@ function mensagem(e: { code?: string; message?: string }): string {
     return "Um tipo que pede dados médicos precisa exigir o documento anexado.";
   }
   if (msg.includes("absence_types_abono_coerente")) {
-    return "O motivo de abono é usado no \"Abonar parte dos dias\": ele fica sempre com o comportamento Falta, sem documento e sem dados médicos.";
+    return "O motivo de abono recebe os dias abonados à parte: ele fica sempre com o comportamento Falta, sem documento e sem dados médicos.";
+  }
+  if (msg.includes("absence_types_compensacao_coerente")) {
+    return "O motivo de compensação recebe os dias compensados à parte: ele fica sempre com o comportamento Falta, sem documento e sem dados médicos.";
   }
   if (msg.includes("absenteismo_dest_email_valido")) return "Informe um e-mail válido.";
   if (msg.includes("absenteismo_dest_geral_uk") || msg.includes("absenteismo_dest_unidade_uk")) {
@@ -147,10 +150,11 @@ export async function deleteAbsenceType(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
 
-  // O motivo Abono é o do "Abonar parte dos dias" (LUIZ, 26/11/2026): sem ele o
-  // abono de parte dos dias para de funcionar, então ele só se desativa
-  const { data: tipo } = await supabase.from("absence_types").select("abono").eq("id", id).maybeSingle();
-  if (tipo?.abono) {
+  // Os motivos Abono e Compensação recebem os dias separados (LUIZ, 26 e
+  // 27/11/2026): sem eles o "abonar ou compensar parte dos dias" para de
+  // funcionar, então eles só se desativam
+  const { data: tipo } = await supabase.from("absence_types").select("abono, compensacao").eq("id", id).maybeSingle();
+  if (tipo?.abono || tipo?.compensacao) {
     await supabase.from("absence_types").update({ active: false }).eq("id", id);
     revalidar();
     return;
@@ -470,8 +474,12 @@ export type ConfirmacaoInput = {
    * tipo de atestado (`certificate_kind`).
    */
   tipoDocumento?: string;
-  /** falta abonada: fica no histórico, mas não pesa na remuneração variável */
-  abonada?: boolean;
+  /**
+   * Só na falta (LUIZ, 27/11/2026): abono (não desconta, não repõe) ou
+   * compensação (não desconta, vira débito no banco de horas). Nulo = descontada.
+   * Os dois ficam no histórico e não pesam na remuneração variável.
+   */
+  tratamento?: "abono" | "compensacao" | null;
   /**
    * Falta sem data de término (LUIZ, 17/11/2026): a pessoa segue faltando e não
    * se sabe até quando. Só vale para motivo de falta; o término é gravado como
@@ -532,7 +540,7 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
 
     const { data: tipo } = await supabase
       .from("absence_types")
-      .select("id, name, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, abono")
+      .select("id, name, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, abono, compensacao")
       .eq("id", input.absenceTypeId)
       .maybeSingle();
     if (!tipo) return { error: "Tipo de absenteísmo não encontrado." };
@@ -563,6 +571,12 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
     const emHoras = !semTermino && (Boolean(input.parcial) || (primeiroDia === "integral" && comHoras));
     const gravaHoras = comHoras && (emHoras || primeiroDia === "parcial");
 
+    // abono e compensação só existem para falta: nas demais o motivo já diz o
+    // efeito. Os motivos Abono e Compensação mandam (o banco também força).
+    const tratamento = tipo.abono ? "abono" : tipo.compensacao ? "compensacao"
+      : tipo.kind === "falta" && (input.tratamento === "abono" || input.tratamento === "compensacao") ? input.tratamento
+      : null;
+
     const { error } = await supabase
       .from("absenteismo_lancamentos")
       .update({
@@ -587,9 +601,8 @@ export async function salvarConfirmacao(input: ConfirmacaoInput): Promise<Action
           : tipo.kind === "afastamento"
             ? (input.tipoDocumento === "medico" || input.tipoDocumento === "pericia_inss" ? input.tipoDocumento : null)
             : null,
-        // abono só existe para falta: nas demais o motivo já diz o efeito. O
-        // motivo Abono sai sempre abonado (o banco também força)
-        waived: tipo.abono ? true : tipo.kind === "falta" ? Boolean(input.abonada) : false,
+        waived: tratamento !== null,
+        tratamento,
         hours_start: gravaHoras ? horaIni : null,
         hours_end: gravaHoras ? horaFim : null,
         partial_day: emHoras,
@@ -983,7 +996,7 @@ export async function gerarRelatorioAbsenteismo(
       "Data", "Mês", "Data início", "Data fim", "Dias de atestado", "Data retorno",
       "Horário inicial", "Horário final", "Tipo de afastamento", "Tipo de atestado", "Observação",
       "CID", "Descrição do CID", "Categoria CID", "Descrição da categoria",
-      "Nome do médico", "CRM", "Hospital", "Acidente de trabalho", "Falta abonada", "Acompanhado",
+      "Nome do médico", "CRM", "Hospital", "Acidente de trabalho", "Abono ou compensação", "Acompanhado",
       "Parentesco do falecido", "Alerta INSS", "Situação",
       "Horas", "Efeito na RV", "Lançado por", "Decidido por", "Observação da decisão",
     ];
@@ -999,7 +1012,8 @@ export async function gerarRelatorioAbsenteismo(
         status: STATUS_DA_SITUACAO[r.situacao] ?? "cancelado",
         kind: r.comportamento,
         descontaRv: r.desconta_rv === "Sim",
-        abonada: r.abonada === "Sim",
+        // "Abono", "Compensação" ou "Não" (27/11/2026; antes, "Sim" ou "Não")
+        abonada: r.abonada === "Abono" || r.abonada === "Compensação" || r.abonada === "Sim",
         // com motivo, "dias" vazio só acontece na ausência de horas
         horas: r.dias == null,
       }, kindsComRedutor),
@@ -1017,17 +1031,18 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
     const id = String(formData.get("id") ?? "");
     if (!id) return { error: "Lançamento inválido." };
 
-    // Abonar parte dos dias (LUIZ, 26/11/2026): o trecho abonado sai do
-    // lançamento e vira falta abonada à parte, enviada junto
+    // Abonar ou compensar parte dos dias (LUIZ, 26 e 27/11/2026): o trecho sai
+    // do lançamento e vai à parte, com o motivo Abono ou Compensação, enviado junto
     const abonoInicio = String(formData.get("abono_inicio") ?? "");
     const abonoFim = String(formData.get("abono_fim") ?? "");
     const comAbono = /^\d{4}-\d{2}-\d{2}$/.test(abonoInicio) && /^\d{4}-\d{2}-\d{2}$/.test(abonoFim);
+    const tratamento = formData.get("abono_tratamento") === "compensacao" ? "compensacao" : "abono";
 
     // Com "Continua ausente", os dias que o documento não cobre viram falta à
     // parte, já enviada ao DP na mesma transação (LUIZ, 17/11/2026)
     const { data, error } = await supabase.rpc(
       "absenteismo_confirmar_e_separar",
-      comAbono ? { p_id: id, p_abono_inicio: abonoInicio, p_abono_fim: abonoFim } : { p_id: id },
+      comAbono ? { p_id: id, p_abono_inicio: abonoInicio, p_abono_fim: abonoFim, p_tratamento: tratamento } : { p_id: id },
     );
     if (error) return { error: error.message };
     // até 26/11/2026 a função devolvia só a lista das faltas separadas
@@ -1045,7 +1060,7 @@ export async function confirmarAbsenteismo(formData: FormData): Promise<ActionSt
     revalidar();
     const n = faltas.length;
     const partes = [
-      abono && "os dias abonados num lançamento à parte",
+      abono && `os dias ${tratamento === "compensacao" ? "compensados" : "abonados"} num lançamento à parte`,
       n && `${n === 1 ? "a falta dos dias" : `${n} lançamentos de falta para os dias`} que o documento não cobre`,
     ].filter(Boolean) as string[];
     return {
@@ -1258,8 +1273,8 @@ function mensagemDoLancamento(e: { code?: string; message?: string }): string {
 }
 
 /**
- * Abonos no ponto (LUIZ, 24/11/2026): marca (ou desfaz) o "Lançado no ponto" da
- * falta abonada e aprovada. Marcam o DP, o Proprietário, o Administrador e a
+ * Abonos e compensações (LUIZ, 24 e 27/11/2026): marca (ou desfaz) o "Lançado
+ * no ponto" do abono ou da compensação aprovados. Marcam o DP, o Proprietário, o Administrador e a
  * Área de Gente, que aqui age: lançar no ponto é a tarefa desse time, e a marca
  * não muda nada do lançamento. A RPC confere quem é e se o caso é mesmo abono.
  */

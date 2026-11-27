@@ -64,6 +64,8 @@ export type AbsenteismoRow = {
   workAccident: boolean;
   certificateKind: string | null;
   waived: boolean;
+  /** abono ou compensação (LUIZ, 27/11/2026); nulo = falta descontada. waived = não nulo */
+  tratamento: Tratamento | null;
   hoursStart: string | null;
   hoursEnd: string | null;
   /** trabalhou parte do dia, com ou sem horário ainda (LUIZ, 12/11/2026) */
@@ -118,19 +120,30 @@ export type AbsenteismoRow = {
 };
 
 /**
- * Linha da aba "Abonos no ponto" (LUIZ, 24/11/2026): a falta abonada com a marca
- * de quem a lançou no sistema de ponto, e quando.
+ * Linha da aba "Abonos e compensações" (LUIZ, 24 e 27/11/2026): o abono ou a
+ * compensação aprovados, com a marca de quem lançou no sistema de ponto, e quando.
  */
 export type LinhaAbono = AbsenteismoRow & {
   pontoEm: string | null;
   pontoPorName: string | null;
 };
 
-/** Onde o abono está no ponto: falta lançar, já lançado, ou cancelado depois de lançado. */
+/** Onde o abono ou a compensação está no ponto: falta lançar, já lançado, ou cancelado depois de lançado. */
 function situacaoNoPonto(a: LinhaAbono): "retirar" | "lancar" | "lancado" {
   if (a.status !== "aprovado") return "retirar";
   return a.pontoEm ? "lancado" : "lancar";
 }
+
+/**
+ * Abono x compensação (LUIZ, 27/11/2026). Nos dois o dia não é descontado na
+ * folha nem pesa na remuneração variável; no abono a empresa perdoa as horas, na
+ * compensação elas viram débito no banco de horas.
+ */
+export type Tratamento = "abono" | "compensacao";
+const PALAVRAS: Record<Tratamento, { inf: string; Inf: string; part: string; parts: string; Parts: string; subst: string; motivo: string }> = {
+  abono: { inf: "abonar", Inf: "Abonar", part: "abonado", parts: "abonados", Parts: "Abonados", subst: "abono", motivo: "Abono" },
+  compensacao: { inf: "compensar", Inf: "Compensar", part: "compensado", parts: "compensados", Parts: "Compensados", subst: "compensação", motivo: "Compensação" },
+};
 
 /** altura dos botões da coluna Ações: todos iguais, para a linha não pular */
 const ALTURA_ACAO = 28;
@@ -162,8 +175,10 @@ type Tipo = {
   requiresKinship: boolean;
   discountsRvDefault: boolean;
   active: boolean;
-  /** o motivo Abono (LUIZ, 26/11/2026): sempre abonado, usado no "Abonar parte dos dias" */
+  /** o motivo Abono (LUIZ, 26/11/2026): sempre abonado, destino dos dias abonados à parte */
   abono?: boolean;
+  /** o motivo Compensação (LUIZ, 27/11/2026): sempre compensado, destino dos dias compensados à parte */
+  compensacao?: boolean;
 };
 
 type PrimeiroDia = "integral" | "trabalhou" | "parcial";
@@ -178,7 +193,8 @@ type Confirmacao = {
   tipoAtestado: string;
   /** afastamento: "medico" | "pericia_inss"; começa em branco e é obrigatório no envio */
   tipoDocumento: string;
-  abonada: boolean;
+  /** só na falta: "" descontada, abono ou compensação (LUIZ, 27/11/2026) */
+  tratamento: "" | Tratamento;
   cid: string;
   cidDescricao: string;
   medico: string;
@@ -194,12 +210,13 @@ type Confirmacao = {
   /** falta sem data de término (LUIZ, 17/11/2026); só vale com motivo de falta */
   semTermino: boolean;
   /**
-   * Abonar parte dos dias (LUIZ, 26/11/2026). Não fica no rascunho: vai só no
-   * envio, quando o banco separa os dias abonados num lançamento à parte.
+   * Abonar ou compensar parte dos dias (LUIZ, 26 e 27/11/2026). Não fica no
+   * rascunho: vai só no envio, quando o banco separa os dias num lançamento à parte.
    */
   abonoParcial: boolean;
   abonoInicio: string;
   abonoFim: string;
+  parteTratamento: Tratamento;
 };
 
 /**
@@ -245,19 +262,21 @@ function diaSeguinte(iso: string): string {
  */
 function conferirAbono(
   inicio: string, fim: string, abIni: string, abFim: string, primeiroDia: PrimeiroDia,
+  trat: Tratamento, nomeDoMotivo: string,
 ): { erro: string } | { restoIni: string; restoFim: string; dias: number } {
-  if (!abIni || !abFim) return { erro: "Informe o primeiro e o último dia abonado." };
-  if (abFim < abIni) return { erro: "O último dia abonado não pode ser antes do primeiro." };
-  if (abIni < inicio || abFim > fim) return { erro: `Os dias abonados precisam estar dentro do período (${intervalo([inicio, fim])}).` };
-  if (abIni === inicio && abFim === fim) return { erro: "Para abonar o período inteiro, escolha o motivo Abono." };
-  if (abIni !== inicio && abFim !== fim) return { erro: "Os dias abonados precisam ser os do começo ou os do fim do período." };
+  const w = PALAVRAS[trat];
+  if (!abIni || !abFim) return { erro: `Informe o primeiro e o último dia ${w.part}.` };
+  if (abFim < abIni) return { erro: `O último dia ${w.part} não pode ser antes do primeiro.` };
+  if (abIni < inicio || abFim > fim) return { erro: `Os dias ${w.parts} precisam estar dentro do período (${intervalo([inicio, fim])}).` };
+  if (abIni === inicio && abFim === fim) return { erro: `Para ${w.inf} o período inteiro, escolha o motivo ${nomeDoMotivo}.` };
+  if (abIni !== inicio && abFim !== fim) return { erro: `Os dias ${w.parts} precisam ser os do começo ou os do fim do período.` };
   if (abIni === inicio && primeiroDia !== "integral") {
-    return { erro: "Com o primeiro dia trabalhado, os dias abonados precisam ser os do fim do período." };
+    return { erro: `Com o primeiro dia trabalhado, os dias ${w.parts} precisam ser os do fim do período.` };
   }
   const restoIni = abIni === inicio ? diaSeguinte(abFim) : inicio;
   const restoFim = abFim === fim ? diaAnterior(abIni) : fim;
   if (primeiroDia === "trabalhou" && restoFim <= restoIni) {
-    return { erro: "Com o primeiro dia trabalhado, sobraria só ele no lançamento. Deixe pelo menos um dia de ausência fora do abono." };
+    return { erro: `Com o primeiro dia trabalhado, sobraria só ele no lançamento. Deixe pelo menos um dia de ausência fora do ${w.subst}.` };
   }
   return { restoIni, restoFim, dias: diasDoPeriodo(abIni, abFim) ?? 0 };
 }
@@ -476,7 +495,7 @@ export function AbsenteismosManager({
   const historico = filtrar(rows.filter((r) => r.status === "aprovado" || r.status === "cancelado"));
 
   /**
-   * Abonos no ponto, na ordem do trabalho: primeiro o cancelado que já tinha ido
+   * Abonos e compensações, na ordem do trabalho: primeiro o cancelado que já tinha ido
    * ao ponto (precisa sair de lá), depois o que falta lançar (o mais antigo
    * antes) e, por último, os já lançados (o mais recente antes).
    */
@@ -502,8 +521,8 @@ export function AbsenteismosManager({
       if (r.error) { toast.error(r.error); return; }
       toast.success(
         lancado ? "Marcado como lançado no ponto."
-          : a.status === "aprovado" ? "Marca desfeita: o abono voltou para lançar."
-          : "Pronto: o abono saiu da lista.",
+          : a.status === "aprovado" ? "Marca desfeita: voltou para lançar."
+          : "Pronto: saiu da lista.",
       );
       router.refresh();
     });
@@ -897,8 +916,8 @@ export function AbsenteismosManager({
 
   const tabelaAbonos = (lista: LinhaAbono[]) => lista.length === 0 ? (
     <EmptyState
-      title="Nenhum abono por aqui"
-      description="Quando o DP aprovar uma falta marcada como abonada, ela aparece nesta lista para ser lançada no ponto."
+      title="Nenhum abono ou compensação por aqui"
+      description="Quando o DP aprovar um abono ou uma compensação, eles aparecem nesta lista para serem lançados no ponto."
     />
   ) : (
     <div style={{ overflowX: "auto" }}>
@@ -912,9 +931,11 @@ export function AbsenteismosManager({
             <th>Unidade</th>
             <th>Setor</th>
             <th>Motivo</th>
+            {/* abono vai ao ponto como abono; compensação, como débito no banco de horas */}
+            <th>Tipo</th>
             <th>Início</th>
             <th>Fim</th>
-            <th title="Os dias abonados">Duração</th>
+            <th title="Os dias ou as horas a lançar no ponto">Duração</th>
             <th>Aprovado em</th>
             <th>No ponto</th>
           </tr>
@@ -935,7 +956,7 @@ export function AbsenteismosManager({
                       <button
                         type="button" className="btn btn-primary btn-xs" style={{ height: ALTURA_ACAO }}
                         disabled={pendente} onClick={() => marcarPonto(a, true)}
-                        title="Já lancei este abono no sistema de ponto"
+                        title={a.tratamento === "compensacao" ? "Já lancei o débito no banco de horas" : "Já lancei este abono no sistema de ponto"}
                       >
                         <Check size={12} /> {ocupado ? "Marcando..." : "Lançado no ponto"}
                       </button>
@@ -944,7 +965,7 @@ export function AbsenteismosManager({
                       <button
                         type="button" className="btn btn-danger btn-xs" style={{ height: ALTURA_ACAO }}
                         disabled={pendente} onClick={() => marcarPonto(a, false)}
-                        title="O lançamento foi cancelado: já retirei o abono do sistema de ponto"
+                        title={a.tratamento === "compensacao" ? "O lançamento foi cancelado: já retirei o débito do banco de horas" : "O lançamento foi cancelado: já retirei o abono do sistema de ponto"}
                       >
                         <Check size={12} /> {ocupado ? "Confirmando..." : "Retirado do ponto"}
                       </button>
@@ -954,7 +975,7 @@ export function AbsenteismosManager({
                         type="button" className="icon-btn"
                         style={{ width: ALTURA_ACAO, height: ALTURA_ACAO }}
                         disabled={pendente}
-                        title="Desfazer: o abono ainda não foi lançado no ponto"
+                        title="Desfazer: ainda não foi lançado no ponto"
                         aria-label="Desfazer a marca de lançado no ponto"
                         onClick={() => marcarPonto(a, false)}
                       >
@@ -979,6 +1000,7 @@ export function AbsenteismosManager({
                 <td className="muted">{corta(a.unitName, 110)}</td>
                 <td className="muted">{corta(a.departmentName, 100)}</td>
                 <td>{a.typeName ? corta(a.typeName, 120) : <span className="soft">–</span>}</td>
+                <td><Badge variant="quiet">{a.tratamento === "compensacao" ? "Compensação" : "Abono"}</Badge></td>
                 <td>{formatDate(a.startDate ?? a.occurredOn)}</td>
                 <td>
                   {a.endDate === SEM_RETORNO
@@ -1055,13 +1077,15 @@ export function AbsenteismosManager({
   if (abonos) {
     abas.push({
       // o número é o que ainda pede alguém agir, não o total da lista
-      id: "abonos", label: `Abonos no ponto (${abonosPorFazer})`,
+      // "Abonos e compensações" (LUIZ, 27/11/2026); antes, "Abonos no ponto"
+      id: "abonos", label: `Abonos e compensações (${abonosPorFazer})`,
       content: (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <p className="soft" style={{ fontSize: "0.8rem", margin: 0 }}>
-            Faltas abonadas e aprovadas pelo DP. Lance o abono no sistema de ponto e marque aqui
-            em <strong>Lançado no ponto</strong>. Se um abono já lançado for cancelado depois, ele volta
-            para o topo: retire do ponto e confirme em <strong>Retirado do ponto</strong>.
+            Abonos e compensações aprovados pelo DP. Lance no sistema de ponto, o <strong>abono</strong> como
+            abono e a <strong>compensação</strong> como débito no banco de horas, e marque aqui em{" "}
+            <strong>Lançado no ponto</strong>. Se um já lançado for cancelado depois, ele volta para o topo:
+            retire do ponto e confirme em <strong>Retirado do ponto</strong>.
           </p>
           {tabelaAbonos(abonosVistos)}
         </div>
@@ -1733,7 +1757,7 @@ function PainelConfirmacao({
     tipoDocumento: linha?.kind === "afastamento"
       && (linha.certificateKind === "medico" || linha.certificateKind === "pericia_inss")
       ? linha.certificateKind : "",
-    abonada: linha?.waived ?? false,
+    tratamento: linha?.tratamento ?? (linha?.waived ? "abono" : ""),
     cid: "", cidDescricao: "", medico: "", crm: "", local: "", emitidoEm: "",
     // só o marcador: com o primeiro dia parcial há horário sem o lançamento ser de horas
     emHoras: Boolean(linha?.partialDay),
@@ -1742,7 +1766,7 @@ function PainelConfirmacao({
     primeiroDia: linha?.primeiroDia ?? "integral",
     acompanhado: "",
     semTermino: Boolean(linha?.faltaContinua && linha.endDate === SEM_RETORNO),
-    abonoParcial: false, abonoInicio: "", abonoFim: "",
+    abonoParcial: false, abonoInicio: "", abonoFim: "", parteTratamento: "abono",
   });
   const [inss, setInss] = useState<AlertaInss | null>(null);
   const [temDoc, setTemDoc] = useState(Boolean(linha?.docPath));
@@ -1765,7 +1789,7 @@ function PainelConfirmacao({
   // afastamento: o documento é médico ou da perícia do INSS (LUIZ, 17/11/2026)
   const pedeTipoDocumento = tipo?.kind === "afastamento" && !tipo.requiresMedical;
   // falta sem término (LUIZ, 17/11/2026): só com motivo de falta; o fim vai 9999
-  const semTermino = c.semTermino && tipo?.kind === "falta" && !tipo.abono;
+  const semTermino = c.semTermino && tipo?.kind === "falta" && !tipo.abono && !tipo.compensacao;
   const fimEfetivo = semTermino ? SEM_RETORNO : c.endDate;
   const primeiroDia = semTermino ? "integral" : primeiroDiaQueVale(c);
   const diasNoDocumento = semTermino ? null : diasDoPeriodo(c.startDate, c.endDate);
@@ -1775,22 +1799,30 @@ function PainelConfirmacao({
   const foraDoDocumento = sem && c.startDate && fimEfetivo && fimEfetivo >= c.startDate
     ? diasForaDoDocumento(sem, c.startDate, fimEfetivo, primeiroDia)
     : [];
-  // a falta comum dos dias fora do documento, nunca o Abono (o mesmo filtro do banco)
-  const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument && !t.abono) ?? null;
+  // a falta comum dos dias fora do documento, nunca o Abono nem a Compensação (o mesmo filtro do banco)
+  const tipoFalta = tipos.find((t) => t.kind === "falta" && !t.requiresDocument && !t.abono && !t.compensacao) ?? null;
   const umDiaFora = foraDoDocumento?.length === 1 && foraDoDocumento[0][0] === foraDoDocumento[0][1];
   const avisoFalta = foraDoDocumento?.length
     ? `O período informado não cobre ${foraDoDocumento.map(intervalo).join(" e ")}. ${umDiaFora ? "Esse dia será lançado" : "Esses dias serão lançados"} como ${tipoFalta?.name ?? "falta"}, num lançamento à parte que vai ao DP junto.`
     : "";
   // o horário vai ao servidor na ausência de horas e no primeiro dia parcial
   const levaHoras = c.emHoras || primeiroDia === "parcial";
-  // Abonar parte dos dias (LUIZ, 26/11/2026): período de 2 dias ou mais, fora da
-  // falta sem término, da ausência de horas e da falta já abonada inteira
-  const podeAbonarParte = Boolean(tipo) && !tipo?.abono && !semTermino && !c.emHoras && (diasNoDocumento ?? 0) >= 2
-    && !(tipo?.kind === "falta" && c.abonada);
-  const nomeDoAbono = tipos.find((t) => t.abono)?.name ?? "Abono";
+  // Abonar ou compensar parte dos dias (LUIZ, 26 e 27/11/2026): período de 2 dias
+  // ou mais, fora da falta sem término, da ausência de horas, da falta já abonada
+  // ou compensada inteira e dos próprios motivos Abono e Compensação
+  const podeAbonarParte = Boolean(tipo) && !tipo?.abono && !tipo?.compensacao && !semTermino && !c.emHoras
+    && (diasNoDocumento ?? 0) >= 2 && !(tipo?.kind === "falta" && c.tratamento);
+  const palavras = PALAVRAS[c.parteTratamento];
+  const nomeDoMotivoDaParte = tipos.find((t) => (c.parteTratamento === "abono" ? t.abono : t.compensacao))?.name ?? palavras.motivo;
   const abonoParte = podeAbonarParte && c.abonoParcial;
-  const abono = abonoParte ? conferirAbono(c.startDate, c.endDate, c.abonoInicio, c.abonoFim, primeiroDia) : null;
+  const abono = abonoParte
+    ? conferirAbono(c.startDate, c.endDate, c.abonoInicio, c.abonoFim, primeiroDia, c.parteTratamento, nomeDoMotivoDaParte)
+    : null;
   const abonoOk = abono && !("erro" in abono) ? abono : null;
+  // o tratamento que vale (LUIZ, 27/11/2026): o motivo especial manda; fora
+  // dele, só a falta escolhe (o banco confere de novo)
+  const tratamentoEfetivo: Tratamento | null = tipo?.abono ? "abono" : tipo?.compensacao ? "compensacao"
+    : tipo?.kind === "falta" && c.tratamento ? c.tratamento : null;
 
   // O dado clínico já gravado vem pela RPC, uma vez, ao abrir. Não viaja na
   // listagem justamente para isso.
@@ -1831,7 +1863,7 @@ function PainelConfirmacao({
     acidenteTrabalho: c.acidenteTrabalho,
     tipoAtestado: c.tipoAtestado,
     tipoDocumento: c.tipoDocumento,
-    abonada: c.abonada || Boolean(tipo?.abono),
+    tratamento: tratamentoEfetivo,
     horaInicio: levaHoras ? c.horaInicio : "",
     horaFim: levaHoras ? c.horaFim : "",
     parcial: c.emHoras,
@@ -1874,6 +1906,11 @@ function PainelConfirmacao({
           `${intervalo([c.startDate, c.endDate])} (${dias} dia${dias === 1 ? "" : "s"})`,
         ]);
     if (semTermino) itens.push(["Falta sem término", "Conta todos os dias até o DP encerrar. O desligamento encerra sozinho."]);
+    if (tipo?.kind === "falta" && !tipo.abono && !tipo.compensacao && c.tratamento) {
+      itens.push(["Na folha", c.tratamento === "abono"
+        ? "Abonada: não desconta e o colaborador não repõe as horas"
+        : "Compensada: não desconta e as horas viram débito no banco de horas", true]);
+    }
     const minutosAusente = minutosDeAusencia(c.horaInicio, c.horaFim);
     const horario = c.horaInicio
       ? `das ${faixaDaAusencia(c.horaInicio, c.horaFim || null)}${minutosAusente ? ` (${rotuloDeHoras(minutosAusente)})` : ""}`
@@ -1891,8 +1928,8 @@ function PainelConfirmacao({
       // rótulo curto: o nome do motivo já está na linha Motivo, e um rótulo longo esmagava a coluna dos valores
       itens.push(["Dias do motivo", `${intervalo([abonoOk.restoIni, abonoOk.restoFim])} (${resto} dia${resto === 1 ? "" : "s"})`]);
       itens.push([
-        "Dias abonados",
-        `${intervalo([c.abonoInicio, c.abonoFim])} (${abonoOk.dias} dia${abonoOk.dias === 1 ? "" : "s"}), num lançamento à parte com o motivo ${nomeDoAbono}`,
+        `Dias ${palavras.parts}`,
+        `${intervalo([c.abonoInicio, c.abonoFim])} (${abonoOk.dias} dia${abonoOk.dias === 1 ? "" : "s"}), num lançamento à parte com o motivo ${nomeDoMotivoDaParte}`,
         true,
       ]);
     }
@@ -1982,13 +2019,14 @@ function PainelConfirmacao({
       if (abonoOk) {
         fd.set("abono_inicio", c.abonoInicio);
         fd.set("abono_fim", c.abonoFim);
+        fd.set("abono_tratamento", c.parteTratamento);
       }
       const r = await confirmarAbsenteismo(fd);
       if (r.error) { onErro(r.error); return; }
       onEnviado?.();
       onFechar();
       if (r.warning) toast.warning(r.warning);
-      // a mensagem do servidor só vem quando algo foi separado (dias abonados ou fora do documento)
+      // a mensagem do servidor só vem quando algo foi separado (dias abonados, compensados ou fora do documento)
       else toast.success(r.message ?? (ehNovo ? "Ausência lançada e enviada ao DP." : "Enviado ao DP."));
     });
   };
@@ -2186,7 +2224,7 @@ function PainelConfirmacao({
 
       {/* Falta sem término (LUIZ, 17/11/2026): quem parou de vir e não vai
           justificar, sem data para acabar. O DP encerra depois, pela ficha. */}
-      {tipo?.kind === "falta" && !tipo.abono && !c.emHoras && (
+      {tipo?.kind === "falta" && !tipo.abono && !tipo.compensacao && !c.emHoras && (
         <label style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
           <input
             type="checkbox" checked={c.semTermino} style={{ marginTop: 3 }}
@@ -2286,10 +2324,11 @@ function PainelConfirmacao({
         </div>
       )}
 
-      {/* Abonar parte dos dias (LUIZ, 26/11/2026): atestado de acompanhamento de
-          5 dias em que a lei cobre 1, e a empresa abona os outros 4. Os dias
-          abonados saem deste lançamento e vão ao DP num lançamento à parte, como
-          falta abonada; aprovados, aparecem em Abonos no ponto. */}
+      {/* Abonar ou compensar parte dos dias (LUIZ, 26 e 27/11/2026): atestado de
+          acompanhamento de 5 dias em que a lei cobre 1, e os outros 4 a empresa
+          abona ou o colaborador compensa no banco de horas. Os dias saem deste
+          lançamento e vão ao DP num lançamento à parte, com o motivo Abono ou
+          Compensação; aprovados, aparecem em Abonos e compensações. */}
       {podeAbonarParte && (
         <div style={{ border: "1px solid var(--border)", borderRadius: "var(--mh-radius-lg)", padding: "0.7rem 0.8rem", display: "flex", flexDirection: "column", gap: "0.55rem" }}>
           <label style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem", fontSize: "0.84rem", cursor: "pointer" }}>
@@ -2303,19 +2342,31 @@ function PainelConfirmacao({
               }}
             />
             <span>
-              Abonar parte dos dias
+              Abonar ou compensar parte dos dias
               <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
-                Quando o motivo não cobre o período todo e a empresa abona o restante. Os dias abonados saem
-                deste lançamento e são encaminhados para o DP, num lançamento à parte com o motivo {nomeDoAbono}: ficam
-                registrados, não pesam na remuneração variável e, depois de aprovados, aparecem em Abonos no ponto.
+                Quando o motivo não cobre o período todo. Os dias escolhidos saem deste lançamento e vão ao DP num
+                lançamento à parte. <strong>Abonados</strong>: a empresa perdoa as horas. <strong>Compensados</strong>: as
+                horas viram débito no banco de horas. Nos dois casos não são descontados na folha, não pesam na
+                remuneração variável e, depois de aprovados, aparecem em Abonos e compensações.
               </span>
             </span>
           </label>
           {c.abonoParcial && (
             <>
+              <div style={{ display: "flex", gap: "1.1rem", flexWrap: "wrap", paddingLeft: "1.4rem" }}>
+                {(["abono", "compensacao"] as Tratamento[]).map((t) => (
+                  <label key={t} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.84rem", cursor: "pointer" }}>
+                    <input
+                      type="radio" name={`parte-tratamento-${linha?.id ?? "novo"}`} checked={c.parteTratamento === t}
+                      onChange={() => setC((x) => ({ ...x, parteTratamento: t }))}
+                    />
+                    {t === "abono" ? "Abonar" : "Compensar no banco de horas"}
+                  </label>
+                ))}
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 170px))", gap: "0.8rem", paddingLeft: "1.4rem" }}>
                 <div>
-                  <label className="label">Abonar de <span style={{ color: "var(--mh-danger)" }}>*</span></label>
+                  <label className="label">{palavras.Inf} de <span style={{ color: "var(--mh-danger)" }}>*</span></label>
                   <input
                     type="date" className="input" value={c.abonoInicio} min={c.startDate} max={c.endDate}
                     onChange={(e) => setC((x) => ({ ...x, abonoInicio: e.target.value }))}
@@ -2331,7 +2382,7 @@ function PainelConfirmacao({
               </div>
               {!c.abonoInicio || !c.abonoFim ? (
                 <p className="soft" style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem" }}>
-                  Informe de que dia até que dia a empresa abona: os primeiros ou os últimos dias do período.
+                  Informe de que dia até que dia {c.parteTratamento === "abono" ? "a empresa abona" : "o colaborador compensa"}: os primeiros ou os últimos dias do período.
                 </p>
               ) : abono && "erro" in abono ? (
                 <p style={{ fontSize: "0.8rem", margin: "0 0 0 1.4rem", color: "var(--mh-danger)" }}>{abono.erro}</p>
@@ -2342,7 +2393,7 @@ function PainelConfirmacao({
                     return (
                       <>
                         Fica como {tipo?.name ?? "o motivo"}: <strong>{intervalo([abonoOk.restoIni, abonoOk.restoFim])} ({resto} dia{resto === 1 ? "" : "s"})</strong>.
-                        {" "}Abonados à parte: <strong>{intervalo([c.abonoInicio, c.abonoFim])} ({abonoOk.dias} dia{abonoOk.dias === 1 ? "" : "s"})</strong>.
+                        {" "}{palavras.Parts} à parte: <strong>{intervalo([c.abonoInicio, c.abonoFim])} ({abonoOk.dias} dia{abonoOk.dias === 1 ? "" : "s"})</strong>.
                       </>
                     );
                   })()}
@@ -2389,14 +2440,35 @@ function PainelConfirmacao({
             </div>
           </>
         )}
-        {tipo?.kind === "falta" && !tipo.abono && (
-          <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", fontSize: "0.82rem", cursor: "pointer", gridColumn: "span 2" }}>
-            <input
-              type="checkbox" checked={c.abonada}
-              onChange={(e) => setC((x) => ({ ...x, abonada: e.target.checked }))}
-            />
-            Abonar a falta (fica registrada, mas não pesa na remuneração variável)
-          </label>
+        {/* Abono x compensação (LUIZ, 27/11/2026): os dois não descontam na
+            folha nem pesam na remuneração variável; a compensação vira débito
+            no banco de horas. Só na falta: nos demais motivos o motivo já diz. */}
+        {tipo?.kind === "falta" && !tipo.abono && !tipo.compensacao && (
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+            <span className="label" style={{ margin: 0 }}>Na folha, esta falta</span>
+            <div style={{ display: "flex", gap: "1.1rem", flexWrap: "wrap" }}>
+              {([
+                ["", "É descontada"],
+                ["abono", "É abonada (o colaborador não repõe as horas)"],
+                ["compensacao", "É compensada no banco de horas"],
+              ] as ["" | Tratamento, string][]).map(([v, rotulo]) => (
+                <label key={v || "desconta"} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.84rem", cursor: "pointer" }}>
+                  <input
+                    type="radio" name={`tratamento-${linha?.id ?? "novo"}`} checked={c.tratamento === v}
+                    onChange={() => setC((x) => ({ ...x, tratamento: v }))}
+                  />
+                  {rotulo}
+                </label>
+              ))}
+            </div>
+            {c.tratamento && (
+              <span className="soft" style={{ fontSize: "0.76rem" }}>
+                Fica registrada, não é descontada na folha, não pesa na remuneração variável e, depois de aprovada,
+                aparece em Abonos e compensações para o DP lançar no ponto
+                {c.tratamento === "compensacao" ? ", como débito no banco de horas." : "."}
+              </span>
+            )}
+          </div>
         )}
       </div>
       {c.emHoras && <ContaDasHoras dia={c.startDate} inicio={c.horaInicio} fim={c.horaFim} />}
@@ -2429,7 +2501,10 @@ function PainelConfirmacao({
           Aqui a tela só INFORMA o que vai acontecer. */}
       {tipo && (
         <p className="soft" style={{ fontSize: "0.78rem", margin: 0, background: "var(--surface-2)", padding: "0.5rem 0.7rem", borderRadius: 8 }}>
-          {kindsComRedutor.includes(tipo.kind)
+          {tratamentoEfetivo
+            // abono e compensação não pesam nem reduzem férias (LUIZ, 27/11/2026)
+            ? <>Efeito na remuneração variável: <strong>nenhum</strong>. {tratamentoEfetivo === "abono" ? "Abonada" : "Compensada"}, a ausência não pesa na remuneração variável nem reduz os dias de férias.</>
+            : kindsComRedutor.includes(tipo.kind)
             ? <>Efeito na remuneração variável: este motivo já entra no <strong>redutor por faixa de dias</strong> configurado em Remuneração variável. Para não descontar duas vezes o mesmo dia, os dias do período não são descontados de novo na proporcionalidade.</>
             : tipo.discountsRvDefault
               ? <>Efeito na remuneração variável: os dias do período <strong>descontam proporcionalmente</strong> o valor do mês, conforme definido para este tipo em Configurações.</>
@@ -3068,7 +3143,12 @@ function Ficha({
           />
         )}
         {linha.workAccident && <Campo rotulo="Acidente de trabalho" valor="Sim" />}
-        {linha.waived && <Campo rotulo="Falta abonada" valor="Sim" />}
+        {linha.waived && (
+          <Campo
+            rotulo="Abono ou compensação"
+            valor={linha.tratamento === "compensacao" ? "Compensação no banco de horas" : "Abono"}
+          />
+        )}
         {linha.note && (
           <div style={{ gridColumn: "1 / -1" }}>
             <Campo rotulo="Observação" valor={linha.note} />

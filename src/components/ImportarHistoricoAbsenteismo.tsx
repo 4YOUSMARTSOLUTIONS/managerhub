@@ -119,7 +119,7 @@ export function ImportarHistoricoAbsenteismo({ aberto: abertoDeFora, onFechar }:
         ["Acompanhado", "Não", "Quem foi acompanhado, nos atestados de acompanhamento."],
         ["Parentesco", "Não", "Grau de parentesco do falecido. Só é gravado nos motivos que usam parentesco (Licença nojo)."],
         ["Acidente de trabalho", "Não", "Sim ou Não. Em branco vale Não."],
-        ["Abonada", "Não", "Sim ou Não, só para falta. Em branco vale Não."],
+        ["Abono ou compensação", "Não", "Abono, Compensação ou Não, só para falta. Em branco vale Não. Abono: não desconta e o colaborador não repõe. Compensação: não desconta e vira débito no banco de horas."],
         ["", "", ""],
         ["Como entra", "", "Cada linha entra JÁ APROVADA, sem comunicado por e-mail, sem aviso no sino e sem anexo. Passa a contar no relatório, na soma de 15 dias do INSS, na situação do colaborador e na remuneração variável (desconto e redutor do motivo, como na aprovação do DP)."],
         ["O vínculo da época", "", "Setor, função, gestor e unidade gravados no lançamento são os da data do absenteísmo (histórico de movimentações), não os de hoje."],

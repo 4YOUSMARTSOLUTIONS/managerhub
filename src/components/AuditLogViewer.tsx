@@ -42,7 +42,7 @@ const ENTITY_LABEL: Record<string, string> = {
   acesso_telas_nivel: "Acesso às telas: regra do nível",
   acesso_telas_pessoa: "Acesso às telas: exceção da pessoa",
   formularios: "Formulário", formulario_respostas: "Resposta de formulário",
-  absenteismo_ponto: "Abono lançado no ponto",
+  absenteismo_ponto: "Abono ou compensação lançado no ponto",
 };
 
 const ACTION_LABEL: Record<string, { label: string; tone: Tone }> = {
@@ -64,7 +64,7 @@ const FIELD_LABEL: Record<string, string> = {
   starts_at: "Início", ends_at: "Fim", target: "Meta", value: "Valor", effective_from: "Vigência",
   kind: "Tipo", direction: "Direção", consolidation: "Cálculo", unit: "Un. medida", sort: "Ordem",
   gender: "Sexo", cpf: "CPF", email: "E-mail", phone: "Telefone", employee_code: "Código funcionário",
-  admission_date: "Admissão", birth_date: "Nascimento", day: "Data", tipo: "Tipo", nps_score: "NPS", nps_comment: "Comentário NPS",
+  admission_date: "Admissão", birth_date: "Nascimento", day: "Data", tipo: "Tipo", tratamento: "Abono ou compensação", compensacao: "Motivo de compensação", nps_score: "NPS", nps_comment: "Comentário NPS",
   resolved_at: "Resolvido em", approval_requested_at: "Aprovação solicitada em",
   problem_statement: "Problema/Diagnóstico",
   // lançamento de meta individual

@@ -6,7 +6,7 @@ import type { Enums } from "@/types/database";
 import { normTexto } from "@/lib/absences-import";
 import { indiceDeAlvos, resolverAlvo, MOTIVO_LABEL, type Origem } from "@/lib/import-pessoa";
 import { carregarCadastroParaImportar } from "@/lib/absenteismo-cadastro";
-import { dataBR, detalheDoAfastamento, normCid, simNao, tipoDeAtestado, type LinhaHistorico } from "@/lib/absenteismo-historico";
+import { dataBR, detalheDoAfastamento, normCid, simNao, tipoDeAtestado, tratamentoDaPlanilha, type LinhaHistorico } from "@/lib/absenteismo-historico";
 import { AFASTAMENTO_MOTIVO } from "@/lib/constants";
 
 /**
@@ -155,8 +155,8 @@ export async function importarHistoricoAbsenteismo(
       if (tipoAtestado === null) { recusar(l, "Tipo de atestado: use Médico ou Odontológico."); continue; }
       const acidente = simNao(l.acidente ?? "");
       if (acidente === null) { recusar(l, "Acidente de trabalho: use Sim ou Não."); continue; }
-      const abonada = simNao(l.abonada ?? "");
-      if (abonada === null) { recusar(l, "Abonada: use Sim ou Não."); continue; }
+      const tratamento = tratamentoDaPlanilha(l.abonada ?? "");
+      if (tratamento === null) { recusar(l, "Abono ou compensação: use Abono, Compensação ou Não."); continue; }
       const detalhe = detalheDoAfastamento(l.detalhe ?? "");
       if (detalhe === null) {
         recusar(l, "Detalhe do afastamento: use Afastado pelo INSS, Acidente de trabalho, Aposentadoria por invalidez, Rescisão indireta ou Licença-maternidade.");
@@ -188,7 +188,9 @@ export async function importarHistoricoAbsenteismo(
         acompanhado: (l.acompanhado ?? "").trim(),
         parentesco: (l.parentesco ?? "").trim(),
         acidente,
-        abonada,
+        // o banco só aceita na falta e deixa o motivo Abono ou Compensação decidir
+        abonada: tratamento !== "",
+        tratamento: tratamento || null,
       });
     }
 

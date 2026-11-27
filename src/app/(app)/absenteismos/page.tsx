@@ -73,7 +73,7 @@ export default async function AbsenteismosPage() {
   if (unidades) lista = lista.or(`snap_unit_id.in.(${unidades.join(",")}),snap_unit_id.is.null`);
 
   /**
-   * Abonos no ponto (LUIZ, 24/11/2026): a falta abonada, numa consulta própria e
+   * Abonos e compensações (LUIZ, 24 e 27/11/2026): `waived` cobre os dois, numa consulta própria e
    * sem o teto de 500 da lista, senão o abono antigo ainda por lançar sumiria da
    * aba. Só para quem vê a fila do DP (a aba é dele e da Área de Gente). Vem
    * qualquer situação: o aprovado é o trabalho, e o cancelado DEPOIS de lançado
@@ -103,7 +103,7 @@ export default async function AbsenteismosPage() {
     getMembers(tenant.id),
     supabase
       .from("absence_types")
-      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, active, abono")
+      .select("id, name, description, kind, requires_document, requires_medical, requires_companion, requires_kinship, discounts_rv_default, active, abono, compensacao")
       .eq("tenant_id", tenant.id)
       .order("sort").order("name"),
     // fetchAll: a empresa passa de 1000 vínculos (ativos e desligados) e o
@@ -180,6 +180,7 @@ export default async function AbsenteismosPage() {
     workAccident: l.work_accident,
     certificateKind: l.certificate_kind,
     waived: l.waived,
+    tratamento: l.tratamento ?? (l.waived ? "abono" : null),
     hoursStart: l.hours_start,
     hoursEnd: l.hours_end,
     partialDay: l.partial_day,
@@ -255,7 +256,7 @@ export default async function AbsenteismosPage() {
           id: t.id, name: t.name, description: t.description, kind: t.kind,
           requiresDocument: t.requires_document, requiresMedical: t.requires_medical,
           requiresCompanion: t.requires_companion, requiresKinship: t.requires_kinship,
-          discountsRvDefault: t.discounts_rv_default, active: t.active, abono: t.abono,
+          discountsRvDefault: t.discounts_rv_default, active: t.active, abono: t.abono, compensacao: t.compensacao,
         }))}
         unidades={(unidadesTodas ?? [])
           .filter((u) => !unidades || unidades.includes(u.id))

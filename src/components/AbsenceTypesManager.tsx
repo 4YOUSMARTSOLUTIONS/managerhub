@@ -27,6 +27,8 @@ export type TipoAbsenteismoRow = {
   active: boolean;
   /** o motivo dos dias abonados (LUIZ, 26/11/2026): sempre Falta, sem documento, sempre abonado */
   abono?: boolean;
+  /** o motivo dos dias compensados (LUIZ, 27/11/2026): sempre Falta, sem documento, sempre compensado */
+  compensacao?: boolean;
 };
 
 type Rascunho = {
@@ -301,9 +303,15 @@ export function AbsenceTypesManager({
                 <td>
                   <span style={{ fontWeight: 600 }}>{t.name}</span>
                   {t.abono && (
-                    <span title="Usado no Abonar parte dos dias. Todo lançamento com ele sai abonado; o comportamento fica sempre Falta, sem documento."
+                    <span title="Recebe os dias abonados à parte. Todo lançamento com ele sai abonado: não desconta e o colaborador não repõe as horas. O comportamento fica sempre Falta, sem documento."
                       style={{ marginLeft: 6 }}>
                       <Badge variant="quiet" tone="gray">Abono</Badge>
+                    </span>
+                  )}
+                  {t.compensacao && (
+                    <span title="Recebe os dias compensados à parte. Todo lançamento com ele sai compensado: não desconta e as horas viram débito no banco de horas. O comportamento fica sempre Falta, sem documento."
+                      style={{ marginLeft: 6 }}>
+                      <Badge variant="quiet" tone="gray">Compensação</Badge>
                     </span>
                   )}
                   {t.description && (

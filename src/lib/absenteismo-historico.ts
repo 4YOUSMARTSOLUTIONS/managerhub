@@ -18,7 +18,7 @@ import { normTexto, parseDataPlanilha } from "@/lib/absences-import";
 export const COLUNAS_HISTORICO = [
   "ID", "Unidade", "Colaborador", "Motivo", "Detalhe do afastamento", "Início", "Fim", "Das", "Até", "Observação",
   "Tipo de atestado", "CID", "Profissional", "CRM", "Local de atendimento", "Data de emissão",
-  "Acompanhado", "Parentesco", "Acidente de trabalho", "Abonada",
+  "Acompanhado", "Parentesco", "Acidente de trabalho", "Abono ou compensação",
 ] as const;
 
 /**
@@ -102,6 +102,19 @@ const SIM = ["sim", "s", "x", "true", "1", "verdadeiro"];
 const NAO = ["nao", "n", "false", "0", "falso"];
 
 /** Sim/Não: vazio vale Não; `null` = escreveram outra coisa. */
+/**
+ * A coluna "Abono ou compensação" (LUIZ, 27/11/2026): `""` descontada (vazio ou
+ * Não), `"abono"` (Abono, Abonada ou Sim, como na planilha antiga),
+ * `"compensacao"` (Compensação, Compensada), `null` ilegível.
+ */
+export function tratamentoDaPlanilha(v: string): "" | "abono" | "compensacao" | null {
+  const s = normTexto(v ?? "");
+  if (!s || NAO.includes(s)) return "";
+  if (SIM.includes(s) || s.startsWith("abon")) return "abono";
+  if (s.startsWith("compens") || s.includes("banco de horas")) return "compensacao";
+  return null;
+}
+
 export function simNao(v: string): boolean | null {
   const s = normTexto(v ?? "");
   if (!s || NAO.includes(s)) return false;
@@ -176,7 +189,7 @@ export function mapearColunas(cabecalho: unknown[]) {
   const acompanhado = achar((x) => x.includes("acompanhad"));
   const parentesco = achar((x) => x.includes("parentesco"));
   const acidente = achar((x) => x.includes("acidente"));
-  const abonada = achar((x) => x.includes("abonad") || x.includes("abono"));
+  const abonada = achar((x) => x.includes("abonad") || x.includes("abono") || x.includes("compensa"));
   return {
     code, unit, name, motivo, detalhe, inicio, fim, das, ate, obs, tipoAtestado, cid, medico, crm, local,
     emissao, acompanhado, parentesco, acidente, abonada,
