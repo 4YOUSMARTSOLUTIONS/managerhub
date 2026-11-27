@@ -55,10 +55,13 @@ export default async function FeriasPage() {
   // escolha depende do prazo); a espera da efetivação não depende de nada.
   const meuVinculoP = supabase
     .from("memberships")
-    .select("admission_date, hierarchy_level_id")
+    .select("admission_date, hierarchy_level_id, fora_da_folha")
     .eq("tenant_id", tenant.id)
     .eq("user_id", user.id)
     .maybeSingle();
+  // quem está fora da folha (sócios) não tem férias (LUIZ, 27/11/2026)
+  const foraDaFolhaP = supabase.from("memberships").select("user_id")
+    .eq("tenant_id", tenant.id).eq("fora_da_folha", true);
   const bloqueadosP = supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id);
   // antecedência mínima por quem lança (Configurações > Férias)
   const configP = supabase
@@ -169,7 +172,8 @@ export default async function FeriasPage() {
   // A empresa importa da folha e a pessoa não veio no relatório: não há saldo
   // conferível, e o banco recusaria o pedido de qualquer jeito.
   const semFolha = usaFolha && meusAquisitivos.length === 0;
-  const podeSolicitar = !nivelBloqueado && !semAdmissao && !semFolha;
+  const foraDaFolha = meuVinculo?.fora_da_folha === true;
+  const podeSolicitar = !foraDaFolha && !nivelBloqueado && !semAdmissao && !semFolha;
   const escolhasDecimo = nivelBloqueado
     ? ((minhaEscolha as unknown as DecimoPelaEscolha | null)?.escolhas ?? [])
     : null;
@@ -179,7 +183,9 @@ export default async function FeriasPage() {
   const aguardandoDecimo: Record<string, string> = Object.fromEntries(
     (esperaDecimo ?? []).map((e) => [e.solicitacao_id, e.prazo]),
   );
-  const avisoSolicitar = nivelBloqueado
+  const avisoSolicitar = foraDaFolha
+    ? "Seu cadastro está fora da folha de pagamento, então não há férias a solicitar."
+    : nivelBloqueado
     ? "As férias do seu nível são programadas pelo seu gestor. Você acompanha por aqui o saldo e as previsões lançadas para você."
     : semAdmissao
       ? "Sua data de admissão ainda não está cadastrada, então o saldo não pode ser calculado. Peça ao departamento pessoal para completar o seu cadastro."
@@ -190,8 +196,9 @@ export default async function FeriasPage() {
   // Para quem o usuário pode lançar: o DP para qualquer colaborador ativo, o
   // gestor para a própria cadeia. O servidor revalida (manages_user / papel).
   const alcanceLancar = ehDp ? [...nomePorId.keys()] : equipe;
+  const semFerias = new Set(((await foraDaFolhaP).data ?? []).map((m) => m.user_id));
   const pessoasLancar = alcanceLancar
-    .filter((id) => id !== user.id)
+    .filter((id) => id !== user.id && !semFerias.has(id))
     .map((id) => ({ id, name: nomePorId.get(id) ?? "" }))
     .filter((p) => p.name)
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));

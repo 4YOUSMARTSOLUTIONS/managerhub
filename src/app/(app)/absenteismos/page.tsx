@@ -111,7 +111,7 @@ export default async function AbsenteismosPage() {
     // fora em branco no lançamento
     fetchAll(() => supabase
       .from("memberships")
-      .select("id, user_id, employee_code, department_id, subdepartment_id, position_id, manager_id")
+      .select("id, user_id, employee_code, department_id, subdepartment_id, position_id, manager_id, fora_da_folha")
       .eq("tenant_id", tenant.id)
       .order("id")),
     supabase.from("departments").select("id, name").eq("tenant_id", tenant.id),
@@ -140,8 +140,9 @@ export default async function AbsenteismosPage() {
   const unidadePorVinculo = new Map((vinculoUnidades ?? []).map((vu) => [vu.membership_id, vu.unit_id]));
   const vinculoPorUsuario = new Map((vinculos ?? []).map((v) => [v.user_id, v]));
 
+  // quem está fora da folha (sócios) não tem absenteísmo (LUIZ, 27/11/2026)
   const pessoas = alcance
-    .filter((id) => id !== user.id)
+    .filter((id) => id !== user.id && !vinculoPorUsuario.get(id)?.fora_da_folha)
     .map((id) => {
       const v = vinculoPorUsuario.get(id);
       const unitId = v ? unidadePorVinculo.get(v.id) ?? null : null;

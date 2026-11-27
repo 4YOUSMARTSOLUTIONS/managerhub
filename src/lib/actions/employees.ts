@@ -50,11 +50,20 @@ export async function createEmployee(
     const password = String(formData.get("password") ?? "");
     if (password.length < 8) return { error: "A senha deve ter ao menos 8 caracteres." };
 
-    const { error } = await supabase.rpc("admin_create_employee", {
+    const { data: novoId, error } = await supabase.rpc("admin_create_employee", {
       p_data: buildData(formData, cpf),
       p_password: password,
     });
     if (error) return { error: error.message };
+
+    // Fora da folha (LUIZ, 27/11/2026): sócio diretor e afins, marcado já no cadastro
+    if (formData.get("fora_da_folha") === "1" && novoId) {
+      const { tenantId } = await actionContext();
+      const { error: e2 } = await supabase.from("memberships")
+        .update({ fora_da_folha: true })
+        .eq("tenant_id", tenantId).eq("user_id", novoId as string);
+      if (e2) return { error: `Colaborador criado, mas a marcação Fora da folha não foi salva: ${e2.message}` };
+    }
 
     revalidatePath("/configuracoes");
     return { ok: true };
@@ -245,6 +254,16 @@ export async function updateEmployee(
     // (`so_administracao_concede_treinamentos`) vale também fora desta tela.
     // A marca de RH vai junto, pelo mesmo marcador e com a mesma trava no banco
     // (`so_administracao_concede_rh`).
+    // Fora da folha: owner, admin e DP (trava no banco, so_dp_marca_fora_da_folha)
+    if (formData.get("fora_da_folha_presente") === "1") {
+      const { error: e3 } = await supabase
+        .from("memberships")
+        .update({ fora_da_folha: formData.get("fora_da_folha") === "1" })
+        .eq("tenant_id", tenantId)
+        .eq("user_id", userId);
+      if (e3) return { error: e3.message };
+    }
+
     if (formData.get("gestao_treinamentos_presente") === "1" && (role === "owner" || role === "admin")) {
       const { error: e2 } = await supabase
         .from("memberships")

@@ -455,6 +455,7 @@ export default async function SettingsPage({
       isTrainingManager: m.is_training_manager,
       isAvaliadorBlitz: m.is_avaliador_blitz,
       isAjustaEquipe: m.is_ajusta_equipe,
+      foraDaFolha: m.fora_da_folha,
       isHr: m.is_hr,
       isGente: m.is_gente,
       departmentName: m.department_id ? deptById.get(m.department_id)?.name ?? null : null,

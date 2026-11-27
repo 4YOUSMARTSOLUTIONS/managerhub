@@ -156,12 +156,15 @@ export function UsersManager({
   const contextoImportacao = useMemo((): ContextoImportacao | undefined => {
     if (!importacao) return undefined;
     const ativos = employees.filter((e) => e.active && !e.dismissedAt);
+    // quem está fora da folha não vem no arquivo do Domínio: não entra no aviso
+    // de "ativos que não vieram no arquivo" (LUIZ, 27/11/2026)
+    const daFolha = ativos.filter((e) => !e.foraDaFolha);
     const posNome = new Map(positions.map((x) => [x.id, x.name]));
     const unNome = new Map(units.map((x) => [x.id, x.name]));
     const deptNome = new Map(departments.map((x) => [x.id, x.name]));
     return {
       empresasDominio: importacao.empresasDominio,
-      ativos: ativos.map((e) => ({
+      ativos: daFolha.map((e) => ({
         userId: e.userId, nome: e.fullName ?? "", cpf: e.cpf ? onlyDigits(e.cpf) : null,
         codigo: e.employeeCode, unidades: e.unitNames,
         gestorId: e.managerId ?? null, gestorNome: e.managerName ?? null,
@@ -371,6 +374,7 @@ export function UsersManager({
                       {e.isHr && e.role !== "hr" && <Badge variant="quiet">DP</Badge>}
                       {e.isGente && <Badge variant="quiet">Área de Gente</Badge>}
                       {e.isAjustaEquipe && <Badge variant="quiet">Ajusta equipes</Badge>}
+                      {e.foraDaFolha && <Badge variant="quiet">Fora da folha</Badge>}
                     </span>
                   </td>
                   <td>

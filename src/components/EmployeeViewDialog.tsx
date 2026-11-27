@@ -71,6 +71,7 @@ export function EmployeeViewDialog({
               {employee.isHr && employee.role !== "hr" && <Badge variant="quiet">Departamento Pessoal</Badge>}
               {employee.isGente && <Badge variant="quiet">Área de Gente</Badge>}
               {employee.isAjustaEquipe && <Badge variant="quiet">Ajusta equipes</Badge>}
+              {employee.foraDaFolha && <Badge variant="quiet">Fora da folha</Badge>}
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" style={{ background: "none", border: "none", fontSize: "1.3rem", cursor: "pointer", lineHeight: 1, color: "var(--text-muted)", flexShrink: 0 }}>×</button>

@@ -37,6 +37,8 @@ export type EmployeeData = {
   /** marca de avaliador da blitz de trajeto (lança a blitz sem ser gestor) */
   isAvaliadorBlitz?: boolean;
   isAjustaEquipe?: boolean;
+  /** usa o sistema sem ser empregado da folha (sócios diretores, LUIZ 27/11/2026) */
+  foraDaFolha?: boolean;
   /** marca do Departamento Pessoal, a antiga "RH" (atribuição, independente do perfil) */
   isHr?: boolean;
   /** marca da Área de Gente: lê o pessoal da empresa, sem agir (LUIZ, 19/11/2026) */
@@ -446,6 +448,21 @@ export function EmployeeDialog({
                 </div>
               </div>
             )}
+
+            {/* Fora da folha (LUIZ, 27/11/2026): sócio diretor e quem mais usar o
+                sistema sem ser empregado. O marcador diz ao servidor que a caixa
+                estava na tela. Owner, admin e DP marcam (trava no banco). */}
+            <input type="hidden" name="fora_da_folha_presente" value="1" />
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer", fontSize: "0.85rem" }}>
+              <input type="checkbox" name="fora_da_folha" value="1" defaultChecked={employee?.foraDaFolha ?? false} style={{ marginTop: 3 }} />
+              <span>
+                <strong>Fora da folha</strong>
+                <span className="soft" style={{ display: "block", fontSize: "0.76rem" }}>
+                  Usa o sistema sem ser empregado (por exemplo, os sócios diretores). Fica fora de férias, de
+                  absenteísmo e do aviso da importação do Domínio, que não traz essas pessoas.
+                </span>
+              </span>
+            </label>
 
             {isEdit && (
               <>
