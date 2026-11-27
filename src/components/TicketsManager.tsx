@@ -16,6 +16,7 @@ import { NpsRating } from "@/components/NpsRating";
 import { deleteTicket, decideTicketConclusion, getDescricoesDeChamados } from "@/lib/actions/tickets";
 import { confirmDialog } from "@/components/ui/confirm";
 import { MenuDeLinha } from "@/components/ui/MenuDeLinha";
+import { aoClicarNaLinha } from "@/lib/linha-clicavel";
 import { PRIORITY, PRIORITY_TONE, ticketStatusView } from "@/lib/constants";
 import { formatDateTime, isOverdue, numeroChamado, shortName } from "@/lib/format";
 import { Tabs, type Tab } from "@/components/ui/Tabs";
@@ -251,7 +252,7 @@ export function TicketsManager({
                 // solicitante decide a conclusão (de acordo / reabrir) quando aguardando aprovação
                 const canDecide = t.requesterId === currentUserId && awaitingApproval;
                 return (
-                  <tr key={t.id}>
+                  <tr key={t.id} onClick={(e) => aoClicarNaLinha(e, () => setSelected(t))} style={{ cursor: "pointer" }}>
                     <td style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", fontWeight: 600 }}>
                       <button type="button" className="cell-link cell-link-id" onClick={() => setSelected(t)} title="Abrir o chamado">
                         {numeroChamado(t.code)}

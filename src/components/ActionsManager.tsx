@@ -21,6 +21,7 @@ import { deleteAction, getActionFilterOptions, getActionForEdit, getActionFormOp
 import type { CollectedAction } from "./ActionDialog";
 import { confirmDialog } from "@/components/ui/confirm";
 import { MenuDeLinha } from "@/components/ui/MenuDeLinha";
+import { aoClicarNaLinha } from "@/lib/linha-clicavel";
 import { ActionDialog, type Opt } from "./ActionDialog";
 import { ImportActionsDialog } from "./ImportActionsDialog";
 import { ExportActionsButton } from "./ExportActionsButton";
@@ -876,7 +877,11 @@ export function ActionsManager({
                     const finalizada = d.status === "done" || d.status === "cancelled";
                     const overdue = !!d.dueDate && !finalizada && isOverdue(d.dueDate);
                     return (
-                      <tr key={d.id} style={{ borderTop: first && ri > 0 ? "2px solid var(--border-strong)" : undefined, opacity: d.status === "cancelled" ? 0.55 : 1 }}>
+                      <tr
+                        key={d.id}
+                        onClick={(e) => aoClicarNaLinha(e, () => openPanel(d, a, di))}
+                        style={{ cursor: "pointer", borderTop: first && ri > 0 ? "2px solid var(--border-strong)" : undefined, opacity: d.status === "cancelled" ? 0.55 : 1 }}
+                      >
                         <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
                           <button type="button" className="cell-link cell-link-id" onClick={() => openPanel(d, a, di)} title="Abrir o tratamento da ação">
                             #{a.code}{a.demandas.length > 1 ? `.${di + 1}` : ""}
