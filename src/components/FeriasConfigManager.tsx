@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/Badge";
-import { setAntecedenciaFerias, setNivelSolicitaFerias, setPrazosLegaisFerias } from "@/lib/actions/ferias";
+import { setAntecedenciaFerias, setPrazosLegaisFerias, setRegimeFeriasNivel, type RegimeFeriasNivel } from "@/lib/actions/ferias";
 import type { ModoPrazo, PrazosLegais } from "@/lib/ferias";
 
 const REGRAS_DE_PRAZO: { chave: "abono" | "decimo"; rotulo: string; ajuda: string }[] = [
@@ -210,44 +210,48 @@ function AntecedenciaMinima({ atual, canEdit }: { atual: AntecedenciaFerias; can
   );
 }
 
+/** Os regimes de férias de um nível, na ordem do seletor (LUIZ, 27/11/2026). */
+const REGIMES: { valor: RegimeFeriasNivel; rotulo: string; tom: "green" | "amber" | "gray" }[] = [
+  { valor: "solicita", rotulo: "Solicita as próprias férias", tom: "green" },
+  { valor: "gestor", rotulo: "Programado pelo gestor, escolhe o 13º no ano", tom: "amber" },
+  { valor: "gestor_sem_decimo", rotulo: "Programado pelo gestor, sem 13º", tom: "amber" },
+  { valor: "sem_ferias", rotulo: "Não tira férias", tom: "gray" },
+];
+
 /**
- * Quem solicita as próprias férias, por nível de hierarquia.
+ * O regime de férias de cada nível de hierarquia.
  *
- * Nível marcado como "programado pelo gestor" não vê o botão de solicitar no
- * módulo Férias: a previsão dele é lançada pelo gestor (o caso do operacional).
- * A lista chega ordenada por `rank`, que é a ordem real da hierarquia.
+ * Programado pelo gestor não vê o botão de solicitar: a previsão é lançada pelo
+ * gestor (o caso do operacional) e a pessoa escolhe, por ano, o adiantamento do
+ * 13º. "Sem 13º" tira a escolha (estagiário). "Não tira férias" tira o nível de
+ * todo o módulo: o contrato termina antes de completar o período aquisitivo e as
+ * férias são pagas na rescisão (aprendiz). A lista vem na ordem da hierarquia.
  */
 export function FeriasConfigManager({
-  niveis, bloqueados, antecedencia, prazos, canEdit,
+  niveis, regimes, antecedencia, prazos, canEdit,
 }: {
   niveis: { id: string; name: string; active: boolean }[];
-  bloqueados: string[];
+  /** o regime de cada nível que não "solicita"; ausente = solicita */
+  regimes: Record<string, RegimeFeriasNivel>;
   /** antecedência mínima atual, em dias, por quem lança (0 = sem) */
   antecedencia: AntecedenciaFerias;
   /** o que fazer com abono e 13º pedidos fora do prazo legal */
   prazos: PrazosLegais;
   canEdit: boolean;
 }) {
-  const [bloq, setBloq] = useState(new Set(bloqueados));
+  const [atual, setAtual] = useState<Record<string, RegimeFeriasNivel>>(regimes);
   const [salvando, iniciar] = useTransition();
   const router = useRouter();
 
-  const alternar = (id: string, solicita: boolean) => {
-    // otimista: o toggle responde na hora e o servidor confirma
-    setBloq((s) => {
-      const n = new Set(s);
-      if (solicita) n.delete(id); else n.add(id);
-      return n;
-    });
+  const mudar = (id: string, regime: RegimeFeriasNivel) => {
+    const antes = atual[id] ?? "solicita";
+    // otimista: o seletor responde na hora e o servidor confirma
+    setAtual((s) => ({ ...s, [id]: regime }));
     iniciar(async () => {
-      const r = await setNivelSolicitaFerias({ hierarchyLevelId: id, solicita });
+      const r = await setRegimeFeriasNivel({ hierarchyLevelId: id, regime });
       if (r.error) {
         toast.error(r.error);
-        setBloq((s) => {
-          const n = new Set(s);
-          if (solicita) n.add(id); else n.delete(id);
-          return n;
-        });
+        setAtual((s) => ({ ...s, [id]: antes }));
         return;
       }
       router.refresh();
@@ -259,10 +263,12 @@ export function FeriasConfigManager({
     <AntecedenciaMinima atual={antecedencia} canEdit={canEdit} />
     <PrazosLegaisDoPedido atual={prazos} canEdit={canEdit} />
     <div className="card card-pad" style={{ marginBottom: "1rem" }}>
-      <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Quem solicita as próprias férias</h3>
+      <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Férias por nível</h3>
       <p className="soft" style={{ fontSize: "0.8rem", margin: "0.25rem 0 0.8rem" }}>
-        Nível marcado como &quot;programado pelo gestor&quot; não solicita pelo sistema: o gestor
-        lança a previsão por ele no módulo Férias.
+        <strong>Programado pelo gestor</strong>: não solicita pelo sistema, o gestor lança a previsão, e a
+        pessoa escolhe por ano o adiantamento do 13º (ou não escolhe, no <strong>sem 13º</strong>, como o
+        estagiário). <strong>Não tira férias</strong>: o contrato termina antes de completar o período
+        aquisitivo e as férias são pagas na rescisão (como o aprendiz); o nível sai de todo o módulo Férias.
       </p>
       {niveis.length === 0 ? (
         <p className="soft" style={{ fontSize: "0.85rem", margin: 0 }}>
@@ -272,7 +278,8 @@ export function FeriasConfigManager({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
           {niveis.map((n) => {
-            const bloqueado = bloq.has(n.id);
+            const regime = atual[n.id] ?? "solicita";
+            const r = REGIMES.find((x) => x.valor === regime) ?? REGIMES[0];
             return (
               <div
                 key={n.id}
@@ -284,18 +291,19 @@ export function FeriasConfigManager({
                 <span style={{ fontWeight: 600, fontSize: "0.86rem" }}>{n.name}</span>
                 {!n.active && <Badge variant="quiet" tone="gray">Inativo</Badge>}
                 <span style={{ marginLeft: "auto" }}>
-                  {bloqueado
-                    ? <Badge variant="quiet" tone="amber">Programado pelo gestor</Badge>
-                    : <Badge variant="quiet" tone="green">Solicita as próprias</Badge>}
+                  {canEdit ? (
+                    <select
+                      className="select" value={regime} disabled={salvando}
+                      aria-label={`Regime de férias do nível ${n.name}`}
+                      style={{ width: "auto", padding: "0.3rem 0.5rem", fontSize: "0.82rem" }}
+                      onChange={(e) => mudar(n.id, e.target.value as RegimeFeriasNivel)}
+                    >
+                      {REGIMES.map((x) => <option key={x.valor} value={x.valor}>{x.rotulo}</option>)}
+                    </select>
+                  ) : (
+                    <Badge variant="quiet" tone={r.tom}>{r.rotulo}</Badge>
+                  )}
                 </span>
-                {canEdit && (
-                  <button
-                    type="button" className="btn btn-ghost btn-sm" disabled={salvando}
-                    onClick={() => alternar(n.id, bloqueado)}
-                  >
-                    {bloqueado ? "Permitir solicitar" : "Passar ao gestor"}
-                  </button>
-                )}
               </div>
             );
           })}

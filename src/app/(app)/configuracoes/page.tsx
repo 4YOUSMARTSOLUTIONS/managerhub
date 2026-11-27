@@ -347,8 +347,14 @@ export default async function SettingsPage({
       .eq("tenant_id", tenant.id).order("sort").order("name") : nada,
     em("seguranca") ? supabase.from("seg_veiculos").select("id, user_id, meio_id, placa, tipo_descricao, propriedade, cor, active")
       .eq("tenant_id", tenant.id).order("placa") : nada,
-    // níveis de hierarquia que não solicitam as próprias férias
-    em("ferias") ? supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id) : nada,
+    // regime de férias de cada nível: programado pelo gestor (com ou sem 13º) ou
+    // não tira férias (LUIZ, 27/11/2026)
+    em("ferias")
+      ? Promise.all([
+          supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id, sem_decimo").eq("tenant_id", tenant.id),
+          supabase.from("ferias_niveis_sem_ferias").select("hierarchy_level_id").eq("tenant_id", tenant.id),
+        ]).then(([b, s]) => ({ data: { bloqueados: b.data ?? [], semFerias: s.data ?? [] }, count: null }))
+      : nada,
     // situação do colaborador: o afastamento ou a licença em vigor hoje (fuso do
     // Brasil, decidido dentro da RPC)
     em("usuarios") ? supabase.rpc("colaboradores_situacoes", { p_tenant: tenant.id }) : nada,
@@ -892,7 +898,10 @@ export default async function SettingsPage({
           content: (
             <FeriasConfigManager
               niveis={(hierarchies ?? []).map((h) => ({ id: h.id, name: h.name, active: h.active }))}
-              bloqueados={(feriasBloqueadosData ?? []).map((b) => b.hierarchy_level_id)}
+              regimes={Object.fromEntries([
+                ...(feriasBloqueadosData?.bloqueados ?? []).map((b) => [b.hierarchy_level_id, b.sem_decimo ? "gestor_sem_decimo" : "gestor"]),
+                ...(feriasBloqueadosData?.semFerias ?? []).map((s) => [s.hierarchy_level_id, "sem_ferias"]),
+              ])}
               antecedencia={{
                 colaborador: feriasConfigData?.antecedencia_minima_dias ?? 0,
                 gestor: feriasConfigData?.antecedencia_gestor_dias ?? 0,

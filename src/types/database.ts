@@ -985,6 +985,14 @@ export type Database = {
       // programa por eles). Catálogo simples: escrita direta por policy
       // (owner/admin/hr), no molde de absence_types.
       ferias_niveis_bloqueados: {
+        // sem_decimo (27/11/2026): o nível não escolhe o adiantamento do 13º (estagiário)
+        Row: { tenant_id: string; hierarchy_level_id: string; created_at: string; sem_decimo: boolean }
+        Insert: { tenant_id: string; hierarchy_level_id: string; created_at?: string; sem_decimo?: boolean }
+        Update: { sem_decimo?: boolean }
+        Relationships: []
+      }
+      // níveis que não tiram férias (aprendiz, LUIZ 27/11/2026): fora de todo o módulo Férias
+      ferias_niveis_sem_ferias: {
         Row: { tenant_id: string; hierarchy_level_id: string; created_at: string }
         Insert: { tenant_id: string; hierarchy_level_id: string; created_at?: string }
         Update: never

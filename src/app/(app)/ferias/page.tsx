@@ -59,20 +59,30 @@ export default async function FeriasPage() {
     .eq("tenant_id", tenant.id)
     .eq("user_id", user.id)
     .maybeSingle();
-  // quem está fora da folha (sócios) não tem férias (LUIZ, 27/11/2026)
-  const foraDaFolhaP = supabase.from("memberships").select("user_id")
-    .eq("tenant_id", tenant.id).eq("fora_da_folha", true);
-  const bloqueadosP = supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id").eq("tenant_id", tenant.id);
+  // Promise.resolve: a consulta roda uma vez, mesmo esperada em vários pontos
+  const bloqueadosP = Promise.resolve(
+    supabase.from("ferias_niveis_bloqueados").select("hierarchy_level_id, sem_decimo").eq("tenant_id", tenant.id));
+  // níveis que não tiram férias (aprendiz, LUIZ 27/11/2026): fora de todo o módulo
+  const semFeriasP = Promise.resolve(
+    supabase.from("ferias_niveis_sem_ferias").select("hierarchy_level_id").eq("tenant_id", tenant.id));
+  // quem está fora da folha (sócios) ou num nível que não tira férias (aprendiz)
+  // não tem férias (LUIZ, 27/11/2026)
+  const foraDaFolhaP = semFeriasP.then(({ data: s }) => {
+    const niveis = (s ?? []).map((x) => x.hierarchy_level_id);
+    return supabase.from("memberships").select("user_id").eq("tenant_id", tenant.id)
+      .or(niveis.length ? `fora_da_folha.eq.true,hierarchy_level_id.in.(${niveis.join(",")})` : "fora_da_folha.eq.true");
+  });
   // antecedência mínima por quem lança (Configurações > Férias)
   const configP = supabase
     .from("ferias_config")
     .select("antecedencia_minima_dias, antecedencia_gestor_dias, antecedencia_dp_dias, abono_fora_prazo, decimo_fora_prazo, decimo_prazo")
     .eq("tenant_id", tenant.id)
     .maybeSingle();
-  const nivelBloqueadoP = Promise.all([meuVinculoP, bloqueadosP]).then(([{ data: v }, { data: b }]) =>
-    !!v?.hierarchy_level_id && (b ?? []).some((x) => x.hierarchy_level_id === v.hierarchy_level_id));
-  // quem não solicita as próprias férias escolhe, por ano, o adiantamento do 13º
-  const minhaEscolhaP = (async () => (await nivelBloqueadoP)
+  // quem não solicita as próprias férias escolhe, por ano, o adiantamento do 13º;
+  // o estagiário é programado pelo gestor, mas não tem 13º para escolher
+  const escolheDecimoP = Promise.all([meuVinculoP, bloqueadosP]).then(([{ data: v }, { data: b }]) =>
+    !!v?.hierarchy_level_id && (b ?? []).some((x) => x.hierarchy_level_id === v.hierarchy_level_id && !x.sem_decimo));
+  const minhaEscolhaP = (async () => (await escolheDecimoP)
     ? (await supabase.rpc("ferias_escolhas_decimo", { p_tenant: tenant.id, p_user: user.id })).data
     : null)();
   // quem acompanha equipe vê se os operacionais já escolheram o 13º do ano
@@ -173,8 +183,11 @@ export default async function FeriasPage() {
   // conferível, e o banco recusaria o pedido de qualquer jeito.
   const semFolha = usaFolha && meusAquisitivos.length === 0;
   const foraDaFolha = meuVinculo?.fora_da_folha === true;
-  const podeSolicitar = !foraDaFolha && !nivelBloqueado && !semAdmissao && !semFolha;
-  const escolhasDecimo = nivelBloqueado
+  const nivelSemFerias = !!meuVinculo?.hierarchy_level_id
+    && ((await semFeriasP).data ?? []).some((s) => s.hierarchy_level_id === meuVinculo.hierarchy_level_id);
+  const escolheDecimo = await escolheDecimoP;
+  const podeSolicitar = !foraDaFolha && !nivelSemFerias && !nivelBloqueado && !semAdmissao && !semFolha;
+  const escolhasDecimo = escolheDecimo
     ? ((minhaEscolha as unknown as DecimoPelaEscolha | null)?.escolhas ?? [])
     : null;
   const painelDecimo = escolhasDaEquipe
@@ -185,6 +198,8 @@ export default async function FeriasPage() {
   );
   const avisoSolicitar = foraDaFolha
     ? "Seu cadastro está fora da folha de pagamento, então não há férias a solicitar."
+    : nivelSemFerias
+    ? "O seu contrato termina antes de completar o período aquisitivo, então as férias não são tiradas: elas são pagas na rescisão. Dúvidas, procure o departamento pessoal."
     : nivelBloqueado
     ? "As férias do seu nível são programadas pelo seu gestor. Você acompanha por aqui o saldo e as previsões lançadas para você."
     : semAdmissao

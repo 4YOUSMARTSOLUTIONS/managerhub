@@ -291,24 +291,45 @@ export async function setPrazosLegaisFerias(input: PrazosLegais): Promise<Action
   }
 }
 
-/** Configuração: marca ou desmarca um nível de hierarquia como "não solicita". */
-export async function setNivelSolicitaFerias(
-  input: { hierarchyLevelId: string; solicita: boolean },
+/**
+ * O regime de férias de um nível (LUIZ, 27/11/2026):
+ *  - "solicita": pede as próprias férias (fora das duas tabelas);
+ *  - "gestor": programado pelo gestor e escolhe, por ano, o adiantamento do 13º;
+ *  - "gestor_sem_decimo": programado pelo gestor, sem 13º (estagiário);
+ *  - "sem_ferias": não tira férias, o contrato termina antes do período
+ *    aquisitivo (aprendiz); fica fora de todo o módulo.
+ */
+export type RegimeFeriasNivel = "solicita" | "gestor" | "gestor_sem_decimo" | "sem_ferias";
+
+export async function setRegimeFeriasNivel(
+  input: { hierarchyLevelId: string; regime: RegimeFeriasNivel },
 ): Promise<ActionState> {
   try {
     const { supabase, tenantId } = await dpActionContext();
-    if (input.solicita) {
-      const { error } = await supabase
-        .from("ferias_niveis_bloqueados")
-        .delete()
-        .eq("tenant_id", tenantId)
-        .eq("hierarchy_level_id", input.hierarchyLevelId);
+    const nivel = input.hierarchyLevelId;
+    if (!nivel) return { error: "Nível inválido." };
+    if (!["solicita", "gestor", "gestor_sem_decimo", "sem_ferias"].includes(input.regime)) {
+      return { error: "Regime inválido." };
+    }
+
+    // os regimes se excluem: sai das duas listas e entra só na do novo
+    const d1 = await supabase.from("ferias_niveis_bloqueados").delete()
+      .eq("tenant_id", tenantId).eq("hierarchy_level_id", nivel);
+    if (d1.error) return { error: d1.error.message };
+    const d2 = await supabase.from("ferias_niveis_sem_ferias").delete()
+      .eq("tenant_id", tenantId).eq("hierarchy_level_id", nivel);
+    if (d2.error) return { error: d2.error.message };
+
+    if (input.regime === "gestor" || input.regime === "gestor_sem_decimo") {
+      const { error } = await supabase.from("ferias_niveis_bloqueados").insert({
+        tenant_id: tenantId, hierarchy_level_id: nivel, sem_decimo: input.regime === "gestor_sem_decimo",
+      });
       if (error) return { error: error.message };
-    } else {
-      const { error } = await supabase
-        .from("ferias_niveis_bloqueados")
-        .insert({ tenant_id: tenantId, hierarchy_level_id: input.hierarchyLevelId });
-      if (error && !error.message.includes("duplicate")) return { error: error.message };
+    } else if (input.regime === "sem_ferias") {
+      const { error } = await supabase.from("ferias_niveis_sem_ferias").insert({
+        tenant_id: tenantId, hierarchy_level_id: nivel,
+      });
+      if (error) return { error: error.message };
     }
     revalidar();
     revalidatePath("/configuracoes");
