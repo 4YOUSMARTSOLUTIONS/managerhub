@@ -952,6 +952,13 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      // cada marca no ponto, sem apagar (LUIZ, 27/11/2026); escrita só por absenteismo_marcar_ponto
+      absenteismo_ponto_historico: {
+        Row: { id: string; tenant_id: string; lancamento_id: string; acao: "lancado" | "desfeito" | "retirado"; por: string | null; em: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       // Contratos ENCERRADOS do colaborador (vínculos anteriores, com outra
       // matrícula). A importação em lote arquiva aqui ao detectar recontratação,
       // e as importações de férias/punições/RV consultam para aceitar

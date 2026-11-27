@@ -28,6 +28,8 @@ export function destinoDaNotificacao(n: {
   // e uma coluna a mais em `notifications` custaria uma migração por módulo
   if (n.type.startsWith("training_")) return "/treinamentos";
   if (n.type.startsWith("punicao_")) return "/punicoes";
+  // abono ou compensação para lançar (ou retirar) no ponto: a aba da Área de Gente
+  if (n.type === "absenteismo_ponto") return "/absenteismos?aba=abonos";
   if (n.type.startsWith("absenteismo_")) return "/absenteismos";
   if (n.type.startsWith("ferias_")) return "/ferias";
   // quem não tem e-mail cadastrado é o RH que resolve, na ficha do colaborador

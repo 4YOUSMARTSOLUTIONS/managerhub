@@ -4,7 +4,7 @@ import { minhaEquipe } from "@/lib/team";
 import { moduleGate } from "@/lib/module-gate";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { AbsenteismosManager, type AbsenteismoRow, type LinhaAbono } from "@/components/AbsenteismosManager";
+import { AbsenteismosManager, type AbsenteismoRow, type EventoPonto, type LinhaAbono } from "@/components/AbsenteismosManager";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 
 /**
@@ -24,7 +24,11 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 // a leitura do atestado com IA (foto, modelo maior) passa fácil dos 15 s padrão
 export const maxDuration = 60;
 
-export default async function AbsenteismosPage() {
+export default async function AbsenteismosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ aba?: string }>;
+}) {
   const gate = await moduleGate("absenteismos");
   if (gate) return gate;
 
@@ -90,6 +94,9 @@ export default async function AbsenteismosPage() {
         }),
         fetchAll(() => supabase.from("absenteismo_ponto").select("lancamento_id, lancado_por, lancado_em")
           .eq("tenant_id", tenant.id).order("lancamento_id")),
+        // cada marca no ponto, para a ficha (LUIZ, 27/11/2026)
+        fetchAll(() => supabase.from("absenteismo_ponto_historico").select("id, lancamento_id, acao, por, em")
+          .eq("tenant_id", tenant.id).order("em").order("id")),
       ])
     : null;
 
@@ -215,8 +222,14 @@ export default async function AbsenteismosPage() {
   const rows: AbsenteismoRow[] = (lancamentos ?? []).map(paraLinha);
 
   let abonos: LinhaAbono[] | null = null;
+  const historicoPonto: Record<string, EventoPonto[]> = {};
   if (abonosP) {
-    const [{ data: lancAbonos, error: erroAbonos }, { data: marcas, error: erroMarcas }] = await abonosP;
+    const [{ data: lancAbonos, error: erroAbonos }, { data: marcas, error: erroMarcas }, { data: passos }] = await abonosP;
+    for (const h of passos ?? []) {
+      (historicoPonto[h.lancamento_id] ??= []).push({
+        acao: h.acao, porName: h.por ? nomePorId.get(h.por) ?? null : null, em: h.em,
+      });
+    }
     if (erroAbonos || erroMarcas) console.error("[absenteismo] abonos no ponto", erroAbonos?.message ?? erroMarcas?.message);
     const marcaPorLancamento = new Map((marcas ?? []).map((m) => [m.lancamento_id, m]));
     abonos = ((lancAbonos ?? []) as Lancamento[])
@@ -269,6 +282,9 @@ export default async function AbsenteismosPage() {
         // só o proprietário (LUIZ, 16/11/2026); a action e a RPC conferem de novo
         podeImportarHistorico={role === "owner"}
         abonos={abonos}
+        // o histórico do ponto só para quem vê a aba (DP e Área de Gente)
+        historicoPonto={abonos ? historicoPonto : null}
+        abaInicial={(await searchParams).aba === "abonos" && abonos ? "abonos" : undefined}
       />
     </div>
   );

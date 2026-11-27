@@ -17,7 +17,7 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { IconImport } from "@/components/ui/ImpExpIcons";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { confirmDialog } from "@/components/ui/confirm";
-import { formatDate, normalizar, shortName } from "@/lib/format";
+import { formatDate, formatDateTime, normalizar, shortName } from "@/lib/format";
 import { formatCpf } from "@/lib/cpf";
 import {
   ABSENCE_KIND_LABEL, ABSENCE_KIND_TONE,
@@ -126,6 +126,14 @@ export type AbsenteismoRow = {
 export type LinhaAbono = AbsenteismoRow & {
   pontoEm: string | null;
   pontoPorName: string | null;
+};
+
+/** Um passo da marca no ponto (LUIZ, 27/11/2026), da tabela absenteismo_ponto_historico. */
+export type EventoPonto = { acao: "lancado" | "desfeito" | "retirado"; porName: string | null; em: string };
+const ACAO_NO_PONTO: Record<EventoPonto["acao"], string> = {
+  lancado: "Lançado no ponto",
+  desfeito: "Marca desfeita (ainda não lançado)",
+  retirado: "Retirado do ponto (lançamento cancelado)",
 };
 
 /** Onde o abono ou a compensação está no ponto: falta lançar, já lançado, ou cancelado depois de lançado. */
@@ -404,7 +412,7 @@ const hoje = () => {
  */
 export function AbsenteismosManager({
   rows, pessoas, equipe, tipos, unidades, kindsComRedutor, meuId, podeDecidir, veEmpresa, podeCancelarAprovado, podeImportarHistorico,
-  abonos,
+  abonos, historicoPonto = null, abaInicial,
 }: {
   rows: AbsenteismoRow[];
   pessoas: Pessoa[];
@@ -434,6 +442,10 @@ export function AbsenteismosManager({
    * vê a fila do DP: a aba nem aparece.
    */
   abonos: LinhaAbono[] | null;
+  /** cada marca no ponto, por lançamento; nulo para quem não vê a aba */
+  historicoPonto?: Record<string, EventoPonto[]> | null;
+  /** a aba aberta ao chegar (o aviso do ponto leva a "abonos") */
+  abaInicial?: string;
 }) {
   const [novo, setNovo] = useState<
     {
@@ -471,7 +483,7 @@ export function AbsenteismosManager({
 
   // "Faltas sem término" (LUIZ, 17/11/2026): quem segue faltando, sem data
   const [soSemTermino, setSoSemTermino] = useState(false);
-  const [aba, setAba] = useState<string | undefined>(undefined);
+  const [aba, setAba] = useState<string | undefined>(abaInicial);
   const quantosSemTermino = rows.filter(semTerminoAberto).length;
 
   const filtrar = (lista: AbsenteismoRow[]) => {
@@ -1435,6 +1447,7 @@ export function AbsenteismosManager({
             onBaixarDocumento={baixarDocumento}
             onEfetivar={podeEfetivar(aberto) ? () => { const r = aberto; setAberto(null); setErro(""); setConfirmando(r); } : undefined}
             onFechar={() => { setAberto(null); setErro(""); }}
+            historicoPonto={historicoPonto ? historicoPonto[aberto.id] ?? [] : null}
           />
         </Dialogo>
       )}
@@ -2215,7 +2228,9 @@ function PainelConfirmacao({
           do Motivo, um texto longo esticava a linha inteira. */}
       {tipo && (
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "-0.4rem" }}>
-          <Badge variant="quiet" tone={ABSENCE_KIND_TONE[tipo.kind]}>{ABSENCE_KIND_LABEL[tipo.kind]}</Badge>
+          {tipo.abono || tipo.compensacao
+            ? <Badge variant="quiet">{tipo.abono ? "Abono" : "Compensação"}</Badge>
+            : <Badge variant="quiet" tone={ABSENCE_KIND_TONE[tipo.kind]}>{ABSENCE_KIND_LABEL[tipo.kind]}</Badge>}
           {tipo.description && (
             <span className="soft" style={{ fontSize: "0.78rem" }}>{tipo.description}</span>
           )}
@@ -2928,8 +2943,11 @@ function EncerrarFalta({ linha, onErro }: { linha: AbsenteismoRow; onErro: (m: s
 /** A ficha completa, com a decisão do DP quando for o caso. */
 function Ficha({
   linha, kindsComRedutor, podeDecidir, podeCancelarAprovado, podeCancelarProprio, podeReenviar, erro, onErro, onAbrirDocumento, onBaixarDocumento, onEfetivar, onFechar,
+  historicoPonto = null,
 }: {
   linha: AbsenteismoRow;
+  /** as marcas no ponto deste lançamento; nulo = quem olha não vê a aba do ponto */
+  historicoPonto?: EventoPonto[] | null;
   kindsComRedutor: Enums<"absence_kind">[];
   podeDecidir: boolean;
   podeCancelarAprovado: boolean;
@@ -3060,7 +3078,11 @@ function Ficha({
     <>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         <Badge tone={ABSENTEISMO_STATUS_TONE[linha.status]}>{ABSENTEISMO_STATUS[linha.status]}</Badge>
-        {linha.kind && <Badge variant="quiet" tone={ABSENCE_KIND_TONE[linha.kind]}>{ABSENCE_KIND_LABEL[linha.kind]}</Badge>}
+        {/* abono e compensação têm comportamento Falta, mas "Falta sem
+            justificativa" no topo da ficha enganava (LUIZ, 27/11/2026) */}
+        {linha.waived
+          ? <Badge variant="quiet">{linha.tratamento === "compensacao" ? "Compensação" : "Abono"}</Badge>
+          : linha.kind && <Badge variant="quiet" tone={ABSENCE_KIND_TONE[linha.kind]}>{ABSENCE_KIND_LABEL[linha.kind]}</Badge>}
       </div>
 
       <DetailSection title="Colaborador">
@@ -3224,6 +3246,29 @@ function Ficha({
         )}
         </FieldGrid>
       </DetailSection>
+
+      {/* No ponto (LUIZ, 27/11/2026): cada marca de quem lançou, desfez ou
+          retirou do sistema de ponto, e quando. Só para o DP e a Área de Gente. */}
+      {linha.waived && historicoPonto && (linha.status === "aprovado" || historicoPonto.length > 0) && (
+        <DetailSection title="No ponto">
+          {historicoPonto.length === 0 ? (
+            <p className="soft" style={{ fontSize: "0.84rem", margin: 0 }}>
+              Ainda não lançado no ponto{linha.tratamento === "compensacao" ? " (débito no banco de horas)" : ""}.
+            </p>
+          ) : (
+            <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              {historicoPonto.map((h, i) => (
+                <li key={i} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.84rem" }}>
+                  <strong style={{ fontWeight: 600 }}>{ACAO_NO_PONTO[h.acao]}</strong>
+                  <span className="muted">
+                    {h.porName ?? "Usuário removido"} · {formatDateTime(h.em)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </DetailSection>
+      )}
 
       {podeDecidir && linha.faltaContinua && (linha.status === "aprovado" || linha.status === "pendente") && (
         <EncerrarFalta linha={linha} onErro={onErro} />
