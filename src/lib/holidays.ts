@@ -56,10 +56,11 @@ export function nationalHolidays(year: number): Map<string, string> {
   for (const [mmdd, name] of Object.entries(FIXED)) map.set(`${year}-${mmdd}`, name);
   if (year >= 2024) map.set(`${year}-11-20`, "Consciência Negra");
 
+  // Carnaval fica de fora: é ponto facultativo, não feriado nacional (LUIZ,
+  // 27/11/2026; barrava férias começando na segunda de carnaval). Quem folga
+  // cadastra o dia nos feriados da empresa. Mesmo corte em national_holiday_name.
   const e = easterSunday(year);
   map.set(dateKey(addDays(e, -2)), "Sexta-feira Santa");
-  map.set(dateKey(addDays(e, -48)), "Carnaval");
-  map.set(dateKey(addDays(e, -47)), "Carnaval");
   map.set(dateKey(addDays(e, 60)), "Corpus Christi");
 
   cache.set(year, map);
