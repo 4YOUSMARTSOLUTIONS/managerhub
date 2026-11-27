@@ -661,10 +661,23 @@ export function AbsenteismosManager({
   // quais botões de ação esta linha mostra; a tabela reserva a vaga de cada um
   const acoesDa = (r: AbsenteismoRow) => {
     const efetivar = podeEfetivar(r);
+    const reprovado = r.status === "reprovado";
     return {
       efetivar,
       continua: r.status === "aberto" && efetivar && !r.partialDay,
       cancelar: r.status === "aberto" && podeMexer(r),
+      // por que o botão está apagado, na dica (LUIZ, 27/11/2026)
+      porque: {
+        efetivar: "Só quem lançou, a gestão acima de quem lançou e o DP efetivam este lançamento.",
+        continua: reprovado
+          ? "Reprovado pelo DP: corrija e envie de novo pelo Efetivar."
+          : r.partialDay
+            ? "Ausência de parte do dia: vale para um dia só."
+            : "Só quem lançou, a gestão acima de quem lançou e o DP registram que continua ausente.",
+        cancelar: reprovado
+          ? "Reprovado pelo DP: corrija e envie de novo pelo Efetivar. Para desistir do lançamento, abra pelo Ver."
+          : "Só quem lançou e o DP cancelam este lançamento.",
+      },
     };
   };
 
@@ -689,15 +702,15 @@ export function AbsenteismosManager({
             mesma altura, e "Continua ausente" em duas linhas para ocupar menos
             largura (LUIZ, 17/11/2026). */}
         {/* centralizada como o cabeçalho: no Histórico, só o Ver fica no meio.
-            Botão que não vale para a linha guarda a vaga, invisível, para os
-            outros não mudarem de lugar (LUIZ, 18/11/2026: o reprovado, sem
-            Continua ausente nem cancelar, ficava com os botões deslocados) */}
+            Botão que não vale para a linha aparece apagado, sem clique e com o
+            motivo na dica, para os outros não mudarem de lugar (LUIZ, 18/11 e
+            27/11/2026: invisível, o buraco na linha do reprovado ficava feio) */}
         <td style={{ textAlign: "center" }}>
           <span style={{ display: "inline-flex", gap: "0.25rem", alignItems: "center" }}>
             {/* Botão com NOME, não ícone: efetivar é o passo central do fluxo, e
                 escondê-lo num lápis fez parecer que o comunicado ia direto ao DP. */}
             {vagas.efetivar && (
-              <Vaga mostra={acoes.efetivar}>
+              <Vaga mostra={acoes.efetivar} motivo={acoes.porque.efetivar}>
               <button
                 type="button" className="btn btn-primary btn-xs" style={{ height: ALTURA_ACAO }}
                 onClick={() => { setErro(""); setConfirmando(r); }}
@@ -710,7 +723,7 @@ export function AbsenteismosManager({
                 com aviso aos destinatários (LUIZ, 17/11/2026). A ausência
                 parcial é de um dia só. Com o nome (o LUIZ pediu de volta). */}
             {vagas.continua && (
-              <Vaga mostra={acoes.continua}>
+              <Vaga mostra={acoes.continua} motivo={acoes.porque.continua}>
               <button
                 // mais folga dos lados que o btn-xs (LUIZ, 17/11/2026: ficou espremido)
                 type="button" className="btn btn-ghost btn-xs"
@@ -726,7 +739,7 @@ export function AbsenteismosManager({
             {/* a ausência não se confirmou (a pessoa chegou depois das primeiras
                 horas): cancela e pede ao DP para desconsiderar o comunicado */}
             {vagas.cancelar && (
-              <Vaga mostra={acoes.cancelar}>
+              <Vaga mostra={acoes.cancelar} motivo={acoes.porque.cancelar}>
               <button
                 type="button" className="icon-btn"
                 title="Cancelar: a ausência não se confirmou (o colaborador chegou depois, por exemplo)"
@@ -1411,13 +1424,18 @@ export function AbsenteismosManager({
 type Vagas = { efetivar: boolean; continua: boolean; cancelar: boolean };
 
 /**
- * O espaço de um botão de ação. Escondido, ele continua ocupando o lugar
- * (invisível e fora do alcance do teclado e do leitor de tela), para os botões
- * das linhas ficarem alinhados em colunas.
+ * O espaço de um botão de ação. Quando o botão não vale para a linha, ele
+ * aparece apagado (LUIZ, 27/11/2026: invisível, deixava um buraco na linha),
+ * sem clique e fora do teclado (`inert`), com o motivo na dica. A dica fica no
+ * invólucro: o conteúdo `inert` não recebe o mouse, e o ponteiro cai nele.
  */
-function Vaga({ mostra, children }: { mostra: boolean; children: React.ReactNode }) {
+function Vaga({ mostra, motivo, children }: { mostra: boolean; motivo: string; children: React.ReactNode }) {
   if (mostra) return <>{children}</>;
-  return <span aria-hidden inert style={{ visibility: "hidden", display: "inline-flex" }}>{children}</span>;
+  return (
+    <span title={motivo} aria-disabled style={{ display: "inline-flex", cursor: "not-allowed" }}>
+      <span inert style={{ display: "inline-flex", opacity: 0.35, filter: "grayscale(1)" }}>{children}</span>
+    </span>
+  );
 }
 
 /**
